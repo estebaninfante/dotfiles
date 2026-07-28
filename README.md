@@ -5,22 +5,25 @@ Configuraciones personales gestionadas desde este repositorio como fuente de ver
 ## Estructura
 
 ```
-linux/     → Configuraciones para Linux (Hyprland, Waybar, Kitty, etc.)
-common/   → Configuraciones multiplataforma (futuro)
-windows/  → Futuro
-macos/    → Futuro
-scripts/  → Scripts auxiliares
-docs/     → Documentación
+linux/      → Configuraciones para Linux (Hyprland, Waybar, Kitty, etc.)
+common/    → Configuraciones multiplataforma (futuro)
+windows/   → Futuro
+macos/     → Futuro
+scripts/   → install.sh, publish.sh
+docs/      → Documentacion
 ```
 
 ## Uso
 
 ```bash
-# Instalar enlaces simbólicos
-~/dotfiles/install.sh
+# Instalar enlaces simbolicos
+~/dotfiles/scripts/install.sh
+
+# Modo no interactivo (idempotente)
+~/dotfiles/scripts/install.sh --force
 
 # Publicar cambios
-~/dotfiles/publish.sh
+~/dotfiles/scripts/publish.sh
 ```
 
 **Importante:** editar siempre dentro de `~/dotfiles/`, nunca en `~/.config/`. Ver `AGENTS.md`.

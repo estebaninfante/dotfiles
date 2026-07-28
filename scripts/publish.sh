@@ -17,7 +17,6 @@ if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   exit 1
 fi
 
-# Show status
 echo "  git status:"
 echo ""
 git status
@@ -28,8 +27,7 @@ if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --other
   exit 0
 fi
 
-# Stage and commit
-echo "── Añadiendo cambios..."
+echo "── Anadiendo cambios..."
 git add -A
 
 TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
@@ -39,7 +37,6 @@ echo ""
 echo "  Commit creado: $(git log -1 --oneline)"
 echo ""
 
-# Push with confirmation
 if git remote -v | grep -q .; then
   echo "── Repositorio remoto detectado:"
   git remote -v
