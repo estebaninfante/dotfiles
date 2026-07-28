@@ -1,0 +1,105 @@
+// -*- mode: jsonc -*-
+{
+    "layer": "top",
+    "position": "top",
+
+    "height": 34,
+
+    "margin-top": 10,
+    "margin-left": 14,
+    "margin-right": 14,
+
+    "spacing": 6,
+
+    "modules-left": [
+        "hyprland/workspaces"
+    ],
+
+    "modules-center": [],
+
+    "modules-right": [
+        "pulseaudio",
+        "memory",
+        "cpu",
+        "battery",
+        "clock"
+    ],
+
+    /* =========================
+       WORKSPACES
+       ========================= */
+
+    "hyprland/workspaces": {
+        "disable-scroll": false,
+        "all-outputs": true,
+        "warp-on-scroll": false,
+        "format": "{name}",
+        "persistent-workspaces": {
+            "*": 5
+        },
+	"all-outputs": false
+    },
+
+    /* =========================
+       CLOCK
+       ========================= */
+
+    "clock": {
+        "format": "{:%H:%M}"
+    },
+
+    /* =========================
+       CPU
+       ========================= */
+
+    "cpu": {
+        "interval": 2,
+        "format": "CPU {usage}%"
+    },
+
+    /* =========================
+       MEMORY
+       ========================= */
+
+    "memory": {
+        "interval": 2,
+        "format": "RAM {}%"
+    },
+
+    /* =========================
+       BATTERY
+       ========================= */
+
+    "battery": {
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+
+        "format": "{capacity}%",
+
+        "format-charging": "{capacity}%+",
+
+        "format-plugged": "{capacity}% AC",
+
+        "format-alt": "{time}",
+
+        "tooltip": true,
+
+        "tooltip-format": "{time} remaining"
+    },
+
+    /* =========================
+       AUDIO
+       ========================= */
+
+	"pulseaudio": {
+	    "scroll-step": 5,
+
+	    "format": "VOL {volume}%",
+
+	    "format-muted": "VOL MUTED",
+
+	    "on-click": "pavucontrol"
+	},
+}

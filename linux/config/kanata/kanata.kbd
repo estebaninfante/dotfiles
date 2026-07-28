@@ -1,0 +1,34 @@
+(defsrc
+  lalt ret
+  a    s    d    f    e
+  m    ,    .    j    k    l    u    i    o    ;
+  spc
+)
+
+(deflayer base
+  (tap-hold 200 200 lalt (layer-while-held numpad))
+  (tap-hold 200 200 ret  (layer-while-held nav))
+  a    s    d    f    e
+  m    ,    .    j    k    l    u    i    o    ;
+  spc
+)
+
+(deflayer nav
+  _    _
+  left left down right up
+  _    _    _    _    _    _    _    _    _    _
+  (multi lctl lsft f6)
+)
+
+(deflayer numpad
+  _    _
+  _    _    _    _    (cmd wtype +)
+  1    2    3    4    5    6    7    8    9    0
+  _
+)
+
+
+
+(defcfg
+  danger-enable-cmd yes
+)
