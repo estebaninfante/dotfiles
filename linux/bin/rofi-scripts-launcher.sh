@@ -8,16 +8,21 @@ SCRIPT_DIRS=(
 if [ -n "$1" ]; then
     for dir in "${SCRIPT_DIRS[@]}"; do
         SCRIPT_PATH="$dir/$1"
-        if [ -x "$SCRIPT_PATH" ]; then
-            if [ "$1" == "rofi-scripts-launcher.sh" ] || [ "$1" == "rofi-file-search.sh" ]; then
-                exit 0
-            fi
+if [ -x "$SCRIPT_PATH" ]; then
+          if [ "$1" == "rofi-scripts-launcher.sh" ] || \
+             [ "$1" == "rofi-file-search.sh" ] || \
+             [ "$1" == "rofi-context-menu.sh" ]; then
+              exit 0
+          fi
 
-            if [ -n "$ROFI_RETV" ] && [ "$ROFI_RETV" -ne 1 ]; then
-                coproc ( ~/.local/bin/rofi-context-menu.sh "$SCRIPT_PATH" > /dev/null 2>&1 )
-            else
-                coproc ( "$SCRIPT_PATH" > /dev/null 2>&1 )
-            fi
+          if [ -n "$ROFI_RETV" ] && [ "$ROFI_RETV" -ne 1 ]; then
+              coproc ( ~/.local/bin/rofi-context-menu.sh "$SCRIPT_PATH" > /dev/null 2>&1 )
+          elif [[ "$SCRIPT_PATH" == "$HOME/dotfiles/scripts/"* ]]; then
+              # scripts interactivos: necesitan terminal
+              coproc ( kitty -e "$SCRIPT_PATH" )
+          else
+              coproc ( "$SCRIPT_PATH" )
+          fi
             exit 0
         fi
     done
@@ -30,6 +35,5 @@ for dir in "${SCRIPT_DIRS[@]}"; do
         -maxdepth 1 \
         -type f \
         -executable \
-        -not -name "rofi-*" \
         -printf "%f\n"
 done | sort -u
