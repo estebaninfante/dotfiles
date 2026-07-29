@@ -1,0 +1,87 @@
+#!/bin/bash
+
+SAVE_DIR="$HOME/Pictures/screenshots"
+TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
+MODE="area"
+ACTION="copy"
+GEOMETRY=""
+
+usage() {
+    cat <<EOF
+Uso: shot [opciones] [full|active|area]
+
+Por defecto: captura area → clipboard
+
+Opciones:
+  -s, --save      Guardar en archivo (además de clipboard)
+  -e, --edit      Abrir en swappy para editar/guardar
+  -h, --help      Mostrar ayuda
+
+Modos:
+  full            Pantalla completa
+  active          Ventana activa
+  area            Selección manual (default)
+
+Ejemplos:
+  shot              area → clipboard
+  shot full         full → clipboard
+  shot active       ventana activa → clipboard
+  shot -s           area → archivo + clipboard
+  shot -s full      full → archivo + clipboard
+  shot -e           area → swappy
+EOF
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -s|--save) ACTION="save"; shift ;;
+        -e|--edit) ACTION="edit"; shift ;;
+        -h|--help) usage ;;
+        full|active|area) MODE="$1"; shift ;;
+        *) echo "Opción desconocida: $1"; usage ;;
+    esac
+done
+
+case "$MODE" in
+    active)
+        GEOMETRY=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
+        [ -z "$GEOMETRY" ] && { notify-send -u critical "shot" "No se pudo obtener ventana activa"; exit 1; }
+        ;;
+    full)
+        GEOMETRY=""
+        ;;
+    area)
+        GEOMETRY=$(slurp)
+        [ -z "$GEOMETRY" ] && exit 1
+        ;;
+esac
+
+case "$ACTION" in
+    copy)
+        if [ -z "$GEOMETRY" ]; then
+            grim - | wl-copy
+        else
+            grim -g "$GEOMETRY" - | wl-copy
+        fi
+        notify-send "shot" "Captura copiada al portapapeles"
+        ;;
+    save)
+        mkdir -p "$SAVE_DIR"
+        FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
+        if [ -z "$GEOMETRY" ]; then
+            grim "$FILE"
+        else
+            grim -g "$GEOMETRY" "$FILE"
+        fi
+        wl-copy < "$FILE"
+        notify-send "shot" "Guardada: $FILE"
+        ;;
+    edit)
+        if [ -z "$GEOMETRY" ]; then
+            grim - | swappy -f -
+        else
+            grim -g "$GEOMETRY" - | swappy -f -
+        fi
+        ;;
+esac
