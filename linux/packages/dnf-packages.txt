@@ -153,3 +153,9 @@ protonplus
 protontricks
 mangohud
 gamemode
+
+# ── Gestión de energía (laptop) ──
+# tuned-ppd: demonio de perfiles (API PowerProfiles, auto AC/batería)
+tuned
+tuned-ppd
+tuned-utils

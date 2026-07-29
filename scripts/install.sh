@@ -137,6 +137,14 @@ SYSTEM_FILES_XKB=(
   "linux/xkb/dvk_prog:/usr/share/X11/xkb/symbols/dvk_prog"
 )
 
+SYSTEM_FILES_KEYD=(
+  "linux/system/keyd/default.conf:/etc/keyd/default.conf"
+)
+
+SYSTEM_FILES_TUNED=(
+  "linux/system/tuned/ppd.conf:/etc/tuned/ppd.conf"
+)
+
 # ── Helpers ──────────────────────────────────────────────────
 
 entry_status() {
@@ -282,6 +290,46 @@ for entry in "${SYSTEM_FILES_XKB[@]}"; do
   else
     echo "    Para instalar layout XKB (requiere sudo):"
     echo "    sudo ln -s $src $target"
+  fi
+done
+
+# ── System files (keyd) ──────────────────────────────────────
+info "Instalando configuracion keyd..."
+for entry in "${SYSTEM_FILES_KEYD[@]}"; do
+  src_rel="${entry%%:*}"
+  target="${entry##*:}"
+  src="$DOTFILES/$src_rel"
+  if [ -f "$target" ] && [ ! -L "$target" ]; then
+    warn "$target existe como archivo real. Requiere sudo para reemplazar."
+    echo "    sudo rm $target"
+    echo "    sudo mkdir -p $(dirname "$target")"
+    echo "    sudo ln -s $src $target"
+  elif [ -L "$target" ]; then
+    skip "keyd symlink ya existe en $target"
+  else
+    echo "    Para instalar config keyd (requiere sudo):"
+      echo "    sudo mkdir -p $(dirname "$target")"
+      echo "    sudo ln -s $src $target"
+  fi
+done
+
+# ── System files (tuned-ppd / gestion de energia) ───────────
+info "Instalando configuracion tuned-ppd..."
+for entry in "${SYSTEM_FILES_TUNED[@]}"; do
+  src_rel="${entry%%:*}"
+  target="${entry##*:}"
+  src="$DOTFILES/$src_rel"
+  if [ -f "$target" ] && [ ! -L "$target" ]; then
+    warn "$target existe como archivo real. Requiere sudo para reemplazar."
+    echo "    sudo mv $target $target.bak"
+    echo "    sudo ln -s $src $target"
+    echo "    sudo systemctl restart tuned-ppd"
+  elif [ -L "$target" ]; then
+    skip "tuned-ppd symlink ya existe en $target"
+  else
+    echo "    Para instalar config tuned-ppd (requiere sudo):"
+    echo "    sudo ln -s $src $target"
+    echo "    sudo systemctl restart tuned-ppd"
   fi
 done
 

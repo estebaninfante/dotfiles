@@ -13,6 +13,9 @@ org.mozilla.firefox
 org.videolan.VLC
 com.obsproject.Studio
 
+# ── Productividad ──
+md.obsidian.Obsidian                   # Markdown knowledge base
+
 # ── Utilidades ──
 org.gimp.GIMP
 org.inkscape.Inkscape

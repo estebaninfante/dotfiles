@@ -83,16 +83,6 @@ window#waybar {
   color: #ffffff;
 }
 
-/* CLOCK */
-
-#clock {
-  color: #ff4040;
-
-  font-weight: 700;
-
-  margin-right: 10px;
-}
-
 /* CPU */
 
 #cpu {
@@ -134,3 +124,5 @@ tooltip {
 tooltip label {
   color: #ffffff;
 }
+
+/* (spacers removed — waybar centers modules-center natively) */

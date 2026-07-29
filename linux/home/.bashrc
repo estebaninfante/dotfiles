@@ -34,3 +34,5 @@ alias office='lo'
 
 # opencode
 export PATH=/home/eztvn/.opencode/bin:$PATH
+alias opencode="script -q -c \"opencode\" /dev/null"
+. "$HOME/.cargo/env"

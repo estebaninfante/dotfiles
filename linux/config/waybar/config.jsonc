@@ -10,10 +10,10 @@
   "modules-left": [
     "sway/workspaces",
     "sway/mode",
-    "sway/scratchpad"
+    "sway/scratchpad",
+    "sway/window"
   ],
   "modules-center": [
-    "sway/window",
     "clock"
   ],
   "modules-right": [
@@ -234,5 +234,5 @@
       "suspend": "systemctl suspend",
       "hibernate": "systemctl hibernate"
     }
+  },
   }
-}
