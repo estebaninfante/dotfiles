@@ -1,0 +1,25 @@
+window {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+label, image {
+    opacity: 0;
+    font-size: 0px;
+}
+
+progressbar {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+progress {
+    background: #ffffff;
+    border-radius: 4px;
+}
+
+trough {
+    min-width: 8px;
+    min-height: 180px;
+}

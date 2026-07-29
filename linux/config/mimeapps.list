@@ -1,0 +1,7 @@
+[Default Applications]
+image/jpeg=org.videolan.VLC.desktop
+text/plain=nvim.desktop
+
+[Added Associations]
+image/jpeg=org.videolan.VLC.desktop;
+text/plain=nvim.desktop;
