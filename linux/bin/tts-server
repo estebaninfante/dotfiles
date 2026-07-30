@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CACHE_DIR="$HOME/.cache/tts"
+FIFO="$CACHE_DIR/tts.fifo"
+PIDFILE="$CACHE_DIR/tts-server.pid"
+ENGINE="${TTS_ENGINE:-piper}"
+VOICE="${TTS_VOICE:-es_ES-davefx-medium}"
+
+ensure_fifo() {
+  mkdir -p "$CACHE_DIR"
+  if [ ! -p "$FIFO" ]; then
+    rm -f "$FIFO"
+    mkfifo "$FIFO"
+  fi
+}
+
+run_foreground() {
+  ensure_fifo
+  echo "TTS server ready (engine: $ENGINE, voice: $VOICE, fifo: $FIFO)"
+  while true; do
+    if read -r line < "$FIFO"; then
+      if [ "$line" = "STOP" ]; then
+        break
+      fi
+      tts -e "$ENGINE" -v "$VOICE" "$line"
+    fi
+  done
+}
+
+start() {
+  if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    echo "TTS server already running (PID $(cat "$PIDFILE"))"
+    exit 0
+  fi
+
+  ensure_fifo
+  echo "Starting TTS server (engine: $ENGINE, voice: $VOICE)"
+  nohup bash -c "
+    while true; do
+      if read -r line < \"$FIFO\"; then
+        if [ \"\$line\" = \"STOP\" ]; then
+          break
+        fi
+        tts -e \"$ENGINE\" -v \"$VOICE\" \"\$line\"
+      fi
+    done
+  " > /dev/null 2>&1 &
+  echo $! > "$PIDFILE"
+  echo "TTS server started (PID $!)"
+}
+
+stop() {
+  if [ -f "$PIDFILE" ]; then
+    local pid
+    pid=$(cat "$PIDFILE")
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "STOP" > "$FIFO" 2>/dev/null || true
+      sleep 0.5
+      kill "$pid" 2>/dev/null || true
+      echo "TTS server stopped"
+    else
+      echo "TTS server not running"
+    fi
+    rm -f "$PIDFILE"
+  else
+    echo "STOP" > "$FIFO" 2>/dev/null && echo "TTS server stopped" || echo "TTS server not running"
+  fi
+}
+
+status() {
+  if systemctl --user is-active tts.service &>/dev/null; then
+    echo "TTS server running (systemd service)"
+    echo "Engine: $ENGINE"
+    echo "Voice: $VOICE"
+  elif [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    echo "TTS server running (PID $(cat "$PIDFILE"))"
+    echo "Engine: $ENGINE"
+    echo "Voice: $VOICE"
+  else
+    echo "TTS server not running"
+  fi
+}
+
+case "${1:-status}" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; sleep 0.5; start ;;
+  status) status ;;
+  run) run_foreground ;;
+  *)
+    echo "Usage: tts-server {start|stop|restart|status|run}"
+    exit 1
+    ;;
+esac

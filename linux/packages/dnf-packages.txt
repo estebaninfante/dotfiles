@@ -154,6 +154,10 @@ protontricks
 mangohud
 gamemode
 
+# ── Biometría (huella dactilar) ──
+fprintd
+fprintd-pam
+
 # ── Gestión de energía (laptop) ──
 # tuned-ppd: demonio de perfiles (API PowerProfiles, auto AC/batería)
 tuned

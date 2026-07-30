@@ -32,7 +32,7 @@ echo ""
 
 # ── 1. Repositorios ──
 if [ -f "$PACKAGES_DIR/repos.sh" ]; then
-  info "Paso 1/5: Agregando repositorios..."
+  info "Paso 1/7: Agregando repositorios..."
   bash "$PACKAGES_DIR/repos.sh"
   ok "Repositorios listos"
 else
@@ -43,7 +43,7 @@ echo ""
 # ── 2. DNF packages ──
 DNF_LIST="$PACKAGES_DIR/dnf-packages.txt"
 if [ -f "$DNF_LIST" ]; then
-  info "Paso 2/5: Instalando paquetes DNF..."
+  info "Paso 2/7: Instalando paquetes DNF..."
   packages=$(grep -v '^\s*#' "$DNF_LIST" | grep -v '^\s*$' | tr '\n' ' ')
   info "Paquetes: $packages"
   if [ -n "$packages" ]; then
@@ -60,7 +60,7 @@ echo ""
 # ── 3. Flatpak ──
 FLATPAK_LIST="$PACKAGES_DIR/flatpak-packages.txt"
 if [ -f "$FLATPAK_LIST" ]; then
-  info "Paso 3/5: Instalando paquetes Flatpak..."
+  info "Paso 3/7: Instalando paquetes Flatpak..."
   flatpak_apps=$(grep -v '^\s*#' "$FLATPAK_LIST" | grep -v '^\s*$')
   if [ -n "$flatpak_apps" ]; then
     for app in $flatpak_apps; do
@@ -83,7 +83,7 @@ echo ""
 # ── 4. Pip packages ──
 PIP_LIST="$PACKAGES_DIR/pip-packages.txt"
 if [ -f "$PIP_LIST" ]; then
-  info "Paso 4/5: Instalando paquetes pip..."
+  info "Paso 4/7: Instalando paquetes pip..."
   pip_packages=$(grep -v '^\s*#' "$PIP_LIST" | grep -v '^\s*$' | tr '\n' ' ')
   if [ -n "$pip_packages" ]; then
     run pip3 install --user $pip_packages
@@ -96,10 +96,33 @@ else
 fi
 echo ""
 
-# ── 5. Wallpapers ──
+# ── 5. libinput-gestures (git + make) ──
+info "Paso 5/7: Instalando libinput-gestures..."
+if command -v libinput-gestures &>/dev/null; then
+  skip "libinput-gestures ya instalado"
+else
+  TMP_CLONE=$(mktemp -d)
+  run git clone --depth 1 https://github.com/bulletmark/libinput-gestures.git "$TMP_CLONE/libinput-gestures"
+  run sudo make -C "$TMP_CLONE/libinput-gestures" install
+  rm -rf "$TMP_CLONE"
+  ok "libinput-gestures instalado"
+fi
+echo ""
+
+# ── 6. Grupo input (para libinput-gestures) ──
+info "Paso 6/7: Verificando grupo input..."
+if id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx input; then
+  skip "Usuario ya está en grupo input"
+else
+  run sudo usermod -aG input "$USER"
+  ok "Usuario agregado a grupo input (requiere re-login)"
+fi
+echo ""
+
+# ── 7. Wallpapers ──
 WALLPAPER_DIR="$PACKAGES_DIR/wallpaper"
 if [ -d "$WALLPAPER_DIR" ] && [ "$(ls -A "$WALLPAPER_DIR" 2>/dev/null)" ]; then
-  info "Paso 5/5: Copiando wallpapers a ~/Imágenes/..."
+  info "Paso 7/7: Copiando wallpapers a ~/Imágenes/..."
   mkdir -p "$HOME/Imágenes"
   for img in "$WALLPAPER_DIR"/*; do
     name=$(basename "$img")

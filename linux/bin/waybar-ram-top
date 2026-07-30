@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Custom memory module for waybar — text + tooltip with top processes
+
+mem_percent=$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf "%.0f", (t-a)/t*100}' /proc/meminfo)
+
+# Build process list with literal \n for JSON
+processes=""
+while read -r comm mem rss; do
+    line=$(printf "%-20s %5s%%  %6sMB" "$comm" "$mem" "$((rss / 1024))")
+    if [ -n "$processes" ]; then
+        processes="${processes}\\n${line}"
+    else
+        processes="${line}"
+    fi
+done < <(ps -eo comm,%mem,rss --sort=-%mem | head -11 | tail -10)
+
+tooltip="RAM Usage: ${mem_percent}%\\n\\n${processes}"
+
+printf '{"text":"RAM %s%%","tooltip":"%s"}' "$mem_percent" "$tooltip"

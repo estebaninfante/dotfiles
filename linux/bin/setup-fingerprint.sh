@@ -2,30 +2,19 @@
 # ==========================================================
 # setup-fingerprint.sh
 # Instala y configura soporte para huella dactilar en
-# Fedora 44 con fprintd + PAM.
+# Fedora con fprintd + authselect.
 #
 # USO:
-#   ./setup-fingerprint.sh          # Modo interactivo (pregunta antes de cada paso)
+#   ./setup-fingerprint.sh          # Modo interactivo
 #   ./setup-fingerprint.sh --apply  # Ejecutar cambios directamente
 #   ./setup-fingerprint.sh --status # Solo mostrar estado actual
 #
 # IDEMPOTENTE: Puede ejecutarse múltiples veces sin romper nada.
-# SEGURO: No modifica PAM si ya está configurado.
 # ==========================================================
 
 set -euo pipefail
 
 # ─── Configuración ──────────────────────────────────────────
-PAM_FILES=(
-    "/etc/pam.d/sudo"
-    "/etc/pam.d/su"
-    "/etc/pam.d/polkit-1"
-    "/etc/pam.d/gdm-password"
-    "/etc/pam.d/swaylock"
-)
-
-PAM_FPRINT_LINE="auth       sufficient   pam_fprintd.so"
-
 REQUIRED_PKGS=(
     fprintd
     fprintd-pam
@@ -41,25 +30,23 @@ error()   { echo -e "  [ERROR] $*"; }
 check_packages() {
     local missing=()
     for pkg in "${REQUIRED_PKGS[@]}"; do
-        if ! rpm -q "$pkg" &>/dev/null; then
-            missing+=("$pkg")
+        if rpm -q "$pkg" &>/dev/null; then
+            ok "$pkg ya instalado"
         else
-            ok "Paquete $pkg ya instalado"
+            missing+=("$pkg")
         fi
     done
-    echo "${missing[@]}"
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "${missing[@]}"
+    fi
 }
 
 check_device() {
-    if lsusb 2>/dev/null | grep -qiE "fingerprint|biometric|synaptics|elan|goodix|validity"; then
-        ok "Dispositivo de huella detectado por lsusb"
+    if fprintd-list 2>/dev/null | grep -q "devices\|Device"; then
+        ok "Dispositivo de huella detectado"
         return 0
     fi
-    if ls /sys/bus/usb/devices/*/driver 2>/dev/null | grep -qi "vfs"; then
-        ok "Controlador vfs(susb) detectado"
-        return 0
-    fi
-    warn "No se detectó dispositivo de huella. ¿Está conectado/soportado?"
+    warn "No se detectó dispositivo de huella"
     return 1
 }
 
@@ -72,42 +59,30 @@ check_fprintd_service() {
     return 1
 }
 
-check_pam_configured() {
-    local file="$1"
-    if [ ! -f "$file" ]; then
+check_authselect() {
+    local profile
+    profile=$(authselect current 2>/dev/null | grep "Profile ID:" | awk '{print $NF}')
+    if [ -z "$profile" ]; then
+        warn "authselect no configurado"
         return 1
     fi
-    grep -q "^$PAM_FPRINT_LINE" "$file" 2>/dev/null
+    if authselect current 2>/dev/null | grep -q "with-fingerprint"; then
+        ok "authselect: with-fingerprint ya habilitado"
+        return 0
+    fi
+    warn "authselect: with-fingerprint NO habilitado (perfil: $profile)"
+    return 1
 }
 
-backup_pam() {
-    local file="$1"
-    local backup="$file.bak.fprint.$(date +%Y%m%d_%H%M%S)"
-    cp -v "$file" "$backup"
-    ok "Backup creado: $backup"
-}
-
-add_pam_line() {
-    local file="$1"
-    local auth_line="$PAM_FPRINT_LINE"
-
-    info "Modificando $file ..."
-
-    if [ ! -f "$file" ]; then
-        warn "Archivo no encontrado: $file. Saltando."
-        return
+check_fingers_enrolled() {
+    local user
+    user=$(whoami)
+    if fprintd-list "$user" 2>/dev/null | grep -q "Finger\|finger"; then
+        ok "Huellas registradas para $user"
+        return 0
     fi
-
-    if check_pam_configured "$file"; then
-        ok "fprint ya configurado en $file. Saltando."
-        return
-    fi
-
-    backup_pam "$file"
-
-    # Insertar después de la primera línea "auth" o "auth       substack"
-    sed -i '0,/^auth/ s/^auth.*/'"$auth_line"'\n&/' "$file"
-    ok "Línea añadida a $file"
+    warn "Sin huellas registradas para $user"
+    return 1
 }
 
 show_status() {
@@ -131,17 +106,20 @@ show_status() {
     echo "--- Dispositivo ---"
     check_device || true
     echo ""
-    echo "--- Configuración PAM ---"
-    for f in "${PAM_FILES[@]}"; do
-        if [ -f "$f" ]; then
-            check_pam_configured "$f" && ok "fprint activo en $f" || echo "  [--] $f: sin fprint"
-        else
-            warn "$f: no existe"
-        fi
-    done
+    echo "--- Authselect ---"
+    authselect current 2>/dev/null || warn "authselect no disponible"
     echo ""
     echo "--- Huellas registradas ---"
-    fprintd-list 2>/dev/null || echo "  (ejecutar 'fprintd-list' como root si hay errores)"
+    fprintd-list "$(whoami)" 2>/dev/null || warn "Sin huellas"
+    echo ""
+    echo "--- Archivos PAM (hyprlock) ---"
+    if [ -f /etc/pam.d/hyprlock ]; then
+        ok "/etc/pam.d/hyprlock existe:"
+        cat /etc/pam.d/hyprlock
+    else
+        warn "/etc/pam.d/hyprlock no existe"
+    fi
+    echo ""
 }
 
 # ─── Main ───────────────────────────────────────────────────
@@ -149,7 +127,7 @@ show_status() {
 MODE="${1:-}"
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║  setup-fingerprint.sh — Fedora 44    ║"
+echo "║  setup-fingerprint.sh — Fedora       ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 
@@ -212,24 +190,76 @@ else
 fi
 echo ""
 
-# ─── Paso 4: Configurar PAM ─────────────────────────────────
-echo "── Paso 4: PAM ──"
-if [ "$APPLY" = true ]; then
-    for pam_file in "${PAM_FILES[@]}"; do
-        add_pam_line "$pam_file"
-    done
+# ─── Paso 4: Configurar authselect ──────────────────────────
+echo "── Paso 4: Authselect (método oficial Fedora) ──"
+if check_authselect; then
+    ok "Fingerprint ya habilitado en authselect"
 else
-    echo "  Archivos PAM a modificar:"
-    for pam_file in "${PAM_FILES[@]}"; do
-        if check_pam_configured "$pam_file"; then
-            ok "Ya configurado: $pam_file"
+    if [ "$APPLY" = true ]; then
+        info "Habilitando with-fingerprint en authselect..."
+        sudo authselect enable-feature with-fingerprint
+        ok "authselect: with-fingerprint habilitado"
+        info "PAM configurado automáticamente para: sudo, gdm, login, system-auth"
+    else
+        echo "  Para habilitar: sudo authselect enable-feature with-fingerprint"
+    fi
+fi
+echo ""
+
+# ─── Paso 5: Verificar hyprlock PAM ─────────────────────────
+echo "── Paso 5: PAM hyprlock ──"
+if [ -f /etc/pam.d/hyprlock ]; then
+    if grep -q "account.*include" /etc/pam.d/hyprlock && grep -q "session.*include" /etc/pam.d/hyprlock; then
+        ok "/etc/pam.d/hyprlock completo"
+    else
+        warn "/etc/pam.d/hyprlock incompleto (falta account/session)"
+        if [ "$APPLY" = true ]; then
+            info "Corrigiendo /etc/pam.d/hyprlock..."
+            sudo cp /etc/pam.d/hyprlock /etc/pam.d/hyprlock.bak.$(date +%Y%m%d_%H%M%S)
+            sudo tee /etc/pam.d/hyprlock > /dev/null << 'PAM'
+# PAM configuration file for hyprlock
+
+auth        include     login
+
+account     include     login
+
+session     optional    pam_keyinit.so force revoke
+session     include     login
+PAM
+            ok "/etc/pam.d/hyprlock corregido"
         else
-            echo "  [PENDIENTE] $pam_file"
+            echo "  Para corregir: ejecuta $0 --apply"
         fi
-    done
+    fi
+else
+    warn "/etc/pam.d/hyprlock no existe"
+    if [ "$APPLY" = true ]; then
+        info "Creando /etc/pam.d/hyprlock..."
+        sudo tee /etc/pam.d/hyprlock > /dev/null << 'PAM'
+# PAM configuration file for hyprlock
+
+auth        include     login
+
+account     include     login
+
+session     optional    pam_keyinit.so force revoke
+session     include     login
+PAM
+        ok "/etc/pam.d/hyprlock creado"
+    else
+        echo "  Para crear: ejecuta $0 --apply"
+    fi
+fi
+echo ""
+
+# ─── Paso 6: Verificar huellas ──────────────────────────────
+echo "── Paso 6: Huellas registradas ──"
+if check_fingers_enrolled; then
+    ok "Ya tienes huellas registradas"
+else
     echo ""
-    echo "  Para aplicar: sudo $0 --apply"
-    echo "  O editar manualmente cada archivo en /etc/pam.d/"
+    echo "  Para registrar huella: fprintd-enroll"
+    echo ""
 fi
 echo ""
 
@@ -237,20 +267,15 @@ echo ""
 echo "═══════════════════════════════════════"
 echo "  Resumen"
 echo "═══════════════════════════════════════"
-if [ "$APPLY" = false ] && [ -z "$MODE" ]; then
-    echo ""
-    echo "  Para registrar una huella después de la configuración:"
-    echo "    fprintd-enroll"
-    echo ""
-    echo "  Para verificar el estado después de aplicar:"
-    echo "    $0 --status"
-elif [ "$APPLY" = true ]; then
-    echo ""
-    echo "  Configuración aplicada. Para registrar huella:"
-    echo "    fprintd-enroll"
-    echo ""
-    echo "  Para verificar: fprintd-verify"
-fi
 echo ""
-
-exit 0
+echo "  Configuración PAM: authselect (oficial Fedora)"
+echo "  GDM:       habilitado via authselect with-fingerprint"
+echo "  Hyprlock:  habilitado via /etc/pam.d/hyprlock + config"
+echo "  sudo:      habilitado via authselect with-fingerprint"
+echo ""
+if ! check_fingers_enrolled 2>/dev/null; then
+    echo "  SIGUIENTE PASO: fprintd-enroll"
+    echo ""
+fi
+echo "  Verificar estado: $0 --status"
+echo ""

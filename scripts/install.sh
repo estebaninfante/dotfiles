@@ -133,6 +133,10 @@ HOME_FILES=(
   .gitconfig
 )
 
+FLATPAK_CONFIGS=(
+  "linux/config/obs-studio:$HOME/.var/app/com.obsproject.Studio/config/obs-studio"
+)
+
 SYSTEM_FILES_XKB=(
   "linux/xkb/dvk_prog:/usr/share/xkeyboard-config-2/symbols/dvk_prog"
   "linux/xkb/dvk_prog:/usr/share/X11/xkb/symbols/dvk_prog"
@@ -206,6 +210,12 @@ for file in "${HOME_FILES[@]}"; do
   summary_entries+=("$DOTFILES/linux/home/$file:$HOME/$file")
 done
 
+for entry in "${FLATPAK_CONFIGS[@]}"; do
+  src_rel="${entry%%:*}"
+  dst="${entry##*:}"
+  summary_entries+=("$DOTFILES/$src_rel:$dst")
+done
+
 for script in "$DOTFILES/linux/bin/"*; do
   [ -f "$script" ] || continue
   name=$(basename "$script")
@@ -264,6 +274,14 @@ done
 info "Enlazando archivos de home..."
 for file in "${HOME_FILES[@]}"; do
   link_home "$file"
+done
+
+# ── Flatpak configs ─────────────────────────────────────────
+info "Enlazando configs de flatpak..."
+for entry in "${FLATPAK_CONFIGS[@]}"; do
+  src_rel="${entry%%:*}"
+  dst="${entry##*:}"
+  link "$DOTFILES/$src_rel" "$dst"
 done
 
 # ── Scripts ──────────────────────────────────────────────────
@@ -348,6 +366,12 @@ done
 
 for file in "${HOME_FILES[@]}"; do
   validate_symlink "$DOTFILES/linux/home/$file" "$HOME/$file"
+done
+
+for entry in "${FLATPAK_CONFIGS[@]}"; do
+  src_rel="${entry%%:*}"
+  dst="${entry##*:}"
+  validate_symlink "$DOTFILES/$src_rel" "$dst"
 done
 
 for script in "$DOTFILES/linux/bin/"*; do

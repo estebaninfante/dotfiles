@@ -20,8 +20,9 @@
     ],
 
     "modules-right": [
+        "custom/lid-inhibit",
         "pulseaudio",
-        "memory",
+        "custom/memory",
         "cpu",
         "battery"
     ],
@@ -32,13 +33,9 @@
 
     "hyprland/workspaces": {
         "disable-scroll": false,
-        "all-outputs": true,
+        "all-outputs": false,
         "warp-on-scroll": false,
-        "format": "{name}",
-        "persistent-workspaces": {
-            "*": 5
-        },
-	"all-outputs": false
+        "format": "{name}"
     },
 
     /* =========================
@@ -62,9 +59,11 @@
        MEMORY
        ========================= */
 
-    "memory": {
+    "custom/memory": {
+        "exec": "$HOME/.local/bin/waybar-ram-top",
+        "return-type": "json",
         "interval": 2,
-        "format": "RAM {}%"
+        "tooltip": true
     },
 
     /* =========================
@@ -103,4 +102,16 @@
 
 	    "on-click": "pavucontrol"
 	},
+
+    /* =========================
+       LID INHIBIT
+       ========================= */
+
+    "custom/lid-inhibit": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "$HOME/.local/bin/lid-inhibit-waybar.sh",
+        "on-click": "$HOME/.local/bin/toggle-lid.sh",
+        "tooltip": true
+    },
 }

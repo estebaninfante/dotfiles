@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TTS_DIR="$HOME/.local/share/tts"
+PIPER_DIR="$TTS_DIR/piper"
+PIPER_BIN="$PIPER_DIR/piper"
+PIPER_VOICES="$PIPER_DIR/voices"
+CACHE_DIR="$HOME/.cache/tts"
+
+usage() {
+  cat <<EOF
+Usage: tts [options] [text]
+
+Speak text using various TTS engines.
+
+Options:
+  -e, --engine ENGINE   Engine: espeak, piper, kokoro, spd (default: piper)
+  -v, --voice VOICE     Voice name (default: auto per engine)
+  -l, --list-voices     List available voices for engine
+  -o, --output FILE     Save audio to file instead of playing
+  -h, --help            Show this help
+
+Examples:
+  tts "Hola mundo"
+  tts -e espeak "Hello world"
+  tts -e piper -v es_ES-davefx-medium "Hola"
+  tts -e spd -v es "Hola mundo"
+  tts -l
+  tts -e piper -l
+
+EOF
+  exit 0
+}
+
+list_voices() {
+  case "$ENGINE" in
+    espeak)
+      echo "espeak-ng voices:"
+      espeak-ng --voices 2>/dev/null | column -t
+      ;;
+    piper)
+      echo "Piper voices:"
+      ls "$PIPER_VOICES"/*.onnx 2>/dev/null | sed 's/.*\///; s/\.onnx$//' || echo "  No voices found. Run setup-tts.sh first."
+      ;;
+    kokoro)
+      echo "Kokoro voices:"
+      python3 -c "
+try:
+  from kokoro import KPipeline
+  from pathlib import Path
+  import os
+  home = os.path.expanduser('~')
+  voices_dir = os.path.join(home, '.local', 'share', 'kokoro', 'voices')
+  if os.path.exists(voices_dir):
+    for f in sorted(Path(voices_dir).glob('*')):
+      print(f'  {f.name}')
+  else:
+    print('  No voices found')
+except Exception as e:
+  print(f'  Error: {e}')
+" 2>/dev/null || echo "  Kokoro not installed"
+      ;;
+    spd)
+      echo "speech-dispatcher voices:"
+      spd-say -O 2>/dev/null || echo "  Use -v <voice>"
+      ;;
+    *)
+      echo "Unknown engine: $ENGINE"
+      exit 1
+      ;;
+  esac
+}
+
+speak_espeak() {
+  local voice="${1:-es}"
+  local text="$2"
+  if [ -n "$OUTPUT_FILE" ]; then
+    espeak-ng -v "$voice" -w "$OUTPUT_FILE" "$text"
+  else
+    espeak-ng -v "$voice" "$text"
+  fi
+}
+
+speak_piper() {
+  local voice="${1:-es_ES-davefx-medium}"
+  local text="$2"
+  local voice_file="$PIPER_VOICES/$voice.onnx"
+  if [ ! -f "$voice_file" ]; then
+    echo "Voice not found: $voice" >&2
+    echo "Available voices:" >&2
+    ls "$PIPER_VOICES"/*.onnx 2>/dev/null | sed 's/.*\///; s/\.onnx$//' >&2
+    exit 1
+  fi
+  if [ ! -x "$PIPER_BIN" ]; then
+    echo "Piper not installed. Run setup-tts.sh first." >&2
+    exit 1
+  fi
+  if [ -n "$OUTPUT_FILE" ]; then
+    echo "$text" | "$PIPER_BIN" --model "$voice_file" --output-raw \
+      | aplay -r 22050 -f S16_LE -c 1 -t raw 2>/dev/null
+    echo "$text" | "$PIPER_BIN" --model "$voice_file" --output-file "$OUTPUT_FILE"
+  else
+    echo "$text" | "$PIPER_BIN" --model "$voice_file" --output-raw \
+      | aplay -r 22050 -f S16_LE -c 1 -t raw 2>/dev/null
+  fi
+}
+
+speak_kokoro() {
+  local voice="${1:-af_heart}"
+  local text="$2"
+  python3 -c "
+import sys, os, tempfile, wave, struct, math
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+try:
+  from kokoro import KPipeline
+  pipeline = KPipeline(lang_code='a')
+  gen = pipeline('$text', voice='$voice', speed=1.0)
+  audio_data = b''
+  for gs, ps, audio in gen:
+    audio_data += audio.tobytes()
+  if audio_data:
+    if '$OUTPUT_FILE':
+      import soundfile as sf
+      sf.write('$OUTPUT_FILE', audio_data, 24000)
+    else:
+      tmp = tempfile.mktemp(suffix='.wav')
+      sf.write(tmp, audio_data, 24000)
+      os.system(f'paplay {tmp}')
+      os.unlink(tmp)
+except Exception as e:
+  print(f'Kokoro error: {e}', file=sys.stderr)
+  sys.exit(1)
+" 2>&1 || echo "Kokoro failed. Not installed or incompatible." >&2
+}
+
+speak_spd() {
+  local voice="${1:-es}"
+  local text="$2"
+  if [ -n "$OUTPUT_FILE" ]; then
+    spd-say -o "$OUTPUT_FILE" -l "$voice" -w "$text"
+  else
+    spd-say -l "$voice" "$text"
+  fi
+}
+
+# --- Parse args ---
+ENGINE="piper"
+VOICE=""
+TEXT=""
+OUTPUT_FILE=""
+LIST_VOICES=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -l|--list-voices) LIST_VOICES=true; shift ;;
+    -e|--engine) ENGINE="$2"; shift 2 ;;
+    -v|--voice) VOICE="$2"; shift 2 ;;
+    -o|--output) OUTPUT_FILE="$2"; shift 2 ;;
+    *) TEXT="$*"; break ;;
+  esac
+done
+
+if [ "$LIST_VOICES" = true ]; then
+  list_voices
+  exit 0
+fi
+
+if [ -z "$TEXT" ]; then
+  read -r TEXT
+fi
+
+if [ -z "$TEXT" ]; then
+  echo "No text provided" >&2
+  usage
+fi
+
+case "$ENGINE" in
+  espeak)
+    [ -z "$VOICE" ] && VOICE="es"
+    speak_espeak "$VOICE" "$TEXT"
+    ;;
+  piper)
+    [ -z "$VOICE" ] && VOICE="es_ES-davefx-medium"
+    speak_piper "$VOICE" "$TEXT"
+    ;;
+  kokoro)
+    [ -z "$VOICE" ] && VOICE="af_heart"
+    speak_kokoro "$VOICE" "$TEXT"
+    ;;
+  spd)
+    [ -z "$VOICE" ] && VOICE="es"
+    speak_spd "$VOICE" "$TEXT"
+    ;;
+  *)
+    echo "Unknown engine: $ENGINE. Use: espeak, piper, kokoro, spd" >&2
+    exit 1
+    ;;
+esac

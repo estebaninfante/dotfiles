@@ -1,0 +1,16 @@
+[Unit]
+Description=TTS Server (FIFO-based)
+After=pipewire.service sound.target
+Wants=pipewire.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/tts-server run
+ExecStop=%h/.local/bin/tts-server stop
+Restart=on-failure
+RestartSec=2
+Environment=TTS_ENGINE=piper
+Environment=TTS_VOICE=es_ES-davefx-medium
+
+[Install]
+WantedBy=default.target

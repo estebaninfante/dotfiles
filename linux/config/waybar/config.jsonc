@@ -17,6 +17,7 @@
     "clock"
   ],
   "modules-right": [
+    "custom/lid-inhibit",
     "idle_inhibitor",
     "pulseaudio",
     "network",
@@ -222,6 +223,13 @@
     "escape": true,
     "exec": "$HOME/.config/waybar/mediaplayer.py 2> /dev/null" // Script in resources folder
     // "exec": "$HOME/.config/waybar/mediaplayer.py --player spotify 2> /dev/null" // Filter player based on name
+  },
+  "custom/lid-inhibit": {
+    "format": "{}",
+    "return-type": "json",
+    "exec": "$HOME/.local/bin/lid-inhibit-waybar.sh",
+    "on-click": "$HOME/.local/bin/toggle-lid.sh",
+    "tooltip": true
   },
   "custom/power": {
     "format": "⏻ ",

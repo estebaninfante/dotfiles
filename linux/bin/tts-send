@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FIFO="$HOME/.cache/tts/tts.fifo"
+TEXT="$*"
+
+if [ -z "$TEXT" ]; then
+  read -r TEXT
+fi
+
+if [ ! -p "$FIFO" ]; then
+  echo "TTS server not running. Start with: tts-server start" >&2
+  exit 1
+fi
+
+echo "$TEXT" > "$FIFO"

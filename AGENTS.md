@@ -67,6 +67,12 @@ dotfiles/
 | btop | `~/.config/btop/` |
 | gh | `~/.config/gh/` |
 
+### Flatpak config (`linux/config/`) — flatpak apps
+
+| App | Ruta destino |
+|-----|-------------|
+| obs-studio | `~/.var/app/com.obsproject.Studio/config/obs-studio/` |
+
 ### GDM (login screen) — configuración manual con sudo
 
 | Archivo | Descripción |

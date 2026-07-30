@@ -29,3 +29,4 @@ it.mijorus.gearlever               # AppImage manager
 com.valvesoftware.Steam
 net.lutris.Lutris
 org.prismlauncher.PrismLauncher
+com.moonlight_stream.Moonlight
