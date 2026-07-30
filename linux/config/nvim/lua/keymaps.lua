@@ -37,6 +37,13 @@ vim.keymap.set("n", "<leader>bd", ":bdelete<cr>", { desc = "Cerrar buffer" })
 
 -- Guardado rápido
 vim.keymap.set("n", "<leader>w", ":w<cr>", { desc = "Guardar archivo" })
+vim.keymap.set("n", "<leader>s", ":w<cr>", { desc = "Guardar archivo" })
+
+-- Dashboard
+vim.keymap.set("n", "<leader>h", "<cmd>Dashboard<cr>", { desc = "Abrir dashboard" })
+
+-- Espacio en insert mode: sin delay de leader
+vim.keymap.set("i", "<space>", "<space>", { nowait = true })
 
 -- Copiar / Pegar / Cortar
 vim.keymap.set({ "n", "v" }, "<C-c>", "y", { noremap = true, silent = true })

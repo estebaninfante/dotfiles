@@ -150,3 +150,25 @@ bash ~/dotfiles/scripts/backup-packages.sh
 ## Lo que NO se gestiona
 
 Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes (Python, npm, dnf, etc.).
+
+## Autonomía de ejecución
+
+Cuando modifiques archivos de configuración relacionados con Linux (Hyprland, Waybar, Hyprpaper, PipeWire, systemd, keyd, GDM, GTK, Qt, shell, etc.), no te detengas después de editar.
+
+Después de cada modificación:
+
+1. Ejecuta automáticamente todos los comandos necesarios para aplicar los cambios (recargar servicios, reiniciar procesos, ejecutar scripts, etc.).
+2. Verifica que los cambios se hayan aplicado correctamente mediante los comandos de validación apropiados.
+3. Si aparece un error, investiga la causa e intenta solucionarlo de forma autónoma antes de pedirme ayuda.
+4. Repite el ciclo de editar → aplicar → verificar hasta que el problema quede resuelto o ya no puedas avanzar sin intervención humana.
+5. Siempre que sea posible, realiza tú mismo las acciones necesarias. No me pidas que ejecute comandos manualmente si puedes hacerlo tú.
+
+Solo solicita confirmación para operaciones potencialmente destructivas o de alto impacto, como:
+
+- Eliminar archivos o directorios.
+- Reinstalar o desinstalar paquetes.
+- Sobrescribir datos importantes.
+- Reiniciar o apagar el sistema.
+- Cambios irreversibles o con riesgo de pérdida de datos.
+
+Los reinicios de aplicaciones, recargas de servicios, validaciones de configuración, consultas con `journalctl`, ejecución de scripts del repositorio y demás operaciones rutinarias **no requieren confirmación**.

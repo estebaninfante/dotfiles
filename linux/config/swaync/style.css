@@ -1,0 +1,163 @@
+* {
+  all: unset;
+  font-family: "JetBrainsMono Nerd Font";
+  font-size: 11px;
+}
+
+.notification-row {
+  outline: none;
+  margin: 10px 12px;
+  padding: 0;
+}
+
+.notification {
+  min-height: 100px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 2px solid #ff1a1a;
+  border-radius: 12px;
+  padding: 14px;
+  margin: 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: notificationIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.notification-content {
+  background: transparent;
+  padding: 0;
+}
+
+.notification-default-action {
+  padding: 0;
+  margin: 0;
+  border-radius: 12px;
+}
+
+.notification-default-action:hover {
+  background: rgba(255, 26, 26, 0.08);
+}
+
+.notification-default-action:active {
+  background: rgba(255, 26, 26, 0.15);
+}
+
+/* Close button */
+.close-button {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 100%;
+  padding: 4px;
+  margin: 2px;
+}
+
+.close-button:hover {
+  background: #ff1a1a;
+}
+
+.close-button:active {
+  background: #cc0000;
+}
+
+/* Notification image */
+.notification-image {
+  padding: 0 8px 0 0;
+}
+
+.notification-image image {
+  border-radius: 8px;
+}
+
+/* Notification title */
+.notification-title {
+  font-weight: bold;
+  font-size: 12px;
+  color: #ffffff;
+  margin: 0 0 4px 0;
+}
+
+/* Notification body */
+.notification-body {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  margin: 0;
+}
+
+/* Notification app name */
+.notification-app-name {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  margin: 4px 0 0 0;
+}
+
+/* Critical urgency */
+.notification.critical {
+  border-color: #ff4444;
+  background: rgba(40, 0, 0, 0.8);
+}
+
+.notification.critical .notification-title {
+  color: #ff4444;
+}
+
+/* Low urgency */
+.notification.low {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Control Center */
+.control-center {
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 14px;
+  margin: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.control-center-title {
+  font-weight: bold;
+  font-size: 13px;
+  color: #ffffff;
+  padding: 0 0 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0 0 8px 0;
+}
+
+.control-center-list {
+  background: transparent;
+}
+
+.control-center-list-placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+}
+
+/* Clear all button */
+.widget-title {
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+
+.widget-title button {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 8px;
+  padding: 4px 12px;
+  color: #ffffff;
+}
+
+.widget-title button:hover {
+  background: #ff1a1a;
+}
+
+/* Animations */
+@keyframes notificationIn {
+  from {
+    opacity: 0;
+    transform: translateX(80px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}

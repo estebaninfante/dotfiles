@@ -4,13 +4,21 @@ SAVE_DIR="$HOME/Pictures/screenshots"
 TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
 MODE="area"
 ACTION="copy"
-GEOMETRY=""
+
+LOCKFILE="/tmp/shot.lock"
+exec 9>"$LOCKFILE" || exit 1
+flock -n 9 || exit 1
+
+cleanup() {
+    [ -n "$HYPRPICKER_PID" ] && kill "$HYPRPICKER_PID" 2>/dev/null
+}
+trap cleanup EXIT
 
 usage() {
     cat <<EOF
 Uso: shot [opciones] [full|active|area]
 
-Por defecto: captura area → clipboard
+Pantalla congelada al capturar. Sin captures superpuestas.
 
 Opciones:
   -s, --save      Guardar en archivo (además de clipboard)
@@ -23,7 +31,7 @@ Modos:
   area            Selección manual (default)
 
 Ejemplos:
-  shot              area → clipboard
+  shot              area → clipboard (congelado)
   shot full         full → clipboard
   shot active       ventana activa → clipboard
   shot -s           area → archivo + clipboard
@@ -31,6 +39,14 @@ Ejemplos:
   shot -e           area → swappy
 EOF
     exit 0
+}
+
+freeze_screen() {
+    if command -v hyprpicker &>/dev/null; then
+        hyprpicker -r -z &
+        HYPRPICKER_PID=$!
+        sleep 0.15
+    fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -47,41 +63,34 @@ case "$MODE" in
     active)
         GEOMETRY=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
         [ -z "$GEOMETRY" ] && { notify-send -u critical "shot" "No se pudo obtener ventana activa"; exit 1; }
+        freeze_screen
+        grim -g "$GEOMETRY" -
         ;;
     full)
-        GEOMETRY=""
+        freeze_screen
+        grim -
         ;;
     area)
-        GEOMETRY=$(slurp)
+        freeze_screen
+        GEOMETRY=$(slurp -d)
         [ -z "$GEOMETRY" ] && exit 1
+        grim -g "$GEOMETRY" -
         ;;
-esac
-
-case "$ACTION" in
-    copy)
-        if [ -z "$GEOMETRY" ]; then
-            grim - | wl-copy
-        else
-            grim -g "$GEOMETRY" - | wl-copy
-        fi
-        notify-send "shot" "Captura copiada al portapapeles"
-        ;;
-    save)
-        mkdir -p "$SAVE_DIR"
-        FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
-        if [ -z "$GEOMETRY" ]; then
-            grim "$FILE"
-        else
-            grim -g "$GEOMETRY" "$FILE"
-        fi
-        wl-copy < "$FILE"
-        notify-send "shot" "Guardada: $FILE"
-        ;;
-    edit)
-        if [ -z "$GEOMETRY" ]; then
-            grim - | swappy -f -
-        else
-            grim -g "$GEOMETRY" - | swappy -f -
-        fi
-        ;;
-esac
+esac | {
+    case "$ACTION" in
+        copy)
+            wl-copy --type image/png
+            notify-send "shot" "Captura copiada al portapapeles"
+            ;;
+        save)
+            mkdir -p "$SAVE_DIR"
+            FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
+            cat > "$FILE"
+            wl-copy --type image/png < "$FILE"
+            notify-send "shot" "Guardada: $FILE"
+            ;;
+        edit)
+            swappy -f -
+            ;;
+    esac
+}

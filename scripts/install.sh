@@ -113,6 +113,7 @@ CONFIG_DIRS=(
   kanata
   fastfetch
   mako
+  swaync
   swayosd
   avizo
   btop

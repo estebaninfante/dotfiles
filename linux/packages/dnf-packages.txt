@@ -16,17 +16,17 @@ neovim
 # ── Hyprland ecosystem ──
 hyprland
 hyprpaper
+hyprpicker
 hypridle
 hyprlock
 waybar
 rofi
 rofi-emoji
-mako
+swaync
 swayosd
 avizo
 kanata
 brightnessctl
-dunst
 libnotify
 playerctl
 pamixer
