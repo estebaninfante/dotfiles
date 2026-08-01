@@ -20,11 +20,12 @@
     ],
 
     "modules-right": [
+        "custom/pomodoro",
         "custom/lid-inhibit",
         "pulseaudio",
         "custom/memory",
         "cpu",
-        "battery"
+        "custom/battery"
     ],
 
     /* =========================
@@ -35,7 +36,10 @@
         "disable-scroll": false,
         "all-outputs": false,
         "warp-on-scroll": false,
-        "format": "{name}"
+        "format": "{name}",
+        "on-click": "activate",
+        "sort-by-number": true,
+        "active-only": false
     },
 
     /* =========================
@@ -70,23 +74,18 @@
        BATTERY
        ========================= */
 
-    "battery": {
+    "custom/battery": {
+        "exec": "$HOME/.local/bin/waybar-battery-top",
+        "return-type": "json",
+        "interval": 10,
+        "tooltip": true,
         "states": {
             "warning": 30,
             "critical": 15
         },
-
-        "format": "{capacity}%",
-
-        "format-charging": "{capacity}%+",
-
-        "format-plugged": "{capacity}% AC",
-
-        "format-alt": "{time}",
-
-        "tooltip": true,
-
-        "tooltip-format": "{time} remaining"
+        "format": "{}",
+        "format-charging": "{}",
+        "format-plugged": "{}"
     },
 
     /* =========================
@@ -113,5 +112,17 @@
         "exec": "$HOME/.local/bin/lid-inhibit-waybar.sh",
         "on-click": "$HOME/.local/bin/toggle-lid.sh",
         "tooltip": true
+    },
+
+    /* =========================
+       POMODORO
+       ========================= */
+
+    "custom/pomodoro": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "$HOME/.local/bin/pomodoro-waybar.sh",
+        "on-click": "$HOME/.local/bin/pomodoro-waybar.sh toggle",
+        "tooltip": false
     },
 }

@@ -12,6 +12,7 @@ org.mozilla.firefox
 # ── Multimedia ──
 org.videolan.VLC
 com.obsproject.Studio
+com.spotify.Client
 
 # ── Productividad ──
 md.obsidian.Obsidian                   # Markdown knowledge base

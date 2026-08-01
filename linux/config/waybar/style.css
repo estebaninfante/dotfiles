@@ -42,7 +42,7 @@ window#waybar {
 #pulseaudio,
 #custom-memory,
 #cpu,
-#battery {
+#custom-battery {
   background: transparent;
 
   padding: 0 12px;
@@ -115,13 +115,42 @@ window#waybar {
   color: #666666;
 }
 
+/* POMODORO */
+
+#custom-pomodoro {
+  padding: 0 12px;
+  margin: 0 2px;
+}
+
+#custom-pomodoro.pomodoro-idle {
+  color: #666666;
+}
+
+#custom-pomodoro.pomodoro-work {
+  color: #ff5555;
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+
+#custom-pomodoro.pomodoro-break {
+  color: #50fa7b;
+}
+
+@keyframes pulse {
+  from { opacity: 1; }
+  to { opacity: 0.5; }
+}
+
 /* BATTERY */
 
-#battery.warning {
+#custom-battery {
+  color: #d0d0d0;
+}
+
+#custom-battery.warning {
   color: #ff6666;
 }
 
-#battery.critical {
+#custom-battery.critical {
   color: #ffffff;
 }
 

@@ -35,4 +35,12 @@ alias office='lo'
 # opencode
 export PATH=/home/eztvn/.opencode/bin:$PATH
 alias opencode="script -q -c \"opencode\" /dev/null"
+
+# kitty: disable SIGTSTP so ctrl+z reaches opencode as undo
+if [[ -n "$KITTY_WINDOW_ID" ]]; then
+    stty susp ^-
+fi
 . "$HOME/.cargo/env"
+
+# zoxide (smarter cd)
+eval "$(zoxide init bash)"

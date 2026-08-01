@@ -18,6 +18,7 @@ set -euo pipefail
 REQUIRED_PKGS=(
     fprintd
     fprintd-pam
+    hyprpolkitagent
 )
 
 # ─── Funciones ──────────────────────────────────────────────
@@ -85,6 +86,15 @@ check_fingers_enrolled() {
     return 1
 }
 
+check_polkit_agent() {
+    if systemctl --user is-active --quiet hyprpolkitagent 2>/dev/null; then
+        ok "Agente polkit (hyprpolkitagent) activo"
+        return 0
+    fi
+    warn "Agente polkit NO activo (fprintd-enroll requiere autenticación polkit)"
+    return 1
+}
+
 show_status() {
     echo ""
     echo "═══════════════════════════════════════"
@@ -108,6 +118,9 @@ show_status() {
     echo ""
     echo "--- Authselect ---"
     authselect current 2>/dev/null || warn "authselect no disponible"
+    echo ""
+    echo "--- Agente polkit ---"
+    check_polkit_agent || true
     echo ""
     echo "--- Huellas registradas ---"
     fprintd-list "$(whoami)" 2>/dev/null || warn "Sin huellas"
@@ -202,6 +215,20 @@ else
         info "PAM configurado automáticamente para: sudo, gdm, login, system-auth"
     else
         echo "  Para habilitar: sudo authselect enable-feature with-fingerprint"
+    fi
+fi
+echo ""
+
+# ─── Paso 4b: Agente polkit ────────────────────────────────
+echo "── Paso 4b: Agente polkit ──"
+if check_polkit_agent; then
+    ok "Agente polkit funcionando"
+else
+    if [ "$APPLY" = true ]; then
+        info "Iniciando hyprpolkitagent..."
+        systemctl --user start hyprpolkitagent 2>/dev/null && ok "hyprpolkitagent iniciado" || warn "No se pudo iniciar (¿estás en Hyprland?)"
+    else
+        echo "  Para iniciar: systemctl --user start hyprpolkitagent"
     fi
 fi
 echo ""

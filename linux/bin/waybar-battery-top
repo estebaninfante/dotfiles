@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Custom battery module for waybar — text + tooltip with top CPU consumers
+
+bat_path=$(upower -e | grep BAT)
+if [ -z "$bat_path" ]; then
+    printf '{"text":"AC","tooltip":"No battery detected"}'
+    exit 0
+fi
+
+upower_out=$(upower -i "$bat_path")
+
+# Parse battery info (handle comma decimal separator)
+bat_percent=$(echo "$upower_out" | awk '/percentage/{gsub(/%/,"",$2); print $2}')
+bat_status=$(echo "$upower_out" | awk '/state:/{print $2}')
+bat_energy=$(echo "$upower_out" | awk '/energy:/{gsub(/,/,".",$2); print $2}')
+bat_energy_full=$(echo "$upower_out" | awk '/energy-full:/{gsub(/,/,".",$2); print $2}')
+bat_energy_rate=$(echo "$upower_out" | awk '/energy-rate:/{gsub(/,/,".",$2); print $2}')
+
+# Calculate time remaining (hours)
+if [ "$bat_status" = "discharging" ] && [ -n "$bat_energy" ] && [ -n "$bat_energy_rate" ]; then
+    time_left=$(echo "$bat_energy $bat_energy_rate" | awk '{printf "%.1f", $1/$2}')
+    time_str="${time_left}h"
+else
+    time_str=""
+fi
+
+case "$bat_status" in
+    charging)      icon="+" ;;
+    discharging)   icon="" ;;
+    fully-charged) icon="AC" ;;
+    *)             icon="" ;;
+esac
+
+# Top 10 CPU consumers
+processes=$(ps -eo %cpu,pid,comm --sort=-%cpu | head -11 | tail -10 | awk '{printf "%-20s %5s%%  PID %s\\n", $3, $1, $2}')
+
+tooltip="Battery: ${bat_percent}% ${icon}\\nStatus: ${bat_status}"
+[ -n "$time_str" ] && tooltip="${tooltip}\\nTime left: ${time_str}"
+tooltip="${tooltip}\\nPower: ${bat_energy_rate}W"
+tooltip="${tooltip}\\n\\nTop CPU consumers:\\n${processes}"
+
+printf '{"text":"%s%%","tooltip":"%s"}' "$bat_percent" "$tooltip"

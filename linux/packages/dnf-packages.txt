@@ -26,6 +26,7 @@ swaync
 swayosd
 avizo
 kanata
+hyprpolkitagent
 brightnessctl
 libnotify
 playerctl
@@ -101,6 +102,7 @@ npm
 python3
 python3-pip
 python3-devel
+python3-evdev
 rust
 cargo
 go

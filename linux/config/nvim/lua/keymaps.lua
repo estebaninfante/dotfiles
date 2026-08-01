@@ -9,7 +9,7 @@ vim.opt.shiftwidth = 2
 vim.opt.expandtab = true
 vim.opt.termguicolors = true
 vim.opt.wrap = false
-vim.keymap.set("i", "kk", "<Esc>")
+vim.keymap.set("i", "uu", "<Esc>")
 -- ==========================================
 -- Navegación Dvorak Home Row (h t n s)
 -- h = Izquierda | t = Abajo | n = Arriba | s = Derecha
@@ -51,9 +51,12 @@ vim.keymap.set({ "n", "v" }, "<C-v>", "p", { noremap = true, silent = true })
 vim.keymap.set("i", "<C-v>", "<C-r>+", { noremap = true, silent = true })
 vim.keymap.set({ "n", "v" }, "<C-x>", "d", { noremap = true, silent = true })
 
+-- File Explorer
+vim.keymap.set("n", "<leader>e", "<cmd>NvimTreeToggle<cr>", { desc = "Toggle file explorer" })
+
 -- Búsqueda y Navegación (Telescope / LSP / Proyectos)
 vim.keymap.set("n", "<leader>p", "<cmd>Telescope projects<cr>", { desc = "Abrir proyectos (.git)" })
 vim.keymap.set("n", "<leader>ff", "<cmd>Telescope find_files<cr>", { desc = "Buscar archivos" })
-vim.keymap.set("n", "<leader>fg", "<cmd>Telescope live_grep<cr>", { desc = "Buscar texto (grep)" })
+vim.keymap.set("n", "<leader>ft", "<cmd>Telescope live_grep<cr>", { desc = "Buscar texto (grep)" })
 vim.keymap.set("n", "gd", vim.lsp.buf.definition, { desc = "Ir a definición" })
 vim.keymap.set("n", "K", vim.lsp.buf.hover, { desc = "Ver documentación (hover)" })

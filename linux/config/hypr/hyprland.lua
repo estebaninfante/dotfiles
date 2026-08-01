@@ -20,7 +20,7 @@ hl.config({
 -- ========================
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 hl.env("GDK_SCALE", "2")
-hl.env("PATH", "$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin")
+hl.env("PATH", os.getenv("HOME") .. "/.local/bin:/usr/local/bin:/usr/bin:/bin")
 
 -- ========================
 -- MONITORS
@@ -40,7 +40,10 @@ hl.config({
         follow_mouse = 1,
         touchpad = {
             disable_while_typing = true,
-            tap_to_click = false,
+            tap_to_click = true,
+            clickfinger_behavior = true,
+            tap_and_drag = false,
+            drag_lock = false,
             natural_scroll = true,
             scroll_factor = 0.5
         },
@@ -125,6 +128,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("urserver --daemon")
     hl.exec_cmd("swayosd-server --top-margin=0.4")
     hl.exec_cmd("sleep 5 && libinput-gestures-setup start")
+    hl.exec_cmd("sleep 5 && handy --start-hidden")
 end)
 
 -- ========================
@@ -137,7 +141,7 @@ hl.window_rule({ match = { class = "libreoffice.*" }, workspace = "empty" })
 hl.window_rule({ match = { class = "soffice.*" }, workspace = "empty" })
 hl.window_rule({ match = { class = "swayosd-server" }, float = 1 })
 hl.window_rule({ match = { class = "swayosd-server" }, move = "1% 40%" })
-hl.window_rule({ match = { class = "swayosd-server" }, size = "8 180" })
+hl.window_rule({ match = { class = "swayosd-server" }, size = "200 20" })
 hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
 
 -- ========================
@@ -183,12 +187,12 @@ hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 3%- && swayo
 -- ========================
 -- SCREENSHOT (shot: grim + slurp + wl-copy)
 -- ========================
-hl.bind("Print",           hl.dsp.exec_cmd("shot"))
-hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("shot full"))
-hl.bind("CTRL + Print",    hl.dsp.exec_cmd("shot -s"))
-hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("shot -s full"))
-hl.bind(mainMod .. " + Print",       hl.dsp.exec_cmd("shot active"))
-hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd("shot -e"))
+hl.bind("Print",           hl.dsp.exec_cmd("bash -c '~/.local/bin/shot'"))
+hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("bash -c '~/.local/bin/shot full'"))
+hl.bind("CTRL + Print",    hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -s'"))
+hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -s full'"))
+hl.bind(mainMod .. " + Print",       hl.dsp.exec_cmd("bash -c '~/.local/bin/shot active'"))
+hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -e'"))
 
 -- Handy (speech-to-text)
 hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-transcription"))
@@ -217,10 +221,10 @@ hl.bind(mainMod .. " + SHIFT + E", hl.dsp.window.move({ direction = "down" }))
 -- ========================
 -- RESIZE
 -- ========================
-hl.bind(mainMod .. " + left",  hl.dsp.window.resize({ x = -20, y = 0 }))
-hl.bind(mainMod .. " + right", hl.dsp.window.resize({ x = 20, y = 0 }))
-hl.bind(mainMod .. " + up",    hl.dsp.window.resize({ x = 0, y = -20 }))
-hl.bind(mainMod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20 }))
+hl.bind(mainMod .. " + left",  hl.dsp.window.resize({ x = -20, y = 0, relative = true }))
+hl.bind(mainMod .. " + right", hl.dsp.window.resize({ x = 20, y = 0, relative = true }))
+hl.bind(mainMod .. " + up",    hl.dsp.window.resize({ x = 0, y = -20, relative = true }))
+hl.bind(mainMod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative = true }))
 
 -- ========================
 -- WORKSPACES

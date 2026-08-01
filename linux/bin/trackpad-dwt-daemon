@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Trackpad disable-while-typing daemon.
+
+Grabs touchpad exclusively (EVIOCGRAB) for DWT_MS after each keystroke.
+Blocks all touchpad events: movement, taps, clicks, scrolls.
+
+Requires: python3-evdev, user in 'input' group.
+Env vars:
+  TRACKPAD_DWT_MS    - disable window in ms (default: 500)
+  TRACKPAD_DEVICE    - touchpad device name substring (default: Touchpad)
+  KEYBOARD_DEVICE    - keyboard device name substring (default: Keyboard)
+"""
+
+import asyncio
+import os
+import signal
+import sys
+
+from evdev import InputDevice, categorize, ecodes
+
+DWT_MS = int(os.environ.get("TRACKPAD_DWT_MS", "500"))
+TP_SUB = os.environ.get("TRACKPAD_DEVICE", "Touchpad")
+KB_SUB = os.environ.get("KEYBOARD_DEVICE", "Keyboard")
+
+
+def find_device(substring: str) -> InputDevice | None:
+    """Find first /dev/input/eventN whose name contains substring."""
+    from evdev import list_devices
+    for path in list_devices():
+        try:
+            dev = InputDevice(path)
+            if substring.lower() in dev.name.lower():
+                return dev
+        except (PermissionError, OSError):
+            continue
+    return None
+
+
+async def main():
+    kb = find_device(KB_SUB)
+    tp = find_device(TP_SUB)
+
+    if not kb:
+        print(f"keyboard not found (substring: {KB_SUB!r})", file=sys.stderr)
+        sys.exit(1)
+    if not tp:
+        print(f"touchpad not found (substring: {TP_SUB!r})", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"keyboard: {kb.path} ({kb.name})", file=sys.stderr, flush=True)
+    print(f"touchpad: {tp.path} ({tp.name}) — DWT window {DWT_MS}ms",
+          file=sys.stderr, flush=True)
+
+    loop = asyncio.get_event_loop()
+    grabbed = False
+    timer = None
+
+    def release():
+        nonlocal grabbed, timer
+        timer = None
+        if grabbed:
+            try:
+                tp.ungrab()
+            except OSError as e:
+                print(f"ungrab failed: {e}", file=sys.stderr, flush=True)
+            grabbed = False
+
+    async for event in kb.async_read_loop():
+        # Only react to key press events (value 1=press, 2=repeat)
+        if event.type != ecodes.EV_KEY or event.value not in (1, 2):
+            continue
+
+        # Grab touchpad if not already grabbed
+        if not grabbed:
+            try:
+                tp.grab()
+                grabbed = True
+            except OSError as e:
+                print(f"grab failed: {e}", file=sys.stderr, flush=True)
+                continue
+
+        # Reset timer on every keystroke
+        if timer:
+            timer.cancel()
+        timer = loop.call_later(DWT_MS / 1000, release)
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

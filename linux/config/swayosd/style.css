@@ -1,6 +1,7 @@
-window {
+window#osd {
     background: transparent;
     border: none;
+    border-radius: 0;
     box-shadow: none;
 }
 
@@ -10,16 +11,24 @@ label, image {
 }
 
 progressbar {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+    background: transparent;
+    border: none;
+    transform: rotate(-90deg);
+    transform-origin: center center;
+}
+
+trough {
+    background: rgba(255, 255, 255, 0.15);
+    min-height: 4px;
+    min-width: 180px;
+    border-radius: 999px;
+    border: none;
 }
 
 progress {
     background: #ffffff;
-    border-radius: 4px;
-}
-
-trough {
-    min-width: 8px;
-    min-height: 180px;
+    min-height: 4px;
+    min-width: 0;
+    border-radius: 999px;
+    border: none;
 }

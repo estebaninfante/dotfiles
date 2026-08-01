@@ -206,6 +206,10 @@ for file in "${CONFIG_FILES[@]}"; do
   summary_entries+=("$DOTFILES/linux/config/$file:$HOME/.config/$file")
 done
 
+for unit in "${SYSTEMD_UNITS[@]}"; do
+  summary_entries+=("$DOTFILES/linux/config/systemd/user/$unit:$HOME/.config/systemd/user/$unit")
+done
+
 for file in "${HOME_FILES[@]}"; do
   summary_entries+=("$DOTFILES/linux/home/$file:$HOME/$file")
 done
@@ -268,6 +272,16 @@ done
 info "Enlazando archivos sueltos de configuracion..."
 for file in "${CONFIG_FILES[@]}"; do
   link_config "$file"
+done
+
+# ── Systemd user units ─────────────────────────────────────
+info "Enlazando unidades systemd user..."
+mkdir -p "$HOME/.config/systemd/user"
+SYSTEMD_UNITS=(
+  trackpad-dwt.service
+)
+for unit in "${SYSTEMD_UNITS[@]}"; do
+  link "$DOTFILES/linux/config/systemd/user/$unit" "$HOME/.config/systemd/user/$unit"
 done
 
 # ── Home files ───────────────────────────────────────────────
@@ -362,6 +376,10 @@ done
 
 for file in "${CONFIG_FILES[@]}"; do
   validate_symlink "$DOTFILES/linux/config/$file" "$HOME/.config/$file"
+done
+
+for unit in "${SYSTEMD_UNITS[@]}"; do
+  validate_symlink "$DOTFILES/linux/config/systemd/user/$unit" "$HOME/.config/systemd/user/$unit"
 done
 
 for file in "${HOME_FILES[@]}"; do

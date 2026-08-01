@@ -25,7 +25,7 @@ configuration {
 /*	drun-match-fields: "name,generic,exec,categories,keywords";*/
 /*	drun-categories: ;*/
 /*	drun-exclude-categories: ;*/
-/*	drun-show-actions: false;*/
+	drun-show-actions: true;
 /*	drun-display-format: "{name} [<span weight='light' size='small'><i>({generic})</i></span>]";*/
 /*	drun-url-launcher: "xdg-open";*/
 /*	disable-history: false;*/
