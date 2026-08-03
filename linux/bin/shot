@@ -5,12 +5,9 @@ TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
 MODE="area"
 ACTION="copy"
 
-LOCKFILE="/tmp/shot.lock"
-exec 9>"$LOCKFILE" || exit 1
-flock -n 9 || exit 1
-
 cleanup() {
     [ -n "$HYPRPICKER_PID" ] && kill "$HYPRPICKER_PID" 2>/dev/null
+    wait "$HYPRPICKER_PID" 2>/dev/null
 }
 trap cleanup EXIT
 
@@ -59,38 +56,37 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+freeze_screen
+
 case "$MODE" in
     active)
         GEOMETRY=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
         [ -z "$GEOMETRY" ] && { notify-send -u critical "shot" "No se pudo obtener ventana activa"; exit 1; }
-        freeze_screen
-        grim -g "$GEOMETRY" -
+        grim -g "$GEOMETRY" - > /tmp/shot.png
         ;;
     full)
-        freeze_screen
-        grim -
+        grim - > /tmp/shot.png
         ;;
     area)
-        freeze_screen
         GEOMETRY=$(slurp -d)
         [ -z "$GEOMETRY" ] && exit 1
-        grim -g "$GEOMETRY" -
+        grim -g "$GEOMETRY" - > /tmp/shot.png
         ;;
-esac | {
-    case "$ACTION" in
-        copy)
-            wl-copy --type image/png
-            notify-send "shot" "Captura copiada al portapapeles"
-            ;;
-        save)
-            mkdir -p "$SAVE_DIR"
-            FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
-            cat > "$FILE"
-            wl-copy --type image/png < "$FILE"
-            notify-send "shot" "Guardada: $FILE"
-            ;;
-        edit)
-            swappy -f -
-            ;;
-    esac
-}
+esac
+
+case "$ACTION" in
+    copy)
+        wl-copy --type image/png < /tmp/shot.png
+        notify-send "shot" "Captura copiada al portapapeles"
+        ;;
+    save)
+        mkdir -p "$SAVE_DIR"
+        FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
+        cp /tmp/shot.png "$FILE"
+        wl-copy --type image/png < "$FILE"
+        notify-send "shot" "Guardada: $FILE"
+        ;;
+    edit)
+        swappy -f /tmp/shot.png
+        ;;
+esac

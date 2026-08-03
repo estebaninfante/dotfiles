@@ -44,3 +44,6 @@ fi
 
 # zoxide (smarter cd)
 eval "$(zoxide init bash)"
+
+# starship prompt
+eval "$(starship init bash)"
