@@ -47,7 +47,7 @@ if [ -f "$DNF_LIST" ]; then
   packages=$(grep -v '^\s*#' "$DNF_LIST" | grep -v '^\s*$' | tr '\n' ' ')
   info "Paquetes: $packages"
   if [ -n "$packages" ]; then
-    run sudo dnf install -y $packages
+    run sudo dnf install -y --allowerasing $packages
     ok "Paquetes DNF instalados"
   else
     skip "No hay paquetes DNF en la lista"
