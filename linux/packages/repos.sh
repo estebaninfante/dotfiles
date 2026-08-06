@@ -48,6 +48,14 @@ else
   echo "  ✓ Google Chrome repo ya presente"
 fi
 
+# ── Tailscale ──
+if [ ! -f /etc/yum.repos.d/tailscale.repo ]; then
+  curl -fsSL https://pkgs.tailscale.com/stable/fedora/tailscale.repo | sudo tee /etc/yum.repos.d/tailscale.repo > /dev/null
+  echo "  ✓ Tailscale repo añadido"
+else
+  echo "  ✓ Tailscale repo ya presente"
+fi
+
 # ── Flathub (flatpak) ──
 if ! flatpak remotes 2>/dev/null | grep -q flathub; then
   flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo

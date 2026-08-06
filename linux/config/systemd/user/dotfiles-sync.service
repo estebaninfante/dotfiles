@@ -1,0 +1,8 @@
+[Unit]
+Description=Dotfiles auto-sync (git pull)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/git -C %h/dotfiles pull --ff-only

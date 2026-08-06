@@ -7,6 +7,13 @@ local fileManager = "dolphin"
 local menu = "ulauncher"
 
 -- ========================
+-- MACHINE DETECTION
+-- ========================
+local f = io.open(os.getenv("HOME") .. "/.config/machine-type", "r")
+local machine = f and f:read("*a"):match("^%s*(.-)%s*$") or "laptop"
+if f then f:close() end
+
+-- ========================
 -- XWAYLAND
 -- ========================
 hl.config({
@@ -26,8 +33,12 @@ hl.env("PATH", os.getenv("HOME") .. "/.local/bin:/usr/local/bin:/usr/bin:/bin")
 -- MONITORS
 -- ========================
 -- bgcolor=rgba(0,0,0,1) eliminates white flash before hyprpaper loads
-hl.monitor({ output = "eDP-1",     mode = "2880x1800@120", position = "0x0",      scale = 2 })
-hl.monitor({ output = "HDMI-A-1",  mode = "2560x1440@144", position = "1440x-270", scale = 1 })
+if machine == "laptop" then
+    hl.monitor({ output = "eDP-1",     mode = "2880x1800@120", position = "0x0",      scale = 2 })
+    hl.monitor({ output = "HDMI-A-1",  mode = "2560x1440@144", position = "1440x-270", scale = 1 })
+elseif machine == "desktop" then
+    hl.monitor({ output = "DP-1",  mode = "2560x1440@144", position = "0x0", scale = 1 })
+end
 
 -- ========================
 -- INPUT
@@ -38,18 +49,25 @@ hl.config({
         kb_variant  = "basic",
         kb_options  = "caps:super",
         follow_mouse = 1,
-        touchpad = {
-            disable_while_typing = true,
-            tap_to_click = true,
-            clickfinger_behavior = true,
-            tap_and_drag = false,
-            drag_lock = false,
-            natural_scroll = true,
-            scroll_factor = 0.5
-        },
         sensitivity = 0
     }
 })
+
+if machine == "laptop" then
+    hl.config({
+        input = {
+            touchpad = {
+                disable_while_typing = true,
+                tap_to_click = true,
+                clickfinger_behavior = true,
+                tap_and_drag = false,
+                drag_lock = false,
+                natural_scroll = true,
+                scroll_factor = 0.5
+            }
+        }
+    })
+end
 
 -- ========================
 -- APPEARANCE (LOOK & FEEL)
@@ -96,19 +114,21 @@ hl.config({
 })
 
 -- ========================
--- DEVICE (touchpad)
+-- DEVICE (touchpad) — laptop only
 -- ========================
-hl.device({
-    name    = "elan06fa:00-04f3:3280-touchpad",
-    enabled = true
-})
+if machine == "laptop" then
+    hl.device({
+        name    = "elan06fa:00-04f3:3280-touchpad",
+        enabled = true
+    })
+end
 
 -- ========================
 -- AUTO-START (optimized order)
 -- ========================
 hl.on("hyprland.start", function()
     -- 1. Wallpaper immediately (first visual priority)
-    hl.exec_cmd("hyprpaper")
+    hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-" .. machine .. ".conf")
 
     -- 2. Bar and UI
     hl.exec_cmd("waybar")
@@ -127,8 +147,11 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'")
     hl.exec_cmd("urserver --daemon")
     hl.exec_cmd("swayosd-server --top-margin=0.4")
-    hl.exec_cmd("sleep 5 && libinput-gestures-setup start")
     hl.exec_cmd("sleep 5 && handy --start-hidden")
+
+    if machine == "laptop" then
+        hl.exec_cmd("sleep 5 && libinput-gestures-setup start")
+    end
 end)
 
 -- ========================
@@ -200,7 +223,10 @@ hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-transcription"))
 -- OpenCode / TV toggle
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles -e ~/.opencode/bin/opencode"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
-hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-lid.sh"))
+
+if machine == "laptop" then
+    hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-lid.sh"))
+end
 
 -- ========================
 -- FOCUS (DVORAK-PROG layout)

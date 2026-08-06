@@ -79,6 +79,7 @@ neofetch
 ufw
 openssh-clients
 NetworkManager-tui
+tailscale
 
 # ── Multimedia ──
 vlc

@@ -11,16 +11,14 @@ vim.opt.termguicolors = true
 vim.opt.wrap = false
 vim.keymap.set("i", "uu", "<Esc>")
 -- ==========================================
--- Navegación Dvorak Home Row (h t n s)
--- h = Izquierda | t = Abajo | n = Arriba | s = Derecha
+-- Navegación Dvorak Home Row (h n s)
+-- h = Izquierda | n = Arriba | s = Derecha
 -- ==========================================
 vim.keymap.set({ "n", "v" }, "h", "h", { desc = "Mover a la izquierda" })
-vim.keymap.set({ "n", "v" }, "t", "j", { desc = "Mover abajo" })
 vim.keymap.set({ "n", "v" }, "n", "k", { desc = "Mover arriba" })
 vim.keymap.set({ "n", "v" }, "s", "l", { desc = "Mover a la derecha" })
 
--- Remapear comandos originales de t, n, s a j, k, l si es necesario
-vim.keymap.set({ "n", "v" }, "j", "t", { desc = "Hasta el carácter (remap de t)" })
+-- Remapear comandos originales de n, s a k, l si es necesario
 vim.keymap.set({ "n", "v" }, "k", "n", { desc = "Siguiente búsqueda (remap de n)" })
 vim.keymap.set({ "n", "v" }, "l", "s", { desc = "Sustituir carácter (remap de s)" })
 

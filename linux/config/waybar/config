@@ -23,6 +23,7 @@
         "custom/pomodoro",
         "custom/lid-inhibit",
         "pulseaudio",
+        "network",
         "custom/memory",
         "cpu",
         "custom/battery"
@@ -101,6 +102,22 @@
 
 	    "on-click": "pavucontrol"
 	},
+
+    /* =========================
+       NETWORK
+       ========================= */
+
+    "network": {
+        "format-wifi": "{icon} {signalStrength}%",
+        "format-ethernet": "\uF0230 {ifname}",
+        "format-disconnected": "\uF092D OFF",
+        "format-alt": "{ifname}: {ipaddr}/{cidr}",
+        "tooltip-format": "{ifname}: {ipaddr}/{cidr}\nGateway: {gwaddr}\nSignal: {signalStrength}%\nFrequency: {frequency} MHz",
+        "format-icons": ["\uF092F", "\uF091F", "\uF0922", "\uF0925", "\uF0928"],
+        "on-click": "$HOME/.local/bin/wifi-reconnect.sh",
+        "on-click-right": "nm-connection-editor",
+        "interval": 5
+    },
 
     /* =========================
        LID INHIBIT

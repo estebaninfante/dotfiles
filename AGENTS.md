@@ -153,6 +153,72 @@ bash ~/dotfiles/scripts/backup-packages.sh
 # Luego haz commit y push
 ```
 
+## Multi-máquina (laptop + desktop)
+
+### Detección
+
+El archivo `~/.config/machine-type` contiene `laptop` o `desktop`. No se commitea al repo (es local a cada máquina).
+
+`install.sh` lee este archivo al inicio. Si no existe, asume `laptop`.
+
+### Configs machine-specific
+
+**`hyprland.lua`** usa condicionales por machine type:
+
+```lua
+local f = io.open(os.getenv("HOME") .. "/.config/machine-type", "r")
+local machine = f and f:read("*a"):match("^%s*(.-)%s*$") or "laptop"
+if f then f:close() end
+
+if machine == "laptop" then
+    -- monitores, touchpad, device, lid
+end
+
+if machine == "desktop" then
+    -- monitores desktop
+end
+
+-- Shared: keybinds, appearance, autostart, etc.
+```
+
+**`hyprpaper`** tiene dos configs:
+- `hyprpaper-laptop.conf` → monitor eDP-2
+- `hyprpaper-desktop.conf` → monitor DP-1
+
+El autostart en hyprland.lua carga la correcta:
+```lua
+hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-" .. machine .. ".conf")
+```
+
+**Scripts machine-specific** (solo se enlazan en laptop):
+- `toggle-lid.sh`
+- `lid-inhibit-waybar.sh`
+- `waybar-battery-top`
+- `trackpad-dwt-daemon`
+- `reload-hyprpaper.sh`
+
+**Systemd units:**
+- `trackpad-dwt.service` → solo laptop
+- `dotfiles-sync.service` + `dotfiles-sync.timer` → ambas máquinas
+
+### Sync entre máquinas
+
+Servicio systemd user (`dotfiles-sync.timer`) ejecuta `git pull --ff-only` cada 5 minutos.
+
+Para subir cambios desde una máquina:
+```bash
+bash ~/dotfiles/scripts/publish.sh
+```
+
+La otra máquina recibe los cambios automáticamente (o al reiniciar: `systemctl --user daemon-reload && systemctl --user enable --now dotfiles-sync.timer`).
+
+### Reglas para AI (opencode)
+
+1. **Nunca modificar bloques `if machine == "X"` sin preguntar.** Esos bloques son machine-specific.
+2. **Configs compartidas** (keybinds, appearance, animations, window rules) se pueden editar libremente.
+3. **Al agregar un script machine-specific**, añadirlo a `LAPTOP_SCRIPTS` o crear un array `DESKTOP_SCRIPTS` en install.sh.
+4. **Al agregar una unit systemd**, añadirla a `SYSTEMD_UNITS` en install.sh.
+
 ## Lo que NO se gestiona
 
 Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes (Python, npm, dnf, etc.).

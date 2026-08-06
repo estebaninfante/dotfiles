@@ -15,6 +15,17 @@ for arg in "$@"; do
   esac
 done
 
+# ── Machine detection ────────────────────────────────────────
+MACHINE_FILE="$HOME/.config/machine-type"
+if [ -f "$MACHINE_FILE" ]; then
+  MACHINE=$(cat "$MACHINE_FILE" | tr -d '[:space:]')
+else
+  MACHINE="laptop"
+  warn "No se encontro $MACHINE_FILE — asumiendo 'laptop'"
+  echo "    Crea el archivo con: echo -n 'laptop' > $MACHINE_FILE"
+  echo "                  o: echo -n 'desktop' > $MACHINE_FILE"
+fi
+
 # ── Si se pide --packages, instalar paquetes primero ──
 if [ "$PACKAGES" = true ]; then
   SETUP_SCRIPT="$DOTFILES/scripts/setup-packages.sh"
@@ -150,6 +161,24 @@ SYSTEM_FILES_TUNED=(
   "linux/system/tuned/ppd.conf:/etc/tuned/ppd.conf"
 )
 
+# ── Machine-specific scripts ────────────────────────────────
+LAPTOP_SCRIPTS=(
+  toggle-lid.sh
+  lid-inhibit-waybar.sh
+  waybar-battery-top
+  trackpad-dwt-daemon
+  reload-hyprpaper.sh
+)
+
+# ── Systemd units (conditional on machine type) ─────────────
+SYSTEMD_UNITS=(
+  dotfiles-sync.service
+  dotfiles-sync.timer
+)
+if [ "$MACHINE" = "laptop" ]; then
+  SYSTEMD_UNITS+=(trackpad-dwt.service)
+fi
+
 # ── Helpers ──────────────────────────────────────────────────
 
 entry_status() {
@@ -223,6 +252,10 @@ done
 for script in "$DOTFILES/linux/bin/"*; do
   [ -f "$script" ] || continue
   name=$(basename "$script")
+  # Skip machine-specific scripts in summary too
+  if [[ " ${LAPTOP_SCRIPTS[*]} " =~ " ${name} " ]] && [ "$MACHINE" != "laptop" ]; then
+    continue
+  fi
   summary_entries+=("$script:$HOME/.local/bin/$name")
 done
 
@@ -277,9 +310,6 @@ done
 # ── Systemd user units ─────────────────────────────────────
 info "Enlazando unidades systemd user..."
 mkdir -p "$HOME/.config/systemd/user"
-SYSTEMD_UNITS=(
-  trackpad-dwt.service
-)
 for unit in "${SYSTEMD_UNITS[@]}"; do
   link "$DOTFILES/linux/config/systemd/user/$unit" "$HOME/.config/systemd/user/$unit"
 done
@@ -304,6 +334,13 @@ mkdir -p "$HOME/.local/bin"
 for script in "$DOTFILES/linux/bin/"*; do
   [ -f "$script" ] || continue
   name=$(basename "$script")
+
+  # Skip machine-specific scripts that don't apply
+  if [[ " ${LAPTOP_SCRIPTS[*]} " =~ " ${name} " ]] && [ "$MACHINE" != "laptop" ]; then
+    skip "$name (solo laptop, machine=$MACHINE)"
+    continue
+  fi
+
   link "$script" "$HOME/.local/bin/$name"
   [ "$DRY_RUN" = false ] && chmod +x "$HOME/.local/bin/$name" 2>/dev/null || true
 done
@@ -395,6 +432,10 @@ done
 for script in "$DOTFILES/linux/bin/"*; do
   [ -f "$script" ] || continue
   name=$(basename "$script")
+  # Skip machine-specific scripts in validation too
+  if [[ " ${LAPTOP_SCRIPTS[*]} " =~ " ${name} " ]] && [ "$MACHINE" != "laptop" ]; then
+    continue
+  fi
   validate_symlink "$script" "$HOME/.local/bin/$name"
 done
 

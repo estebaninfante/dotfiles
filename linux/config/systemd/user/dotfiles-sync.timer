@@ -1,0 +1,8 @@
+[Unit]
+Description=Dotfiles pull at boot
+
+[Timer]
+OnBootSec=2min
+
+[Install]
+WantedBy=default.target
