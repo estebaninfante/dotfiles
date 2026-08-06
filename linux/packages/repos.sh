@@ -33,7 +33,7 @@ fi
 
 # ── Brave Browser ──
 if [ ! -f /etc/yum.repos.d/brave-browser.repo ]; then
-  sudo dnf config-manager --add-repo https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+  curl -fsSL https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo | sudo tee /etc/yum.repos.d/brave-browser.repo > /dev/null
   sudo rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc
   echo "  ✓ Brave repo añadido"
 else
@@ -42,7 +42,14 @@ fi
 
 # ── Google Chrome ──
 if [ ! -f /etc/yum.repos.d/google-chrome.repo ]; then
-  sudo dnf config-manager --add-repo https://dl.google.com/linux/chrome/rpm/stable/x86_64
+  cat <<REPO | sudo tee /etc/yum.repos.d/google-chrome.repo > /dev/null
+[google-chrome]
+name=google-chrome
+baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+REPO
   echo "  ✓ Google Chrome repo añadido"
 else
   echo "  ✓ Google Chrome repo ya presente"
