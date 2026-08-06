@@ -136,7 +136,6 @@ CONFIG_FILES=(
   mimeapps.list
   user-dirs.dirs
   user-dirs.locale
-  gdm/black.png
 )
 
 HOME_FILES=(
