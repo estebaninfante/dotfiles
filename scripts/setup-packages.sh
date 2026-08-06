@@ -44,10 +44,6 @@ echo ""
 DNF_LIST="$PACKAGES_DIR/dnf-packages.txt"
 if [ -f "$DNF_LIST" ]; then
   info "Paso 2/7: Instalando paquetes DNF..."
-  if dnf list installed ffmpeg-free &>/dev/null && dnf list installed ffmpeg &>/dev/null; then
-    info "Removiendo ffmpeg-free (conflicto con ffmpeg de RPM Fusion)..."
-    run sudo dnf remove -y --allowerasing ffmpeg-free || warn "Conflicto ffmpeg-free/ffmpeg — resolver manualmente con: sudo dnf remove --allowerasing ffmpeg-free"
-  fi
   packages=$(grep -v '^\s*#' "$DNF_LIST" | grep -v '^\s*$' | tr '\n' ' ')
   info "Paquetes: $packages"
   if [ -n "$packages" ]; then

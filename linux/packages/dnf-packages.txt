@@ -85,7 +85,7 @@ tailscale
 vlc
 mpv
 obs-studio
-ffmpeg
+ffmpeg-free
 ffmpegthumbnailer
 imagemagick
 gimp
