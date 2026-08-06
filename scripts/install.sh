@@ -15,6 +15,13 @@ for arg in "$@"; do
   esac
 done
 
+# ── Helpers (definidos primero) ──
+info()  { echo -e "  [INFO]  $*"; }
+ok()    { echo -e "  [OK]    $*"; }
+warn()  { echo -e "  [WARN]  $*"; }
+skip()  { echo -e "  [SKIP]  $*"; }
+error() { echo -e "  [ERROR] $*"; }
+
 # ── Machine detection ────────────────────────────────────────
 MACHINE_FILE="$HOME/.config/machine-type"
 if [ -f "$MACHINE_FILE" ]; then
@@ -34,15 +41,9 @@ if [ "$PACKAGES" = true ]; then
     bash "$SETUP_SCRIPT" ${DRY_RUN:+--dry-run}
     echo ""
   else
-    echo "  [WARN] setup-packages.sh no encontrado en $SETUP_SCRIPT"
+    warn "setup-packages.sh no encontrado en $SETUP_SCRIPT"
   fi
 fi
-
-info()  { echo -e "  [INFO]  $*"; }
-ok()    { echo -e "  [OK]    $*"; }
-warn()  { echo -e "  [WARN]  $*"; }
-skip()  { echo -e "  [SKIP]  $*"; }
-error() { echo -e "  [ERROR] $*"; }
 
 ERRORS=0
 

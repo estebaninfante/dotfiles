@@ -134,7 +134,7 @@ Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por
 git clone <url> ~/dotfiles
 
 # 2. Instalar TODO: repos + paquetes + configs + wallpapers
-bash ~/dotfiles/scripts/install.sh --packages --force
+bash ~/dotfiles/scripts/fresh-install.sh
 
 # 3. (Opcional) Configuraciones del sistema
 sudo bash ~/dotfiles/linux/bin/setup-gdm-dark.sh
@@ -144,6 +144,8 @@ sudo ln -s ~/dotfiles/linux/xkb/dvk_prog /usr/share/X11/xkb/symbols/dvk_prog
 # 4. Recargar shell
 exec bash
 ```
+
+El script `fresh-install.sh` hace todo: detecta machine type, instala repos, paquetes dnf/flatpak/pip, wallpapers, y enlaza configuraciones.
 
 ### Backup (antes de reinstalar)
 
