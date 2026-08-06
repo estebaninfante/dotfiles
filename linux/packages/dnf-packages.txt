@@ -92,6 +92,9 @@ gimp
 inkscape
 yt-dlp
 
+# ── Speech-to-Text ──
+handy
+
 # ── Desarrollo ──
 gcc
 gcc-c++

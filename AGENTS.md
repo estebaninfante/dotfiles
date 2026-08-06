@@ -219,6 +219,30 @@ La otra máquina recibe los cambios automáticamente (o al reiniciar: `systemctl
 3. **Al agregar un script machine-specific**, añadirlo a `LAPTOP_SCRIPTS` o crear un array `DESKTOP_SCRIPTS` en install.sh.
 4. **Al agregar una unit systemd**, añadirla a `SYSTEMD_UNITS` en install.sh.
 
+## Handy (Speech-to-Text)
+
+Handy es una app de speech-to-text instalada via RPM (`handy`). Se ejecuta como daemon en background.
+
+**Uso:**
+- `handy --start-hidden` — inicia minimizado (en autostart de Hyprland)
+- `handy --toggle-transcription` — alterna transcripción on/off (keybind `F7`)
+- `handy --toggle-post-process` — alterna post-procesamiento
+- `handy --cancel` — cancela operación actual
+
+**Autostart en hyprland.lua:**
+```lua
+hl.exec_cmd("handy --start-hidden")
+```
+
+**Keybind:**
+```lua
+hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-transcription"))
+```
+
+**Paquete:** `handy` en `dnf-packages.txt`
+
+**Config:** Handy no genera archivos de configuración en `~/.config/`. Usa settings por defecto en `/usr/lib/Handy/resources/default_settings.json`.
+
 ## Lo que NO se gestiona
 
 Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes (Python, npm, dnf, etc.).
