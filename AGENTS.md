@@ -118,7 +118,20 @@ Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por
 | `dnf-packages.txt` | Lista de paquetes RPM (uno por línea, `#` para comentarios) |
 | `flatpak-packages.txt` | Lista de apps Flatpak (application ID, uno por línea) |
 | `pip-packages.txt` | Paquetes pip (opcional) |
+| `rpm/` | **RPMs locales** que no están en repos de Fedora (handy, opencode-desktop, rstudio). **NO se guardan en el repo git** (GitHub limita >100MB). Viven en `~/Descargas/`; `install-rpms.sh` los busca ahí y en `~/Downloads`. En NixOS no se usan (están en nixpkgs). |
 | `wallpaper/` | Wallpapers default, se copian a `~/Imágenes/` |
+
+## Scripts (`scripts/`)
+
+| Script | Descripción |
+|--------|-------------|
+| `install.sh` | Enlaza configs (idempotente) |
+| `setup-packages.sh` | Instala repos + dnf + flatpak + wallpapers |
+| `install-rpms.sh` | Instala los RPMs locales de `linux/packages/rpm/` |
+| `fresh-install.sh` | Todo desde cero (repos → dnf → flatpak → rpm → pip → gestures → wallpapers → symlinks → Hermes) |
+| `setup-nixos.sh` | **Un comando** en NixOS: clona repo + hardware-config + nixos-rebuild + Hermes |
+| `backup-packages.sh` | Captura estado actual del sistema a manifiestos |
+| `publish.sh` | Commit + push con confirmacion |
 
 ## Flujo de trabajo
 
@@ -198,6 +211,24 @@ hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-" .. machine .. ".conf"
 - `waybar-battery-top`
 - `trackpad-dwt-daemon`
 - `reload-hyprpaper.sh`
+- `gpu-mode.sh` → toggle manual NVIDIA (ahorro batería vs gaming)
+
+### GPU NVIDIA (laptop híbrida)
+
+**Caso:** iGPU AMD (amdgpu) maneja el display; dGPU NVIDIA (RTX 4060) solo para juegos.
+
+**`gpu-mode.sh`** controla la NVIDIA via Runtime PM:
+- `gpu-mode.sh battery` → `power/control=auto`: GPU en D3cold cuando inactiva → máximo ahorro de batería
+- `gpu-mode.sh gaming` → `power/control=on` + `nvidia-smi -pm 1`: GPU activa y lista
+- `gpu-mode.sh toggle` / `status`
+
+Accesible desde `rofi-power-mode.sh` (menú "Modo Energia"). Requiere sudo NOPASSWD:
+- `/usr/bin/tee /sys/bus/pci/devices/*/power/control`
+- `/usr/bin/nvidia-smi`
+
+Config del driver NVIDIA (módulo `nvidia`): `NVreg_DynamicPowerManagement` (auto por defecto).
+
+**Truco kernel: `dracut --force --kver <X>` regenera initramfs SOLO del kernel especificado.** Nunca dejar un kernel con initramfs desactualizado tras cambios en `/etc/modprobe.d/`.
 
 **Systemd units:**
 - `trackpad-dwt.service` → solo laptop
@@ -248,6 +279,32 @@ hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-transcription"))
 ## Lo que NO se gestiona
 
 Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes (Python, npm, dnf, etc.).
+
+## NixOS (`nixos/` + `flake.nix`)
+
+Kit de migración a NixOS. Replica el entorno Fedora con la misma filosofia
+(el repo es la unica fuente de verdad): home-manager crea symlinks directos
+a `linux/config/`, `linux/home/` y `linux/bin/` via `mkOutOfStoreSymlink`.
+
+**Importante: esto NO se gestiona con `install.sh`** — es para la máquina
+NixOS (el flake root es la raiz del repo). Estructura:
+
+- `flake.nix` — inputs (nixpkgs + home-manager) y hosts `laptop`/`desktop`
+- `nixos/configuration.nix` — base comun (servicios, fuentes, usuario, GDM, Hyprland)
+- `nixos/home.nix` — home-manager: symlinks a linux/config, linux/bin, units
+- `nixos/modules/packages.nix` — mapeo `dnf-packages.txt` → nixpkgs
+- `nixos/modules/sudoers.nix` — NOPASSWD (gpu-mode.sh)
+- `nixos/hosts/laptop.nix` — NVIDIA hybrid, XKB dvk_prog, keyd
+- `nixos/hosts/hardware-configuration.*.nix` — placeholders, generar con `nixos-generate-config`
+
+**Reglas:**
+1. Al añadir un paquete a `dnf-packages.txt`, añadirlo también a `nixos/modules/packages.nix` (y viceversa).
+2. Al añadir un config nuevo a `install.sh`, añadirlo también al inventario de `nixos/home.nix`.
+3. Los `hardware-configuration.*.nix` son por-máquina y NO se commitean con datos reales de particiones (se generan en instalación).
+4. Los scripts de `linux/bin/` se symlinkean igual; los laptop-only siguen la lista `LAPTOP_SCRIPTS`.
+5. Comandos: `sudo nixos-rebuild switch --flake ~/dotfiles#laptop` (o `#desktop`).
+
+Ver `nixos/README.md` para la guía de instalación completa.
 
 ## Autonomía de ejecución
 

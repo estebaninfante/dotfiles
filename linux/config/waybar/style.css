@@ -27,7 +27,7 @@ window#waybar {
   margin-right: 14px;
 
   box-shadow:
-    0 0 18px rgba(255, 0, 0, 0.08);
+    0 0 18px rgba(183, 0, 1, 0.12);
 }
 
 /* MODULES */
@@ -73,9 +73,9 @@ window#waybar {
 #workspaces button.active {
   color: #ffffff;
 
-  background: #d41919;
+  background: #b70001;
 
-  border: 1px solid #d41919;
+  border: 1px solid #b70001;
 }
 
 #workspaces button:hover {
@@ -87,7 +87,7 @@ window#waybar {
 /* CPU */
 
 #cpu {
-  color: #ff5555;
+  color: #e03131;
 }
 
 /* MEMORY */
@@ -123,7 +123,7 @@ window#waybar {
 }
 
 #custom-lid-inhibit.active {
-  color: #ff5555;
+  color: #e03131;
 }
 
 #custom-lid-inhibit.inhibited {
@@ -142,7 +142,7 @@ window#waybar {
 }
 
 #custom-pomodoro.pomodoro-work {
-  color: #ff5555;
+  color: #e03131;
   animation: pulse 1s ease-in-out infinite alternate;
 }
 
@@ -162,7 +162,7 @@ window#waybar {
 }
 
 #custom-battery.warning {
-  color: #ff6666;
+  color: #d94a4a;
 }
 
 #custom-battery.critical {
@@ -176,7 +176,7 @@ tooltip {
 
   border-radius: 10px;
 
-  border: 1px solid #ff1a1a;
+  border: 1px solid #b70001;
 }
 
 tooltip label {

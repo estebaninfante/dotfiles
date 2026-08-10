@@ -32,3 +32,4 @@ com.valvesoftware.Steam
 net.lutris.Lutris
 org.prismlauncher.PrismLauncher
 com.moonlight_stream.Moonlight
+com.vysp3r.ProtonPlus

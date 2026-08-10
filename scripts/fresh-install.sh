@@ -76,7 +76,7 @@ echo ""
 # ── 3. Flatpak ──
 FLATPAK_LIST="$PACKAGES_DIR/flatpak-packages.txt"
 if [ -f "$FLATPAK_LIST" ]; then
-  info "Paso 3/8: Instalando paquetes Flatpak..."
+  info "Paso 3/9: Instalando paquetes Flatpak..."
   flatpak_apps=$(awk 'NF && !/^#/' "$FLATPAK_LIST")
   if [ -n "$flatpak_apps" ]; then
     for app in $flatpak_apps; do
@@ -96,10 +96,15 @@ else
 fi
 echo ""
 
-# ── 4. Pip packages ──
+# ── 4. RPMs locales (handy, opencode-desktop, rstudio) ──
+info "Paso 4/9: Instalando RPMs locales del repo..."
+run bash "$DOTFILES/scripts/install-rpms.sh"
+echo ""
+
+# ── 5. Pip packages ──
 PIP_LIST="$PACKAGES_DIR/pip-packages.txt"
 if [ -f "$PIP_LIST" ]; then
-  info "Paso 4/8: Instalando paquetes pip..."
+  info "Paso 5/9: Instalando paquetes pip..."
   pip_packages=$(awk 'NF && !/^#/' "$PIP_LIST" | tr '\n' ' ')
   if [ -n "$pip_packages" ]; then
     run pip3 install --user $pip_packages
@@ -112,8 +117,8 @@ else
 fi
 echo ""
 
-# ── 5. libinput-gestures ──
-info "Paso 5/8: Instalando libinput-gestures..."
+# ── 6. libinput-gestures ──
+info "Paso 6/9: Instalando libinput-gestures..."
 if command -v libinput-gestures &>/dev/null; then
   skip "libinput-gestures ya instalado"
 else
@@ -126,7 +131,7 @@ fi
 echo ""
 
 # ── 6. Grupo input ──
-info "Paso 6/8: Verificando grupo input..."
+info "Paso 6/9: Verificando grupo input..."
 if id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx input; then
   skip "Usuario ya está en grupo input"
 else
@@ -138,7 +143,7 @@ echo ""
 # ── 7. Wallpapers ──
 WALLPAPER_DIR="$PACKAGES_DIR/wallpaper"
 if [ -d "$WALLPAPER_DIR" ] && [ "$(ls -A "$WALLPAPER_DIR" 2>/dev/null)" ]; then
-  info "Paso 7/8: Copiando wallpapers a ~/Imágenes/..."
+  info "Paso 7/9: Copiando wallpapers a ~/Imágenes/..."
   mkdir -p "$HOME/Imágenes"
   for img in "$WALLPAPER_DIR"/*; do
     name=$(basename "$img")
@@ -155,9 +160,25 @@ fi
 echo ""
 
 # ── 8. Enlazar configuraciones ──
-info "Paso 8/8: Enlazando configuraciones..."
+info "Paso 8/9: Enlazando configuraciones..."
 run bash "$DOTFILES/scripts/install.sh" --force
 ok "Configuraciones enlazadas"
+echo ""
+
+# ── 9. Hermes + opencode (prioridad del usuario) ──
+info "Paso 9/9: Hermes + opencode..."
+if command -v hermes &>/dev/null || [ -x "$HOME/.hermes/bin/hermes" ]; then
+  skip "Hermes ya instalado"
+else
+  info "Instalando Hermes Agent..."
+  run bash -c 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash'
+  ok "Hermes instalado (configura con: hermes setup)"
+fi
+if command -v opencode &>/dev/null; then
+  skip "opencode ya instalado"
+else
+  warn "opencode no esta en dnf-packages.txt — anadelo o instalalo manualmente"
+fi
 echo ""
 
 # ── Final ──

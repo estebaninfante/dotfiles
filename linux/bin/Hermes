@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Hermes — habilita el backend (dashboard web) y abre el navegador en la WebUI.
+# Parte de los dotfiles: se enlaza a ~/.local/bin/Hermes y rofi lo lista
+# via rofi-scripts-launcher.sh (que escanea ~/.local/bin).
+
+set -euo pipefail
+
+PORT=9119
+HOST=127.0.0.1
+URL="http://${HOST}:${PORT}"
+
+# ── 1. Habilitar / asegurar el backend (dashboard web) ──
+if curl -fsS -o /dev/null --max-time 2 "$URL" 2>/dev/null; then
+  echo "Backend de Hermes ya activo en $URL"
+else
+  echo "Iniciando backend de Hermes (dashboard web) en $URL..."
+
+  # Detener procesos zombie del dashboard que no respondan, si los hubiera.
+  hermes dashboard --stop >/dev/null 2>&1 || true
+
+  # Arrancar totalmente desacoplado para que sobreviva al cierre de rofi/script.
+  setsid nohup hermes dashboard \
+    --port "$PORT" --host "$HOST" --no-open \
+    >/tmp/hermes-dashboard.log 2>&1 &
+
+  # Esperar hasta que el backend responda (build inicial de la UI puede tardar).
+  for _ in $(seq 1 60); do
+    if curl -fsS -o /dev/null --max-time 2 "$URL" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+
+  if ! curl -fsS -o /dev/null --max-time 2 "$URL" 2>/dev/null; then
+    echo "No se pudo iniciar el backend. Revisa: tail -n 20 /tmp/hermes-dashboard.log"
+    exit 1
+  fi
+  echo "Backend listo en $URL"
+fi
+
+# ── 2. Abrir el navegador en la WebUI ──
+if command -v xdg-open >/dev/null 2>&1; then
+  xdg-open "$URL" >/dev/null 2>&1 &
+elif command -v kitty >/dev/null 2>&1; then
+  kitty -e "$BROWSER" "$URL" >/dev/null 2>&1 &
+else
+  echo "Navegador no disponible. Abre manualmente: $URL"
+  exit 1
+fi
+
+echo "WebUI de Hermes abierta en $URL"

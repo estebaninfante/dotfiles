@@ -6,8 +6,10 @@ window#osd {
 }
 
 label, image {
-    opacity: 0;
-    font-size: 0px;
+    opacity: 1;
+    font-family: "Cinzel Decorative";
+    font-size: 12px;
+    color: rgba(245, 235, 235, 0.85);
 }
 
 progressbar {
@@ -20,15 +22,16 @@ progressbar {
 trough {
     background: rgba(255, 255, 255, 0.15);
     min-height: 4px;
-    min-width: 180px;
+    min-width: 220px;
     border-radius: 999px;
     border: none;
 }
 
 progress {
-    background: #ffffff;
+    background: #b70001;
     min-height: 4px;
     min-width: 0;
     border-radius: 999px;
     border: none;
+    box-shadow: 0 0 12px rgba(183, 0, 1, 0.9);
 }

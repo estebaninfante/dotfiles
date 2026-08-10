@@ -130,6 +130,7 @@ CONFIG_DIRS=(
   avizo
   btop
   gh
+  gtklock
 )
 
 CONFIG_FILES=(
@@ -168,6 +169,7 @@ LAPTOP_SCRIPTS=(
   waybar-battery-top
   trackpad-dwt-daemon
   reload-hyprpaper.sh
+  gpu-mode.sh
 )
 
 # ── Systemd units (conditional on machine type) ─────────────

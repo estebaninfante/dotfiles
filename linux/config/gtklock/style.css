@@ -1,0 +1,51 @@
+window {
+  background-color: #000000;
+}
+
+#window-box {
+  background-color: #000000;
+}
+
+#clock-label {
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 90px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+#date-label {
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: #888888;
+}
+
+#ascii-label {
+  color: #ff0000;
+}
+
+#input-field,
+entry {
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 15px;
+  background-color: #1a1a1a;
+  color: #e08080;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  padding: 10px 16px;
+  min-width: 200px;
+  letter-spacing: 4px;
+}
+
+#input-field:focus,
+entry:focus {
+  border: 1px solid #e08080;
+}
+
+#error-label {
+  color: #ff0000;
+}
+
+#warning-label {
+  color: #ff5555;
+}

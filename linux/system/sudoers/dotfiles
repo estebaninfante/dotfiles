@@ -1,4 +1,4 @@
 # dotfiles — NOPASSWD rules for autonomous agent
 # Install: sudo cp ~/dotfiles/linux/system/sudoers/dotfiles /etc/sudoers.d/dotfiles
 # Remove:  sudo rm /etc/sudoers.d/dotfiles
-eztvn ALL=(ALL) NOPASSWD: /usr/bin/dnf, /usr/bin/rpm, /usr/bin/ln, /usr/bin/mkdir, /usr/bin/rm, /usr/bin/cp, /usr/bin/chown, /usr/bin/keyd, /usr/bin/systemctl
+eztvn ALL=(ALL) NOPASSWD: /usr/bin/dnf, /usr/bin/rpm, /usr/bin/ln, /usr/bin/mkdir, /usr/bin/rm, /usr/bin/cp, /usr/bin/chown, /usr/bin/keyd, /usr/bin/systemctl, /usr/bin/tee /sys/bus/pci/devices/*/power/control, /usr/bin/nvidia-smi

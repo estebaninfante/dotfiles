@@ -18,7 +18,7 @@ hyprland
 hyprpaper
 hyprpicker
 hypridle
-hyprlock
+gtklock
 waybar
 rofi
 rofi-emoji
@@ -75,7 +75,6 @@ ncdu
 duf
 htop
 glances
-neofetch
 ufw
 openssh-clients
 NetworkManager-tui
@@ -87,13 +86,16 @@ mpv
 obs-studio
 ffmpeg-free
 ffmpegthumbnailer
-imagemagick
+ImageMagick
 gimp
 inkscape
 yt-dlp
 
 # ── Speech-to-Text ──
 handy
+
+# ── Compartir teclado/ratón entre máquinas ──
+deskflow
 
 # ── Desarrollo ──
 gcc
@@ -110,8 +112,8 @@ python3-evdev
 rust
 cargo
 go
-java-21-openjdk
-java-21-openjdk-devel
+java-25-openjdk
+java-25-openjdk-devel
 maven
 
 # ── Fuentes ──
@@ -155,10 +157,18 @@ docker-compose
 steam
 lutris
 wine
-protonplus
+wine-mono
+wine-dxvk
 protontricks
 mangohud
 gamemode
+vulkan-tools
+vulkan-validation-layers
+
+# ── Drivers NVIDIA (laptop híbrida RTX 4060) ──
+akmod-nvidia
+xorg-x11-drv-nvidia-cuda
+nvidia-settings
 
 # ── Biometría (huella dactilar) ──
 fprintd
