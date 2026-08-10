@@ -42,22 +42,30 @@ fi
 
 cd "$DOTFILES"
 
-# ── 2. Hardware-config: si es placeholder, generarlo ──
+# ── 2. Hardware-config: si es placeholder, tomar el del sistema ──
+# En un NixOS ya instalado, /etc/nixos/hardware-configuration.nix YA existe
+# (lo genera el instalador con el hardware real). Se copia directamente.
+# Solo si NO existe se regenera con nixos-generate-config (fallback).
 HW_FILE="nixos/hosts/hardware-configuration.$MACHINE.nix"
-if grep -q "NO USAR TAL CUAL\|no se genera por maquina" "$HW_FILE" 2>/dev/null \
+if grep -q "NO USAR TAL CUAL" "$HW_FILE" 2>/dev/null \
    || ! grep -q "fileSystems" "$HW_FILE" 2>/dev/null; then
-  info "Generando hardware-configuration real (placeholder detectado)..."
-  TMP_DIR=$(mktemp -d)
-  sudo nixos-generate-config --root / --dir "$TMP_DIR" >/dev/null 2>&1 \
-    || sudo nixos-generate-config --root / -d "$TMP_DIR" >/dev/null 2>&1
-  if [ -f "$TMP_DIR/hardware-configuration.nix" ]; then
-    sudo cp "$TMP_DIR/hardware-configuration.nix" "$HW_FILE"
-    sudo chown "$USER" "$HW_FILE"
-    ok "hardware-configuration generado → $HW_FILE"
+  if [ -f /etc/nixos/hardware-configuration.nix ]; then
+    info "Copiando /etc/nixos/hardware-configuration.nix (ya generado por el instalador)..."
+    cp /etc/nixos/hardware-configuration.nix "$HW_FILE"
+    chown "$USER" "$HW_FILE" 2>/dev/null || true
+    ok "hardware-configuration copiado → $HW_FILE"
   else
-    warn "No se pudo generar hardware-config; usando placeholder (riesgo)"
+    info "Regenerando hardware-configuration con nixos-generate-config..."
+    TMP_DIR=$(mktemp -d)
+    if ! sudo nixos-generate-config --root / --dir "$TMP_DIR" 2>&1 \
+         && ! sudo nixos-generate-config --root / -d "$TMP_DIR" 2>&1; then
+      warn "No se pudo generar hardware-config; usando placeholder (riesgo)"
+    else
+      [ -f "$TMP_DIR/hardware-configuration.nix" ] && cp "$TMP_DIR/hardware-configuration.nix" "$HW_FILE"
+      ok "hardware-configuration generado → $HW_FILE"
+    fi
+    rm -rf "$TMP_DIR"
   fi
-  rm -rf "$TMP_DIR"
 else
   ok "hardware-configuration ya presente"
 fi
