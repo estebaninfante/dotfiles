@@ -50,7 +50,11 @@
   environment.etc."keyd/default.conf".source = ../../linux/system/keyd/default.conf;
   systemd.services.keyd = {
     description = "Keyboard remapping daemon";
-    wantedBy = [ "multi-user.target" ];
+    # graphical.target: keyd solo corre con la sesion grafica.
+    # En multi-user.target keyd captura el teclado antes del login y su
+    # overload (leftalt/enter) interfiere con Ctrl+Alt+F<N> para cambiar
+    # de TTY (los eventos no llegan al kernel como esperas).
+    wantedBy = [ "graphical.target" ];
     serviceConfig = {
       ExecStart = "${pkgs.keyd}/bin/keyd";
       Restart = "on-failure";
