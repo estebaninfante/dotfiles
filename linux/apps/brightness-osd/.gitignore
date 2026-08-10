@@ -1,0 +1,6 @@
+# Build artifacts de brightness-osd (Rust/TAURI) — no se trackean
+linux/apps/brightness-osd/target/
+linux/apps/brightness-osd/node_modules/
+linux/apps/brightness-osd/dist/
+linux/apps/brightness-osd/src-tauri/target/
+linux/apps/brightness-osd/src-tauri/gen/
