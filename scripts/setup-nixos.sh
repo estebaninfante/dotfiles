@@ -72,7 +72,10 @@ fi
 
 # ── 3. nixos-rebuild switch (TODO el sistema + paquetes + configs) ──
 info "Aplicando config NixOS (paquetes, servicios, dotfiles)..."
-sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" 2>&1 | tail -5 || {
+info "Primera vez tarda 10-20 min (descarga ~295 paquetes)."
+info "La salida se muestra en vivo — si ves 'building' o 'downloading' esta funcionando."
+echo ""
+sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" || {
   error "nixos-rebuild fallo. Revisa el error arriba y vuelve a ejecutar este script."
   exit 1
 }
