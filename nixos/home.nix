@@ -121,6 +121,28 @@ in
     Install = { WantedBy = [ "default.target" ]; };
   };
 
+  # ── keyd: user service (arranca solo con la sesion grafica) ──
+  # Servicio de usuario en vez de sistema: keyd de sistema agarra el
+  # teclado a nivel kernel y su overload (leftalt/enter) se traga
+  # Ctrl+Alt+F<N> → imposible cambiar de TTY. Como user service solo
+  # corre dentro de Hyprland: GDM/TTY libres, overloads funcionales.
+  # Requiere grupos input/uinput (configuration.nix) y /etc/keyd/default.conf
+  # (laptop.nix — config del repo como fuente de verdad).
+  systemd.user.services.keyd = lib.mkIf (machineType == "laptop") {
+    Unit = {
+      Description = "Keyboard remapping daemon (user session)";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.keyd}/bin/keyd";
+      Restart = "on-failure";
+      RestartSec = "2";
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
   # Solo laptop (igual que en install.sh: SYSTEMD_UNITS condicional)
   systemd.user.services.trackpad-dwt = lib.mkIf (machineType == "laptop") {
     Unit = {

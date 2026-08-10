@@ -126,7 +126,9 @@
   users.users.eztvn = {
     isNormalUser = true;
     description = "estebaninfante";
-    extraGroups = [ "wheel" "networkmanager" "libvirtd" "docker" "video" "audio" ];
+    # input/uinput: keyd corre como user service (home.nix) y necesita
+    # leer /dev/input/* y crear /dev/uinput para remapear teclado.
+    extraGroups = [ "wheel" "networkmanager" "libvirtd" "docker" "video" "audio" "input" "uinput" ];
     # TODO: definir contrasena inicial tras instalar:
     #   sudo passwd eztvn
     # o usar hashedPassword con `mkpasswd -m sha-512`.

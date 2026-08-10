@@ -42,22 +42,16 @@
   #  aplica a TTY, X11/GDM y Wayland en laptop y desktop.)
 
   # ── keyd (linux/system/keyd/default.conf como fuente de verdad) ──
-  # El repo define la config en /etc/keyd/default.conf; keyd la lee igual
-  # que en Fedora. Servicio propio para no pelear con el modulo de nixpkgs.
-  # (El modulo oficial de nixpkgs hace hardware.uinput.enable = mkDefault true;
-  #  como usamos servicio propio, lo activamos aqui manualmente.)
+  # La config vive en /etc/keyd/default.conf; keyd la lee igual que en
+  # Fedora.
+  #
+  # ⚠️ keyd corre como SERVICIO DE USUARIO (home.nix), NO de sistema:
+  # un servicio de sistema agarra el teclado a nivel kernel y su overload
+  # (leftalt/enter) se traga Ctrl+Alt+F<N> → no puedes cambiar de TTY.
+  # Como user service arranca solo con la sesion grafica del usuario
+  # (Hyprland): GDM/TTY quedan libres, tus overloads funcionan en la sesion.
+  # El usuario necesita grupos input (leer /dev/input/*) y uinput
+  # (crear /dev/uinput virtual) — se anaden en configuration.nix.
   hardware.uinput.enable = true;
   environment.etc."keyd/default.conf".source = ../../linux/system/keyd/default.conf;
-  systemd.services.keyd = {
-    description = "Keyboard remapping daemon";
-    # graphical.target: keyd solo corre con la sesion grafica.
-    # En multi-user.target keyd captura el teclado antes del login y su
-    # overload (leftalt/enter) interfiere con Ctrl+Alt+F<N> para cambiar
-    # de TTY (los eventos no llegan al kernel como esperas).
-    wantedBy = [ "graphical.target" ];
-    serviceConfig = {
-      ExecStart = "${pkgs.keyd}/bin/keyd";
-      Restart = "on-failure";
-    };
-  };
 }
