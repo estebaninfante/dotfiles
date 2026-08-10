@@ -9,6 +9,12 @@
 { config, pkgs, lib, ... }:
 
 {
+  imports = [
+    # Teclado: layout dvk_prog (Dvorak Programador Español V5) en TTY,
+    # X11/GDM y Wayland. Fuente de verdad: linux/xkb/dvk_prog
+    ./modules/keyboard.nix
+  ];
+
   # ── Boot ──────────────────────────────────────────────────────
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
@@ -30,7 +36,8 @@
   # TODO: ajustar a tu zona horaria / locale si difiere
   time.timeZone = "America/Bogota";
   i18n.defaultLocale = "es_ES.UTF-8";
-  console.keyMap = "es";
+  # NOTA: console.keyMap NO se define aqui — el modulo keyboard.nix
+  # lo pone en dvk_prog (tu layout custom, igual que Fedora).
 
   # ── Paquetes del sistema (mapeo de dnf-packages.txt) ──────────
   environment.systemPackages = import ./modules/packages.nix { inherit pkgs; };

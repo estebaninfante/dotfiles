@@ -38,14 +38,8 @@
   };
 
   # El driver amdgpu es el default para GPUs AMD; nada extra que configurar.
-
-  # ── XKB: layout custom dvk_prog ──────────────────────────────
-  # Equivalente NixOS de linux/xkb/dvk_prog (sin tocar /usr/share/X11/xkb).
-  services.xserver.xkb.extraLayouts.dvk_prog = {
-    description = "Dvorak Programmer";
-    languages = [ "eng" ];
-    symbolsFile = ../../linux/xkb/dvk_prog;
-  };
+  # (El layout XKB dvk_prog ahora vive en nixos/modules/keyboard.nix —
+  #  aplica a TTY, X11/GDM y Wayland en laptop y desktop.)
 
   # ── keyd (linux/system/keyd/default.conf como fuente de verdad) ──
   # El repo define la config en /etc/keyd/default.conf; keyd la lee igual
