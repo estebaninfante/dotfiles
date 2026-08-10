@@ -27,7 +27,11 @@ hl.config({
 -- ========================
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 hl.env("GDK_SCALE", "2")
-hl.env("PATH", os.getenv("HOME") .. "/.local/bin:/usr/local/bin:/usr/bin:/bin")
+-- PREPEND ~/.local/bin al PATH existente (NO reemplazarlo).
+-- En Fedora los binarios estan en /usr/bin; en NixOS en
+-- /run/current-system/sw/bin — si reemplazamos el PATH con rutas
+-- de Fedora, Hyprland no encuentra kitty/waybar/rofi en NixOS.
+hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. os.getenv("PATH"))
 
 -- ========================
 -- MONITORS
