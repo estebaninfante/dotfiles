@@ -76,6 +76,7 @@
 
   # ── Display manager (GDM, tema oscuro — equivalente a setup-gdm-dark.sh) ──
   services.displayManager.gdm.enable = true;
+  services.displayManager.defaultSession = "hyprland"; # login → Hyprland (Wayland)
   services.displayManager.gdm.settings = {
     "org/gnome/desktop/interface" = {
       color-scheme = "prefer-dark";
