@@ -137,6 +137,11 @@
   # NOPASSWD para scripts del repo (equivalente a linux/system/sudoers/dotfiles)
   security.sudo.extraRules = import ./modules/sudoers.nix;
 
+  # hyprlock necesita su propia config PAM en NixOS para poder autenticar
+  # (en Fedora usa el PAM del sistema; en NixOS cada app de bloqueo requiere
+  # /etc/pam.d/hyprlock — sin esto la contrasena siempre es rechazada).
+  security.pam.services.hyprlock = { };
+
   # ── Nix ───────────────────────────────────────────────────────
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   nix.settings.auto-optimise-store = true;
