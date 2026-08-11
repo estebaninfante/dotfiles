@@ -179,3 +179,6 @@ fprintd-pam
 tuned
 tuned-ppd
 tuned-utils
+
+# ── KVM (compartir teclado/ratón entre máquinas) ──
+input-leap

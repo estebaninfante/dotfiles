@@ -20,7 +20,7 @@ let
   # ── Inventarios (espejo de scripts/install.sh) ──────────────
   configDirs = [
     "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
-    "mako" "swaync" "swayosd" "avizo" "btop" "gh" "gtklock"
+    "mako" "swaync" "swayosd" "avizo" "btop" "gh" "lan-mouse" "opencode"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -121,6 +121,27 @@ in
     Install = { WantedBy = [ "default.target" ]; };
   };
 
+  # ── developing sync (espejo de linux/config/systemd/user/) ──
+  # Solo en la laptop (fuente de verdad de ~/developing). El desktop
+  # solo recibe via rsync. Requiere openssh en el desktop (configuration.nix).
+  systemd.user.services.developing-sync = lib.mkIf (machineType == "laptop") {
+    Unit = {
+      Description = "Developing sync (rsync laptop -> desktop)";
+      After = [ "network-online.target" ];
+      Wants = [ "network-online.target" ];
+    };
+    Service = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.rsync}/bin/rsync -az --delete %h/developing/ eztvn@desktop:%h/developing/";
+    };
+  };
+
+  systemd.user.timers.developing-sync = lib.mkIf (machineType == "laptop") {
+    Unit = { Description = "Developing sync periodic"; };
+    Timer = { OnBootSec = "3min"; OnUnitActiveSec = "10min"; };
+    Install = { WantedBy = [ "default.target" ]; };
+  };
+
   # ── keyd: user service (arranca solo con la sesion grafica) ──
   # Servicio de usuario en vez de sistema: keyd de sistema agarra el
   # teclado a nivel kernel y su overload (leftalt/enter) se traga
@@ -139,6 +160,21 @@ in
       ExecStart = "${pkgs.keyd}/bin/keyd";
       Restart = "on-failure";
       RestartSec = "2";
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  systemd.user.services.lan-mouse = {
+    Unit = {
+      Description = "LAN-Mouse KVM daemon";
+      After = [ "graphical-session.target" "network-online.target" ];
+      Wants = [ "network-online.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "%h/.local/bin/lan-mouse daemon";
+      Restart = "always";
+      RestartSec = "5";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };

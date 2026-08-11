@@ -167,6 +167,9 @@ with pkgs; [  # ── Shell & terminal ──
   fprintd                   # fprintd + fprintd-pam (via services.fprintd)
   power-profiles-daemon     # tuned-ppd equivalente (services.power-profiles-daemon)
 
+  # ── KVM (compartir teclado/raton entre maquinas) ──
+  input-leap
+
   # ── Nota ──
   # handy (speech-to-text, RPM-only): NO existe en nixpkgs.
   # Opciones: empaquetar el RPM (overlay) o usar alternativa.

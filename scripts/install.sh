@@ -130,7 +130,8 @@ CONFIG_DIRS=(
   avizo
   btop
   gh
-  gtklock
+  lan-mouse
+  opencode
 )
 
 CONFIG_FILES=(
@@ -162,6 +163,10 @@ SYSTEM_FILES_TUNED=(
   "linux/system/tuned/ppd.conf:/etc/tuned/ppd.conf"
 )
 
+SYSTEM_FILES_NM_DISPATCHER=(
+  "linux/system/NetworkManager/dispatcher.d/90-lan-mouse:/etc/NetworkManager/dispatcher.d/90-lan-mouse"
+)
+
 # ── Machine-specific scripts ────────────────────────────────
 LAPTOP_SCRIPTS=(
   toggle-lid.sh
@@ -176,9 +181,12 @@ LAPTOP_SCRIPTS=(
 SYSTEMD_UNITS=(
   dotfiles-sync.service
   dotfiles-sync.timer
+  lan-mouse.service
 )
 if [ "$MACHINE" = "laptop" ]; then
   SYSTEMD_UNITS+=(trackpad-dwt.service)
+  # Sync de ~/developing: la laptop es la fuente de verdad
+  SYSTEMD_UNITS+=(developing-sync.service developing-sync.timer)
 fi
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -402,6 +410,25 @@ for entry in "${SYSTEM_FILES_TUNED[@]}"; do
     echo "    Para instalar config tuned-ppd (requiere sudo):"
     echo "    sudo ln -s $src $target"
     echo "    sudo systemctl restart tuned-ppd"
+  fi
+done
+
+# ── NetworkManager dispatcher (lan-mouse) ────────────────────
+info "Instalando dispatcher de NM para lan-mouse..."
+for entry in "${SYSTEM_FILES_NM_DISPATCHER[@]}"; do
+  src_rel="${entry%%:*}"
+  target="${entry##*:}"
+  src="$DOTFILES/$src_rel"
+  if [ -f "$target" ] && [ ! -L "$target" ]; then
+    warn "$target existe como archivo real. Requiere sudo para reemplazar."
+    echo "    sudo mv $target $target.bak"
+    echo "    sudo ln -s $src $target"
+  elif [ -L "$target" ]; then
+    skip "dispatcher NM symlink ya existe en $target"
+  else
+    echo "    Para instalar dispatcher NM (requiere sudo):"
+    echo "    sudo mkdir -p $(dirname "$target")"
+    echo "    sudo ln -s $src $target"
   fi
 done
 

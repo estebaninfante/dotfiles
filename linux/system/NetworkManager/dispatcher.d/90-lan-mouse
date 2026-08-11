@@ -1,0 +1,41 @@
+#!/bin/bash
+# NetworkManager dispatcher for LAN-Mouse KVM
+# Restarts lan-mouse daemon when connecting to home network
+# so it re-attempts to reach the desktop at 192.168.1.17
+
+IFACE="$1"
+ACTION="$2"
+USER="eztvn"
+
+HOME_SSIDS=("Familia_Infante_PLUS" "Familia Villamil" "Familia Villamil 1")
+
+is_home_network() {
+    local ssid
+    ssid=$(iwconfig "$IFACE" 2>/dev/null | grep -oP 'ESSID:"\K[^"]+')
+    for home in "${HOME_SSIDS[@]}"; do
+        if [ "$ssid" = "$home" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+restart_lan_mouse() {
+    local uid uid=$(id -u "$USER" 2>/dev/null) || return 1
+    su "$USER" -c "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user restart lan-mouse.service" 2>/dev/null
+}
+
+case "$ACTION" in
+    up)
+        if is_home_network; then
+            restart_lan_mouse
+        fi
+        ;;
+    down)
+        if is_home_network; then
+            restart_lan_mouse
+        fi
+        ;;
+esac
+
+exit 0
