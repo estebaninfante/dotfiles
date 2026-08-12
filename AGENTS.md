@@ -66,6 +66,7 @@ dotfiles/
 | avizo | `~/.config/avizo/` |
 | btop | `~/.config/btop/` |
 | gh | `~/.config/gh/` |
+| opencode | `~/.config/opencode/` |
 
 ### Flatpak config (`linux/config/`) — flatpak apps
 
@@ -236,6 +237,21 @@ Config del driver NVIDIA (módulo `nvidia`): `NVreg_DynamicPowerManagement` (aut
 **Systemd units:**
 - `trackpad-dwt.service` → solo laptop
 - `dotfiles-sync.service` + `dotfiles-sync.timer` → ambas máquinas
+- `developing-sync.service` + `developing-sync.timer` → solo laptop
+
+### Sync de ~/developing (laptop → desktop)
+
+La laptop es la fuente de verdad de `~/developing/` (proyectos, datos de usuario,
+NO gestionado por dotfiles). `developing-sync.timer` corre rsync unidireccional
+laptop → desktop cada 10 min.
+
+- Script: `scripts/sync-developing.sh` (rsync -az --delete a `desktop:~/developing/`)
+- Fedora: units en `linux/config/systemd/user/` (SYSTEMD_UNITS, solo laptop)
+- NixOS: espejo en `nixos/home.nix` (`lib.mkIf (machineType == "laptop")`)
+- Desktop NixOS necesita SSH: `services.openssh` + authorized key de la laptop en
+  `nixos/configuration.nix` (firewall: puerto 22 solo en `tailscale0`)
+- Requiere llave SSH de la laptop autorizada en el desktop y `~/.ssh/config`
+  (local, no se commitea) con `Host desktop` → IP tailscale
 
 ### Sync entre máquinas
 
@@ -278,6 +294,19 @@ hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-transcription"))
 **Paquete:** `handy` en `dnf-packages.txt`
 
 **Config:** Handy no genera archivos de configuración en `~/.config/`. Usa settings por defecto en `/usr/lib/Handy/resources/default_settings.json`.
+
+## Notificaciones al celular (ntfy.sh)
+
+`linux/config/opencode/plugins/notify-sound/plugin.js` notifica en dos canales cuando opencode trabaja:
+
+1. **Sonido local** (`paplay`) en `session.idle` y `permission.asked`.
+2. **Push al celular** vía ntfy.sh:
+   - `session.idle` → "Sesion terminada" (prioridad 3)
+   - `permission.asked` → "Pide permiso: <comando>" (prioridad 4)
+
+Usa `fetch` nativo de Bun (sin curl) → portable Fedora/NixOS. Tópico en `TOPIC` (`opencode-laptop`).
+
+**Suscripción:** abrir `https://ntfy.sh/opencode-laptop` o la app ntfy (Android/iOS) y agregar el tópico.
 
 ## Lo que NO se gestiona
 

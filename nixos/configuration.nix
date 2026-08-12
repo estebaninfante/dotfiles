@@ -31,6 +31,8 @@
   networking.firewall.enable = true;
   # Si usas tailscale descomenta para no cortar la red mesh:
   # networking.firewall.checkReversePath = "loose";
+  # SSH solo via tailscale0 (la laptop sincroniza ~/developing con rsync)
+  networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 22 ];
 
   # ── Localizacion ──────────────────────────────────────────────
   # TODO: ajustar a tu zona horaria / locale si difiere
@@ -69,7 +71,7 @@
   # VPN mesh
   services.tailscale.enable = true;
 
-  # SSH server (para acceso via Tailscale)
+  # SSH server (solo tailnet): la laptop sincroniza ~/developing con rsync.
   services.openssh = {
     enable = true;
     settings = {
@@ -204,6 +206,10 @@
   users.users.eztvn = {
     isNormalUser = true;
     description = "estebaninfante";
+    # Llave SSH de la laptop (fedora-1) — usada por rsync sync-developing.sh
+    openssh.authorizedKeys.keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG3fn5nhRUS9KjWAnKYKDPGsTFnnh+Ms4h5d8C7hGk1u eztvn@fedora-1"
+    ];
     # input/uinput: keyd corre como user service (home.nix) y necesita
     # leer /dev/input/* y crear /dev/uinput para remapear teclado.
     extraGroups = [ "wheel" "networkmanager" "libvirtd" "docker" "video" "audio" "input" "uinput" ];

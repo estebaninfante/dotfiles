@@ -1,0 +1,11 @@
+{
+  "plugin": [
+    "@tarquinen/opencode-dcp@latest"
+  ],
+  "attention": {
+    "enabled": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default"
+  }
+}

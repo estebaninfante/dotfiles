@@ -5,3 +5,6 @@
 Thumbs.db
 result
 /nixos/result
+node_modules/
+package-lock.json
+bun.lock

@@ -26,7 +26,8 @@
         "network",
         "custom/memory",
         "cpu",
-        "custom/battery"
+        "custom/battery",
+        "tray"
     ],
 
     /* =========================
@@ -129,6 +130,15 @@
         "exec": "$HOME/.local/bin/lid-inhibit-waybar.sh",
         "on-click": "$HOME/.local/bin/toggle-lid.sh",
         "tooltip": true
+    },
+
+    /* =========================
+       TRAY
+       ========================= */
+
+    "tray": {
+        "icon-size": 20,
+        "spacing": 6
     },
 
     /* =========================

@@ -1,0 +1,15 @@
+port = 4242
+release_bind = [
+    "KeyLeftCtrl",
+    "KeyLeftShift",
+    "KeyLeftAlt",
+]
+
+[[clients]]
+hostname = "desktop"
+ips = ["192.168.1.17"]
+position = "right"
+activate_on_startup = true
+
+[authorized_fingerprints]
+"65:17:4c:8e:f4:55:c8:84:9d:e7:96:5a:23:7b:ed:d9:6a:3c:69:5a:6d:a1:72:6d:0a:44:73:36:5b:fa:3e:8b" = "desktop"

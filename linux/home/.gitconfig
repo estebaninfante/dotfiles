@@ -1,11 +1,13 @@
 [credential "https://github.com"]
 	helper = 
-	helper = !/usr/bin/gh auth git-credential
+	helper = !gh auth git-credential
 [credential "https://gist.github.com"]
 	helper = 
-	helper = !/usr/bin/gh auth git-credential
+	helper = !gh auth git-credential
 [url "https://github.com"]
 	insteadOf = git@github.com:
 [user]
 	name = estebaninfante
 	email = juanesteban.infantem@gmail.com
+[credential]
+	helper = !gh auth git-credential
