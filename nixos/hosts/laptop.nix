@@ -40,18 +40,4 @@
   # El driver amdgpu es el default para GPUs AMD; nada extra que configurar.
   # (El layout XKB dvk_prog ahora vive en nixos/modules/keyboard.nix —
   #  aplica a TTY, X11/GDM y Wayland en laptop y desktop.)
-
-  # ── keyd (linux/system/keyd/default.conf como fuente de verdad) ──
-  # La config vive en /etc/keyd/default.conf; keyd la lee igual que en
-  # Fedora.
-  #
-  # ⚠️ keyd corre como SERVICIO DE USUARIO (home.nix), NO de sistema:
-  # un servicio de sistema agarra el teclado a nivel kernel y su overload
-  # (leftalt/enter) se traga Ctrl+Alt+F<N> → no puedes cambiar de TTY.
-  # Como user service arranca solo con la sesion grafica del usuario
-  # (Hyprland): GDM/TTY quedan libres, tus overloads funcionan en la sesion.
-  # El usuario necesita grupos input (leer /dev/input/*) y uinput
-  # (crear /dev/uinput virtual) — se anaden en configuration.nix.
-  hardware.uinput.enable = true;
-  environment.etc."keyd/default.conf".source = ../../linux/system/keyd/default.conf;
 }

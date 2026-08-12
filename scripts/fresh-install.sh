@@ -31,17 +31,21 @@ echo "╚═══════════════════════�
 echo ""
 
 # ── 0. Machine type ──
+# Pre-detectado por hardware (DMI/bateria/backlight). Solo pregunta si la
+# deteccion parece dudosa; el detectado queda como default.
 MACHINE_FILE="$HOME/.config/machine-type"
 if [ ! -f "$MACHINE_FILE" ]; then
+  DETECTED="$(bash "$DOTFILES/scripts/detect-machine.sh" 2>/dev/null || echo "laptop")"
+  echo "  Máquina detectada por hardware: $DETECTED"
   echo "  ¿Qué máquina estás configurando?"
   echo "    1) laptop"
   echo "    2) desktop"
-  read -r -p "  Elige [1/2]: " choice
+  read -r -p "  Elige [1/2, Enter=${DETECTED}]: " choice
   case "$choice" in
     1) echo -n "laptop" > "$MACHINE_FILE" ;;
     2) echo -n "desktop" > "$MACHINE_FILE" ;;
-    *) echo "  Opción inválida. Creando 'laptop' por defecto."
-       echo -n "laptop" > "$MACHINE_FILE" ;;
+    *) echo "  Usando detectado: $DETECTED"
+       echo -n "$DETECTED" > "$MACHINE_FILE" ;;
   esac
   ok "Machine type: $(cat "$MACHINE_FILE")"
 fi

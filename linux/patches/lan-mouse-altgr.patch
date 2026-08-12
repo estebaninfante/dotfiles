@@ -1,0 +1,19 @@
+--- a/input-emulation/src/wlroots.rs
++++ b/input-emulation/src/wlroots.rs
+@@ -334,7 +334,8 @@
+             let pressed_mask = match key {
+                 scancode::Linux::KeyLeftShift | scancode::Linux::KeyRightShift => XMods::ShiftMask,
+                 scancode::Linux::KeyLeftCtrl | scancode::Linux::KeyRightCtrl => XMods::ControlMask,
+-                scancode::Linux::KeyLeftAlt | scancode::Linux::KeyRightalt => XMods::Mod1Mask,
++                scancode::Linux::KeyLeftAlt => XMods::Mod1Mask,
++                scancode::Linux::KeyRightalt => XMods::Mod5Mask,
+                 scancode::Linux::KeyLeftMeta | scancode::Linux::KeyRightmeta => XMods::Mod4Mask,
+                 _ => XMods::empty(),
+             };
+@@ -369,5 +370,5 @@
+ 
+     fn mask_pressed(&self) -> XMods {
+-        *self & (XMods::ShiftMask | XMods::ControlMask | XMods::Mod1Mask | XMods::Mod4Mask)
++        *self & (XMods::ShiftMask | XMods::ControlMask | XMods::Mod1Mask | XMods::Mod4Mask | XMods::Mod5Mask)
+     }
+ }

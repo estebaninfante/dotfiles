@@ -20,7 +20,6 @@ with pkgs; [  # ── Shell & terminal ──
   hyprpicker
   hypridle
   hyprlock
-  gtklock
   waybar
   rofi                  # en nixpkgs reciente rofi-wayland ya se fusiono en rofi
   rofi-emoji
@@ -94,6 +93,9 @@ with pkgs; [  # ── Shell & terminal ──
 
   # ── Compartir teclado/raton entre maquinas ──
   deskflow
+  (lan-mouse.overrideAttrs (old: {
+    patches = (old.patches or []) ++ [ ../../linux/patches/lan-mouse-altgr.patch ];
+  }))
 
   # ── opencode (CLI + Desktop) ──
   opencode
@@ -162,6 +164,10 @@ with pkgs; [  # ── Shell & terminal ──
   moonlight-qt
   # stremio / gearlever / protonplus: no estan en nixpkgs →
   # se instalan via flatpak (services.flatpak.enable ya activo).
+
+  # ── GTK theming (GDM login screen) ──
+  gnome-themes-extra
+  adwaita-icon-theme
 
   # ── Biometria / energia ──
   fprintd                   # fprintd + fprintd-pam (via services.fprintd)

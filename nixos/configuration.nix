@@ -69,6 +69,18 @@
   # VPN mesh
   services.tailscale.enable = true;
 
+  # SSH server (para acceso via Tailscale)
+  services.openssh = {
+    enable = true;
+    settings = {
+      PasswordAuthentication = false;
+      PermitRootLogin = "no";
+    };
+  };
+
+  # Abrir puerto SSH solo en la interfaz de Tailscale
+  networking.firewall.interfaces."tailscale0".allowedTCPPorts = [ 22 ];
+
   # Flatpak (apps que no esten en nixpkgs)
   services.flatpak.enable = true;
 
@@ -81,13 +93,81 @@
   programs.steam.enable = true;
   programs.gamemode.enable = true;
 
-  # ── Display manager (GDM, tema oscuro — equivalente a setup-gdm-dark.sh) ──
+  # ── Login manager: GDM ──
+  services.xserver.enable = true;
   services.displayManager.gdm.enable = true;
-  services.displayManager.defaultSession = "hyprland"; # login → Hyprland (Wayland)
-  services.displayManager.gdm.settings = {
-    "org/gnome/desktop/interface" = {
-      color-scheme = "prefer-dark";
-      gtk-theme = "Adwaita-dark";
+  services.accounts-daemon.enable = true;
+
+  environment.etc = {
+    # linux/system/tuned/ppd.conf
+    "ppd.conf".source = ../linux/system/tuned/ppd.conf;
+  };
+
+  # ── keyd: remapeo de teclado (SERVICIO DE SISTEMA) ────────────
+  # Módulo oficial NixOS services.keyd: crea /etc/keyd/default.conf,
+  # habilita hardware.uinput y corre keyd como root en boot
+  # (aplica en GDM/login, TTY y toda sesión). Fuente de verdad:
+  # linux/system/keyd/default.conf (aplica a todas las maquinas).
+  services.keyd = {
+    enable = true;
+    keyboards.default = {
+      ids = [ "*" ];
+      settings = {
+        main = {
+          # Caps Lock como Super (keyd, no XKB): aplica en TTY/GDM.
+          capslock = "leftmeta";
+          # overload(numpad, layer(alt)): tap = alt, hold = numpad layer.
+          # layer(alt) (en vez de leftalt) evita el warning de keyd y
+          # preserva el comportamiento de Alt en tap.
+          leftalt = "overload(numpad, layer(alt))";
+          enter = "overload(nav, enter)";
+        };
+        nav = {
+          a = "left";
+          s = "left";
+          d = "down";
+          f = "right";
+          e = "up";
+        };
+        numpad = {
+          a = "kpplus";
+          s = "kpminus";
+          d = "kpasterisk";
+          f = "kpslash";
+          g = "kpequal";
+          p = "kpequal";
+          m = "1";
+          comma = "2";
+          dot = "3";
+          j = "4";
+          k = "5";
+          l = "6";
+          u = "7";
+          i = "8";
+          o = "9";
+          semicolon = "0";
+        };
+      };
+      # Capa compuesta al final (extraConfig se anade DESPUES de settings):
+      # keyd exige que las capas compuestas se definan tras sus capas base.
+      # Garantiza Ctrl+Alt+F1..F12 (cambio de TTY) aunque leftalt tenga
+      # overload(numpad): al sostener leftalt se activa numpad (no alt), y
+      # esta compuesta con control re-emite ctrl+alt+F<N> con precedencia.
+      extraConfig = ''
+        [control+numpad]
+        f1=C-A-f1
+        f2=C-A-f2
+        f3=C-A-f3
+        f4=C-A-f4
+        f5=C-A-f5
+        f6=C-A-f6
+        f7=C-A-f7
+        f8=C-A-f8
+        f9=C-A-f9
+        f10=C-A-f10
+        f11=C-A-f11
+        f12=C-A-f12
+      '';
     };
   };
 
@@ -117,10 +197,8 @@
   # ── Power profiles (tuned-ppd → power-profiles-daemon) ───────
   # power-mode.sh habla con org.freedesktop.UPower.PowerProfiles via busctl;
   # power-profiles-daemon expone exactamente esa API (igual que tuned-ppd).
+  # Config ppd.conf en environment.etc (arriba).
   services.power-profiles-daemon.enable = true;
-  # linux/system/tuned/ppd.conf como referencia (power-profiles-daemon
-  # lee /etc/ppd.conf para su propio mapeo de perfiles)
-  environment.etc."ppd.conf".source = ../linux/system/tuned/ppd.conf;
 
   # ── Usuario ───────────────────────────────────────────────────
   users.users.eztvn = {
@@ -136,11 +214,15 @@
 
   # NOPASSWD para scripts del repo (equivalente a linux/system/sudoers/dotfiles)
   security.sudo.extraRules = import ./modules/sudoers.nix;
+  security.sudo.wheelNeedsPassword = false;
 
   # hyprlock necesita su propia config PAM en NixOS para poder autenticar
   # (en Fedora usa el PAM del sistema; en NixOS cada app de bloqueo requiere
   # /etc/pam.d/hyprlock — sin esto la contrasena siempre es rechazada).
-  security.pam.services.hyprlock = { };
+  # fprintAuth = true: desbloqueo por huella (silencioso si no hay lector).
+  security.pam.services.hyprlock = {
+    fprintAuth = true;
+  };
 
   # ── Nix ───────────────────────────────────────────────────────
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
@@ -149,6 +231,21 @@
   nix.gc.options = "--delete-older-than 14d";
 
   nixpkgs.config.allowUnfree = true;
+
+  # ── Overlay: waybar patched for Lua IPC dispatch (PR #5013) ──────
+  # Waybar v0.15.0 envia comandos dispatch con sintaxis legacy
+  # ("dispatch workspace N"), pero Hyprland 0.54+ con config Lua espera
+  # la nueva API ("hl.dsp.focus({ workspace = N })"). Esto rompe el
+  # on-click: activate en workspaces y scroll.
+  nixpkgs.overlays = [
+    (final: prev: {
+      waybar = prev.waybar.overrideAttrs (old: {
+        patches = (old.patches or []) ++ [
+          ../linux/patches/waybar-lua-dispatch.patch
+        ];
+      });
+    })
+  ];
 
   system.stateVersion = "25.05";
 }

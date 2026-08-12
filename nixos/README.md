@@ -36,10 +36,15 @@ nixos/
 │   └── sudoers.nix            # NOPASSWD (gpu-mode.sh)
 └── hosts/
     ├── laptop.nix             # NVIDIA hybrid, XKB dvk_prog, keyd
-    ├── desktop.nix
+    ├── desktop.nix            # NVIDIA RTX 3070 (dGPU unica)
     ├── hardware-configuration.laptop.nix   # ⚠️ placeholder
-    └── hardware-configuration.desktop.nix  # ⚠️ placeholder
+    └── hardware-configuration.desktop.nix  # hardware REAL (generado)
 ```
+
+> **hardware-configuration.desktop.nix** contiene ya el hardware real del
+> desktop (Ryzen 9 5900X + RTX 3070, btrfs). **hardware-configuration.laptop.nix**
+> es placeholder a propósito: `setup-nixos.sh` lo regenera con el hardware de
+> la laptop real y valida que coincida con el root UUID de la máquina actual.
 
 ## Instalación (fresh install)
 
@@ -49,12 +54,13 @@ nixos/
 # 2. Monta y genera el hardware-config:
 mount /dev/nvme0n1p2 /mnt
 nixos-generate-config --root /mnt
-# 3. Clona el repo DENTRO del instalador y copia el hardware-config:
+# 3. Clona el repo DENTRO del instalador y copia el hardware-config
+#    (usa el nombre de archivo de TU maquina):
 git clone <url> /tmp/dotfiles
-cp /mnt/etc/nixos/hardware-configuration.nix /tmp/dotfiles/nixos/hosts/hardware-configuration.laptop.nix
+cp /mnt/etc/nixos/hardware-configuration.nix /tmp/dotfiles/nixos/hosts/hardware-configuration.laptop.nix   # o .desktop.nix
 # 4. Instala:
 cd /tmp/dotfiles
-nixos-install --flake .#laptop
+nixos-install --flake .#laptop   # o .#desktop
 # 5. Contraseña del usuario:
 nixos-enter --root /mnt
 passwd eztvn
@@ -66,15 +72,16 @@ reboot
 ### Primer boot — UN comando y todo listo
 
 ```bash
-# El script hace todo: clona el repo si falta, genera el hardware-config
-# si es placeholder, nixos-rebuild switch (paquetes + servicios + dotfiles),
+# El script hace todo: clona el repo si falta, detecta la maquina POR
+# HARDWARE (DMI/bateria/backlight), genera/valida el hardware-config contra
+# el root UUID actual, nixos-rebuild switch (paquetes + servicios + dotfiles),
 # enlaza opencode, e instala Hermes.
 bash ~/dotfiles/scripts/setup-nixos.sh
 
 # O directamente desde cualquier sitio (si el repo no esta clonado):
 curl -fsSL https://raw.githubusercontent.com/estebaninfante/dotfiles/main/scripts/setup-nixos.sh | bash
 
-# Desktop en vez de laptop:
+# Override explicito (solo si la deteccion fallara):
 MACHINE=desktop bash ~/dotfiles/scripts/setup-nixos.sh
 ```
 

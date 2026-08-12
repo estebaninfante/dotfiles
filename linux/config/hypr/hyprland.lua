@@ -51,7 +51,6 @@ hl.config({
     input = {
         kb_layout   = "dvk_prog",
         kb_variant  = "basic",
-        kb_options  = "caps:super",
         follow_mouse = 1,
         sensitivity = 0
     }
@@ -152,6 +151,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("urserver --daemon")
     hl.exec_cmd("swayosd-server --top-margin=0.4")
     hl.exec_cmd("sleep 5 && handy --start-hidden")
+    hl.exec_cmd("lan-mouse daemon")
 
     if machine == "laptop" then
         hl.exec_cmd("sleep 5 && libinput-gestures-setup start")

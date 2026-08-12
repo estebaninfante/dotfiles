@@ -20,7 +20,7 @@ let
   # ── Inventarios (espejo de scripts/install.sh) ──────────────
   configDirs = [
     "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
-    "mako" "swaync" "swayosd" "avizo" "btop" "gh" "gtklock"
+    "mako" "swaync" "swayosd" "avizo" "btop" "gh"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -121,26 +121,68 @@ in
     Install = { WantedBy = [ "default.target" ]; };
   };
 
-  # ── keyd: user service (arranca solo con la sesion grafica) ──
-  # Servicio de usuario en vez de sistema: keyd de sistema agarra el
-  # teclado a nivel kernel y su overload (leftalt/enter) se traga
-  # Ctrl+Alt+F<N> → imposible cambiar de TTY. Como user service solo
-  # corre dentro de Hyprland: GDM/TTY libres, overloads funcionales.
-  # Requiere grupos input/uinput (configuration.nix) y /etc/keyd/default.conf
-  # (laptop.nix — config del repo como fuente de verdad).
-  systemd.user.services.keyd = lib.mkIf (machineType == "laptop") {
+  # ── lan-mouse: KVM por red (mouse+teclado compartido) ─────────
+  # Config: ~/.config/lan-mouse/config.toml (local por maquina,
+  # como machine-type — NO se enlaza desde el repo).
+  systemd.user.services.lan-mouse = {
     Unit = {
-      Description = "Keyboard remapping daemon (user session)";
+      Description = "Lan Mouse daemon (KVM over LAN)";
       After = [ "graphical-session.target" ];
       PartOf = [ "graphical-session.target" ];
     };
     Service = {
       Type = "simple";
-      ExecStart = "${pkgs.keyd}/bin/keyd";
-      Restart = "on-failure";
-      RestartSec = "2";
+      ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse daemon";
+      Restart = "always";
+      RestartSec = "3";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # ── holder de graphical-session.target (portales xdg) ─────────
+  # La sesion de Hyprland no arranca graphical-session.target (eso lo
+  # hace el session manager en DEs tipo GNOME). Las units de
+  # xdg-desktop-portal tienen Requisite=graphical-session.target y se
+  # activan por D-Bus → sin el target la activacion falla y Deskflow
+  # (captura de entrada en Wayland via libei) no puede arrancar.
+  # Este servicio persistente mantiene el target activo durante la sesion.
+  systemd.user.services.graphical-session-holder = {
+    Unit = {
+      Description = "Keep graphical-session.target active (xdg portals)";
+      After = [ "default.target" ];
+      Wants = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+      Restart = "always";
+    };
+    Install = { WantedBy = [ "default.target" ]; };
+  };
+
+  # ── linux-wallpaperengine: wallpapers animados de Steam ────────
+  # Requiere Steam + Wallpaper Engine instalados.
+  # Assets: ~/.local/share/Steam/steamapps/common/wallpaper_engine/assets
+  # wallpaperId: Steam Workshop ID o path local a la carpeta del wallpaper.
+  services.linux-wallpaperengine = {
+    enable = false;  # Activar manualmente: services.linux-wallpaperengine.enable = true;
+    assetsPath = "${config.home.homeDirectory}/.local/share/Steam/steamapps/common/wallpaper_engine/assets";
+    wallpapers = [
+      {
+        monitor = "DP-2";
+        wallpaperId = "3453113767";
+      }
+    ];
+  };
+
+  # Inyectar variables de entorno Wayland que systemd user no hereda de Hyprland
+  systemd.user.services.linux-wallpaperengine = {
+    Unit.After = [ "graphical-session.target" ];
+    Service.Environment = [
+      "XDG_SESSION_TYPE=wayland"
+      "WAYLAND_DISPLAY=wayland-1"
+      "XDG_CURRENT_DESKTOP=Hyprland"
+    ];
   };
 
   # Solo laptop (igual que en install.sh: SYSTEMD_UNITS condicional)

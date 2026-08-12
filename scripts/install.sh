@@ -23,13 +23,18 @@ skip()  { echo -e "  [SKIP]  $*"; }
 error() { echo -e "  [ERROR] $*"; }
 
 # ── Machine detection ────────────────────────────────────────
+# Auto-detectada por HARDWARE (DMI/bateria/backlight) via detect-machine.sh.
+# ⚠️ NO asumir 'laptop' por defecto: fue el bug que instalo el desktop como
+# laptop (configs, scripts y lan-mouse al reves).
 MACHINE_FILE="$HOME/.config/machine-type"
 if [ -f "$MACHINE_FILE" ]; then
   MACHINE=$(cat "$MACHINE_FILE" | tr -d '[:space:]')
 else
-  MACHINE="laptop"
-  warn "No se encontro $MACHINE_FILE — asumiendo 'laptop'"
-  echo "    Crea el archivo con: echo -n 'laptop' > $MACHINE_FILE"
+  MACHINE="$(bash "$DOTFILES/scripts/detect-machine.sh" 2>/dev/null || echo "laptop")"
+  warn "No se encontro $MACHINE_FILE — detectado por hardware: '$MACHINE'"
+  echo -n "$MACHINE" > "$MACHINE_FILE"
+  ok "Creado $MACHINE_FILE con: $MACHINE"
+  echo "    (override manual: echo -n 'laptop' > $MACHINE_FILE)"
   echo "                  o: echo -n 'desktop' > $MACHINE_FILE"
 fi
 
@@ -130,7 +135,6 @@ CONFIG_DIRS=(
   avizo
   btop
   gh
-  gtklock
 )
 
 CONFIG_FILES=(

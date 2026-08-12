@@ -125,11 +125,12 @@ Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por
 
 | Script | Descripción |
 |--------|-------------|
-| `install.sh` | Enlaza configs (idempotente) |
+| `detect-machine.sh` | Detecta `laptop`/`desktop` por **hardware** (DMI chassis_type, batería, backlight). NO lee `machine-type`. Usado por install.sh y setup-nixos.sh para no asumir laptop por defecto |
+| `install.sh` | Enlaza configs (idempotente). Si no existe `machine-type`, detecta por hardware |
 | `setup-packages.sh` | Instala repos + dnf + flatpak + wallpapers |
 | `install-rpms.sh` | Instala los RPMs locales de `linux/packages/rpm/` |
-| `fresh-install.sh` | Todo desde cero (repos → dnf → flatpak → rpm → pip → gestures → wallpapers → symlinks → Hermes) |
-| `setup-nixos.sh` | **Un comando** en NixOS: clona repo + hardware-config + nixos-rebuild + Hermes |
+| `fresh-install.sh` | Todo desde cero (repos → dnf → flatpak → rpm → pip → gestures → wallpapers → symlinks → Hermes). Pre-detecta máquina y pregunta con default detectado |
+| `setup-nixos.sh` | **Un comando** en NixOS: clona repo + hardware-config + nixos-rebuild + Hermes. Detecta máquina por hardware; valida que el hardware-config coincida con el root UUID de la máquina actual |
 | `backup-packages.sh` | Captura estado actual del sistema a manifiestos |
 | `publish.sh` | Commit + push con confirmacion |
 
@@ -174,7 +175,9 @@ bash ~/dotfiles/scripts/backup-packages.sh
 
 El archivo `~/.config/machine-type` contiene `laptop` o `desktop`. No se commitea al repo (es local a cada máquina).
 
-`install.sh` lee este archivo al inicio. Si no existe, asume `laptop`.
+`install.sh` y `setup-nixos.sh` leen este archivo al inicio. **Si no existe, NO asumen `laptop`**: lo detectan por hardware con `scripts/detect-machine.sh` (DMI chassis_type, batería, backlight). Esto evita el bug de instalar el desktop como laptop.
+
+`setup-nixos.sh` además valida que `nixos/hosts/hardware-configuration.<machine>.nix` coincida con el **root UUID de la máquina actual** (`findmnt -no UUID /`). Si el archivo contiene hardware de otra máquina (p.ej. desktop contaminando el de laptop), lo regenera automáticamente en vez de montar particiones ajenas.
 
 ### Configs machine-specific
 
