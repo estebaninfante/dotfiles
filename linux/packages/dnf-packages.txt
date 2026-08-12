@@ -80,6 +80,7 @@ openssh-clients
 openssh-server
 NetworkManager-tui
 tailscale
+ngrok
 
 # ── Multimedia ──
 vlc

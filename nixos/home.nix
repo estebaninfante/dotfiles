@@ -68,6 +68,7 @@ in
     (lib.genAttrs (map configDirName configDirs) (d: {
       source = link (cfg + "/" + lib.removePrefix ".config/" d);
       recursive = true;
+      force = true;
     }))
     # ── Config files sueltos ───────────────────────────────────
     (lib.genAttrs (map configFileName configFiles) (f: {
@@ -208,7 +209,7 @@ in
   # Assets: ~/.local/share/Steam/steamapps/common/wallpaper_engine/assets
   # wallpaperId: Steam Workshop ID o path local a la carpeta del wallpaper.
   services.linux-wallpaperengine = {
-    enable = false;  # Activar manualmente: services.linux-wallpaperengine.enable = true;
+    enable = true;
     assetsPath = "${config.home.homeDirectory}/.local/share/Steam/steamapps/common/wallpaper_engine/assets";
     wallpapers = [
       {

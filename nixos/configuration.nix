@@ -80,9 +80,6 @@
     };
   };
 
-  # Abrir puerto SSH solo en la interfaz de Tailscale
-  networking.firewall.interfaces."tailscale0".allowedTCPPorts = [ 22 ];
-
   # Flatpak (apps que no esten en nixpkgs)
   services.flatpak.enable = true;
 

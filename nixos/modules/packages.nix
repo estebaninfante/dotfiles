@@ -73,6 +73,7 @@ with pkgs; [  # ── Shell & terminal ──
   glances
   openssh
   tailscale
+  ngrok
   libinput-gestures      # hyprland.lua: libinput-gestures-setup start (laptop)
 
   # ── Multimedia ──
@@ -156,6 +157,7 @@ with pkgs; [  # ── Shell & terminal ──
   vulkan-validation-layers
 
   # ── Flatpak equivalents (flatpak-packages.txt) ──
+  localsend
   zapzap
   teams-for-linux
   spotify
