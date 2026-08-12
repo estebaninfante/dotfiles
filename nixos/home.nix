@@ -133,7 +133,7 @@ in
     };
     Service = {
       Type = "simple";
-      ExecStart = "%h/.local/bin/lan-mouse daemon";
+      ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse daemon";
       Restart = "always";
       RestartSec = "5";
     };
@@ -170,13 +170,13 @@ in
   # (laptop.nix — config del repo como fuente de verdad).
   systemd.user.services.keyd = lib.mkIf (machineType == "laptop") {
     Unit = {
-      Description = "Lan Mouse daemon (KVM over LAN)";
+      Description = "Keyd keyboard remapping daemon";
       After = [ "graphical-session.target" ];
       PartOf = [ "graphical-session.target" ];
     };
     Service = {
       Type = "simple";
-      ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse daemon";
+      ExecStart = "${pkgs.keyd}/bin/keyd";
       Restart = "always";
       RestartSec = "3";
     };

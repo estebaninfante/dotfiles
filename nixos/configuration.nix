@@ -33,6 +33,9 @@
   # networking.firewall.checkReversePath = "loose";
   # SSH solo via tailscale0 (la laptop sincroniza ~/developing con rsync)
   networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 22 ];
+  # LAN-Mouse: TCP (handshake) + UDP (input data)
+  networking.firewall.allowedTCPPorts = [ 4242 ];
+  networking.firewall.allowedUDPPorts = [ 4242 ];
 
   # ── Localizacion ──────────────────────────────────────────────
   # TODO: ajustar a tu zona horaria / locale si difiere
