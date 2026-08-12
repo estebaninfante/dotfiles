@@ -1,5 +1,5 @@
 {
-  description = "NixOS configuration — replica del entorno Fedora (dotfiles)";
+  description = "NixOS configuration (dotfiles)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -15,8 +15,8 @@
       lib = nixpkgs.lib;
 
       # Modulos base compartidos por todas las maquinas.
-      # home-manager: los dotfiles del repo se enlazan igual que en Fedora
-      # (misma filosofia: el repo es la unica fuente de verdad).
+      # home-manager: los dotfiles del repo se enlazan via mkOutOfStoreSymlink
+      # (el repo es la unica fuente de verdad).
       baseModules = [
         ./nixos/configuration.nix
         home-manager.nixosModules.home-manager

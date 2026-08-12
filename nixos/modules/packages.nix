@@ -1,6 +1,4 @@
-# Mapeo de linux/packages/dnf-packages.txt → nixpkgs.
-# Mantener sincronizado: si anades un paquete al manifest de Fedora,
-# anadelo tambien aqui (y viceversa).
+# Paquetes del sistema (nixpkgs).
 { pkgs }:
 
 with pkgs; [  # ── Shell & terminal ──
@@ -88,8 +86,6 @@ with pkgs; [  # ── Shell & terminal ──
   yt-dlp
 
   # ── Speech-to-Text ──
-  # handy: existe en nixpkgs (0.9.1, probado). El RPM 0.9.5 del repo
-  # (linux/packages/rpm/) es para Fedora via install-rpms.sh.
   handy
 
   # ── Compartir teclado/raton entre maquinas ──
@@ -102,7 +98,7 @@ with pkgs; [  # ── Shell & terminal ──
   opencode
   opencode-desktop
 
-  # ── RStudio (RPM en Fedora; nativo en nixpkgs) ──
+  # ── RStudio ──
   rstudio
 
   # ── Desarrollo ──
@@ -156,7 +152,7 @@ with pkgs; [  # ── Shell & terminal ──
   vulkan-tools
   vulkan-validation-layers
 
-  # ── Flatpak equivalents (flatpak-packages.txt) ──
+  # ── Apps adicionales ──
   localsend
   zapzap
   teams-for-linux
@@ -173,13 +169,8 @@ with pkgs; [  # ── Shell & terminal ──
 
   # ── Biometria / energia ──
   fprintd                   # fprintd + fprintd-pam (via services.fprintd)
-  power-profiles-daemon     # tuned-ppd equivalente (services.power-profiles-daemon)
+  power-profiles-daemon     # services.power-profiles-daemon
 
   # ── KVM (compartir teclado/raton entre maquinas) ──
   input-leap
-
-  # ── Nota ──
-  # handy (speech-to-text, RPM-only): NO existe en nixpkgs.
-  # Opciones: empaquetar el RPM (overlay) o usar alternativa.
-  # Ver README.md seccion "Gaps".
 ]

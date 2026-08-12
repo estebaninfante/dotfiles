@@ -1,116 +1,93 @@
 # dotfiles
 
-Configuraciones personales y automatización de instalación para Fedora Linux.
-Este repositorio es la **única fuente de verdad** — todo se edita aquí y se sincroniza mediante symlinks.
+Configuraciones personales y automatización de instalación para NixOS.
+Este repositorio es la **única fuente de verdad** — todo se edita aquí y se aplica con un rebuild.
 
 ## Filosofía
 
-Después de reinstalar Fedora varias veces, nació este sistema: un solo comando y tu máquina queda exactamente como la tenías.
+Un solo flake y tu máquina queda exactamente como la tenías:
 
-1. **Manifiestos de paquetes** → qué instalar (DNF, Flatpak, Pip)
-2. **Script de setup** → repos + paquetes + wallpapers
-3. **Symlinks** → tus configs apuntan al repo
-4. **Backup** → captura el estado actual antes de reinstalar
+1. **`flake.nix`** → sistema completo declarativo (paquetes, servicios, drivers)
+2. **`nixos/`** → configuración base, home-manager y hosts (laptop/desktop)
+3. **Symlinks** → tus configs (`linux/config/`) apuntan al repo via home-manager
+4. **`setup-nixos.sh`** → un comando para fresh install
 
 ## Estructura
 
 ```
 dotfiles/
+├── flake.nix                 # inputs (nixpkgs, home-manager) + hosts
+├── nixos/
+│   ├── configuration.nix     # base común (servicios, usuario, GDM, Hyprland)
+│   ├── home.nix              # home-manager: symlinks a linux/config, linux/bin, units
+│   ├── modules/              # packages.nix, keyboard.nix, sudoers.nix
+│   └── hosts/                # laptop.nix, desktop.nix + hardware-config
 ├── linux/
-│   ├── config/          # ~/.config/ (apps: hypr, waybar, kitty, rofi, nvim, etc.)
-│   ├── home/            # ~/.bashrc, ~/.gitconfig
-│   ├── bin/             # ~/.local/bin/ (scripts propios)
-│   ├── packages/        # Manifiestos de paquetes
-│   │   ├── repos.sh           # Agrega COPR, RPM Fusion, Brave, Chrome, Flathub
-│   │   ├── dnf-packages.txt   # Paquetes RPM (uno por línea)
-│   │   ├── flatpak-packages.txt  # Apps Flatpak (application ID)
-│   │   └── wallpaper/         # Wallpapers default
-│   ├── xkb/             # Layout de teclado personalizado
-│   └── system/          # Archivos de sistema (/etc/) — futuro
+│   ├── config/               # ~/.config/ (hypr, waybar, kitty, rofi, nvim, etc.)
+│   ├── home/                 # ~/.bashrc, ~/.gitconfig
+│   ├── bin/                  # ~/.local/bin/ (scripts propios)
+│   ├── xkb/                  # layout de teclado custom (dvk_prog)
+│   ├── patches/              # patches (lan-mouse AltGr, waybar Lua dispatch)
+│   └── system/               # configs de sistema (keyd, NetworkManager)
 ├── scripts/
-│   ├── install.sh             # Enlaza configs (symlinks)
-│   ├── setup-packages.sh      # Instala repos + paquetes desde cero
-│   ├── backup-packages.sh     # Captura paquetes actuales a manifiestos
-│   └── publish.sh             # Commit + push
-├── AGENTS.md            # Instrucciones para asistentes de IA
-└── README.md            # Este archivo
+│   ├── setup-nixos.sh        # fresh install en un comando
+│   ├── detect-machine.sh     # detecta laptop/desktop por hardware
+│   ├── publish.sh            # commit + push
+│   └── sync-developing.sh    # rsync laptop → desktop
+├── AGENTS.md
+└── README.md
 ```
 
-## Fresh install (Fedora Workstation 44)
-
-Después de instalar Fedora, abre una terminal y ejecuta:
+## Fresh install (NixOS)
 
 ```bash
-# 1. Conectar a internet (si no lo hiciste durante la instalación)
-sudo nmcli dev wifi connect <SSID> password <password>
+# Tras instalar NixOS y clonar el repo:
+bash ~/dotfiles/scripts/setup-nixos.sh
 
-# 2. Instalar git
-sudo dnf install -y git
+# O directamente desde cualquier sitio:
+curl -fsSL https://raw.githubusercontent.com/estebaninfante/dotfiles/main/scripts/setup-nixos.sh | bash
 
-# 3. Clonar el repositorio
-git clone <url-del-repo> ~/dotfiles
-
-# 4. Instalar TODO: repos + paquetes + configs + wallpapers
-cd ~/dotfiles
-bash scripts/install.sh --packages --force
-
-# 5. (Opcional) Configuraciones del sistema
-sudo bash linux/bin/setup-gdm-dark.sh           # Fondo negro en pantalla de login
-sudo ln -s ~/dotfiles/linux/xkb/dvk_prog /usr/share/X11/xkb/symbols/dvk_prog  # Layout de teclado
-
-# 6. Recargar shell
-exec bash
+# Override explícito (solo si la detección por hardware fallara):
+MACHINE=desktop bash ~/dotfiles/scripts/setup-nixos.sh
 ```
 
-> **Nota:** `install.sh --packages` ejecuta `setup-packages.sh` automáticamente. Si solo quieres los paquetes sin enlazar configs, corre `setup-packages.sh` directamente.
-
-### Lo que instala `--packages`
-
-| Origen | Qué |
-|--------|-----|
-| `repos.sh` | RPM Fusion, COPR Hyprland, Brave, Chrome, Flathub |
-| `dnf-packages.txt` | Hyprland ecosystem, neovim, kitty, waybar, rofi, navegadores, dev tools, multimedia, juegos |
-| `flatpak-packages.txt` | WhatsApp (ZapZap), Teams (Portal for Teams), Firefox, VLC, OBS, Steam, Lutris |
-| `wallpaper/` | Wallpapers copiados a `~/Imágenes/` |
+Ver `nixos/README.md` para la guía de instalación completa.
 
 ## Uso diario
 
 ```bash
 # Editar configs (siempre dentro de ~/dotfiles/)
-vim ~/dotfiles/linux/config/hypr/hyprland.conf
+vim ~/dotfiles/linux/config/hypr/hyprland.lua
 
-# Refrescar symlinks
-~/dotfiles/scripts/install.sh --force
+# Aplicar cambios de sistema/paquetes
+sudo nixos-rebuild switch --flake ~/dotfiles#laptop   # o #desktop
 
-# Publicar cambios (con confirmación antes de pushear)
+# Publicar cambios (commit + push, con confirmación)
 ~/dotfiles/scripts/publish.sh
 ```
 
-## Backup (antes de reinstalar Fedora)
+## Multi-máquina (laptop + desktop)
 
-```bash
-# Captura paquetes DNF, Flatpak y Pip actuales a linux/packages/
-bash ~/dotfiles/scripts/backup-packages.sh
+El flake define dos hosts (`#laptop` y `#desktop`). La detección de máquina
+(`~/.config/machine-type`) la hace `scripts/detect-machine.sh` por **hardware**
+(DMI, batería, backlight), nunca se asume `laptop` por defecto.
 
-# Revisa los archivos, elimina lo que no necesites, edita lo que falte
-vim ~/dotfiles/linux/packages/dnf-packages.txt
-vim ~/dotfiles/linux/packages/flatpak-packages.txt
-
-# Haz commit y push
-~/dotfiles/scripts/publish.sh
-```
+Los configs machine-specific (`hyprland.lua`, `hyprpaper-*.conf`, scripts de
+laptop) usan condicionales por machine type. Ver `AGENTS.md` para el detalle.
 
 ## Agregar una nueva configuración
 
 1. Pon tus archivos en `linux/config/<app>/` o `linux/home/<archivo>`
-2. Añade una entrada en `scripts/install.sh` (arrays `CONFIG_DIRS`, `CONFIG_FILES` o `HOME_FILES`)
-3. Si requiere paquetes, agrégalos a `linux/packages/dnf-packages.txt` o `flatpak-packages.txt`
-4. Ejecuta `install.sh --force`
+2. Añade la entrada en `nixos/home.nix` (listas `configDirs`, `configFiles`, `homeFiles` o `allScripts`)
+3. Si requiere paquetes, agrégalos a `nixos/modules/packages.nix`
+4. `sudo nixos-rebuild switch --flake ~/dotfiles#<host>`
 
 ## Lo que NO gestiona este repo
 
-Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes (Python, npm, dnf, etc.).
+Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario,
+ni ejecutables instalados por gestores de paquetes (Python, npm, etc.).
 
 ## Ver también
 
-- `AGENTS.md` — instrucciones detalladas para asistentes de IA y colaboradores
+- `AGENTS.md` — instrucciones para asistentes de IA
+- `nixos/README.md` — guía de instalación completa

@@ -1,6 +1,4 @@
 # Configuracion base NixOS — comun a laptop y desktop.
-# Replica el entorno Fedora descrito en linux/packages/dnf-packages.txt
-# y el inventario de scripts/install.sh.
 #
 # OJO: el archivo hardware-configuration.nix NO se gestiona aqui.
 # Se genera por maquina con `nixos-generate-config` durante la instalacion
@@ -27,7 +25,7 @@
   # Hostname por maquina (definido en hosts/*.nix)
   networking.hostName = lib.mkDefault "nixos";
 
-  # Firewall (equivalente a ufw en Fedora)
+  # Firewall
   networking.firewall.enable = true;
   # Si usas tailscale descomenta para no cortar la red mesh:
   # networking.firewall.checkReversePath = "loose";
@@ -42,9 +40,9 @@
   time.timeZone = "America/Bogota";
   i18n.defaultLocale = "es_ES.UTF-8";
   # NOTA: console.keyMap NO se define aqui — el modulo keyboard.nix
-  # lo pone en dvk_prog (tu layout custom, igual que Fedora).
+  # lo pone en dvk_prog (tu layout custom).
 
-  # ── Paquetes del sistema (mapeo de dnf-packages.txt) ──────────
+  # ── Paquetes del sistema ─────────────────────────────────────
   environment.systemPackages = import ./modules/packages.nix { inherit pkgs; };
 
   # ── Servicios base ────────────────────────────────────────────
@@ -62,9 +60,8 @@
   # Huella dactilar (fprintd + fprintd-pam)
   services.fprintd.enable = true;
 
-  # Power profiles (reemplaza tuned-ppd; misma API UPower.PowerProfiles
-  # que usa power-mode.sh via busctl). Ver seccion "Power profiles" abajo
-  # para la config ppd.conf.
+  # Power profiles: power-profiles-daemon (misma API UPower.PowerProfiles
+  # que usa power-mode.sh via busctl).
 
   # Sync de archivos
   services.syncthing.enable = true;
@@ -99,11 +96,6 @@
   services.xserver.enable = true;
   services.displayManager.gdm.enable = true;
   services.accounts-daemon.enable = true;
-
-  environment.etc = {
-    # linux/system/tuned/ppd.conf
-    "ppd.conf".source = ../linux/system/tuned/ppd.conf;
-  };
 
   # ── keyd: remapeo de teclado (SERVICIO DE SISTEMA) ────────────
   # Módulo oficial NixOS services.keyd: crea /etc/keyd/default.conf,
@@ -185,7 +177,7 @@
     extraPortals = [ pkgs.xdg-desktop-portal-gtk pkgs.xdg-desktop-portal-hyprland ];
   };
 
-  # ── Fuentes (mapeo de linux/packages/dnf-packages.txt) ──────
+  # ── Fuentes ──────────────────────────────────────────────────
   fonts.packages = with pkgs; [
     fira-code            # fira-code-fonts
     jetbrains-mono       # jetbrains-mono-fonts
@@ -196,19 +188,17 @@
     nerd-fonts.jetbrains-mono  # hyprlock usa "JetBrainsMono Nerd Font"
   ];
 
-  # ── Power profiles (tuned-ppd → power-profiles-daemon) ───────
-  # power-mode.sh habla con org.freedesktop.UPower.PowerProfiles via busctl;
-  # power-profiles-daemon expone exactamente esa API (igual que tuned-ppd).
-  # Config ppd.conf en environment.etc (arriba).
+  # ── Power profiles (power-profiles-daemon) ──────────────────
+  # power-mode.sh habla con org.freedesktop.UPower.PowerProfiles via busctl.
   services.power-profiles-daemon.enable = true;
 
   # ── Usuario ───────────────────────────────────────────────────
   users.users.eztvn = {
     isNormalUser = true;
     description = "estebaninfante";
-    # Llave SSH de la laptop (fedora-1) — usada por rsync sync-developing.sh
+    # Llave SSH de la laptop — usada por rsync sync-developing.sh
     openssh.authorizedKeys.keys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG3fn5nhRUS9KjWAnKYKDPGsTFnnh+Ms4h5d8C7hGk1u eztvn@fedora-1"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG3fn5nhRUS9KjWAnKYKDPGsTFnnh+Ms4h5d8C7hGk1u eztvn@laptop"
     ];
     # input/uinput: keyd corre como user service (home.nix) y necesita
     # leer /dev/input/* y crear /dev/uinput para remapear teclado.
@@ -218,13 +208,13 @@
     # o usar hashedPassword con `mkpasswd -m sha-512`.
   };
 
-  # NOPASSWD para scripts del repo (equivalente a linux/system/sudoers/dotfiles)
+  # NOPASSWD para scripts del repo (equivalente a nixos/modules/sudoers.nix)
   security.sudo.extraRules = import ./modules/sudoers.nix;
   security.sudo.wheelNeedsPassword = false;
 
   # hyprlock necesita su propia config PAM en NixOS para poder autenticar
-  # (en Fedora usa el PAM del sistema; en NixOS cada app de bloqueo requiere
-  # /etc/pam.d/hyprlock — sin esto la contrasena siempre es rechazada).
+  # (cada app de bloqueo requiere /etc/pam.d/hyprlock — sin esto la
+  # contrasena siempre es rechazada).
   # fprintAuth = true: desbloqueo por huella (silencioso si no hay lector).
   security.pam.services.hyprlock = {
     fprintAuth = true;

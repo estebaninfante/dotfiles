@@ -16,7 +16,7 @@
   services.xserver.videoDrivers = [ "nvidia" ];
 
   hardware.nvidia = {
-    # Driver propietario (equivalente a akmod-nvidia en Fedora).
+    # Driver propietario.
     # RTX 3070 (Ampere) → open = false (el open kernel module soporta
     # Turing+ pero el driver closed es el estandar para desktop stable).
     open = false;

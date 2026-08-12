@@ -1,4 +1,4 @@
-# home-manager: replica EXACTA de lo que hace scripts/install.sh en Fedora.
+# home-manager: inventario canónico de configs (~/.config, ~/.local/bin).
 #
 # Filosofia identica: el repo (~/dotfiles) es la unica fuente de verdad.
 # home.file usa mkOutOfStoreSymlink → crea symlinks a los archivos del repo
@@ -17,7 +17,7 @@ let
   # Symlink out-of-store (el repo queda como fuente de verdad)
   link = p: config.lib.file.mkOutOfStoreSymlink p;
 
-  # ── Inventarios (espejo de scripts/install.sh) ──────────────
+  # ── Inventarios ─────────────────────────────────────────────
   configDirs = [
     "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "lan-mouse" "opencode"
@@ -30,13 +30,13 @@ let
   allScripts = [
     "rofi-power-mode.sh" "gpu-mode.sh" "toggle_moonlight.sh" "reload-hyprpaper.sh"
     "trackpad-dwt-daemon" "wifi-reconnect.sh" "shot" "waybar-battery-top"
-    "clean-temp.sh" "pomodoro-waybar.sh" "setup-fingerprint.sh" "lid-inhibit-waybar.sh"
+    "clean-temp.sh" "pomodoro-waybar.sh" "lid-inhibit-waybar.sh"
     "waybar-ram-top" "tts-send" "tts-server" "tts" "rofi-scripts-launcher.sh"
     "power-mode.sh" "toggle-lid.sh" "agent.sh" "send-with-taildrop" "tv-toggle.sh"
     "tv-mode.sh" "rofi-file-search.sh" "rofi-context-menu.sh" "reiniciar.sh"
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
   ];
-  # Solo laptop (igual que LAPTOP_SCRIPTS en install.sh)
+  # Solo laptop
   laptopScripts = [
     "toggle-lid.sh" "lid-inhibit-waybar.sh" "waybar-battery-top"
     "trackpad-dwt-daemon" "reload-hyprpaper.sh" "gpu-mode.sh"
@@ -54,7 +54,7 @@ in
   home.homeDirectory = "/home/eztvn";
   home.stateVersion = "25.05";
 
-  # Todos los paquetes van a nivel sistema (como dnf en Fedora).
+  # Todos los paquetes van a nivel sistema.
   # home.packages queda libre para herramientas de perfil de usuario si
   # algun dia quieres separar; por ahora nada para no duplicar.
   home.packages = [ ];
@@ -93,7 +93,7 @@ in
   ];
 
   # ── Git credential helper ─────────────────────────────────────
-  # El .gitconfig del repo apunta a /usr/bin/gh (ruta Fedora).
+  # El .gitconfig del repo apunta a /usr/bin/gh (ruta no-store).
   # En NixOS gh vive en el store: override solo del helper, el resto
   # del .gitconfig (user.name/email/insteadOf) sigue viniendo del repo.
   programs.git = {
@@ -102,7 +102,7 @@ in
     settings.credential."https://gist.github.com".helper = "!${pkgs.gh}/bin/gh auth git-credential";
   };
 
-  # ── Units systemd user (espejo de linux/config/systemd/user/) ──
+  # ── Units systemd user ──────────────────────────────────────
   # Nota: en NixOS los binarios no estan en /usr/bin → rutas del store.
   systemd.user.services.dotfiles-sync = {
     Unit = {
@@ -140,7 +140,7 @@ in
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
 
-  # ── developing sync (espejo de linux/config/systemd/user/) ──
+  # ── developing sync ─────────────────────────────────────────
   # Solo en la laptop (fuente de verdad de ~/developing). El desktop
   # solo recibe via rsync. Requiere openssh en el desktop (configuration.nix).
   systemd.user.services.developing-sync = lib.mkIf (machineType == "laptop") {
@@ -229,7 +229,7 @@ in
     ];
   };
 
-  # Solo laptop (igual que en install.sh: SYSTEMD_UNITS condicional)
+  # Solo laptop
   systemd.user.services.trackpad-dwt = lib.mkIf (machineType == "laptop") {
     Unit = {
       Description = "Trackpad disable-while-typing daemon";

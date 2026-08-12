@@ -1,8 +1,5 @@
-# Equivalente NixOS de linux/system/sudoers/dotfiles.
 # Reglas NOPASSWD para los scripts del repo (gpu-mode.sh, etc.).
-#
-# En Fedora: sudo tee /sys/bus/pci/devices/*/power/control
-# En NixOS los binarios viven en /run/current-system/sw/bin.
+# Los binarios viven en /run/current-system/sw/bin.
 #
 # Uso: security.sudo.extraRules = import ./modules/sudoers.nix;
 

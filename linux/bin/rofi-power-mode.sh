@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rofi menu: switch power profiles via tuned-ppd.
+# Rofi menu: switch power profiles via power-profiles-daemon.
 set -euo pipefail
 
 current=$(power-mode.sh status | awk '{print $NF}')

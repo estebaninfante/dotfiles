@@ -8,8 +8,8 @@
 //      - sesion idle         → "opencode: sesion terminada"
 //      - permiso pedido      → "opencode: pide permiso" (prioridad alta)
 //
-// El push usa fetch nativo de Bun → sin dependencia de curl, portable
-// entre Fedora y NixOS. El topico se configura en TOPIC.
+// El push usa fetch nativo de Bun → sin dependencia de curl.
+// El topico se configura en TOPIC.
 //
 // NOTA sobre eventos (version-dependent):
 //   - opencode deriva `session.idle` desde `session.status` (status.type

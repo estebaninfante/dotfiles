@@ -2,7 +2,7 @@
 # ==========================================================
 # fix-hyprland.sh
 # Diagnóstico y reparación de problemas comunes en
-# Hyprland (Fedora 44, Wayland).
+# Hyprland (NixOS, Wayland).
 #
 # USO:
 #   ./fix-hyprland.sh            # Diagnóstico completo
@@ -217,7 +217,7 @@ full_diagnostic() {
     check_logs
 
     header "12. Resumen de herramientas"
-    for cmd in hyprctl grim slurp wl-paste wl-copy swaylock makoctl dnf5; do
+    for cmd in hyprctl grim slurp wl-paste wl-copy swaylock makoctl; do
         if check_command "$cmd" &>/dev/null; then
             echo "  [OK]   $cmd"
         else

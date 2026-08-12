@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cambia perfil de energia via tuned-ppd (API org.freedesktop.UPower.PowerProfiles).
+# Cambia perfil de energia via power-profiles-daemon (API org.freedesktop.UPower.PowerProfiles).
 # Uso: power-mode.sh [saver|balanced|performance|toggle|status]
 set -euo pipefail
 

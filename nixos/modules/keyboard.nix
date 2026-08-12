@@ -1,8 +1,7 @@
 # ── Teclado: layout custom dvk_prog (Dvorak Programador Español V5) ──
-# Fuente de verdad: linux/xkb/dvk_prog (mismo archivo que Fedora enlaza
-# a /usr/share/X11/xkb/symbols/).
+# Fuente de verdad: linux/xkb/dvk_prog.
 #
-# Cubre las TRES superficies donde Fedora tenia el layout:
+# Cubre las TRES superficies donde el layout debe estar:
 #   1. X11/GDM (login): services.xserver.xkb.layout
 #   2. Wayland/Hyprland: hyprland.lua ya pide kb_layout = "dvk_prog"
 #      (el extraLayouts lo hace resolvible; aqui se activa para GDM)

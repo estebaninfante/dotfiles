@@ -1,9 +1,0 @@
-[Unit]
-Description=Developing sync periodic
-
-[Timer]
-OnBootSec=3min
-OnUnitActiveSec=10min
-
-[Install]
-WantedBy=default.target

@@ -17,7 +17,7 @@
   services.xserver.videoDrivers = [ "amdgpu" "nvidia" ];
 
   hardware.nvidia = {
-    # Driver propietario (equivalente a akmod-nvidia en Fedora).
+    # Driver propietario.
     # Obligatorio fijarlo: el default null rompe una assertion del modulo.
     open = false;
     modesetting.enable = true;
