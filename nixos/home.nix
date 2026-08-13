@@ -20,7 +20,7 @@ let
   # ── Inventarios ─────────────────────────────────────────────
   configDirs = [
     "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
-    "mako" "swaync" "swayosd" "avizo" "btop" "gh" "lan-mouse" "opencode"
+    "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -64,6 +64,13 @@ in
   home.file = lib.mkMerge [
     {
       ".config/machine-type".text = machineType;
+    }
+    # ── Lan-mouse: PEM (shared) + config.toml (machine-specific)
+    # Both are symlinks to the repo. config.toml is writable (lan-mouse
+    # saves state); it's gitignored so it won't dirty the repo.
+    {
+      ".config/lan-mouse/lan-mouse.pem" = { source = link (cfg + "/lan-mouse/lan-mouse.pem"); force = true; };
+      ".config/lan-mouse/config.toml" = { source = link (cfg + "/lan-mouse/config.${machineType}.toml"); force = true; };
     }
     (lib.genAttrs (map configDirName configDirs) (d: {
       source = link (cfg + "/" + lib.removePrefix ".config/" d);
@@ -123,22 +130,34 @@ in
   };
 
   # ── lan-mouse: KVM por red (mouse+teclado compartido) ─────────
-  # Config: ~/.config/lan-mouse/config.toml (local por maquina,
-  # como machine-type — NO se enlaza desde el repo).
+  # Config: config.${machineType}.toml enlazado desde el repo.
+  # PEM: compartido entre machines. config.toml es writable (lan-mouse
+  # guarda estado) pero gitignored.
   systemd.user.services.lan-mouse = {
     Unit = {
       Description = "LAN-Mouse KVM daemon";
-      After = [ "graphical-session.target" "network-online.target" ];
-      Wants = [ "network-online.target" ];
+      After = [ "graphical-session.target" "network-online.target" "xdg-desktop-portal-hyprland.service" ];
+      Wants = [ "network-online.target" "xdg-desktop-portal-hyprland.service" ];
     };
     Service = {
       Type = "simple";
       ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse daemon";
       Restart = "always";
       RestartSec = "5";
+      Environment = [
+        "WAYLAND_DISPLAY=wayland-1"
+        "XDG_RUNTIME_DIR=/run/user/%U"
+      ];
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
+  # Drop-in: forzar Restart=always en xdg-desktop-portal-hyprland
+  # (el stock usa Restart=on-failure que no cubre SIGSEGV)
+  xdg.configFile."systemd/user/xdg-desktop-portal-hyprland.service.d/override.conf".text = ''
+    [Service]
+    Restart=always
+    RestartSec=2
+  '';
 
   # ── developing sync ─────────────────────────────────────────
   # Solo en la laptop (fuente de verdad de ~/developing). El desktop
@@ -222,11 +241,17 @@ in
   # Inyectar variables de entorno Wayland que systemd user no hereda de Hyprland
   systemd.user.services.linux-wallpaperengine = {
     Unit.After = [ "graphical-session.target" ];
-    Service.Environment = [
-      "XDG_SESSION_TYPE=wayland"
-      "WAYLAND_DISPLAY=wayland-1"
-      "XDG_CURRENT_DESKTOP=Hyprland"
-    ];
+    Service = {
+      Environment = [
+        "XDG_SESSION_TYPE=wayland"
+        "WAYLAND_DISPLAY=wayland-1"
+        "XDG_CURRENT_DESKTOP=Hyprland"
+        "XDG_RUNTIME_DIR=/run/user/1000"
+      ];
+      RestartSec = "5";
+      StartLimitIntervalSec = "30";
+      StartLimitBurst = "3";
+    };
   };
 
   # Solo laptop
@@ -237,7 +262,10 @@ in
     };
     Service = {
       Type = "simple";
-      ExecStart = "%h/.local/bin/trackpad-dwt-daemon";
+      ExecStart = "${pkgs.python3}/bin/python3 %h/.local/bin/trackpad-dwt-daemon";
+      Environment = [
+        "PYTHONPATH=${pkgs.python3Packages.evdev}/${pkgs.python3.sitePackages}"
+      ];
       Restart = "on-failure";
       RestartSec = "2";
     };

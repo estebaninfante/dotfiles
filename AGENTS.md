@@ -47,6 +47,7 @@ dotfiles/
 │   ├── sync-developing.sh # rsync laptop → desktop (~/developing)
 │   ├── sync.sh          # (legacy)
 │   ├── setup-tts.sh     # TTS
+│   ├── setup-secrets.sh # Configura/verifica claves y secrets post-install
 │   └── publish.sh       # Commit + push con confirmacion
 ├── AGENTS.md
 └── README.md
@@ -118,6 +119,7 @@ Config de keyd (Caps Lock como Super, overload leftalt→numpad, capa nav, compo
 | `setup-nixos.sh` | **Un comando** en NixOS: clona repo + hardware-config + `nixos-rebuild` + Hermes. Detecta máquina por hardware; valida que el hardware-config coincida con el root UUID de la máquina actual |
 | `sync-developing.sh` | rsync unidireccional laptop → desktop de `~/developing/` |
 | `setup-tts.sh` | Instala/configura TTS |
+| `setup-secrets.sh` | Configura/verifica claves y secrets post-install (SSH host trust, tailscale auth, sunshine creds, gh auth, syncthing, handy Groq, machine-type). Idempotente, no destructivo |
 | `publish.sh` | Commit + push con confirmacion |
 
 ## Flujo de trabajo
@@ -139,9 +141,23 @@ bash ~/dotfiles/scripts/setup-nixos.sh
 # 3. Configurar Hermes
 hermes setup
 
-# 4. Recargar shell
+# 4. Claves/secrets pendientes (tailscale auth, sunshine creds, gh auth,
+#    syncthing pairing, ssh host trust...) — idempotente, pide solo lo que falte.
+bash ~/dotfiles/scripts/setup-secrets.sh
+
+# 5. Recargar shell
 exec bash
 ```
+
+### Secrets y llaves tras fresh install
+
+`scripts/setup-secrets.sh` configura/verifica todo lo que necesita claves o
+estado local (SSH host trust, tailscale auth, sunshine creds, gh auth,
+syncthing pairing, handy Groq key, machine-type). Idempotente y no destructivo:
+solo pide los secrets que faltan y reporta PASS/SKIP/MANUAL por item.
+
+Para configurarlo rápido con opencode: **«corre scripts/setup-secrets.sh y dime
+qué falta»** — el agente lo ejecuta y resuelve cada item.
 
 Ver `nixos/README.md` para la guia de instalacion completa.
 
@@ -236,6 +252,27 @@ bash ~/dotfiles/scripts/publish.sh
 
 La otra máquina recibe los cambios automáticamente.
 
+### SSH entre máquinas
+
+Ambas máquinas tienen `services.openssh` habilitado (solo llave pública, sin
+password, puerto 22 únicamente en la interfaz tailscale). Para conectarse:
+
+```bash
+# desde la laptop hacia el desktop
+ssh eztvn@desktop
+
+# desde el desktop hacia la laptop
+ssh eztvn@laptop
+```
+
+- `desktop` / `laptop` se resuelven vía tailscale MagicDNS (solo cuando la
+  otra máquina está online en la tailnet).
+- IPs tailscale: desktop `100.118.58.7`; laptop ver con `tailscale ip -4 laptop`.
+- La llave de la laptop está autorizada en el desktop
+  (`users.users.eztvn.openssh.authorizedKeys.keys` en `configuration.nix`).
+  Para el sentido inverso (desktop → laptop) hay que autorizar la llave del
+  desktop en la laptop.
+
 ### Reglas para AI (opencode)
 
 1. **Nunca modificar bloques `if machine == "X"` sin preguntar.** Esos bloques son machine-specific.
@@ -245,13 +282,20 @@ La otra máquina recibe los cambios automáticamente.
 
 ## Handy (Speech-to-Text)
 
-Handy es una app de speech-to-text. En NixOS se instala desde nixpkgs (`handy`).
+Handy es una app de speech-to-text. En NixOS se instala desde el flake
+upstream `github:cjpais/Handy` (v0.9.5+, no nixpkgs que va atrasado en 0.9.1).
 
 **Uso:**
 - `handy --start-hidden` — inicia minimizado (en autostart de Hyprland)
-- `handy --toggle-transcription` — alterna transcripción on/off (keybind `F7`)
-- `handy --toggle-post-process` — alterna post-procesamiento
+- `handy --toggle-post-process` — transcribe SIEMPRE con post-procesado (keybind `F7`)
+- `handy --toggle-transcription` — transcribe texto plano (sin post-procesado)
 - `handy --cancel` — cancela operación actual
+
+**Post-procesado:** provider Groq + modelo `openai/gpt-oss-120b`. Config
+persistente en `~/.local/share/com.pais.handy/settings_store.json`
+(prompts custom con variable `${output}`). El prompt activo "Personalizado"
+corrige ortografía, quita muletillas, convierte dictado en texto escrito
+natural y soporta comandos dictados ("coma", "nueva línea", "haz una lista"...).
 
 **Autostart en hyprland.lua:**
 ```lua
@@ -260,8 +304,56 @@ hl.exec_cmd("handy --start-hidden")
 
 **Keybind:**
 ```lua
-hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-transcription"))
+hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-post-process"))
 ```
+
+## Sunshine (Moonlight)
+
+Sunshine = host de streaming Moonlight. Instalado en AMBAS máquinas via el
+módulo NixOS `services.sunshine` (`nixos/configuration.nix`).
+
+```nix
+services.sunshine = {
+  enable = true;
+  openFirewall = true;   # abre puertos TCP/UDP de Moonlight
+  autoStart = false;     # ver gotcha abajo
+  capSysAdmin = false;   # captura via Wayland (portal), no KMS
+};
+```
+
+**Paquete por máquina:**
+- Desktop (`nixos/hosts/desktop.nix`): `services.sunshine.package = pkgs.sunshine.override { cudaSupport = true; }` → NVENC (RTX 3070) para jugar en streaming.
+- Laptop: paquete plain (software) → suficiente para solo ver. La laptop usa dGPU híbrida; software evita depender de `gpu-mode`.
+
+**Gotcha (IMPORTANTE, causó cuelgue de login):**
+- `autoStart=false` es OBLIGATORIO. Con `Linger=yes` + el servicio
+  `graphical-session-holder` (WantedBy=default.target + Wants=graphical-session.target),
+  `graphical-session.target` se activa al BOOT (antes del login). Si sunshine
+  tiene `wantedBy=graphical-session.target` arranca al boot sin compositor
+  Wayland → captura via KMS → agarra `/dev/dri/card1` → GDM "No GPUs found"
+  → login colgado.
+- Sunshine se arranca post-login desde `hyprland.lua`:
+  `hl.exec_cmd("sleep 8 && systemctl --user start sunshine")`.
+
+**⚠️ Build NVENC:** `sunshine.override { cudaSupport = true; }` recompila
+sunshine desde fuente. Compilar con paralelismo default (`max-jobs=24`, sin
+swap) OOM y congela el sistema. Usar SIEMPRE paralelismo controlado:
+`sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" nixos-rebuild switch --flake ~/dotfiles#desktop`.
+
+**Web UI + credenciales:**
+- Web UI: `https://localhost:47990` (usuario `eztvn`, password en
+  `~/.config/sunshine/.webui-password` — local, NO en el repo).
+- `sunshine --creds eztvn <pass>` setea credenciales sin navegador.
+- Estado (cert, apps, pairings) vive en `~/.config/sunshine/` (dir real, no
+  symlink al repo). NO sincronizar `sunshine_state.json` entre máquinas:
+  cada host tiene su propio certificado/pairing.
+
+**Pairing Moonlight (celular):**
+- App Moonlight → añadir host (IP LAN o tailscale) → PIN → emparejar.
+- Desktop: LAN `192.168.1.17` · tailscale `100.118.58.7`.
+- Laptop: ver `tailscale ip -4 laptop`.
+- Encoder NVENC ya auto-detectado en desktop (`h264_nvenc`/`hevc_nvenc`); AV1
+  no soportado por RTX 3070.
 
 ## Notificaciones al celular (ntfy.sh)
 
@@ -293,12 +385,12 @@ a `linux/config/`, `linux/home/` y `linux/bin/` via `mkOutOfStoreSymlink`.
 - `nixos/modules/sudoers.nix` — NOPASSWD (gpu-mode.sh)
 - `nixos/hosts/laptop.nix` — NVIDIA hybrid, keyd
 - `nixos/hosts/desktop.nix` — NVIDIA RTX 3070 (dGPU unica)
-- `nixos/hosts/hardware-configuration.*.nix` — placeholders, generar con `nixos-generate-config`
+- `nixos/hosts/hardware-configuration.*.nix` — hardware REAL por máquina (generado con `nixos-generate-config`), commiteado. `setup-nixos.sh` lo regenera si el root UUID no coincide con la máquina actual
 
 **Reglas:**
 1. Al añadir un paquete, añadirlo a `nixos/modules/packages.nix`.
 2. Al añadir un config nuevo, añadirlo al inventario de `nixos/home.nix`.
-3. Los `hardware-configuration.*.nix` son por-máquina y NO se commitean con datos reales de particiones (se generan en instalación).
+3. Los `hardware-configuration.*.nix` son por-máquina y se commitean con el hardware real de cada una (`nixos-generate-config`). Excepción a la regla de no commitear datos de máquina: el hardware-config es necesario para fresh installs; `setup-nixos.sh` valida por root UUID y regenera si la máquina difiere. **Lo que NO se commitea**: claves, tokens, passwords ni datos de usuario.
 4. Los scripts de `linux/bin/` se symlinkean via `allScripts`; los laptop-only siguen la lista `laptopScripts`.
 5. Comandos: `sudo nixos-rebuild switch --flake ~/dotfiles#laptop` (o `#desktop`).
 

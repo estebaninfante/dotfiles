@@ -7,6 +7,14 @@
 
   networking.hostName = "desktop";
 
+  # ── Sunshine NVENC (RTX 3070) ────────────────────────────────
+  # Solo desktop: NVENC para gaming en streaming. Requiere recompilar
+  # sunshine con cudaSupport (SUNSHINE_ENABLE_CUDA) para la conversion de
+  # color por GPU. La laptop usa el paquete plain (software), suficiente
+  # para solo ver. ⚠️ Compilar con paralelismo limitado (max-jobs/cores)
+  # o la build C++ con 24 jobs OOM y congela (sin swap).
+  services.sunshine.package = (pkgs.sunshine.override { cudaSupport = true; });
+
   # ── NVIDIA (RTX 3070 / GA104, unica GPU) ────────────────────
   # GPU dedicada manejando el display directo → driver nvidia con
   # modesetting. SIN prime.offload (eso es para hibridas con iGPU).

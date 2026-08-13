@@ -1,0 +1,16 @@
+port = 4242
+release_bind = [
+    "KeyLeftCtrl",
+    "KeyLeftShift",
+    "KeyLeftAlt",
+]
+
+[[clients]]
+hostname = "192.168.1.16"
+ips = ["192.168.1.16"]
+position = "left"
+activate_on_startup = true
+
+[authorized_fingerprints]
+"65:17:4c:8e:f4:55:c8:84:9d:e7:96:5a:23:7b:ed:d9:6a:3c:69:5a:6d:a1:72:6d:0a:44:73:36:5b:fa:3e:8b" = "laptop"
+"a2:7f:27:bb:7d:4e:03:db:5f:e9:48:ee:f9:5c:b3:c5:aa:5b:b3:9d:59:93:69:b1:e6:05:f8:97:fa:75:fa:3b" = "laptop"

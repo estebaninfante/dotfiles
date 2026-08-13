@@ -4,7 +4,7 @@
 # Se genera por maquina con `nixos-generate-config` durante la instalacion
 # (ver README.md). Cada host importa el suyo en hosts/<host>.nix.
 
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, handyPackage, ... }:
 
 {
   imports = [
@@ -19,6 +19,7 @@
 
   # ── Kernel / hardware base ────────────────────────────────────
   hardware.graphics.enable = true;
+  boot.kernelModules = [ "uhid" ]; # Sunshine: emulacion de DS5 controller
 
   # ── Red ───────────────────────────────────────────────────────
   networking.networkmanager.enable = true;
@@ -43,7 +44,7 @@
   # lo pone en dvk_prog (tu layout custom).
 
   # ── Paquetes del sistema ─────────────────────────────────────
-  environment.systemPackages = import ./modules/packages.nix { inherit pkgs; };
+  environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage; };
 
   # ── Servicios base ────────────────────────────────────────────
   services.pipewire = {
@@ -70,6 +71,20 @@
 
   # VPN mesh
   services.tailscale.enable = true;
+
+  # ── Sunshine (host Moonlight) ─────────────────────────────────
+  # autoStart=false: con linger + graphical-session-holder, graphical-session.target
+  # se activa al BOOT (antes del login) y sunshine arrancaria sin compositor
+  # Wayland → captura via KMS → agarra /dev/dri/card1 → GDM "No GPUs found" →
+  # cuelga el login. Se arranca post-login desde hyprland.lua.
+  # capSysAdmin=false: captura via Wayland (portal), no KMS.
+  # package por maquina: desktop usa override cudaSupport (NVENC) en hosts/desktop.nix.
+  services.sunshine = {
+    enable = true;
+    openFirewall = true;
+    autoStart = false;
+    capSysAdmin = false;
+  };
 
   # SSH server (solo tailnet): la laptop sincroniza ~/developing con rsync.
   services.openssh = {
@@ -196,9 +211,11 @@
   users.users.eztvn = {
     isNormalUser = true;
     description = "estebaninfante";
-    # Llave SSH de la laptop — usada por rsync sync-developing.sh
+    # Llaves SSH de ambas maquinas (rsync sync-developing.sh + ssh bidireccional
+    # laptop <-> desktop). Llaves publicas: se commitean, son publicas.
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG3fn5nhRUS9KjWAnKYKDPGsTFnnh+Ms4h5d8C7hGk1u eztvn@laptop"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINodW8jCv6unpL0ViAN24VO8UFwAogy1ffvUdGNT/zYE eztvn@desktop"
     ];
     # input/uinput: keyd corre como user service (home.nix) y necesita
     # leer /dev/input/* y crear /dev/uinput para remapear teclado.
@@ -225,6 +242,16 @@
   nix.settings.auto-optimise-store = true;
   nix.gc.automatic = true;
   nix.gc.options = "--delete-older-than 14d";
+
+  # Cachix de handy (github:cjpais/Handy): evita compilar handy desde fuente
+  nix.settings.substituters = [
+    "https://cache.nixos.org"
+    "https://handy-computer.cachix.org"
+  ];
+  nix.settings.trusted-public-keys = [
+    "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+    "handy-computer.cachix.org-1:Sihzctn6DC0CJM5QeL+9nBEL3CL8c33m777C+eIv748="
+  ];
 
   nixpkgs.config.allowUnfree = true;
 

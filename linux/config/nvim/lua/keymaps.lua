@@ -10,27 +10,15 @@ vim.opt.expandtab = true
 vim.opt.termguicolors = true
 vim.opt.wrap = false
 vim.keymap.set("i", "uu", "<Esc>")
--- ==========================================
--- Navegación Dvorak Home Row (h n s)
--- h = Izquierda | n = Arriba | s = Derecha
--- ==========================================
-vim.keymap.set({ "n", "v" }, "h", "h", { desc = "Mover a la izquierda" })
-vim.keymap.set({ "n", "v" }, "n", "k", { desc = "Mover arriba" })
-vim.keymap.set({ "n", "v" }, "s", "l", { desc = "Mover a la derecha" })
-
--- Remapear comandos originales de n, s a k, l si es necesario
-vim.keymap.set({ "n", "v" }, "k", "n", { desc = "Siguiente búsqueda (remap de n)" })
-vim.keymap.set({ "n", "v" }, "l", "s", { desc = "Sustituir carácter (remap de s)" })
-
--- Navegación fluida entre paneles / ventanas (Splits) con Ctrl + htns
+-- Navegación fluida entre paneles / ventanas (Splits) con Ctrl + hjkl
 vim.keymap.set("n", "<C-h>", "<C-w>h", { desc = "Mover a panel izquierdo" })
-vim.keymap.set("n", "<C-t>", "<C-w>j", { desc = "Mover a panel inferior" })
-vim.keymap.set("n", "<C-n>", "<C-w>k", { desc = "Mover a panel superior" })
-vim.keymap.set("n", "<C-s>", "<C-w>l", { desc = "Mover a panel derecho" })
+vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Mover a panel inferior" })
+vim.keymap.set("n", "<C-k>", "<C-w>k", { desc = "Mover a panel superior" })
+vim.keymap.set("n", "<C-l>", "<C-w>l", { desc = "Mover a panel derecho" })
 
 -- Navegación entre Buffers (Pestañas abiertas)
 vim.keymap.set("n", "<S-h>", ":bprevious<cr>", { desc = "Buffer anterior" })
-vim.keymap.set("n", "<S-s>", ":bnext<cr>", { desc = "Siguiente buffer" })
+vim.keymap.set("n", "<S-l>", ":bnext<cr>", { desc = "Siguiente buffer" })
 vim.keymap.set("n", "<leader>bd", ":bdelete<cr>", { desc = "Cerrar buffer" })
 
 -- Guardado rápido

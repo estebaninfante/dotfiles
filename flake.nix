@@ -7,9 +7,12 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # handy (speech-to-text): nixpkgs va atrasado (0.9.1); el flake
+    # upstream tiene 0.9.5+ y cachix propio (handy-computer).
+    handy.url = "github:cjpais/Handy/v0.9.5";
   };
 
-  outputs = { self, nixpkgs, home-manager, ... }:
+  outputs = { self, nixpkgs, home-manager, handy, ... }:
     let
       system = "x86_64-linux";
       lib = nixpkgs.lib;
@@ -27,10 +30,14 @@
         }
       ];
 
+      # handy desde flake upstream (v0.9.5+), no desde nixpkgs
+      handyPackage = handy.packages.${system}.handy;
+
       mkHost = { machineType, extraModules }: lib.nixosSystem {
         inherit system;
         modules = baseModules ++ [
           { home-manager.extraSpecialArgs = { inherit machineType; }; }
+          { _module.args.handyPackage = handyPackage; }
         ] ++ extraModules;
       };
     in

@@ -18,7 +18,7 @@ if [ -n "$target" ] && [ -e "$target" ]; then
 
         # Si es un archivo de código o texto, abrirlo automáticamente en Neovim con Kitty
         case "$target" in
-            *.py|*.sh|*.lua|*.json|*.conf|*.md|*.txt|*.js|*.ts|*.tsx|*.jsx|*.html|*.css|*.rasi|*.yaml|*.toml|*.zsh|*.bash|*.env|*.ini|*.sql|*.lock|*.csv|*.xml)
+            *.py|*.sh|*.lua|*.json|*.conf|*.md|*.txt|*.js|*.ts|*.tsx|*.jsx|*.html|*.css|*.rasi|*.yaml|*.toml|*.zsh|*.bash|*.env|*.ini|*.sql|*.lock|*.csv|*.xml|*.nix)
                 dirname=$(dirname "$target")
                 coproc ( kitty -d "$dirname" -e nvim "$target" > /dev/null 2>&1 )
                 exit 0
@@ -33,10 +33,18 @@ fi
 
 echo -en "\0markup-rows\x1ftrue\n"
 
-# Escanear $HOME e incluir ~/.config (filtrando cachés del sistema)
-find "$HOME" \
-    -maxdepth 6 \
-    \( -not -path '*/.*' -o -path "$HOME/.config*" \) 2>/dev/null | \
+# Escanear $HOME e incluir ~/.config (filtrando cachés del sistema).
+# Ejecutables (scripts) primero, resto de archivos después.
+{
+    find "$HOME" \
+        -maxdepth 6 \
+        ! -type d -perm /111 \
+        \( -not -path '*/.*' -o -path "$HOME/.config*" \) 2>/dev/null
+    find "$HOME" \
+        -maxdepth 6 \
+        \( -type d -o ! -perm /111 \) \
+        \( -not -path '*/.*' -o -path "$HOME/.config*" \) 2>/dev/null
+} | \
     grep -v -E "/(Cache|GPUCache|node_modules|__pycache__|venv|\.venv|target|dist|\.git|\.cache|\.local|keyd|libinput-gestures|anyrun|avizo|build|contrib|Crash Reports|google-chrome|BraveSoftware)/" | \
     awk -v home="$HOME" '
 $0 != home {

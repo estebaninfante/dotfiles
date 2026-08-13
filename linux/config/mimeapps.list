@@ -1,4 +1,5 @@
 [Default Applications]
+application/nix=nvim.desktop
 application/xhtml+xml=brave-browser.desktop
 application/x-extension-htm=brave-browser.desktop
 application/x-extension-html=brave-browser.desktop
@@ -14,5 +15,6 @@ x-scheme-handler/claude-cli=claude-code-url-handler.desktop
 x-scheme-handler/antigravity=antigravity.desktop
 
 [Added Associations]
+application/nix=nvim.desktop;
 image/jpeg=org.videolan.VLC.desktop;
 text/plain=nvim.desktop;

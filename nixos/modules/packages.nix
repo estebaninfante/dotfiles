@@ -1,5 +1,5 @@
 # Paquetes del sistema (nixpkgs).
-{ pkgs }:
+{ pkgs, handyPackage }:
 
 with pkgs; [  # ── Shell & terminal ──
   kitty
@@ -32,6 +32,7 @@ with pkgs; [  # ── Shell & terminal ──
   pamixer
   polkit_gnome           # polkit-gnome (attr en nixpkgs es polkit_gnome)
   wl-clipboard
+  wtype                  # Handy paste en Wayland (Hyprland)
   xdg-desktop-portal-hyprland
   xdg-desktop-portal-gtk
   swappy
@@ -86,7 +87,9 @@ with pkgs; [  # ── Shell & terminal ──
   yt-dlp
 
   # ── Speech-to-Text ──
-  handy
+  # handy: se usa el paquete del flake upstream (github:cjpais/Handy),
+  # pasado como handyPackage desde flake.nix. nixpkgs va atrasado (0.9.1).
+  handyPackage
 
   # ── Compartir teclado/raton entre maquinas ──
   deskflow
@@ -160,6 +163,10 @@ with pkgs; [  # ── Shell & terminal ──
   obsidian
   prismlauncher
   moonlight-qt
+  # Sunshine (host Moonlight) NO va aqui: lo gestiona el modulo NixOS
+  # services.sunshine (configuration.nix). El paquete es por-maquina:
+  # desktop → override cudaSupport (NVENC) en hosts/desktop.nix;
+  # laptop → plain (software).
   # stremio / gearlever / protonplus: no estan en nixpkgs →
   # se instalan via flatpak (services.flatpak.enable ya activo).
 

@@ -119,6 +119,13 @@ hl.config({
 -- DEVICE (touchpad) — laptop only
 -- ========================
 if machine == "laptop" then
+    -- Disable the ELAN Mouse companion (relative device without DWT).
+    -- ELAN HID multitouch creates both Mouse + Touchpad; Mouse ignores
+    -- disable_while_typing, so palm touches move the cursor while typing.
+    hl.device({
+        name    = "elan06fa:00-04f3:3280-mouse",
+        enabled = false
+    })
     hl.device({
         name    = "elan06fa:00-04f3:3280-touchpad",
         enabled = true
@@ -150,7 +157,12 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("urserver --daemon")
     hl.exec_cmd("swayosd-server --top-margin=0.4")
     hl.exec_cmd("sleep 5 && handy --start-hidden")
-    hl.exec_cmd("lan-mouse daemon")
+
+    -- Sunshine (host Moonlight): arranca con retardo una vez Wayland-1 +
+    -- xdg-desktop-portal estan listos (captura via Wayland, no KMS).
+    -- NO via graphical-session.target: con linger arranca al boot y captura
+    -- la GPU (KMS) antes del compositor → cuelga GDM/login.
+    hl.exec_cmd("sleep 8 && systemctl --user start sunshine")
 
     if machine == "laptop" then
         hl.exec_cmd("sleep 5 && libinput-gestures-setup start")
@@ -174,8 +186,8 @@ hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
 -- KEYBINDS: SYSTEM & APPS
 -- ========================
 hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
-hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("rofi -show combi -modi \"combi,drun,Archivos:~/.local/bin/rofi-file-search.sh,Scripts:~/.local/bin/rofi-scripts-launcher.sh\" -combi-modes \"drun,Archivos,Scripts\" -show-icons"))
-hl.bind(mainMod .. " + SHIFT + SPACE", hl.dsp.exec_cmd("rofi -show Archivos -modi \"Archivos:~/.local/bin/rofi-file-search.sh\""))
+hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("rofi -show combi -no-sort -modi \"combi,drun,Archivos:~/.local/bin/rofi-file-search.sh,Scripts:~/.local/bin/rofi-scripts-launcher.sh\" -combi-modes \"drun,Archivos,Scripts\" -show-icons"))
+hl.bind(mainMod .. " + SHIFT + SPACE", hl.dsp.exec_cmd("rofi -show Archivos -no-sort -modi \"Archivos:~/.local/bin/rofi-file-search.sh\""))
 hl.bind(mainMod .. " + ALT + SPACE",   hl.dsp.exec_cmd("rofi -show Scripts -modi \"Scripts:~/.local/bin/rofi-scripts-launcher.sh\""))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.local/bin/antigravity-ui.sh"))
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("firefox"))
@@ -220,8 +232,17 @@ hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -s f
 hl.bind(mainMod .. " + Print",       hl.dsp.exec_cmd("bash -c '~/.local/bin/shot active'"))
 hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -e'"))
 
+-- ========================
+-- MOUSE BUTTONS
+-- ========================
+-- Atras (BTN_SIDE): copiar | Adelante (BTN_EXTRA): pegar | Rueda (BTN_MIDDLE): F7 (Handy)
+hl.bind("mouse:275", hl.dsp.exec_cmd("wtype -M ctrl c -m ctrl"))
+hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl v -m ctrl"))
+hl.bind("mouse:274", hl.dsp.exec_cmd("handy --toggle-post-process"))
+
 -- Handy (speech-to-text)
-hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-transcription"))
+-- F7: transcribir SIEMPRE con post-procesado (prompt custom en Handy)
+hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-post-process"))
 
 -- OpenCode / TV toggle
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles -e ~/.opencode/bin/opencode"))
