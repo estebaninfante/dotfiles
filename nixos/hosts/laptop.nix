@@ -7,6 +7,10 @@
 
   networking.hostName = "laptop";
 
+  # Swapfile 16G en btrfs (chattr +C nodatacow, creado con fallocate).
+  # Protege de OOM cuando la RAM llega al maximo.
+  swapDevices = [ { device = "/swapfile"; } ];
+
   # ── NVIDIA hybrid ────────────────────────────────────────────
   # iGPU AMD (amdgpu) maneja el display; dGPU NVIDIA solo para juegos.
   # gpu-mode.sh controla el runtime PM manualmente (battery/gaming),

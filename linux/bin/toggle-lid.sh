@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 if pgrep -f "systemd-inhibit --what=handle-lid-switch sleep infinity" >/dev/null; then
     pkill -f "systemd-inhibit --what=handle-lid-switch sleep infinity"

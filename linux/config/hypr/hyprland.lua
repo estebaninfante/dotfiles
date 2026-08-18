@@ -26,7 +26,13 @@ hl.config({
 -- ENVIRONMENT VARIABLES
 -- ========================
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
-hl.env("GDK_SCALE", "2")
+-- GDK_SCALE debe coincidir con la escala del monitor principal:
+-- laptop eDP-1 scale=2, desktop DP-1 scale=1. Mismatch → GTK apps 2x.
+if machine == "desktop" then
+    hl.env("GDK_SCALE", "1")
+else
+    hl.env("GDK_SCALE", "2")
+end
 -- PREPEND ~/.local/bin al PATH existente (NO reemplazarlo).
 -- En NixOS los binarios estan en /run/current-system/sw/bin — si
 -- reemplazamos el PATH, Hyprland no encuentra kitty/waybar/rofi.
@@ -48,8 +54,8 @@ end
 -- ========================
 hl.config({
     input = {
-        kb_layout   = "dvk_prog",
-        kb_variant  = "basic",
+        kb_layout   = "dvk_prog,es",
+        kb_variant  = "basic,",
         follow_mouse = 1,
         sensitivity = 0
     }
@@ -79,7 +85,7 @@ hl.config({
         gaps_in        = 8,
         gaps_out       = 12,
         border_size    = 0,
-        ["col.active_border"]   = "rgba(00000000)",
+        ["col.active_border"]   = "rgba(255, 0, 0, 0.5)",
         ["col.inactive_border"] = "rgba(00000000)"
     },
     decoration = {
@@ -97,6 +103,21 @@ hl.layer_rule({
     blur = true
 })
 
+-- Blur gaussiano detrás de la barra quickshell (fondo translúcido).
+-- La barra usa `color: "transparent"` + fondo rgba(0,0,0,0.6); Hyprland
+-- difumina el escritorio que queda detrás → efecto cristal esmerilado.
+hl.layer_rule({
+    match = { namespace = "quickshell" },
+    blur = true
+})
+
+-- Blur detrás del launcher (rofi, layer Wayland nativo): el fondo del
+-- window en theme.rasi es rgba translúcido → se ve el escritorio difuminado.
+hl.layer_rule({
+    match = { namespace = "rofi" },
+    blur = true
+})
+
 -- ========================
 -- CURSOR
 -- ========================
@@ -109,10 +130,76 @@ hl.config({
 -- ========================
 -- ANIMATIONS
 -- ========================
+-- Interruptor maestro de animaciones. Con false, TODA animacion (incluido
+-- el leaf "workspaces") se fuerza a warp instantaneo, ignorando los leaves.
+-- Debe estar en true para que cualquier leaf animado funcione.
 hl.config({
     animations = {
-        enabled = false
+        enabled = true
     }
+})
+
+-- Arbol desactivado por defecto: todo hereda "off" salvo lo que se activa
+-- explicitamente abajo (windowsMove + workspaces).
+hl.animation({
+    leaf = "global",
+    enabled = false
+})
+
+-- Solo el movimiento se anima (glide suave al mover flotantes por teclado);
+-- el resto de animaciones sigue desactivado.
+hl.animation({
+    leaf = "windowsMove",
+    enabled = true,
+    speed = 3,
+    bezier = "default"
+})
+
+-- windowsMove tambien anima los drags manuales (mouse) → se sienten
+-- lentos/trabados. Los drags del raton siguen instantaneos, solo el
+-- movimiento por teclado conserva el glide.
+hl.config({
+    misc = {
+        animate_manual_resizes = false,
+        animate_mouse_windowdragging = false
+    }
+})
+
+-- Carrusel de workspaces: al saltar ws1→ws5 desliza por los intermedios.
+hl.animation({
+    leaf = "workspaces",
+    enabled = true,
+    speed = 2,
+    bezier = "default",
+    style = "slide"
+})
+
+-- Apertura "TV viejo": bloom casi instantaneo desde 10% (snap on).
+hl.animation({
+    leaf = "windowsIn",
+    enabled = true,
+    speed = 4,
+    bezier = "default",
+    style = "popin 10%"
+})
+
+-- Cierre: colapso inverso (popin reproducido en reversa).
+hl.animation({
+    leaf = "windowsOut",
+    enabled = true,
+    speed = 8,
+    bezier = "default",
+    style = "popin 10%"
+})
+
+-- Layers (rofi en modo Wayland nativo, waybar, swaync): apertura con popin
+-- rápido. Rofi es un layer → sin esto abre instantáneo sin animación.
+hl.animation({
+    leaf = "layers",
+    enabled = true,
+    speed = 1,
+    bezier = "default",
+    style = "popin"
 })
 
 -- ========================
@@ -140,18 +227,23 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-" .. machine .. ".conf")
 
     -- 2. Bar and UI
-    hl.exec_cmd("waybar")
+    hl.exec_cmd("quickshell")
     hl.exec_cmd("swaync")
 
     -- 3. D-Bus environment and portals
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=Hyprland")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
-    hl.exec_cmd("/usr/libexec/xdg-desktop-portal-hyprland & /usr/libexec/xdg-desktop-portal &")
+    -- Los paths /usr/libexec no existen en NixOS (store). Arrancar via
+    -- systemd da a la unit el env (WAYLAND_DISPLAY) que necesita su condicion.
+    hl.exec_cmd("sleep 1 && systemctl --user start xdg-desktop-portal-hyprland")
+    hl.exec_cmd("systemctl --user restart xdg-desktop-portal")
 
     -- 4. Background services
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
     hl.exec_cmd("dbus-update-activation-environment --systemd SSH_AUTH_SOCK")
-    hl.exec_cmd("/usr/libexec/polkit-gnome-authentication-agent-1")
+    -- polkit agent: hyprpolkitagent (unit systemd user, ver home.nix)
+    -- (antes: /usr/libexec/polkit-gnome-authentication-agent-1, path
+    --  inexistente en NixOS → fprintd-enroll denegaba por falta de agente)
     hl.exec_cmd("hypridle")
     hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'")
     hl.exec_cmd("urserver --daemon")
@@ -186,7 +278,7 @@ hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
 -- KEYBINDS: SYSTEM & APPS
 -- ========================
 hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
-hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("rofi -show combi -no-sort -modi \"combi,drun,Archivos:~/.local/bin/rofi-file-search.sh,Scripts:~/.local/bin/rofi-scripts-launcher.sh\" -combi-modes \"drun,Archivos,Scripts\" -show-icons"))
+hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("rofi -show combi -no-sort -modi \"combi,drun,Archivos:~/.local/bin/rofi-file-search.sh,Scripts:~/.local/bin/rofi-scripts-launcher.sh\" -combi-modes \"drun,Archivos,Scripts\""))
 hl.bind(mainMod .. " + SHIFT + SPACE", hl.dsp.exec_cmd("rofi -show Archivos -no-sort -modi \"Archivos:~/.local/bin/rofi-file-search.sh\""))
 hl.bind(mainMod .. " + ALT + SPACE",   hl.dsp.exec_cmd("rofi -show Scripts -modi \"Scripts:~/.local/bin/rofi-scripts-launcher.sh\""))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.local/bin/antigravity-ui.sh"))
@@ -196,6 +288,7 @@ hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
 hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())
 hl.bind(mainMod .. " + D", hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mainMod .. " + P", hl.dsp.window.pin())
 hl.bind(mainMod .. " + B", hl.dsp.focus({ workspace = "special" }))
 
 hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
@@ -263,10 +356,20 @@ hl.bind(mainMod .. " + E", hl.dsp.focus({ direction = "d" }))
 -- ========================
 -- MOVE WINDOWS
 -- ========================
-hl.bind(mainMod .. " + SHIFT + O", hl.dsp.window.move({ direction = "left" }))
-hl.bind(mainMod .. " + SHIFT + U", hl.dsp.window.move({ direction = "right" }))
-hl.bind(mainMod .. " + SHIFT + ntilde", hl.dsp.window.move({ direction = "up" }))
-hl.bind(mainMod .. " + SHIFT + E", hl.dsp.window.move({ direction = "down" }))
+-- Flotantes: "movewindow" las teleporta al borde del monitor (abrupto).
+-- Mejor: mover por pasos de px (glide). Tiled: swap normal.
+local function move_window(dir, dx, dy)
+    local w = hl.get_active_window()
+    if w ~= nil and w.floating then
+        hl.dispatch(hl.dsp.window.move({ x = dx, y = dy, relative = true }))
+    else
+        hl.dispatch(hl.dsp.window.move({ direction = dir }))
+    end
+end
+hl.bind(mainMod .. " + SHIFT + O",      function() move_window("left",  -50, 0) end)
+hl.bind(mainMod .. " + SHIFT + U",      function() move_window("right",  50, 0) end)
+hl.bind(mainMod .. " + SHIFT + ntilde", function() move_window("up",     0, -50) end)
+hl.bind(mainMod .. " + SHIFT + E",      function() move_window("down",   0, 50) end)
 
 -- ========================
 -- RESIZE
@@ -296,3 +399,4 @@ hl.define_submap("passthrough", function()
     hl.bind("CTRL + Delete", hl.dsp.exec_cmd("~/.local/bin/toggle_moonlight.sh"), { locked = true, submap_universal = true })
     hl.bind("catchall", hl.dsp.submap("reset"))
 end)
+

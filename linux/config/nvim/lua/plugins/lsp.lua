@@ -12,8 +12,9 @@ return {
   },
   config = function()
     require("mason").setup()
-    local lspconfig = require("lspconfig")
     local capabilities = require("cmp_nvim_lsp").default_capabilities()
+
+    vim.lsp.config("*", { capabilities = capabilities })
 
     require("mason-lspconfig").setup({
       ensure_installed = {
@@ -26,12 +27,17 @@ return {
         "ruff",
         "jsonls",
       },
-      handlers = {
-        function(server_name)
-          lspconfig[server_name].setup({ capabilities = capabilities })
-        end,
-      },
     })
+
+    -- qmlls (QML): binario de qtdeclarative (paquete de sistema), no mason
+    vim.lsp.config("qmlls", {
+      cmd = { "qmlls" },
+      on_attach = function(client, bufnr)
+        -- qmlls 6.11 manda semantic tokens invalidos -> nvim 0.12.4 crashea
+        vim.lsp.semantic_tokens.enable(false, { client_id = client.id, bufnr = bufnr })
+      end,
+    })
+    vim.lsp.enable("qmlls")
 
     local cmp = require("cmp")
     cmp.setup({

@@ -31,6 +31,10 @@ lo() {
 }
 alias office='lo'
 
+# Cambiar wallpaper animado (Wallpaper Engine nativo) rápido
+alias wall='wallpaper-switch.sh'
+alias walls='wallpaper-switch.sh list'
+
 
 # opencode
 export PATH=/home/eztvn/.opencode/bin:$PATH
@@ -47,3 +51,16 @@ eval "$(zoxide init bash)"
 
 # starship prompt
 eval "$(starship init bash)"
+
+# nixos-rebuild con flake; detecta laptop/desktop automaticamente
+nrb() {
+    local machine="$(cat ~/.config/machine-type 2>/dev/null || echo laptop)"
+    if [ "$machine" = "desktop" ]; then
+        # sunshine cudaSupport recompila desde fuente: paralelismo default
+        # (max-jobs=24) OOM sin swap. Controlar max-jobs/cores en desktop.
+        sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" \
+            nixos-rebuild "$@" --flake "$HOME/dotfiles#$machine"
+    else
+        sudo nixos-rebuild "$@" --flake "$HOME/dotfiles#$machine"
+    fi
+}

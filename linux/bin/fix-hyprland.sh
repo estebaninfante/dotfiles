@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ==========================================================
 # fix-hyprland.sh
 # Diagnóstico y reparación de problemas comunes en

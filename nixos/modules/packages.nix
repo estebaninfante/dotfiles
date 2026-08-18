@@ -4,6 +4,7 @@
 with pkgs; [  # ── Shell & terminal ──
   kitty
   fish
+  pnpm
   tmux
   fastfetch
   btop
@@ -19,6 +20,20 @@ with pkgs; [  # ── Shell & terminal ──
   hypridle
   hyprlock
   waybar
+  # quickshell (barra QML): qtsvg ya viene dentro del paquete. Wrap extra:
+  #  - qt5compat → Qt5Compat.GraphicalEffects (FastBlur = gaussian blur)
+  #  - qtimageformats → webp/otros formatos en IconImage
+  (symlinkJoin {
+    name = "quickshell";
+    paths = [ quickshell ];
+    buildInputs = [ makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/quickshell \
+        --prefix QML2_IMPORT_PATH : "${qt6Packages.qt5compat}/${qt6.qtbase.qtQmlPrefix}" \
+        --prefix QT_PLUGIN_PATH : "${qt6Packages.qtimageformats}/${qt6.qtbase.qtPluginPrefix}" \
+        --set QS_DISABLE_DMABUF 1
+    '';
+  })
   rofi                  # en nixpkgs reciente rofi-wayland ya se fusiono en rofi
   rofi-emoji
   swaynotificationcenter  # swaync
@@ -33,10 +48,12 @@ with pkgs; [  # ── Shell & terminal ──
   polkit_gnome           # polkit-gnome (attr en nixpkgs es polkit_gnome)
   wl-clipboard
   wtype                  # Handy paste en Wayland (Hyprland)
+  evtest                 # monitor de teclado (super-hold-monitor.sh)
   xdg-desktop-portal-hyprland
   xdg-desktop-portal-gtk
   swappy
   grim
+  networkmanagerapplet
   slurp
   imv
   jq
@@ -118,6 +135,7 @@ with pkgs; [  # ── Shell & terminal ──
   go
   jdk                     # java-25-openjdk (ajustar version si hace falta)
   maven
+  qt6Packages.qtdeclarative  # qmlls + qmlformat (LSP/formatter QML para nvim)
 
   # ── KDE / GNOME apps de escritorio ──
   kdePackages.dolphin
@@ -157,7 +175,6 @@ with pkgs; [  # ── Shell & terminal ──
 
   # ── Apps adicionales ──
   localsend
-  zapzap
   teams-for-linux
   spotify
   obsidian

@@ -12,7 +12,7 @@
 }
 
 window {
-    background-color: @bg;
+    background-color: rgba(10, 10, 10, 0.70);
     border:           1px;
     border-color:     @border;
     border-radius:    10px;
@@ -40,8 +40,11 @@ entry {
 }
 
 listview {
-    lines:   8;
-    spacing: 4px;
+    lines:         8;
+    spacing:       4px;
+    /* Launcher tipo spotlight: sin query todavía, lista oculta.
+       Se muestra solo al empezar a escribir. */
+    require-input: true;
 }
 
 element {

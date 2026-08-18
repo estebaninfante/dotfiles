@@ -21,6 +21,7 @@ let
   configDirs = [
     "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
+    "quickshell"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -29,17 +30,18 @@ let
 
   allScripts = [
     "rofi-power-mode.sh" "gpu-mode.sh" "toggle_moonlight.sh" "reload-hyprpaper.sh"
-    "trackpad-dwt-daemon" "wifi-reconnect.sh" "shot" "waybar-battery-top"
+    "wifi-reconnect.sh" "shot" "waybar-battery-top"
     "clean-temp.sh" "pomodoro-waybar.sh" "lid-inhibit-waybar.sh"
-    "waybar-ram-top" "tts-send" "tts-server" "tts" "rofi-scripts-launcher.sh"
+    "waybar-ram-top" "keyboard-layout-waybar.sh" "tts-send" "tts-server" "tts" "rofi-scripts-launcher.sh"
     "power-mode.sh" "toggle-lid.sh" "agent.sh" "send-with-taildrop" "tv-toggle.sh"
     "tv-mode.sh" "rofi-file-search.sh" "rofi-context-menu.sh" "reiniciar.sh"
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
+    "super-hold-monitor.sh" "wallpaper-switch.sh"
   ];
   # Solo laptop
   laptopScripts = [
     "toggle-lid.sh" "lid-inhibit-waybar.sh" "waybar-battery-top"
-    "trackpad-dwt-daemon" "reload-hyprpaper.sh" "gpu-mode.sh"
+    "reload-hyprpaper.sh" "gpu-mode.sh"
   ];
   scripts =
     if machineType == "laptop" then allScripts
@@ -92,6 +94,13 @@ in
     (lib.genAttrs (map scriptName scripts) (s: {
       source = link (bin + "/" + lib.removePrefix ".local/bin/" s);
     }))
+    # ── Fuente Old London (local, no en nixpkgs): ~/.local/share/fonts ──
+    {
+      ".local/share/fonts/old-london" = {
+        source = link (repo + "/linux/fonts/old-london");
+        recursive = true;
+      };
+    }
     # ── .cargo/env vacio: el .bashrc hace `. ~/.cargo/env`;
     #    en NixOS cargo va en el store, no hay env → no romper el shell ──
     {
@@ -180,27 +189,10 @@ in
     Install = { WantedBy = [ "default.target" ]; };
   };
 
-  # ── keyd: user service (arranca solo con la sesion grafica) ──
-  # Servicio de usuario en vez de sistema: keyd de sistema agarra el
-  # teclado a nivel kernel y su overload (leftalt/enter) se traga
-  # Ctrl+Alt+F<N> → imposible cambiar de TTY. Como user service solo
-  # corre dentro de Hyprland: GDM/TTY libres, overloads funcionales.
-  # Requiere grupos input/uinput (configuration.nix) y /etc/keyd/default.conf
-  # (laptop.nix — config del repo como fuente de verdad).
-  systemd.user.services.keyd = lib.mkIf (machineType == "laptop") {
-    Unit = {
-      Description = "Keyd keyboard remapping daemon";
-      After = [ "graphical-session.target" ];
-      PartOf = [ "graphical-session.target" ];
-    };
-    Service = {
-      Type = "simple";
-      ExecStart = "${pkgs.keyd}/bin/keyd";
-      Restart = "always";
-      RestartSec = "3";
-    };
-    Install = { WantedBy = [ "graphical-session.target" ]; };
-  };
+  # ── keyd: SERVICIO DE SISTEMA (configuration.nix services.keyd) ──
+  # keyd corre como root desde boot (GDM/TTY/sesión). El overload (leftalt/enter)
+  # y la capa compuesta [control+numpad] garantizan Ctrl+Alt+F<N> (cambio de TTY).
+  # No hay user service para evitar duplicar el daemon (crash-loop por doble grab).
 
   # ── holder de graphical-session.target (portales xdg) ─────────
   # La sesion de Hyprland no arranca graphical-session.target (eso lo
@@ -223,6 +215,24 @@ in
     Install = { WantedBy = [ "default.target" ]; };
   };
 
+  # ── polkit agent (hyprpolkitagent) ──────────────────────────────
+  # Necesario para autorizar acciones polkit (p.ej. fprintd-enroll:
+  # "Not Authorized: net.reactivated.fprint.device.enroll" sin agente).
+  # Wayland-native, sustituye al gnome agent que hyprland.lua llamaba
+  # con path inexistente (/usr/libexec/...).
+  systemd.user.services.hyprpolkitagent = {
+    Unit = {
+      Description = "Hyprland polkit authentication agent";
+      After = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.hyprpolkitagent}/libexec/hyprpolkitagent";
+      Restart = "on-failure";
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
   # ── linux-wallpaperengine: wallpapers animados de Steam ────────
   # Requiere Steam + Wallpaper Engine instalados.
   # Assets: ~/.local/share/Steam/steamapps/common/wallpaper_engine/assets
@@ -232,8 +242,8 @@ in
     assetsPath = "${config.home.homeDirectory}/.local/share/Steam/steamapps/common/wallpaper_engine/assets";
     wallpapers = [
       {
-        monitor = "DP-2";
-        wallpaperId = "3453113767";
+        monitor = if machineType == "laptop" then "eDP-1" else "DP-1";
+        wallpaperId = "3464106929";
       }
     ];
   };
@@ -254,21 +264,4 @@ in
     };
   };
 
-  # Solo laptop
-  systemd.user.services.trackpad-dwt = lib.mkIf (machineType == "laptop") {
-    Unit = {
-      Description = "Trackpad disable-while-typing daemon";
-      After = [ "graphical-session.target" ];
-    };
-    Service = {
-      Type = "simple";
-      ExecStart = "${pkgs.python3}/bin/python3 %h/.local/bin/trackpad-dwt-daemon";
-      Environment = [
-        "PYTHONPATH=${pkgs.python3Packages.evdev}/${pkgs.python3.sitePackages}"
-      ];
-      Restart = "on-failure";
-      RestartSec = "2";
-    };
-    Install = { WantedBy = [ "graphical-session.target" ]; };
-  };
 }

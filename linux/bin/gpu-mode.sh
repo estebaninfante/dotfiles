@@ -2,7 +2,8 @@
 # Controla la GPU NVIDIA via Runtime PM (laptop híbrida AMD + RTX).
 #   battery : GPU en D3cold cuando está inactiva → máximo ahorro de batería
 #   gaming  : GPU forzada activa + persistence mode → lista para jugar
-# Uso: gpu-mode.sh [battery|gaming|toggle|status]
+#   guard   : automático por fuente de energía (batería → battery, AC → sin cambios)
+# Uso: gpu-mode.sh [battery|gaming|toggle|guard|status]
 set -euo pipefail
 
 GPU_PCI="0000:01:00.0"
@@ -34,8 +35,13 @@ current_mode() {
 }
 
 set_mode() { # $1 = on|auto, $2 = persistence 0|1
-  sudo tee "$CTRL" <<<"$1" >/dev/null
-  nvidia-smi -pm "$2" >/dev/null 2>&1 || true
+  if [ "$(id -u)" = "0" ]; then
+    tee "$CTRL" <<<"$1" >/dev/null
+    nvidia-smi -pm "$2" >/dev/null 2>&1 || true
+  else
+    sudo tee "$CTRL" <<<"$1" >/dev/null
+    sudo nvidia-smi -pm "$2" >/dev/null 2>&1 || true
+  fi
 }
 
 if ! find_gpu; then
@@ -52,6 +58,13 @@ case "${1:-status}" in
   gaming)
     set_mode on 1
     ;;
+  guard)
+    # Automático: batería → battery (guarda); AC → no tocar (el gaming lo pide el usuario manualmente)
+    if [ "$(ac_status)" = "bateria" ]; then
+      set_mode auto 0
+      notify-send -u low "GPU NVIDIA" "Batería: GPU suspendida (ahorro energía)" 2>/dev/null || true
+    fi
+    ;;
   toggle)
     if [ "$mode" = "gaming" ]; then
       set_mode auto 0
@@ -64,7 +77,7 @@ case "${1:-status}" in
     exit 0
     ;;
   *)
-    echo "Uso: gpu-mode.sh [battery|gaming|toggle|status]" >&2
+    echo "Uso: gpu-mode.sh [battery|gaming|toggle|guard|status]" >&2
     exit 1
     ;;
 esac

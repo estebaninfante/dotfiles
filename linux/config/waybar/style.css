@@ -130,6 +130,19 @@ window#waybar {
   color: #666666;
 }
 
+/* KEYBOARD LAYOUT */
+
+#custom-layout {
+  padding: 0 12px;
+  margin: 0 2px;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+#custom-layout.es {
+  color: #50fa7b;
+}
+
 /* POMODORO */
 
 #custom-pomodoro {

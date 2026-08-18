@@ -11,6 +11,8 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+vim.filetype.add({ extension = { qml = "qml" } })
+
 require("keymaps")
 
 require("lazy").setup("plugins")

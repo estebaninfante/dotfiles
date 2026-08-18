@@ -4,7 +4,7 @@
 # Se genera por maquina con `nixos-generate-config` durante la instalacion
 # (ver README.md). Cada host importa el suyo en hosts/<host>.nix.
 
-{ config, pkgs, lib, handyPackage, ... }:
+{ config, pkgs, lib, handyPackage, machineType, ... }:
 
 {
   imports = [
@@ -58,8 +58,19 @@
   # Gnome keyring (hyprland.lua ejecuta gnome-keyring-daemon)
   services.gnome.gnome-keyring.enable = true;
 
-  # Huella dactilar (fprintd + fprintd-pam)
-  services.fprintd.enable = true;
+  # Huella dactilar (fprintd + fprintd-pam).
+  # Leitor Elan 04f3:0c4b SOLO en laptop (Lenovo). El driver upstream de
+  # libfprint es flaky (enroll falla con "protocol error", "enroll-disconnected").
+  # TODO driver oficial de Lenovo (libfprint-2-tod1-elan) match exacto PID.
+  services.fprintd = {
+    enable = true;
+    # Driver TOD propietario Elan: hardware laptop. En desktop no hay lector
+    # → driver inutil; evitarlo para no arrastrar el paquete a maquinas sin Leitor.
+    tod = lib.mkIf (machineType == "laptop") {
+      enable = true;
+      driver = pkgs.libfprint-2-tod1-elan;
+    };
+  };
 
   # Power profiles: power-profiles-daemon (misma API UPower.PowerProfiles
   # que usa power-mode.sh via busctl).
@@ -130,6 +141,8 @@
           # preserva el comportamiento de Alt en tap.
           leftalt = "overload(numpad, layer(alt))";
           enter = "overload(nav, enter)";
+          # Chording: space+AltGr (rightalt) = escape, sin sacrificar space.
+          "space+rightalt" = "escape";
         };
         nav = {
           a = "left";
@@ -207,6 +220,46 @@
   # power-mode.sh habla con org.freedesktop.UPower.PowerProfiles via busctl.
   services.power-profiles-daemon.enable = true;
 
+  # ── UPower ──────────────────────────────────────────────────
+  # Daemon de batería. Lo consume quickshell (Quickshell.Services.UPower)
+  # para el módulo de batería de la barra. power-profiles-daemon solo
+  # provee la API UPower.PowerProfiles, no el estado de batería.
+  services.upower.enable = true;
+
+  # ── GPU NVIDIA: guarda automática por fuente de energía ──────
+  # Al desconectar el cargador (AC online=0) → gpu-mode.sh guard pone
+  # la dGPU en battery (D3cold, ahorro). Al conectar no toca nada.
+  # Solo laptop (hibrida); en desktop no hay fuente Mains que dispare.
+  systemd.services.gpu-power-guard = lib.mkIf (machineType == "laptop") {
+    description = "NVIDIA GPU: switch a battery mode al desenchufar";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash /home/eztvn/dotfiles/linux/bin/gpu-mode.sh guard";
+    };
+  };
+
+  services.udev.extraRules = lib.mkIf (machineType == "laptop") ''
+    # Flujo de energía Mains (AC) → dispara la guarda de la GPU.
+    # Solo existe un device type=Mains en laptops; en desktop no → no dispara.
+    SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="${pkgs.systemd}/bin/systemctl --no-block start gpu-power-guard.service"
+  '';
+
+  # ── fprintd: restart tras resume ──────────────────────────────
+  # Solo laptop: el desktop no suspende en este patron.
+  systemd.services.restart-fprintd-on-resume = lib.mkIf (machineType == "laptop") {
+    description = "Restart fprintd after suspend/resume";
+    wantedBy = [ "sleep.target" ];
+    before = [ "sleep.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      StopWhenUnneeded = true;
+      ExecStart = "${pkgs.coreutils}/bin/true";
+      ExecStop = "${pkgs.systemd}/bin/systemctl restart fprintd.service";
+    };
+  };
+
   # ── Usuario ───────────────────────────────────────────────────
   users.users.eztvn = {
     isNormalUser = true;
@@ -233,6 +286,9 @@
   # (cada app de bloqueo requiere /etc/pam.d/hyprlock — sin esto la
   # contrasena siempre es rechazada).
   # fprintAuth = true: desbloqueo por huella (silencioso si no hay lector).
+  # NOTA: el login de GDM NO usa fprintAuth en login/gdm-password — GDM
+  # maneja la huella aparte con el servicio PAM gdm-fingerprint en paralelo
+  # (gdm.nix: login.fprintAuth=false a proposito, no pisar).
   security.pam.services.hyprlock = {
     fprintAuth = true;
   };

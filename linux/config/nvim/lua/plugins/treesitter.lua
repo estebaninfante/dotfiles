@@ -14,6 +14,7 @@ return {
           "json",
           "lua",
           "python",
+          "qmljs",
         },
         auto_install = true,
         highlight = { enable = true },

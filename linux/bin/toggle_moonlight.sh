@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Usar el socket de la instancia activa de Hyprland
 # hyprctl usa automáticamente $HYPRLAND_INSTANCE_SIGNATURE si está presente

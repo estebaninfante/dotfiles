@@ -9,7 +9,10 @@ vim.opt.shiftwidth = 2
 vim.opt.expandtab = true
 vim.opt.termguicolors = true
 vim.opt.wrap = false
+vim.opt.autoindent = true
+vim.opt.smartindent = true
 vim.keymap.set("i", "uu", "<Esc>")
+vim.keymap.set("i", "<C-Backspace>", "<C-w>", { desc = "Borrar palabra (ctrl+backspace)" })
 -- Navegación fluida entre paneles / ventanas (Splits) con Ctrl + hjkl
 vim.keymap.set("n", "<C-h>", "<C-w>h", { desc = "Mover a panel izquierdo" })
 vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Mover a panel inferior" })

@@ -26,6 +26,9 @@ configuration {
 /*	drun-categories: ;*/
 /*	drun-exclude-categories: ;*/
 	drun-show-actions: true;
+	drun-use-desktop-cache: true;
+	display-combi: "";
+	combi-hide-mode-prefix: true;
 /*	drun-display-format: "{name} [<span weight='light' size='small'><i>({generic})</i></span>]";*/
 /*	drun-url-launcher: "xdg-open";*/
 /*	disable-history: false;*/

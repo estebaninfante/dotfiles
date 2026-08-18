@@ -37,7 +37,7 @@
         inherit system;
         modules = baseModules ++ [
           { home-manager.extraSpecialArgs = { inherit machineType; }; }
-          { _module.args.handyPackage = handyPackage; }
+          { _module.args = { inherit handyPackage machineType; }; }
         ] ++ extraModules;
       };
     in

@@ -22,6 +22,7 @@
     "modules-right": [
         "custom/pomodoro",
         "custom/lid-inhibit",
+        "custom/layout",
         "pulseaudio",
         "network",
         "custom/memory",
@@ -129,6 +130,18 @@
         "return-type": "json",
         "exec": "$HOME/.local/bin/lid-inhibit-waybar.sh",
         "on-click": "$HOME/.local/bin/toggle-lid.sh",
+        "tooltip": true
+    },
+
+    /* =========================
+       LAYOUT (teclado)
+       ========================= */
+
+    "custom/layout": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "$HOME/.local/bin/keyboard-layout-waybar.sh",
+        "on-click": "$HOME/.local/bin/keyboard-layout-waybar.sh toggle",
         "tooltip": true
     },
 

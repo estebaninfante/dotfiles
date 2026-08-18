@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Pomodoro timer for Waybar
 # States: idle -> work (25m) -> break (5m) -> idle
 # Click toggles state via state file
