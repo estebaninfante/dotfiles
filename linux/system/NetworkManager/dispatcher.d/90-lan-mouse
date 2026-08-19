@@ -1,7 +1,7 @@
 #!/bin/bash
 # NetworkManager dispatcher for LAN-Mouse KVM
 # Restarts lan-mouse daemon when connecting to home network
-# so it re-attempts to reach the desktop at 192.168.1.17
+# so it re-attempts to reach the desktop at 192.168.1.18
 
 IFACE="$1"
 ACTION="$2"
