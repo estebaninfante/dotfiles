@@ -52,9 +52,9 @@ eval "$(zoxide init bash)"
 # starship prompt
 eval "$(starship init bash)"
 
-# nixos-rebuild con flake; detecta laptop/desktop automaticamente
+# nixos-rebuild con flake; detecta laptop/desktop por hardware
 nrb() {
-    local machine="$(cat ~/.config/machine-type 2>/dev/null || echo laptop)"
+    local machine="$(bash "$HOME/dotfiles/scripts/detect-machine.sh")"
     if [ "$machine" = "desktop" ]; then
         # sunshine cudaSupport recompila desde fuente: paralelismo default
         # (max-jobs=24) OOM sin swap. Controlar max-jobs/cores en desktop.

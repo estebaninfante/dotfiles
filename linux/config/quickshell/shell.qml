@@ -18,6 +18,9 @@ PanelWindow {
     readonly property var batt: UPower.displayDevice
     readonly property bool hasBattery: batt != null && batt.isPresent && batt.type === UPowerDeviceType.Battery
     readonly property double battPct: root.hasBattery ? root.batt.percentage * 100 : 0
+    property double volumePct: 0
+    property bool volumeMuted: false
+    property double brightnessPct: 0
 
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
@@ -28,7 +31,7 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened
+    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened
 
     implicitHeight: expanded ? expandedHeight : hotEdge
     exclusiveZone: implicitHeight
@@ -72,6 +75,45 @@ PanelWindow {
                 else if (data === "0")
                     root.superDown = false;
             }
+        }
+    }
+
+    Process {
+        id: volumeStatus
+        command: ["bash", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf \"%s %s\", $2 * 100, ($3 == \"[MUTED]\" ? \"yes\" : \"no\")}'"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const p = this.text.trim().split(/\s+/);
+                root.volumePct = parseFloat(p[0]) || 0;
+                root.volumeMuted = p[1] === "yes";
+            }
+        }
+    }
+
+    Process {
+        id: brightnessStatus
+        command: ["bash", "-c", "brightnessctl -m 2>/dev/null | awk -F, '{gsub(/%/,\"\",$4); print $4}'"]
+        running: root.hasBattery
+        stdout: StdioCollector {
+            onStreamFinished: root.brightnessPct = parseFloat(this.text.trim()) || 0
+        }
+    }
+
+    Process {
+        id: brightnessAdjust
+        command: ["brightnessctl", "set", "5%+"]
+        running: false
+        onExited: brightnessStatus.running = true
+    }
+
+    Timer {
+        interval: 3000
+        running: true
+        repeat: true
+        onTriggered: {
+            volumeStatus.running = true;
+            if (root.hasBattery) brightnessStatus.running = true;
         }
     }
 
@@ -198,12 +240,44 @@ PanelWindow {
                 color: root.battPct <= 20 ? "#e06c75" : root.batt.state === UPowerDeviceState.Charging ? "#98c379" : "white"
             }
         }
-        Row {
-            id: menuRow
+            Row {
+                id: menuRow
             anchors.right: parent.right
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
+                spacing: 6
+
+                Rectangle {
+                    id: brightnessIndicator
+                    visible: root.hasBattery
+                    width: 48
+                    height: 19
+                    radius: 8
+                    color: brightnessArea.containsMouse ? "#cba6f7" : "#141414"
+                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessArea.containsMouse ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 9 }
+                    MouseArea {
+                        id: brightnessArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onWheel: wheel => { brightnessAdjust.command = ["brightnessctl", wheel.angleDelta.y > 0 ? "set" : "set", wheel.angleDelta.y > 0 ? "5%+" : "5%-"]; brightnessAdjust.running = true; }
+                    }
+                }
+
+                Rectangle {
+                    id: volumeIndicator
+                    width: 52
+                    height: 19
+                    radius: 8
+                    color: volumeArea.containsMouse || volumeMenu.opened ? "#cba6f7" : "#141414"
+                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: volumeArea.containsMouse || volumeMenu.opened ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 9 }
+                    MouseArea {
+                        id: volumeArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: volumeMenu.opened = !volumeMenu.opened
+                        onWheel: wheel => { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", wheel.angleDelta.y > 0 ? "5%+" : "5%-"]; volumeAdjust.running = true; }
+                    }
+                }
 
             Rectangle {
                 id: menuBtn
@@ -469,6 +543,52 @@ PanelWindow {
         }
 
         PopupWindow {
+            id: volumeMenu
+            implicitWidth: 190
+            implicitHeight: 104
+            visible: opened
+            grabFocus: true
+            color: "transparent"
+            property bool opened: false
+            anchor { window: root; rect.x: root.width - volumeMenu.implicitWidth - 72; rect.y: root.height + 8 }
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: 12
+                color: "#e60d0d12"
+                border.color: "#383847"
+                border.width: 1
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+                    RowLayout {
+                        width: parent.width
+                        Text { text: "VOLUMEN"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+                        Item { Layout.fillWidth: true }
+                        Text { text: root.volumeMuted ? "silenciado" : Math.round(root.volumePct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 10 }
+                    }
+                    Row {
+                        width: parent.width
+                        spacing: 6
+                        Repeater {
+                            model: [["−", "5%-"], ["SILENCIAR", "toggle-mute"], ["+", "5%+"]]
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: (parent.width - 12) / 3; height: 34; radius: 8
+                                color: volumeActionArea.containsMouse ? "#cba6f7" : "#262633"
+                                Text { anchors.centerIn: parent; text: modelData[0]; color: volumeActionArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: modelData[0] === "SILENCIAR" ? 8 : 18; font.bold: true }
+                                MouseArea { id: volumeActionArea; anchors.fill: parent; hoverEnabled: true; onClicked: { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", modelData[1]]; volumeAdjust.running = true; } }
+                            }
+                        }
+                    }
+                }
+            }
+            Process { id: volumeAdjust; command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]; running: false; onExited: volumeStatus.running = true }
+        }
+
+        PopupWindow {
             id: widgetMenu
              implicitWidth: 520
             implicitHeight: menuCol.implicitHeight
@@ -659,49 +779,79 @@ PanelWindow {
                              }
                          }
 
-                         Card {
-                             id: ramCard
-                            cIcon: "\uf03b9"
-                            cAccent: "#cba6f7"
-                            cTitle: "RAM"
-                             cBig: "--%"
-                             cSub: "---"
-                              cardOn: widgetMenu.opened && widgetMenu.activeSection === "monitoreo"
-                             visible: widgetMenu.activeSection === "monitoreo"
+                          Rectangle {
+                              id: ramCard
+                              width: parent.width
+                              height: ramProcessesOpen ? 96 + ramCard.processes.count * 16 : 84
+                              radius: 14
+                              color: "#16161c"
+                              border.color: "#26262e"
+                              border.width: 1
+                              visible: widgetMenu.activeSection === "monitoreo"
+                              property double usedGiB: 0
+                              property double totGiB: 0
+                              property double usedPct: 0
+                              property bool ramProcessesOpen: false
+                              property var processes: ListModel {}
 
-                            property double usedGiB: 0
-                            property double totGiB: 0
+                              Column {
+                                  anchors.left: parent.left
+                                  anchors.right: parent.right
+                                  anchors.top: parent.top
+                                  anchors.margins: 14
+                                  spacing: 8
+                                  RowLayout {
+                                      width: parent.width
+                                      Text { text: "RAM"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true }
+                                      Text { text: Math.round(ramCard.usedPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 20 }
+                                      Item { Layout.fillWidth: true }
+                                      Text { text: ramCard.usedGiB.toFixed(1) + "G / " + ramCard.totGiB.toFixed(1) + "G"; color: "#8a8a99"; font.family: root.fontFamily; font.pixelSize: 10 }
+                                  }
+                                  Rectangle { width: parent.width; height: 5; radius: 3; color: "#29233b"; Rectangle { width: parent.width * ramCard.usedPct / 100; height: parent.height; radius: 3; color: "#cba6f7" } }
+                                  Text { text: ramCard.ramProcessesOpen ? "PROCESOS QUE MÁS RAM USAN" : "CLIC PARA VER PROCESOS"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                                  Column {
+                                      id: ramProcesses
+                                      width: parent.width
+                                      spacing: 3
+                                      visible: ramCard.ramProcessesOpen
+                                      Repeater {
+                                          model: ramCard.processes
+                                          delegate: RowLayout {
+                                              width: ramProcesses.width
+                                              Text { text: processName; color: "white"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
+                                              Text { text: memory + " MB"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 9 }
+                                          }
+                                      }
+                                  }
+                              }
+                              MouseArea { anchors.fill: parent; z: 1; onClicked: { ramCard.ramProcessesOpen = !ramCard.ramProcessesOpen; if (ramCard.ramProcessesOpen) { ramCard.processes.clear(); ramProcessesStatus.running = true; } } }
 
-                            Process {
-                                id: ramFree
-                                command: ["bash", "-c", "free -m | awk '/Mem:/{printf \"%d %d\", ($2-$7), $2}'"]
-                                running: true
-
-                                stdout: StdioCollector {
-                                    onStreamFinished: {
-                                        const parts = this.text.trim().split(/\s+/);
-                                        if (parts.length === 2) {
-                                            const usedMiB = parseFloat(parts[0]);
-                                            const totMiB = parseFloat(parts[1]);
-                                            if (totMiB > 0) {
-                                                ramCard.cVal = usedMiB / totMiB * 100;
-                                                ramCard.cBig = Math.round(ramCard.cVal) + "%";
-                                                ramCard.usedGiB = usedMiB / 1024;
-                                                ramCard.totGiB = totMiB / 1024;
-                                                ramCard.cSub = ramCard.usedGiB.toFixed(1) + "G usada · " + ramCard.totGiB.toFixed(1) + "G";
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Timer {
-                                interval: 3000
-                                running: true
-                                repeat: true
-                                onTriggered: ramFree.running = true
-                            }
-                        }
+                              Process {
+                                  id: ramFree
+                                  command: ["bash", "-c", "free -m | awk '/Mem:/{printf \"%d %d\", ($2-$7), $2}'"]
+                                  running: true
+                                  stdout: StdioCollector {
+                                      onStreamFinished: {
+                                          const parts = this.text.trim().split(/\s+/);
+                                          if (parts.length === 2) {
+                                              const usedMiB = parseFloat(parts[0]);
+                                              const totMiB = parseFloat(parts[1]);
+                                              if (totMiB > 0) { ramCard.usedPct = usedMiB / totMiB * 100; ramCard.usedGiB = usedMiB / 1024; ramCard.totGiB = totMiB / 1024; }
+                                          }
+                                      }
+                                  }
+                              }
+                              Process {
+                                  id: ramProcessesStatus
+                                  command: ["bash", "-c", "ps -eo comm=,rss= --sort=-rss | awk 'NR <= 8 {printf \"%s|%.0f\\n\", $1, $2/1024}'"]
+                                  running: false
+                                  stdout: SplitParser {
+                                      splitMarker: "\n"
+                                      onRead: line => { const p = line.trim().split("|"); if (p.length === 2) ramCard.processes.append({ processName: p[0], memory: p[1] }); }
+                                  }
+                              }
+                              Timer { interval: 3000; running: true; repeat: true; onTriggered: ramFree.running = true }
+                          }
 
                         Card {
                             id: battCard
@@ -937,7 +1087,7 @@ PanelWindow {
                               Column {
                                   id: audioDetails
                                   anchors.top: parent.top
-                                  anchors.topMargin: 76
+                                   anchors.topMargin: 70
                                   anchors.left: parent.left
                                   anchors.right: parent.right
                                   anchors.leftMargin: 14

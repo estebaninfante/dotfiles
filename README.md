@@ -59,8 +59,8 @@ Ver `nixos/README.md` para la guía de instalación completa.
 # Editar configs (siempre dentro de ~/dotfiles/)
 vim ~/dotfiles/linux/config/hypr/hyprland.lua
 
-# Aplicar cambios de sistema/paquetes
-sudo nixos-rebuild switch --flake ~/dotfiles#laptop   # o #desktop
+# Aplicar cambios de sistema/paquetes; detecta host por hardware
+nrb switch
 
 # Publicar cambios (commit + push, con confirmación)
 ~/dotfiles/scripts/publish.sh
@@ -89,7 +89,7 @@ quedan locales mediante `.stignore`; código y lockfiles sí se sincronizan.
 1. Pon tus archivos en `linux/config/<app>/` o `linux/home/<archivo>`
 2. Añade la entrada en `nixos/home.nix` (listas `configDirs`, `configFiles`, `homeFiles` o `allScripts`)
 3. Si requiere paquetes, agrégalos a `nixos/modules/packages.nix`
-4. `sudo nixos-rebuild switch --flake ~/dotfiles#<host>`
+4. `nrb switch`
 
 ## Lo que NO gestiona este repo
 

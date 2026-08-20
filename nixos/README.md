@@ -79,16 +79,16 @@ Después del primer boot:
 #   nvidiaBusId = "PCI:1:0:0"  (RTX 4060, 01:00.0)
 # Si algo cambia de maquina, verificar con: lspci | grep -E 'VGA|3D'
 
-# Aplicar cambios:
-sudo nixos-rebuild switch --flake ~/dotfiles#laptop
+# Aplicar cambios; detecta host por hardware:
+nrb switch
 ```
 
 ## Flujo diario
 
 ```bash
 # Editas en el repo → los symlinks ya apuntan ahí → se aplica al instante
-# Para cambios de sistema/paquetes:
-sudo nixos-rebuild switch --flake ~/dotfiles#laptop
+# Para cambios de sistema/paquetes; detecta host por hardware:
+nrb switch
 # Para subir cambios:
 bash ~/dotfiles/scripts/publish.sh   # commit + push
 ```
