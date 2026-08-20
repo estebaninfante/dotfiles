@@ -1083,9 +1083,9 @@ PanelWindow {
                                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                                 }
 
-                                RowLayout {
-                                    width: parent.width
-                                    spacing: 6
+                                      RowLayout {
+                                          width: parent.width
+                                          spacing: 6
 
                                     TextInput {
                                         id: wifiPasswordInput
@@ -1137,9 +1137,10 @@ PanelWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             onClicked: wifiCard.refreshNetworks()
-                                        }
-                                    }
-                                }
+                                          }
+                                      }
+
+                                   }
 
                                  Rectangle {
                                      width: parent.width
@@ -1258,10 +1259,39 @@ PanelWindow {
                                              padding: 7
                                              onTextChanged: wifiCard.wifiDomain = text
                                              Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
-                                         }
-                                     }
-                                 }
+                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                          }
+                                      }
+
+                                      RowLayout {
+                                          width: parent.width
+                                          spacing: 6
+                                          TextInput {
+                                              Layout.fillWidth: true
+                                              height: 32
+                                              color: "white"
+                                              text: wifiCard.wifiClientCert
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 10
+                                              padding: 7
+                                              onTextChanged: wifiCard.wifiClientCert = text
+                                              Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado cliente (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                          }
+                                          TextInput {
+                                              Layout.fillWidth: true
+                                              height: 32
+                                              color: "white"
+                                              text: wifiCard.wifiClientKey
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 10
+                                              padding: 7
+                                              onTextChanged: wifiCard.wifiClientKey = text
+                                              Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Clave privada (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                          }
+                                      }
+                                  }
 
                                  ListView {
                                     width: parent.width
