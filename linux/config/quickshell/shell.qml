@@ -31,7 +31,7 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened
+    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened || ramMenu.opened
 
     implicitHeight: expanded ? expandedHeight : hotEdge
     exclusiveZone: implicitHeight
@@ -87,6 +87,8 @@ PanelWindow {
                 const p = this.text.trim().split(/\s+/);
                 root.volumePct = parseFloat(p[0]) || 0;
                 root.volumeMuted = p[1] === "yes";
+                if (!volumeInput.activeFocus)
+                    volumeInput.text = Math.round(root.volumePct).toString();
             }
         }
     }
@@ -166,10 +168,18 @@ PanelWindow {
 
             Text {
                 id: ramIcon
-                text: "\uf03b9"
+                text: "RAM"
                 color: "white"
                 font.family: root.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: 10
+                font.bold: true
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                z: 2
+                hoverEnabled: true
+                onClicked: ramMenu.opened = !ramMenu.opened
             }
 
             Text {
@@ -402,6 +412,15 @@ PanelWindow {
                 rect.y: root.height + 8
             }
 
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: 14
+                color: "#e60d0d12"
+                border.color: "#383847"
+                border.width: 1
+            }
+
             Column {
                 id: powerCol
                 anchors.fill: parent
@@ -545,7 +564,7 @@ PanelWindow {
         PopupWindow {
             id: volumeMenu
             implicitWidth: 190
-            implicitHeight: 104
+            implicitHeight: 132
             visible: opened
             grabFocus: true
             color: "transparent"
@@ -572,15 +591,32 @@ PanelWindow {
                     Row {
                         width: parent.width
                         spacing: 6
-                        Repeater {
-                            model: [["−", "5%-"], ["SILENCIAR", "toggle-mute"], ["+", "5%+"]]
-                            delegate: Rectangle {
-                                required property var modelData
-                                width: (parent.width - 12) / 3; height: 34; radius: 8
-                                color: volumeActionArea.containsMouse ? "#cba6f7" : "#262633"
-                                Text { anchors.centerIn: parent; text: modelData[0]; color: volumeActionArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: modelData[0] === "SILENCIAR" ? 8 : 18; font.bold: true }
-                                MouseArea { id: volumeActionArea; anchors.fill: parent; hoverEnabled: true; onClicked: { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", modelData[1]]; volumeAdjust.running = true; } }
+                        Rectangle {
+                            width: parent.width - 54
+                            height: 26
+                            radius: 8
+                            color: "#0d0d12"
+                            border.color: "#30303b"
+                            Rectangle { width: parent.width * Math.min(root.volumePct, 100) / 100; height: parent.height; radius: 8; color: "#89b4fa" }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: mouse => { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", Math.max(0, Math.min(100, mouse.x / width * 100)).toFixed(0) + "%" ]; volumeAdjust.running = true; }
                             }
+                        }
+                        TextInput {
+                            id: volumeInput
+                            width: 48
+                            height: 26
+                            text: Math.round(root.volumePct).toString()
+                            color: "white"
+                            font.family: root.fontFamily
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            selectByMouse: true
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            onAccepted: { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", Math.max(0, Math.min(100, parseFloat(text) || 0)).toFixed(0) + "%" ]; volumeAdjust.running = true; focus = false; }
+                            Rectangle { anchors.fill: parent; z: -1; radius: 7; color: "#0d0d12"; border.color: "#30303b" }
                         }
                     }
                 }
