@@ -236,6 +236,8 @@ y versionado simple de cinco versiones. Puertos LAN: TCP/UDP 22000 y UDP 21027.
 También anuncia IPs Tailscale para sincronizar fuera de casa cuando ambos equipos
 están encendidos. Si un equipo está apagado, Syncthing conserva cambios locales
 y los entrega al reconectar; no existe sincronización mientras equipo está apagado.
+`.stignore` excluye `node_modules`, `.next`, `dist`, builds, caches y logs; se
+regeneran localmente con `pnpm install` o scripts del proyecto.
 
 `scripts/sync-developing.sh` queda como herramienta manual legacy; no existe timer
 rsync para evitar carreras y borrados unidireccionales.

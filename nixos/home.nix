@@ -13,6 +13,17 @@ let
   cfg = repo + "/linux/config";
   home = repo + "/linux/home";
   bin = repo + "/linux/bin";
+  developingIgnore = pkgs.writeText "developing.stignore" ''
+    **/node_modules
+    **/.next
+    **/dist
+    **/build
+    **/coverage
+    **/.turbo
+    **/.vite
+    **/.cache
+    **/*.log
+  '';
 
   # Symlink out-of-store (el repo queda como fuente de verdad)
   link = p: config.lib.file.mkOutOfStoreSymlink p;
@@ -118,6 +129,16 @@ in
       "${cfg}/lan-mouse/lan-mouse.pem" "$lan_mouse_dir/lan-mouse.pem"
     ${pkgs.coreutils}/bin/install -m 0644 \
       "${cfg}/lan-mouse/config.${machineType}.toml" "$lan_mouse_dir/config.toml"
+  '';
+
+  # Keep generated dependencies/builds local. Source, configs and lockfiles
+  # remain synchronized by Syncthing.
+  home.activation.developingSyncthingIgnore = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    developing_dir="$HOME/developing"
+    if [ -d "$developing_dir" ]; then
+      ${pkgs.coreutils}/bin/install -m 0644 \
+        "${developingIgnore}" "$developing_dir/.stignore"
+    fi
   '';
 
   # ── Git credential helper ─────────────────────────────────────

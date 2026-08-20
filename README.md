@@ -81,6 +81,8 @@ por `http://192.168.1.16:3100/`.
 
 Fuera de casa, Syncthing usa Tailscale. Ambos equipos deben estar encendidos;
 si uno está apagado, cambios quedan pendientes y se aplican al volver a conectar.
+Dependencias y builds generados (`node_modules`, `.next`, `dist`, caches y logs)
+quedan locales mediante `.stignore`; código y lockfiles sí se sincronizan.
 
 ## Agregar una nueva configuración
 
