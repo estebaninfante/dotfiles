@@ -276,7 +276,7 @@ in
           [ -S "$SOCKET" ] && break
           sleep 0.5
         done
-        sleep 2
+        sleep 0.5
       '';
       ExecStart = "${config.home.homeDirectory}/.local/bin/wallpaper-daemon.sh";
       Environment = [
@@ -287,7 +287,7 @@ in
         "LINUX_WALLPAPERENGINE=${pkgs.linux-wallpaperengine}/share/linux-wallpaperengine/linux-wallpaperengine"
       ];
       Restart = "on-failure";
-      RestartSec = "5";
+      RestartSec = "2";
     };
     Install = {
       WantedBy = [ "graphical-session.target" ];
