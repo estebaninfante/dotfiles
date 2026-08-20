@@ -15,7 +15,6 @@ with pkgs; [  # ── Shell & terminal ──
   neovim
 
   # ── Hyprland ecosystem ──
-  hyprpaper
   hyprpicker
   hypridle
   hyprlock

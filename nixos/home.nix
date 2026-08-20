@@ -40,7 +40,7 @@ let
   homeFiles = [ ".bashrc" ".gitconfig" ];
 
   allScripts = [
-    "rofi-power-mode.sh" "gpu-mode.sh" "toggle_moonlight.sh" "reload-hyprpaper.sh"
+    "rofi-power-mode.sh" "gpu-mode.sh" "toggle_moonlight.sh"
     "wifi-reconnect.sh" "shot" "waybar-battery-top"
     "clean-temp.sh" "pomodoro-waybar.sh" "lid-inhibit-waybar.sh"
     "waybar-ram-top" "keyboard-layout-waybar.sh" "tts-send" "tts-server" "tts" "rofi-scripts-launcher.sh"
@@ -53,7 +53,7 @@ let
   # Solo laptop
   laptopScripts = [
     "toggle-lid.sh" "lid-inhibit-waybar.sh" "waybar-battery-top"
-    "reload-hyprpaper.sh" "gpu-mode.sh"
+    "gpu-mode.sh"
   ];
   scripts =
     if machineType == "laptop" then allScripts
@@ -73,7 +73,7 @@ in
   # algun dia quieres separar; por ahora nada para no duplicar.
   home.packages = [ ];
 
-  # ── machine-type (lo lee hyprland.lua / hyprpaper) ───────────
+  # ── machine-type (lo lee hyprland.lua) ─────────────────────────
   # ── Config dirs (~/.config/<app>) ────────────────────────────
   home.file = lib.mkMerge [
     {
