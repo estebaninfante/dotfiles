@@ -63,7 +63,7 @@ PanelWindow {
     Process {
         id: superMonitor
         command: ["super-hold-monitor.sh"]
-        running: true
+         running: true
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: data => {
@@ -111,8 +111,8 @@ PanelWindow {
 
         Timer {
             interval: 1000
-            running: true
-            repeat: true
+             running: true
+             repeat: true
             onTriggered: runDate.running = true
         }
         Row {
@@ -303,19 +303,29 @@ PanelWindow {
              property bool opened: false
              property string activeSection: "conexiones"
 
-             function refreshConnections() {
+              function refreshConnections() {
                  if (activeSection !== "conexiones")
                      return;
                  if (wifiCard.wifiOn && !wifiScan.running)
                      wifiCard.refreshNetworks();
-                 if (bluetoothCard.btOn && !btScan.running)
-                     bluetoothCard.refreshDevices();
-             }
+                  if (bluetoothCard.btOn && !btScan.running)
+                      bluetoothCard.refreshDevices();
+              }
 
-             onOpenedChanged: {
-                 if (opened)
-                     initialRefresh.restart();
-             }
+              function refreshAudio() {
+                  if (activeSection === "audio" && !audioStatus.running) {
+                      audioCard.sinks.clear();
+                      audioCard.sources.clear();
+                      audioStatus.running = true;
+                  }
+              }
+
+              onOpenedChanged: {
+                  if (opened) {
+                      initialRefresh.restart();
+                      refreshAudio();
+                  }
+              }
 
              Timer {
                  id: initialRefresh
@@ -405,41 +415,61 @@ PanelWindow {
                                     onClicked: widgetMenu.opened = false
                              }
                          }
+                         }
 
-                        RowLayout {
-                            width: parent.width
-                             height: 36
-                             spacing: 6
+                         Text {
+                             width: parent.width
+                             text: "SISTEMA  /  " + widgetMenu.activeSection.toUpperCase()
+                             color: "#6c7086"
+                             font.family: root.fontFamily
+                             font.pixelSize: 9
+                             font.letterSpacing: 1.5
+                         }
 
-                            Repeater {
-                                model: ["CONEXIONES", "MONITOREO", "PANTALLAS"]
+                         Flickable {
+                             width: parent.width
+                              height: 36
+                             clip: true
+                             contentWidth: sectionRow.implicitWidth
+                             boundsBehavior: Flickable.StopAtBounds
 
-                                delegate: Rectangle {
-                                    required property string modelData
-                                    Layout.fillWidth: true
-                                     height: 32
-                                     radius: 9
-                                    color: widgetMenu.activeSection === modelData.toLowerCase() ? "#cba6f7" : sectionArea.containsMouse ? "#262633" : "#191922"
+                             Row {
+                                 id: sectionRow
+                                 spacing: 6
 
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData
-                                        color: widgetMenu.activeSection === modelData.toLowerCase() ? "#11111b" : "#a6adc8"
-                                        font.family: root.fontFamily
-                                         font.pixelSize: 9
-                                        font.bold: true
-                                    }
+                                 Repeater {
+                                     model: ["CONEXIONES", "MONITOREO", "PANTALLAS", "AUDIO"]
 
-                                    MouseArea {
-                                        id: sectionArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        onClicked: widgetMenu.activeSection = modelData.toLowerCase()
-                                    }
-                                }
-                            }
-                        }
-                        }
+                                     delegate: Rectangle {
+                                         required property string modelData
+                                         width: Math.max(84, sectionLabel.implicitWidth + 24)
+                                         height: 32
+                                         radius: 9
+                                         color: widgetMenu.activeSection === modelData.toLowerCase() ? "#cba6f7" : sectionArea.containsMouse ? "#262633" : "#191922"
+
+                                         Text {
+                                             id: sectionLabel
+                                             anchors.centerIn: parent
+                                             text: modelData
+                                             color: widgetMenu.activeSection === modelData.toLowerCase() ? "#11111b" : "#a6adc8"
+                                             font.family: root.fontFamily
+                                             font.pixelSize: 9
+                                             font.bold: true
+                                         }
+
+                                         MouseArea {
+                                             id: sectionArea
+                                             anchors.fill: parent
+                                             hoverEnabled: true
+                                             onClicked: {
+                                                 widgetMenu.activeSection = modelData.toLowerCase();
+                                                 widgetMenu.refreshAudio();
+                                             }
+                                         }
+                                     }
+                                 }
+                             }
+                         }
 
                          Card {
                              id: ramCard
@@ -592,7 +622,7 @@ PanelWindow {
                             Process {
                                 id: gpuStatus
                                 command: ["gpu-mode.sh", "status"]
-                                running: true
+                                running: root.hasBattery
 
                                 stdout: SplitParser {
                                     splitMarker: "\n"
@@ -609,7 +639,7 @@ PanelWindow {
 
                             Timer {
                                 interval: 5000
-                                running: true
+                                running: root.hasBattery
                                 repeat: true
                                 onTriggered: gpuStatus.running = true
                             }
@@ -629,7 +659,206 @@ PanelWindow {
                             }
                         }
 
-                         Rectangle {
+                          Rectangle {
+                              id: audioCard
+                              width: parent.width
+                              height: audioDetailsOpen ? 70 + audioDetails.implicitHeight + 12 : 70
+                              radius: 12
+                              color: "#16161c"
+                              border.color: "#26262e"
+                              border.width: 1
+                              visible: widgetMenu.activeSection === "audio"
+
+                              property bool audioDetailsOpen: true
+                              property string audioMessage: ""
+                              property var sinks: ListModel {}
+                              property var sources: ListModel {}
+
+                              function parseAudio(line) {
+                                  const parts = line.split("|");
+                                  if (parts.length < 4)
+                                      return;
+                                  const item = { deviceId: parts[1], name: parts[2], selected: parts[3] === "*" };
+                                  if (parts[0] === "sink")
+                                      sinks.append(item);
+                                  else if (parts[0] === "source")
+                                      sources.append(item);
+                              }
+
+                              function selectDevice(id, label) {
+                                  audioSetDefault.command = ["wpctl", "set-default", id];
+                                  audioCard.audioMessage = "Seleccionando " + label + "...";
+                                  audioSetDefault.running = true;
+                              }
+
+                              RowLayout {
+                                  anchors.fill: parent
+                                  anchors.leftMargin: 14
+                                  anchors.rightMargin: 14
+                                  anchors.topMargin: 10
+                                  anchors.bottomMargin: 10
+                                  spacing: 10
+
+                                  Text {
+                                      text: "\uf028"
+                                      color: "#cba6f7"
+                                      font.family: root.fontFamily
+                                      font.pixelSize: 24
+                                      Layout.preferredWidth: 28
+                                  }
+
+                                  Column {
+                                      spacing: 2
+                                      Layout.fillWidth: true
+                                      Text {
+                                          text: "AUDIO"
+                                          color: "#9a9aa7"
+                                          font.family: root.fontFamily
+                                          font.pixelSize: 9
+                                          font.letterSpacing: 1.5
+                                      }
+                                      Text {
+                                          text: audioCard.sinks.count + " salidas · " + audioCard.sources.count + " entradas"
+                                          color: "white"
+                                          font.family: root.fontFamily
+                                          font.pixelSize: 14
+                                      }
+                                  }
+
+                                  Text {
+                                      text: "\uf078"
+                                      color: "#9a9aa7"
+                                      font.family: root.fontFamily
+                                      font.pixelSize: 12
+                                  }
+                              }
+
+                              MouseArea {
+                                  anchors.fill: parent
+                                  onClicked: audioCard.audioDetailsOpen = !audioCard.audioDetailsOpen
+                              }
+
+                              Column {
+                                  id: audioDetails
+                                  anchors.top: parent.top
+                                  anchors.topMargin: 76
+                                  anchors.left: parent.left
+                                  anchors.right: parent.right
+                                  anchors.leftMargin: 14
+                                  anchors.rightMargin: 14
+                                  spacing: 8
+                                  visible: audioCard.audioDetailsOpen
+
+                                  Text {
+                                      text: "SALIDAS"
+                                      color: "#9a9aa7"
+                                      font.family: root.fontFamily
+                                      font.pixelSize: 9
+                                      font.bold: true
+                                  }
+
+                                  Repeater {
+                                      model: audioCard.sinks
+                                      delegate: Rectangle {
+                                          required property string deviceId
+                                          required property string name
+                                          required property bool selected
+                                          width: audioDetails.width
+                                          height: 34
+                                          radius: 8
+                                          color: audioDeviceArea.containsMouse ? "#252532" : selected ? "#29233b" : "#1d1d26"
+                                          Text {
+                                              anchors.left: parent.left
+                                              anchors.leftMargin: 10
+                                              anchors.right: parent.right
+                                              anchors.rightMargin: 10
+                                              anchors.verticalCenter: parent.verticalCenter
+                                              text: (selected ? "●  " : "○  ") + name
+                                              color: selected ? "#cba6f7" : "white"
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 10
+                                              elide: Text.ElideRight
+                                          }
+                                          MouseArea {
+                                              id: audioDeviceArea
+                                              anchors.fill: parent
+                                              hoverEnabled: true
+                                              onClicked: audioCard.selectDevice(deviceId, name)
+                                          }
+                                      }
+                                  }
+
+                                  Text {
+                                      text: "ENTRADAS"
+                                      color: "#9a9aa7"
+                                      font.family: root.fontFamily
+                                      font.pixelSize: 9
+                                      font.bold: true
+                                  }
+
+                                  Repeater {
+                                      model: audioCard.sources
+                                      delegate: Rectangle {
+                                          required property string deviceId
+                                          required property string name
+                                          required property bool selected
+                                          width: audioDetails.width
+                                          height: 34
+                                          radius: 8
+                                          color: audioInputArea.containsMouse ? "#252532" : selected ? "#29233b" : "#1d1d26"
+                                          Text {
+                                              anchors.left: parent.left
+                                              anchors.leftMargin: 10
+                                              anchors.right: parent.right
+                                              anchors.rightMargin: 10
+                                              anchors.verticalCenter: parent.verticalCenter
+                                              text: (selected ? "●  " : "○  ") + name
+                                              color: selected ? "#cba6f7" : "white"
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 10
+                                              elide: Text.ElideRight
+                                          }
+                                          MouseArea {
+                                              id: audioInputArea
+                                              anchors.fill: parent
+                                              hoverEnabled: true
+                                              onClicked: audioCard.selectDevice(deviceId, name)
+                                          }
+                                      }
+                                  }
+
+                                  Text {
+                                      text: audioCard.audioMessage || "Selecciona dispositivo predeterminado"
+                                      color: "#9a9aa7"
+                                      font.family: root.fontFamily
+                                      font.pixelSize: 10
+                                      elide: Text.ElideRight
+                                  }
+                              }
+
+                              Process {
+                                  id: audioStatus
+                                  command: ["bash", "-c", "wpctl status | awk '/Sinks:/{s=\"sink\"; next} /Sources:/{s=\"source\"; next} /Filters:/{s=\"\"} s && match($0,/\\*?[[:space:]]*[0-9]+\\./){prefix=substr($0,RSTART,RLENGTH-1); star=(prefix ~ /\\*/ ? \"*\" : \"\"); gsub(/[^0-9]/,\"\",prefix); line=substr($0,RSTART+RLENGTH); sub(/^[[:space:]]+/,\"\",line); print s \"|\" prefix \"|\" line \"|\" star}'"]
+                                  running: false
+                                  stdout: SplitParser {
+                                      splitMarker: "\n"
+                                      onRead: line => audioCard.parseAudio(line)
+                                  }
+                                  onExited: audioCard.audioMessage = audioStatus.exitCode === 0 ? "Selecciona dispositivo predeterminado" : "wpctl no disponible"
+                              }
+
+                              Process {
+                                  id: audioSetDefault
+                                  command: ["wpctl", "set-default", "0"]
+                                  running: false
+                                  onExited: {
+                                      audioCard.audioMessage = exitCode === 0 ? "Dispositivo predeterminado actualizado" : "No se pudo seleccionar dispositivo";
+                                      audioStatus.running = true;
+                                  }
+                              }
+                          }
+
+                          Rectangle {
                              id: wifiCard
                              width: parent.width
                              height: wifiDetailsOpen ? 70 + wifiDetails.implicitHeight + 12 : 70
@@ -1211,7 +1440,8 @@ PanelWindow {
                                                 onClicked: {
                                                     if (!bluetoothCard.selectedMac)
                                                         return;
-                                                    bluetoothAction.command = ["bluetoothctl", modelData.toLowerCase(), bluetoothCard.selectedMac];
+                                                     bluetoothAction.routeAudio = modelData === "CONNECT";
+                                                     bluetoothAction.command = bluetoothAction.routeAudio ? ["bash", "-c", "bluetoothctl connect \"" + bluetoothCard.selectedMac + "\" && sleep 1"] : ["bluetoothctl", modelData.toLowerCase(), bluetoothCard.selectedMac];
                                                     bluetoothCard.btMessage = modelData.toLowerCase() + "...";
                                                     bluetoothAction.running = false;
                                                     bluetoothAction.running = true;
@@ -1257,8 +1487,26 @@ PanelWindow {
                                 id: bluetoothAction
                                 command: ["bluetoothctl", "connect", ""]
                                 running: false
+                                property bool routeAudio: false
                                 onExited: {
-                                    bluetoothCard.btMessage = exitCode === 0 ? "Acción completada" : "Acción fallida";
+                                    if (routeAudio && exitCode === 0) {
+                                        bluetoothAudioRoute.command = ["bash", "-c", "mac=\"" + bluetoothCard.selectedMac + "\"; sink=$(wpctl status | awk '/Sinks:/{s=1; next} /Sources:/{s=0} s && /[0-9]+\\./{match($0, /[0-9]+\\./); print substr($0, RSTART, RLENGTH - 1)}' | while read id; do wpctl inspect \"$id\" | awk -v mac=\"$mac\" -v sink_id=\"$id\" '$0 ~ mac{found=1} END{if(found) print sink_id}'; done | head -n1); [ -n \"$sink\" ] && wpctl set-default \"$sink\""];
+                                        bluetoothAudioRoute.running = false;
+                                        bluetoothAudioRoute.running = true;
+                                    } else {
+                                        bluetoothCard.btMessage = exitCode === 0 ? "Acción completada" : "Acción fallida";
+                                        bluetoothStatus.running = false;
+                                        bluetoothStatus.running = true;
+                                    }
+                                }
+                            }
+
+                            Process {
+                                id: bluetoothAudioRoute
+                                command: ["true"]
+                                running: false
+                                onExited: {
+                                    bluetoothCard.btMessage = exitCode === 0 ? "Audio conectado" : "Audio no disponible";
                                     bluetoothStatus.running = false;
                                     bluetoothStatus.running = true;
                                 }
