@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Tmux
+Comment=Terminal multiplexer (kitty + tmux)
+Exec=kitty -e tmux
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;System;TerminalEmulator;

@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# speak — TTS espanol con Piper, reproduccion inmediata (PipeWire).
+#
+# Uso:
+#   speak "texto a decir"                 # argumento(s)
+#   echo "texto" | speak                  # stdin (pipe/here-string)
+#   speak -                               # stdin explicito
+#   speak --notify                        # lee notificacion de swaync (env SWAYNC_*)
+#   speak -v es_ES-davefx-medium "texto"  # voz alternativa
+#
+# Voz por defecto: es_MX-ald-medium (espanol mexicano MASCULINO, "Aldo").
+# Alternativas instaladas: es_MX-claude-high (mexicana femenina), 
+# es_ES-davefx-medium (castellano). Override con la variable de entorno
+# SPEAK_VOICE o la flag -v.
+#
+# Reproduce al instante via `piper --output-raw` | `pw-play` — sin guardar
+# archivo. El sample rate se lee del .onnx.json de cada voz.
+
+set -euo pipefail
+
+VOICE="${SPEAK_VOICE:-es_MX-ald-medium}"
+
+# Directorios donde buscar voces (orden de prioridad).
+voices_dirs=(
+  "${PIPER_VOICES_DIR:-}"
+  "/run/current-system/sw/share/piper-voices"
+  "/nix/var/nix/profiles/default/share/piper-voices"
+  "$HOME/.local/share/tts/piper/voices"
+)
+
+notify=0
+
+usage() {
+  sed -n '2,17p' "$0"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -v|--voice) VOICE="${2:?faltan argumentos para -v}"; shift 2 ;;
+    --notify) notify=1; shift ;;
+    -) shift; break ;;
+    -*) echo "speak: opcion desconocida: $1" >&2; usage >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+
+# ── Modo notificacion (swaync): lee la notificacion del env ──────────
+if [[ $notify -eq 1 ]]; then
+  texto="${SWAYNC_SUMMARY:-}"
+  if [[ -n "${SWAYNC_APP_NAME:-}" ]]; then
+    texto="${SWAYNC_APP_NAME}: ${texto}"
+  fi
+  if [[ -n "${SWAYNC_BODY:-}" ]]; then
+    texto="${texto}. ${SWAYNC_BODY}"
+  fi
+  [[ -n "$texto" ]] || exit 0
+# ── Texto desde argumentos ────────────────────────────────────────────
+elif [[ $# -gt 0 ]]; then
+  texto="$*"
+# ── Texto desde stdin (solo si no es tty) ─────────────────────────────
+elif [[ ! -t 0 ]]; then
+  texto="$(cat)"
+  [[ -n "$texto" ]] || exit 0
+else
+  echo "speak: sin texto. Pasa argumentos, pipe por stdin, o usa --notify." >&2
+  usage >&2
+  exit 2
+fi
+
+# ── Localizar la voz ──────────────────────────────────────────────────
+model=""
+for dir in "${voices_dirs[@]}"; do
+  [[ -n "$dir" ]] || continue
+  candidate="$dir/$VOICE/$VOICE.onnx"
+  if [[ -f "$candidate" ]]; then
+    model="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$model" ]]; then
+  echo "speak: voz '$VOICE' no encontrada en: ${voices_dirs[*]}" >&2
+  echo "  (instalada via packages.nix: piperVoices)" >&2
+  exit 1
+fi
+
+# Sample rate desde el .onnx.json de la voz (jq), fallback 22050.
+json="${model}.json"
+rate="$(jq -r '.audio.sample_rate // 22050' "$json" 2>/dev/null || echo 22050)"
+
+# ── Dedup: varias instancias/eventos de opencode puede llamar `speak` para
+#    la misma notificacion. Un lock global (flock) garantiza UNA sola voz
+#    a la vez: si ya se esta hablando, se omite esta llamada. ───────────
+exec 9>"/tmp/opencode/speak.lock"
+if ! flock -n 9; then
+  echo "speak: voz ocupada, llamada omitida (dedup)" >&2
+  exit 0
+fi
+
+# ── Sintesis + reproduccion directa ───────────────────────────────────
+piper --model "$model" --output-raw 2>/dev/null <<<"$texto" \
+  | pw-play --raw --format=s16 --rate "$rate" --channels=1 - >/dev/null 2>&1

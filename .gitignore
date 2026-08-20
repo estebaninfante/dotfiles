@@ -12,3 +12,4 @@ bun.lock
 # lan-mouse: config.toml es writable (guarda estado) y symlink al repo.
 # Las fuentes de verdad son config.laptop.toml / config.desktop.toml.
 linux/config/lan-mouse/config.toml
+linux/bin/__pycache__/

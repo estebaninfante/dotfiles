@@ -46,6 +46,15 @@
   # ── Paquetes del sistema ─────────────────────────────────────
   environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage; };
 
+  # Incluir las voces de Piper (share/piper-voices) en el profile del
+  # sistema. environment.pathsToLink es una lista restringida: si no se
+  # lista este prefijo, buildEnv descarta la salida de `piperVoices`
+  # (paquete sin binario, contenido solo en /share/piper-voices).
+  environment.pathsToLink = [ "/share/piper-voices" ];
+
+  # ── Variables de sesion ───────────────────────────────────────
+  environment.sessionVariables.XDG_DATA_HOME = "\${XDG_DATA_HOME:-$HOME/.local/share}";
+
   # ── Servicios base ────────────────────────────────────────────
   services.pipewire = {
     enable = true;
@@ -117,6 +126,44 @@
   # ── Gaming ────────────────────────────────────────────────────
   programs.steam.enable = true;
   programs.gamemode.enable = true;
+
+  # ── nix-ld: binarios pre-compilados FHS (antigravity-ide, etc.) ──
+  programs.nix-ld.enable = true;
+  programs.nix-ld.libraries = with pkgs; [
+    nspr
+    nss
+    nss_latest
+    alsa-lib
+    at-spi2-atk
+    at-spi2-core
+    atk
+    cairo
+    cups
+    dbus
+    expat
+    fontconfig
+    freetype
+    glib
+    gtk3
+    libX11
+    libXcomposite
+    libXdamage
+    libXext
+    libXfixes
+    libXrandr
+    libgbm
+    libglvnd
+    libxkbcommon
+    pango
+    udev
+    xorg.libxcb
+    libdrm
+    mesa
+    libnotify
+    libsecret
+    xorg.libXScrnSaver
+    xorg.xcbutilkeysyms
+  ];
 
   # ── Login manager: GDM ──
   services.xserver.enable = true;

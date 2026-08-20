@@ -7,12 +7,14 @@
 #   wallpaper-switch.sh reset  : vuelve al wallpaper por defecto (home.nix)
 # Los ids de workshop viven en steamapps/workshop/content/431960/<id>/
 set -euo pipefail
+
 WORKSHOP="$HOME/.steam/steam/steamapps/workshop/content/431960"
 CFG_DIR="$HOME/.config"
 ID_FILE="$CFG_DIR/wallpaper-current"
 SCALING_FILE="$CFG_DIR/wallpaper-scaling"
 SERVICE="linux-wallpaperengine.service"
-DEFAULT_ID="2981249186"
+DEFAULT_ID="3464106929"
+
 list_wallpapers() {
   local dirs
   mapfile -t dirs < <(find "$WORKSHOP" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
@@ -28,9 +30,11 @@ list_wallpapers() {
     printf "%s  %s\n" "$id" "$name"
   done
 }
+
 restart_service() {
   systemctl --user restart "$SERVICE" 2>/dev/null || true
 }
+
 case "${1:-}" in
   ""|-l|list)
     list_wallpapers

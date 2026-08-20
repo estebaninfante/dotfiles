@@ -37,6 +37,7 @@ end
 -- En NixOS los binarios estan en /run/current-system/sw/bin — si
 -- reemplazamos el PATH, Hyprland no encuentra kitty/waybar/rofi.
 hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. os.getenv("PATH"))
+hl.env("XDG_DATA_HOME", os.getenv("HOME") .. "/.local/share")
 
 -- ========================
 -- MONITORS
@@ -165,6 +166,7 @@ hl.config({
     }
 })
 
+
 -- Carrusel de workspaces: al saltar ws1→ws5 desliza por los intermedios.
 hl.animation({
     leaf = "workspaces",
@@ -259,6 +261,9 @@ hl.on("hyprland.start", function()
     if machine == "laptop" then
         hl.exec_cmd("sleep 5 && libinput-gestures-setup start")
     end
+
+    -- Arrancar siempre en el workspace 5
+    hl.exec_cmd("hyprctl dispatch workspace 5")
 end)
 
 -- ========================
@@ -267,6 +272,8 @@ end)
 hl.window_rule({ match = { class = "kitty" }, opacity = "0.8 0.8" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, workspace = "10" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, fullscreen = 1 })
+hl.window_rule({ match = { class = "leia" }, workspace = "10" })
+hl.window_rule({ match = { class = "leia" }, fullscreen = 1 })
 hl.window_rule({ match = { class = "libreoffice.*" }, workspace = "empty" })
 hl.window_rule({ match = { class = "soffice.*" }, workspace = "empty" })
 hl.window_rule({ match = { class = "swayosd-server" }, float = 1 })
@@ -374,10 +381,10 @@ hl.bind(mainMod .. " + SHIFT + E",      function() move_window("down",   0, 50) 
 -- ========================
 -- RESIZE
 -- ========================
-hl.bind(mainMod .. " + left",  hl.dsp.window.resize({ x = -20, y = 0, relative = true }))
-hl.bind(mainMod .. " + right", hl.dsp.window.resize({ x = 20, y = 0, relative = true }))
-hl.bind(mainMod .. " + up",    hl.dsp.window.resize({ x = 0, y = -20, relative = true }))
-hl.bind(mainMod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative = true }))
+hl.bind(mainMod .. " + left",  hl.dsp.window.resize({ x = -20, y = 0, relative = true }), { repeating = true })
+hl.bind(mainMod .. " + right", hl.dsp.window.resize({ x = 20, y = 0, relative = true }), { repeating = true })
+hl.bind(mainMod .. " + up",    hl.dsp.window.resize({ x = 0, y = -20, relative = true }), { repeating = true })
+hl.bind(mainMod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative = true }), { repeating = true })
 
 -- ========================
 -- WORKSPACES

@@ -1,6 +1,50 @@
 # Paquetes del sistema (nixpkgs).
 { pkgs, handyPackage }:
 
+let
+  inherit (pkgs) fetchurl runCommand;
+
+  # Voces de Piper (rhasspy/piper-voices). No estan en nixpkgs → se
+  # descargan declarativamente. Solo voces es:
+  #   - es_MX-ald-medium     (favorita: espanol mexicano MASCULINO, Aldo)
+  #   - es_MX-claude-high    (alternativa: espanol mexicano femenino, alta calidad)
+  #   - es_ES-davefx-medium  (alternativa: castellano)
+  #   - en_US-joe-medium     (ingles EEUU masculino, Joe; usado por opencode)
+  # Cada voz = .onnx + .onnx.json (config sample_rate, id_map, etc.)
+  piperVoice = path: sha256:
+    fetchurl {
+      url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/${path}";
+      inherit sha256;
+    };
+
+  piperVoices = runCommand "piper-voices" { } ''
+    mkdir -p $out/share/piper-voices/es_MX-claude-high
+    mkdir -p $out/share/piper-voices/es_ES-davefx-medium
+    mkdir -p $out/share/piper-voices/es_MX-ald-medium
+    mkdir -p $out/share/piper-voices/en_US-joe-medium
+    cp ${piperVoice "es/es_MX/claude/high/es_MX-claude-high.onnx" "181y101fw0hfy7ili73wnjh6gynwxk9afvvymgc2r1b3x9qhmx1y"} \
+      $out/share/piper-voices/es_MX-claude-high/es_MX-claude-high.onnx
+    cp ${piperVoice "es/es_MX/claude/high/es_MX-claude-high.onnx.json" "0bf14dvmbdayrxq02zw00s4ajm4bdc4wl3bw9lxwpr600gvq3z0s"} \
+      $out/share/piper-voices/es_MX-claude-high/es_MX-claude-high.onnx.json
+    cp ${piperVoice "es/es_ES/davefx/medium/es_ES-davefx-medium.onnx" "05x94bi45i62crywl6wy5ly3b4qkpim8kab5qbj6wcbc38xv0n36"} \
+      $out/share/piper-voices/es_ES-davefx-medium/es_ES-davefx-medium.onnx
+    cp ${piperVoice "es/es_ES/davefx/medium/es_ES-davefx-medium.onnx.json" "0hj8qngdzyymcclslxyaglr2y9frh1ill9zzf63z7xijqy3xl38f"} \
+      $out/share/piper-voices/es_ES-davefx-medium/es_ES-davefx-medium.onnx.json
+    cp ${piperVoice "es/es_MX/ald/medium/es_MX-ald-medium.onnx" "0qwvaxn1jw3v9wadfvvq9r8rl84970xfblkd415f74rw541ki6q1"} \
+      $out/share/piper-voices/es_MX-ald-medium/es_MX-ald-medium.onnx
+    # ald trae "phoneme_type": "PhonemeType.ESPEAK" (formato v1.0.0), que
+    # piper-tts 1.4.2 rechaza (enum espera "espeak") → se normaliza al copiar.
+    cp ${piperVoice "es/es_MX/ald/medium/es_MX-ald-medium.onnx.json" "0g5hsslc29fhh5dka5lq85ayd765cdpb9lb3s3aiscp5c9p77azg"} \
+      $out/share/piper-voices/es_MX-ald-medium/es_MX-ald-medium.onnx.json
+    sed -i 's/PhonemeType\.ESPEAK/espeak/' \
+      $out/share/piper-voices/es_MX-ald-medium/es_MX-ald-medium.onnx.json
+    cp ${piperVoice "en/en_US/joe/medium/en_US-joe-medium.onnx" "01mg7f5piyvhdfx2s89088xpjnn51i81d76zginw9ndq441wxbsq"} \
+      $out/share/piper-voices/en_US-joe-medium/en_US-joe-medium.onnx
+    cp ${piperVoice "en/en_US/joe/medium/en_US-joe-medium.onnx.json" "0cxd3a73dv6qaqikmynvdyg73431y3w7w94m0nav2p3rnc858v9x"} \
+      $out/share/piper-voices/en_US-joe-medium/en_US-joe-medium.onnx.json
+  '';
+in
+
 with pkgs; [  # ── Shell & terminal ──
   kitty
   fish
@@ -108,6 +152,13 @@ with pkgs; [  # ── Shell & terminal ──
   # pasado como handyPackage desde flake.nix. nixpkgs va atrasado (0.9.1).
   handyPackage
 
+  # ── Text-to-Speech ──
+  # piper-tts (binary `piper`) + voces espanolas descargadas
+  # declarativamente. El script `speak` (~/.local/bin) hace la
+  # sintesis + reproduccion directa vía PipeWire.
+  piper-tts
+  piperVoices
+
   # ── Compartir teclado/raton entre maquinas ──
   deskflow
   (lan-mouse.overrideAttrs (old: {
@@ -164,14 +215,15 @@ with pkgs; [  # ── Shell & terminal ──
   OVMF                    # edk2-ovmf
   docker-compose
 
-  # ── Gaming ──
+# ── Gaming ──
   lutris
-  wineWow64Packages.full  # wine + wine-mono + wine-gecko (wineWowPackages deprecado)
+  wineWowPackages.full  # wine + wine-mono + wine-gecko (wineWowPackages deprecado)
   dxvk                    # wine-dxvk
   protontricks
   mangohud
   vulkan-tools
   vulkan-validation-layers
+  linux-wallpaperengine  # wallpapers animados de Steam (daemon nativo)
 
   # ── Apps adicionales ──
   localsend

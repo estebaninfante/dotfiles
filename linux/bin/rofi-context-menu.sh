@@ -11,7 +11,11 @@ dirname=$(dirname "$target")
 if [ -d "$target" ]; then
     options="📂 Abrir carpeta en Gestor de Archivos\n💻 Abrir carpeta en Terminal (Kitty)\n📝 Abrir carpeta en Neovim\n📋 Copiar ruta al portapapeles"
 else
-    options="📄 Abrir archivo con aplicación por defecto\n💻 Abrir carpeta contenedora en Terminal (Kitty)\n📁 Mostrar carpeta en Gestor de Archivos\n📝 Abrir archivo en Neovim\n📋 Copiar ruta al portapapeles"
+    options="📄 Abrir archivo con aplicación por defecto"
+    if [ -x "$target" ]; then
+        options+="\n🚀 Ejecutar script"
+    fi
+    options+="\n💻 Abrir carpeta contenedora en Terminal (Kitty)\n📁 Mostrar carpeta en Gestor de Archivos\n📝 Abrir archivo en Neovim\n📋 Copiar ruta al portapapeles"
 fi
 
 choice=$(echo -e "$options" | rofi -dmenu -p "Opciones: $basename" -theme-str 'window { width: 500px; }')
@@ -40,6 +44,9 @@ case "$choice" in
         ;;
     "📄 Abrir archivo con aplicación por defecto")
         coproc ( xdg-open "$target" > /dev/null 2>&1 )
+        ;;
+    "🚀 Ejecutar script")
+        coproc ( "$target" > /dev/null 2>&1 )
         ;;
     "📋 Copiar ruta al portapapeles")
         if command -v wl-copy >/dev/null 2>&1; then

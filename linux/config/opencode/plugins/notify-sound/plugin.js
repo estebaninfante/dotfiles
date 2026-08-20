@@ -1,7 +1,7 @@
 // notify-sound — opencode plugin
 //
 // Notifica en dos canales:
-//   1. Sonido local (paplay) en:
+//   1. Voz local (TTS Piper via `speak`) en:
 //      - sesion idle         → la sesion termino
 //      - permiso pedido      → opencode pide permiso para ejecutar
 //   2. Push al celular via ntfy.sh:
@@ -9,6 +9,8 @@
 //      - permiso pedido      → "opencode: pide permiso" (prioridad alta)
 //
 // El push usa fetch nativo de Bun → sin dependencia de curl.
+// El TTS usa `~/.local/bin/speak` (script del repo en linux/bin/speak,
+// symlinkeado por home-manager; lee texto via argumento).
 // El topico se configura en TOPIC.
 //
 // NOTA sobre eventos (version-dependent):
@@ -26,23 +28,65 @@ const TOPIC = 'opencode-laptop';
 
 const DEBUG_LOG = process.env.NOTIFY_SOUND_LOG || '/tmp/opencode/notify-sound.log';
 
+// Ruta absoluta a `speak` (evita depender del PATH del proceso).
+const SPEAK = `${process.env.HOME}/.local/bin/speak`;
+
+// dedup entre procesos: lock atomico via mkdir en /tmp, con TTL. 
+// Varias instancias de opencode pueden recibir el mismo `session.idle`;
+// solo habla la que gane el lock, el resto lo ignora.
+import { mkdirSync, statSync, writeFileSync, rmSync } from 'fs';
+
+const LOCK_DIR = '/tmp/opencode/speak-locks';
+const LOCK_TTL_MS = 90000; // 90s: suficiente para que la frase termine
+
+function acquireLock(key) {
+  try {
+    const dir = `${LOCK_DIR}/${key}`;
+    try {
+      mkdirSync(dir, { recursive: false });
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      const age = Date.now() - statSync(dir).mtimeMs;
+      if (age > LOCK_TTL_MS) {
+        rmSync(dir, { recursive: true, force: true });
+        mkdirSync(dir, { recursive: false });
+      } else {
+        return false; // ocupado: otro proceso/evento ya hablo
+      }
+    }
+    writeFileSync(`${dir}/pid`, String(process.pid));
+    return () => {
+      try { writeFileSync(`${dir}/ts`, String(Date.now())); } catch {}
+    };
+  } catch {
+    return () => {};
+  }
+}
+
 function dbg(msg) {
   try {
-    Bun.write(DEBUG_LOG, `[${new Date().toISOString()}] ${msg}\n`, { append: true });
+    Bun.write(DEBUG_LOG, `[${new Date().toISOString()}] [pid ${process.pid}] ${msg}\n`, { append: true });
   } catch {}
 }
 
-const SOUNDS = {
-  permission: '/usr/share/sounds/gnome/default/alerts/string.ogg',
-  complete: '/usr/share/sounds/gnome/default/alerts/hum.ogg',
-};
-
-function play(file) {
+// Lee el texto en voz alta (Piper TTS). No bloquea: spawn + no await.
+// opencode usa la voz es_MX-claude-high (espanol latino, femenina, Clara).
+// `key` identifica el evento (sesion/permiso + sessionID) para el dedup.
+function speak(text, key) {
+  if (!key) { dbg(`speak (no key, skip): ${text}`); return; }
+  const release = acquireLock(key);
+  if (release === false) {
+    dbg(`speak (dedup, skip): ${text}`);
+    return;
+  }
   try {
-    if (Bun.which('paplay')) {
-      Bun.spawn(['paplay', file], { stdio: ['ignore', 'ignore', 'ignore'] });
-    }
-  } catch {}
+    Bun.spawn([SPEAK, '-v', 'es_MX-claude-high', text], { stdio: ['ignore', 'ignore', 'ignore'] });
+    dbg(`speak: ${text}`);
+  } catch (e) {
+    dbg(`speak ERROR: ${e.message}`);
+  } finally {
+    release();
+  }
 }
 
 // Push a ntfy.sh. Prioridad: 4 = alta (permiso), 3 = default (termino).
@@ -129,12 +173,12 @@ export default async ({ $, client }) => {
 
         if (isSessionIdle(event)) {
           dbg('  → session idle detected');
-          play(SOUNDS.complete);
+          speak(`Opencode: sesion terminada${ctx}`, `idle-${sid || 'default'}`);
           await push('opencode', `Sesion terminada${ctx}`, 3);
         } else if (isPermissionAsked(event)) {
           dbg('  → permission asked detected');
-          play(SOUNDS.permission);
           const detail = permissionDetail(event);
+          speak(`Opencode pide permiso para: ${detail || 'ejecutar'}`, `perm-${sid || 'default'}`);
           await push('opencode: permiso', `${detail ? `Pide permiso: ${detail}` : 'Pide permiso'}${ctx}`, 4);
         }
       } catch (e) {
