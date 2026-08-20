@@ -944,14 +944,14 @@ PanelWindow {
 
                             Process {
                                 id: wifiStatus
-                                command: ["bash", "-c", "enabled=$(nmcli -t -f WIFI g | head -n1); network=$(nmcli -t -f active,ssid dev wifi | awk -F: '$1==\"yes\"{sub(/^yes:/,\"\"); print; exit}'); printf '%s|%s' \"$enabled\" \"${network:-Sin conexión}\""]
+                                 command: ["bash", "-c", "enabled=$(nmcli -t -f WIFI g | head -n1); network=$(nmcli -t -f active,ssid dev wifi | awk -F: '$1==\"yes\"{sub(/^yes:/,\"\"); print; exit}'); wired=$(nmcli -t -f TYPE,STATE,CONNECTION dev | awk -F: '$1==\"ethernet\" && $2==\"connected\"{print $3; exit}'); printf '%s|%s|%s' \"$enabled\" \"$network\" \"$wired\""]
                                 running: true
 
                                 stdout: StdioCollector {
                                     onStreamFinished: {
                                         const parts = this.text.trim().split("|");
                                         wifiCard.wifiOn = parts[0] === "enabled";
-                                        wifiCard.network = parts[1] || "Sin conexión";
+                                         wifiCard.network = parts[1] || (parts[2] ? "Cable: " + parts[2] : "Sin conexión");
                                     }
                                 }
                             }
@@ -1266,15 +1266,16 @@ PanelWindow {
 
                             Process {
                                 id: bluetoothStatus
-                                command: ["bash", "-c", "bluetoothctl show 2>/dev/null | awk -F': ' '/Powered:/{print $2; exit}'"]
+                                 command: ["bash", "-c", "powered=$(bluetoothctl show 2>/dev/null | awk -F': ' '/Powered:/{print $2; exit}'); device=$(bluetoothctl devices Connected 2>/dev/null | awk 'NR==1{sub(/^Device [^ ]+ /,\"\"); print}'); printf '%s|%s' \"$powered\" \"$device\""]
                                 running: true
 
-                                stdout: StdioCollector {
-                                    onStreamFinished: {
-                                        const powered = this.text.trim() === "yes";
-                                        bluetoothCard.btOn = powered;
-                                        bluetoothCard.stateText = powered ? "Activado" : "Desactivado";
-                                    }
+                                 stdout: StdioCollector {
+                                     onStreamFinished: {
+                                         const parts = this.text.trim().split("|");
+                                         const powered = parts[0] === "yes";
+                                         bluetoothCard.btOn = powered;
+                                          bluetoothCard.stateText = powered ? (parts[1] || "Activado") : "Desactivado";
+                                     }
                                 }
                             }
 
