@@ -11,7 +11,7 @@ PanelWindow {
     id: root
     property bool superDown: false
     property bool superHeld: false
-    property int expandedHeight: 30
+    property int expandedHeight: 34
     property int hotEdge: 3
 
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
@@ -28,7 +28,7 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool expanded: hot.hovered || superHeld
+    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened
 
     implicitHeight: expanded ? expandedHeight : hotEdge
     exclusiveZone: implicitHeight
@@ -287,13 +287,28 @@ PanelWindow {
 
         PopupWindow {
             id: widgetMenu
-            implicitWidth: 320
+             implicitWidth: 520
             implicitHeight: menuCol.implicitHeight
             visible: opened
             grabFocus: true
             color: "transparent"
 
-            property bool opened: false
+             property bool opened: false
+             property string activeSection: "conexiones"
+
+             function refreshConnections() {
+                 if (activeSection !== "conexiones")
+                     return;
+                 if (wifiCard.wifiOn && !wifiScan.running)
+                     wifiCard.refreshNetworks();
+                 if (bluetoothCard.btOn && !btScan.running)
+                     bluetoothCard.refreshDevices();
+             }
+
+             onOpenedChanged: {
+                 if (opened)
+                     refreshConnections();
+             }
 
             anchor {
                 window: root
@@ -304,35 +319,48 @@ PanelWindow {
             Column {
                 id: menuCol
                 anchors.fill: parent
-                spacing: 8
+                 spacing: 12
 
                 Rectangle {
                     width: parent.width
-                    height: cards.implicitHeight + 22
-                    radius: 14
-                    color: "#0d0d12"
-                    border.color: "#26262e"
-                    border.width: 1
+                     height: cards.implicitHeight + 32
+                     radius: 18
+                     color: "#e60d0d12"
+                     border.color: "#383847"
+                     border.width: 1
+                     opacity: widgetMenu.opened ? 1 : 0
+                     scale: widgetMenu.opened ? 1 : 0.94
+                     transformOrigin: Item.TopRight
 
-                    Column {
-                        id: cards
+                     Behavior on opacity {
+                         NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                     }
+                     Behavior on scale {
+                         NumberAnimation { duration: 220; easing.type: Easing.OutBack }
+                     }
+                     Behavior on height {
+                         NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+                     }
+
+             Column {
+                 id: cards
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.topMargin: 11
-                        anchors.leftMargin: 11
-                        anchors.rightMargin: 11
-                        spacing: 10
+                         anchors.topMargin: 16
+                         anchors.leftMargin: 16
+                         anchors.rightMargin: 16
+                         spacing: 12
 
-                        RowLayout {
-                            width: parent.width
-                            height: 22
+                         RowLayout {
+                             width: parent.width
+                             height: 24
 
                             Text {
                                 text: "SISTEMA"
                                 color: "#9a9aa7"
                                 font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 9
+                                 font.pixelSize: 10
                                 font.letterSpacing: 3
                                 font.bold: true
                             }
@@ -361,18 +389,52 @@ PanelWindow {
                                     hoverEnabled: true
                                     anchors.fill: parent
                                     onClicked: widgetMenu.opened = false
+                             }
+                         }
+
+                        RowLayout {
+                            width: parent.width
+                             height: 36
+                             spacing: 6
+
+                            Repeater {
+                                model: ["CONEXIONES", "MONITOREO", "PANTALLAS"]
+
+                                delegate: Rectangle {
+                                    required property string modelData
+                                    Layout.fillWidth: true
+                                     height: 32
+                                     radius: 9
+                                    color: widgetMenu.activeSection === modelData.toLowerCase() ? "#cba6f7" : sectionArea.containsMouse ? "#262633" : "#191922"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData
+                                        color: widgetMenu.activeSection === modelData.toLowerCase() ? "#11111b" : "#a6adc8"
+                                        font.family: root.fontFamily
+                                         font.pixelSize: 9
+                                        font.bold: true
+                                    }
+
+                                    MouseArea {
+                                        id: sectionArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: widgetMenu.activeSection = modelData.toLowerCase()
+                                    }
                                 }
                             }
                         }
+                        }
 
-                        Card {
-                            id: ramCard
+                         Card {
+                             id: ramCard
                             cIcon: "\uf03b9"
                             cAccent: "#cba6f7"
                             cTitle: "RAM"
                             cBig: "--%"
                             cSub: "---"
-                            cardOn: widgetMenu.opened
+                             cardOn: widgetMenu.opened && widgetMenu.activeSection === "monitoreo"
 
                             property double usedGiB: 0
                             property double totGiB: 0
@@ -418,7 +480,7 @@ PanelWindow {
                             cSub: battCard.battSub()
                             dDel: 60
                             cardOn: widgetMenu.opened
-                            visible: root.hasBattery
+                             visible: root.hasBattery && widgetMenu.activeSection === "monitoreo"
 
                             function icon() {
                                 if (root.batt && root.batt.state === UPowerDeviceState.Charging)
@@ -496,7 +558,7 @@ PanelWindow {
                             cSub: gpuCard.fuente ? (gpuCard.modo === "gaming" ? "Click: modo bater\u00eda" : "Click: modo juegos") : "---"
                             dDel: 120
                             cardOn: widgetMenu.opened
-                            visible: root.hasBattery
+                             visible: root.hasBattery && widgetMenu.activeSection === "monitoreo"
 
                             property string modo: ""
                             property string fuente: ""
@@ -552,14 +614,19 @@ PanelWindow {
                             }
                         }
 
-                        Rectangle {
-                            id: wifiCard
-                            width: parent.width
-                            height: wifiDetailsOpen ? 70 + wifiDetails.implicitHeight + 12 : 70
-                            radius: 12
-                            color: "#16161c"
-                            border.color: "#26262e"
-                            border.width: 1
+                         Rectangle {
+                             id: wifiCard
+                             width: parent.width
+                             height: wifiDetailsOpen ? 70 + wifiDetails.implicitHeight + 12 : 70
+                             radius: 12
+                             color: "#16161c"
+                             border.color: "#26262e"
+                             border.width: 1
+                             visible: widgetMenu.activeSection === "conexiones"
+
+                             Behavior on height {
+                                 NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                             }
 
                             property bool wifiOn: false
                             property string network: "Sin conexión"
@@ -595,18 +662,20 @@ PanelWindow {
                             }
 
                             RowLayout {
-                                anchors.fill: parent
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
                                 anchors.leftMargin: 14
                                 anchors.rightMargin: 14
                                 anchors.topMargin: 10
-                                anchors.bottomMargin: 10
+                                 height: 58
                                 spacing: 10
 
                                 Text {
                                     text: wifiCard.wifiOn ? "\uf1eb" : "\uf127"
                                     color: wifiCard.wifiOn ? "#89b4fa" : "#6c7086"
                                     font.family: root.fontFamily
-                                    font.pixelSize: 21
+                                     font.pixelSize: 24
                                     Layout.preferredWidth: 28
                                 }
 
@@ -625,9 +694,9 @@ PanelWindow {
                                         text: wifiCard.wifiOn ? wifiCard.network : "Desactivado"
                                         color: "white"
                                         font.family: root.fontFamily
-                                        font.pixelSize: 15
+                                         font.pixelSize: 17
                                         elide: Text.ElideRight
-                                        width: 155
+                                         width: 245
                                         MouseArea {
                                             anchors.fill: parent
                                             onClicked: wifiCard.wifiDetailsOpen = !wifiCard.wifiDetailsOpen
@@ -641,8 +710,8 @@ PanelWindow {
 
                                 Rectangle {
                                     width: 48
-                                    height: 25
-                                    radius: 8
+                                     height: 30
+                                     radius: 9
                                     color: wifiToggleArea.containsMouse ? "#89b4fa" : "#262633"
 
                                     Text {
@@ -668,20 +737,27 @@ PanelWindow {
 
                             MouseArea {
                                 anchors.fill: parent
-                                z: -1
+                                anchors.bottomMargin: parent.height - 78
+                                anchors.rightMargin: 62
+                                z: 1
                                 onClicked: wifiCard.wifiDetailsOpen = !wifiCard.wifiDetailsOpen
                             }
 
                             Column {
                                 id: wifiDetails
                                 anchors.top: parent.top
-                                anchors.topMargin: 75
+                                anchors.topMargin: 84
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.leftMargin: 14
                                 anchors.rightMargin: 14
-                                spacing: 7
+                                spacing: 9
                                 visible: wifiCard.wifiDetailsOpen
+                                opacity: wifiCard.wifiDetailsOpen ? 1 : 0
+
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                                }
 
                                 RowLayout {
                                     width: parent.width
@@ -799,8 +875,8 @@ PanelWindow {
 
                                 Rectangle {
                                     width: parent.width
-                                    height: 28
-                                    radius: 6
+                                    height: 34
+                                    radius: 8
                                     color: wifiConnectArea.containsMouse ? "#89b4fa" : "#262633"
                                     Text {
                                         anchors.centerIn: parent
@@ -892,6 +968,7 @@ PanelWindow {
                             color: "#16161c"
                             border.color: "#26262e"
                             border.width: 1
+                            visible: widgetMenu.activeSection === "conexiones"
 
                             property bool btOn: false
                             property string stateText: "No disponible"
@@ -922,11 +999,13 @@ PanelWindow {
                             }
 
                             RowLayout {
-                                anchors.fill: parent
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
                                 anchors.leftMargin: 14
                                 anchors.rightMargin: 14
                                 anchors.topMargin: 10
-                                anchors.bottomMargin: 10
+                                height: 50
                                 spacing: 10
 
                                 Text {
@@ -995,7 +1074,9 @@ PanelWindow {
 
                             MouseArea {
                                 anchors.fill: parent
-                                z: -1
+                                anchors.bottomMargin: parent.height - 70
+                                anchors.rightMargin: 62
+                                z: 1
                                 onClicked: bluetoothCard.btDetailsOpen = !bluetoothCard.btDetailsOpen
                             }
 
@@ -1012,7 +1093,7 @@ PanelWindow {
 
                                 Rectangle {
                                     width: parent.width
-                                    height: 28
+                                         height: 34
                                     radius: 6
                                     color: btRefreshArea.containsMouse ? "#89dceb" : "#262633"
                                     Text {
@@ -1033,7 +1114,7 @@ PanelWindow {
 
                                 ListView {
                                     width: parent.width
-                                    height: Math.min(contentHeight, 132)
+                                    height: Math.min(contentHeight, 190)
                                     visible: count > 0
                                     clip: true
                                     model: bluetoothCard.btDevices
@@ -1085,8 +1166,8 @@ PanelWindow {
                                         delegate: Rectangle {
                                             required property string modelData
                                             Layout.fillWidth: true
-                                            height: 28
-                                            radius: 6
+                                    height: 34
+                                    radius: 8
                                             color: btActionArea.containsMouse ? "#89dceb" : "#262633"
                                             Text {
                                                 anchors.centerIn: parent
