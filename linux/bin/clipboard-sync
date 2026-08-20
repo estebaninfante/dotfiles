@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Sync richest single Wayland MIME offered by clipboard. wl-copy cannot expose
+# multiple MIME sources at once, so prefer formats that preserve most data.
+STATE_FILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/clipboard-sync.last"
+PEER="${CLIPBOARD_PEER:?CLIPBOARD_PEER not set}"
+SSH_KEY="${CLIPBOARD_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+
+choose_mime() {
+  local type
+  mapfile -t types < <(wl-paste --list-types 2>/dev/null || true)
+  for type in image/png image/jpeg image/webp image/gif text/html text/uri-list text/plain UTF8_STRING; do
+    if printf '%s\n' "${types[@]}" | grep -Fxq "$type"; then
+      printf '%s\n' "$type"
+      return 0
+    fi
+  done
+  [[ ${#types[@]} -gt 0 ]] && printf '%s\n' "${types[0]}"
+}
+
+send() {
+  local mime tmp digest
+  mime="$(choose_mime)"
+  [[ -n "$mime" ]] || exit 0
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN
+  wl-paste --no-newline --type "$mime" > "$tmp"
+  digest="$( { printf '%s\0' "$mime"; sha256sum "$tmp"; } | sha256sum | cut -d' ' -f1 )"
+  if [[ -f "$STATE_FILE" ]] && [[ $(<"$STATE_FILE") == "$digest" ]]; then
+    rm -f "$STATE_FILE"
+    exit 0
+  fi
+  ssh -4 -o BatchMode=yes -o ConnectTimeout=3 -o IdentitiesOnly=yes \
+    -i "$SSH_KEY" "$PEER" \
+    "/home/eztvn/.local/bin/clipboard-sync receive '$mime' '$digest'" < "$tmp" \
+    >/dev/null 2>&1 || true
+}
+
+receive() {
+  local mime="$1" digest="$2" tmp
+  [[ "$mime" =~ ^[A-Za-z0-9._+-]+/[A-Za-z0-9._+-]+$|^UTF8_STRING$ ]] || exit 2
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || exit 2
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN
+  cat > "$tmp"
+  printf '%s\n' "$digest" > "$STATE_FILE"
+  wl-copy --type "$mime" < "$tmp" >/dev/null 2>&1 &
+  disown || true
+}
+
+case "${1:-watch}" in
+  watch|send) send ;;
+  receive) receive "${2:-}" "${3:-}" ;;
+  *) exit 2 ;;
+esac

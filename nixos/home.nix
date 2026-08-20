@@ -48,7 +48,7 @@ let
     "tv-mode.sh" "rofi-file-search.sh" "rofi-context-menu.sh" "reiniciar.sh"
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
-    "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh"
+    "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh" "clipboard-sync"
   ];
   # Solo laptop
   laptopScripts = [
@@ -204,6 +204,29 @@ in
       Environment = [
         "WAYLAND_DISPLAY=wayland-1"
         "XDG_RUNTIME_DIR=/run/user/%U"
+      ];
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # Clipboard sync externo recomendado por comunidad lan-mouse. SSH transporta
+  # MIME Wayland elegido por riqueza; lan-mouse sigue manejando input.
+  systemd.user.services.clipboard-sync = {
+    Unit = {
+      Description = "Bidirectional Wayland clipboard sync";
+      After = [ "graphical-session.target" "network-online.target" ];
+      Wants = [ "network-online.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.wl-clipboard}/bin/wl-paste --watch ${bin}/clipboard-sync watch";
+      Restart = "always";
+      RestartSec = "3";
+      Environment = [
+        "WAYLAND_DISPLAY=wayland-1"
+        "XDG_RUNTIME_DIR=/run/user/%U"
+        "CLIPBOARD_PEER=${if machineType == "laptop" then "eztvn@desktop" else "eztvn@laptop"}"
+        "CLIPBOARD_SSH_KEY=/home/eztvn/.ssh/id_ed25519"
       ];
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };

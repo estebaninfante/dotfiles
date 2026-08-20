@@ -648,10 +648,11 @@ PanelWindow {
                                              id: sectionArea
                                              anchors.fill: parent
                                              hoverEnabled: true
-                                             onClicked: {
-                                                 widgetMenu.activeSection = modelData.toLowerCase();
-                                                 widgetMenu.refreshAudio();
-                                             }
+                                              onClicked: {
+                                                  widgetMenu.activeSection = modelData.toLowerCase();
+                                                  widgetMenu.refreshAudio();
+                                                  widgetMenu.refreshScreens();
+                                              }
                                          }
                                      }
                                  }
@@ -1095,8 +1096,127 @@ PanelWindow {
                               }
                           }
 
-                          Rectangle {
-                             id: wifiCard
+                           Rectangle {
+                               id: screenCard
+                               width: parent.width
+                               height: 360
+                               radius: 12
+                               color: "#16161c"
+                               border.color: "#26262e"
+                               border.width: 1
+                               visible: widgetMenu.activeSection === "pantallas"
+                               property var monitors: ListModel {}
+                               property string screenMessage: ""
+
+                               function refresh() {
+                                   monitors.clear();
+                                   screenMessage = "Leyendo pantallas...";
+                                   screenStatus.running = false;
+                                   screenStatus.running = true;
+                               }
+
+                               function apply(name, action) {
+                                   let monitor = null;
+                                   for (let i = 0; i < monitors.count; i++)
+                                       if (monitors.get(i).name === name) monitor = monitors.get(i);
+                                   if (!monitor) return;
+                                   let command;
+                                   if (action === "duplicate")
+                                       command = "hyprctl keyword monitor '" + name + ",preferred,auto,1,mirror," + monitor.primary + "'";
+                                   else if (action === "extend")
+                                       command = "hyprctl keyword monitor '" + name + ",preferred," + monitor.mx + "x" + monitor.my + "," + monitor.mscale + "'";
+                                   else if (action === "second")
+                                       command = "hyprctl keyword monitor '" + monitor.primary + ",disable'; hyprctl keyword monitor '" + name + ",preferred,auto,1'";
+                                   else if (action === "only")
+                                       command = "hyprctl keyword monitor '" + name + ",preferred,auto,1'; hyprctl keyword monitor '" + monitor.primary + ",disable'";
+                                   else {
+                                       const dx = action === "left" ? -100 : action === "right" ? 100 : 0;
+                                       const dy = action === "up" ? -100 : action === "down" ? 100 : 0;
+                                       command = "hyprctl keyword monitor '" + name + ",preferred," + (monitor.mx + dx) + "x" + (monitor.my + dy) + "," + monitor.mscale + "'";
+                                   }
+                                   screenAction.command = ["bash", "-c", command];
+                                   screenAction.running = true;
+                               }
+
+                               Column {
+                                   anchors.fill: parent
+                                   anchors.margins: 14
+                                   spacing: 9
+                                   Text { text: "PANTALLAS"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+                                   Text { text: "Configura cómo usar cada monitor conectado"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13 }
+                                   ListView {
+                                       width: parent.width
+                                       height: 190
+                                       clip: true
+                                       spacing: 6
+                                       model: screenCard.monitors
+                                       delegate: Rectangle {
+                                           required property string name
+                                           required property string description
+                                           required property string primary
+                                           required property int mx
+                                           required property int my
+                                           width: parent ? parent.width : 0
+                                           height: 48
+                                           radius: 8
+                                           color: "#1d1d26"
+                                           Column {
+                                               anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                                               Text { text: name; color: "white"; font.family: root.fontFamily; font.pixelSize: 11 }
+                                               Text { text: description; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; width: 390 }
+                                           }
+                                       }
+                                   }
+                                   RowLayout {
+                                       width: parent.width; spacing: 5
+                                       Repeater {
+                                           model: ["DUPLICAR", "AMPLIAR", "SOLO 2ª", "SOLO ESTA"]
+                                           delegate: Rectangle {
+                                               required property string modelData
+                                               Layout.fillWidth: true; height: 32; radius: 7
+                                               color: screenModeArea.containsMouse ? "#cba6f7" : "#262633"
+                                               Text { anchors.centerIn: parent; text: modelData; color: screenModeArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                               MouseArea { id: screenModeArea; anchors.fill: parent; hoverEnabled: true; onClicked: { if (screenCard.monitors.count) screenCard.apply(screenCard.monitors.get(screenCard.monitors.count - 1).name, modelData === "DUPLICAR" ? "duplicate" : modelData === "AMPLIAR" ? "extend" : modelData === "SOLO 2ª" ? "second" : "only"); } }
+                                           }
+                                       }
+                                   }
+                                   RowLayout {
+                                       width: parent.width; spacing: 5
+                                       Text { text: "POSICIÓN"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                                       Item { Layout.fillWidth: true }
+                                       Repeater {
+                                           model: [["←", "left"], ["→", "right"], ["↑", "up"], ["↓", "down"]]
+                                           delegate: Rectangle {
+                                               required property var modelData
+                                               width: 30; height: 28; radius: 7; color: positionArea.containsMouse ? "#cba6f7" : "#262633"
+                                               Text { anchors.centerIn: parent; text: modelData[0]; color: "#cdd6f4"; font.pixelSize: 14 }
+                                               MouseArea { id: positionArea; anchors.fill: parent; hoverEnabled: true; onClicked: { if (screenCard.monitors.count) screenCard.apply(screenCard.monitors.get(screenCard.monitors.count - 1).name, modelData[1]); } }
+                                           }
+                                       }
+                                   }
+                                   Text { text: screenCard.screenMessage || "Selecciona modo o mueve pantalla en pasos de 100 px"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
+                               }
+
+                               Process {
+                                   id: screenStatus
+                                   command: ["bash", "-c", "hyprctl monitors -j | jq -r '.[] | [.name, (.description // .name), (.x|tostring), (.y|tostring), (.scale|tostring), (.focused|tostring)] | @tsv'"]
+                                   running: false
+                                   stdout: SplitParser {
+                                       splitMarker: "\n"
+                                       onRead: line => {
+                                           const p = line.split("\t");
+                                           if (p.length < 6) return;
+                                           const primary = p[5] === "true" ? p[0] : (screenCard.monitors.count ? screenCard.monitors.get(0).primary : p[0]);
+                                           screenCard.monitors.append({ name: p[0], description: p[1], mx: parseInt(p[2]), my: parseInt(p[3]), mscale: parseFloat(p[4]), primary: primary });
+                                       }
+                                   }
+                                   onExited: screenCard.screenMessage = screenCard.monitors.count ? "Elige modo de pantalla" : "No se detectaron pantallas"
+                               }
+                               Process { id: screenAction; command: ["true"]; running: false; onExited: { screenCard.screenMessage = exitCode === 0 ? "Configuración aplicada" : "No se pudo cambiar pantalla"; screenCard.refresh(); } }
+                           }
+
+                           Rectangle {
+                              id: wifiCard
                              width: parent.width
                              height: wifiDetailsOpen ? 70 + wifiDetails.implicitHeight + 12 : 70
                              radius: 12
@@ -1338,7 +1458,7 @@ PanelWindow {
                                      color: wifiCard.wifiAdvancedOpen ? "#89b4fa" : wifiAdvancedArea.containsMouse ? "#262633" : "#1d1d26"
                                      Text {
                                          anchors.centerIn: parent
-                                         text: wifiCard.wifiAdvancedOpen ? "OCULTAR OPCIONES AVANZADAS" : "OPCIONES AVANZADAS (802.1X / UNIVERSIDAD)"
+                                          text: wifiCard.wifiAdvancedOpen ? "OCULTAR CONFIGURACIÓN EMPRESARIAL" : "CONFIGURACIÓN EMPRESARIAL (802.1X)"
                                          color: wifiCard.wifiAdvancedOpen ? "#11111b" : "#cdd6f4"
                                          font.family: root.fontFamily
                                          font.pixelSize: 9
@@ -1352,18 +1472,27 @@ PanelWindow {
                                      }
                                  }
 
-                                 Column {
-                                     width: parent.width
-                                     spacing: 6
-                                     visible: wifiCard.wifiAdvancedOpen
+                                  Column {
+                                      width: parent.width
+                                      spacing: 6
+                                      visible: wifiCard.wifiAdvancedOpen
 
-                                     Text {
-                                         text: "WPA-ENTERPRISE / 802.1X"
-                                         color: "#9a9aa7"
-                                         font.family: root.fontFamily
-                                         font.pixelSize: 9
-                                         font.bold: true
-                                     }
+                                      Text {
+                                          text: "RED UNIVERSITARIA O DE EMPRESA"
+                                          color: "#9a9aa7"
+                                          font.family: root.fontFamily
+                                          font.pixelSize: 9
+                                          font.bold: true
+                                      }
+
+                                      Text {
+                                          width: parent.width
+                                          text: "Usa esta opción solo si la red pide usuario además de contraseña."
+                                          color: "#6c7086"
+                                          font.family: root.fontFamily
+                                          font.pixelSize: 9
+                                          wrapMode: Text.WordWrap
+                                      }
 
                                      RowLayout {
                                          width: parent.width
