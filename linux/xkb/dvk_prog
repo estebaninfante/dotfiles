@@ -14,7 +14,7 @@ xkb_symbols "basic" {
     key <AD03> { [ ntilde, Ntilde, greater ] }; key <AD04> { [ p, P, quotedbl ] };
     key <AD05> { [ y, Y, at ] }; key <AD06> { [ f, F ] }; key <AD07> { [ g, G, percent ] };
     key <AD08> { [ c, C, dollar ] }; key <AD09> { [ r, R, numbersign ] };
-    key <AD10> { [ l, L, underscore ] }; key <AD11> { [ apostrophe, asciicircum, dead_acute ] };
+    key <AD10> { [ l, L, equal ] }; key <AD11> { [ apostrophe, asciicircum, dead_acute ] };
     key <AD12> { [ ccedilla, asterisk ] }; key <AC01> { [ a, A, parenleft ] };
     key <AC02> { [ o, O, braceleft ] }; key <AC03> { [ e, E, braceright ] };
     key <AC04> { [ u, U, parenright ] }; key <AC05> { [ i, I, bracketleft ] };
@@ -25,7 +25,7 @@ xkb_symbols "basic" {
     key <AB01> { [ minus, underscore, U2192 ] }; key <AB02> { [ q, Q, exclam ] };
     key <AB03> { [ j, J, bar ] }; key <AB04> { [ k, K, ampersand ] };
     key <AB05> { [ x, X, plus ] }; key <AB06> { [ b, B, backslash ] };
-    key <AB07> { [ m, M, minus ] }; key <AB08> { [ w, W, asciicircum ] };
+    key <AB07> { [ m, M, backslash ] }; key <AB08> { [ w, W, asciicircum ] };
     key <AB09> { [ v, V ] }; key <AB10> { [ z, Z ] };
 
     include "level3(ralt_switch)"
