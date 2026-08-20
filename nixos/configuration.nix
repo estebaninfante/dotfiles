@@ -30,11 +30,13 @@
   networking.firewall.enable = true;
   # Si usas tailscale descomenta para no cortar la red mesh:
   # networking.firewall.checkReversePath = "loose";
-  # SSH solo via tailscale0 (la laptop sincroniza ~/developing con rsync)
+  # SSH solo via tailscale0.
   networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 22 ];
   # LAN-Mouse: TCP (handshake) + UDP (input data)
-  networking.firewall.allowedTCPPorts = [ 4242 ];
-  networking.firewall.allowedUDPPorts = [ 4242 ];
+  # Syncthing: TCP/UDP 22000 + descubrimiento local UDP 21027.
+  # Proyecto leia: Next dev server en laptop, puerto 3100.
+  networking.firewall.allowedTCPPorts = [ 4242 22000 3100 ];
+  networking.firewall.allowedUDPPorts = [ 4242 21027 22000 ];
   networking.nameservers = [ "1.1.1.1" "8.8.8.8"];
 
   # ── Localizacion ──────────────────────────────────────────────
@@ -80,6 +82,32 @@
   services.syncthing.enable = true;
   services.syncthing.user = "eztvn";
   services.syncthing.dataDir = "/home/eztvn/.local/state/syncthing";
+  services.syncthing.settings = {
+    devices = {
+      laptop = {
+        id = "CL2PRT2-ZIZVS42-UFZJQL4-ATHFXNT-FA7XYJC-AIWBAVW-HAM52GU-25TMEAL";
+        addresses = [ "tcp://192.168.1.16:22000" "quic://192.168.1.16:22000" ];
+      };
+      desktop = {
+        id = "EMW3K4G-36KQAKL-73EKS3M-53AXVRU-PTCOZFR-5VOXQJL-6YTELPO-R2QHLAE";
+        addresses = [ "tcp://192.168.1.18:22000" "quic://192.168.1.18:22000" ];
+      };
+    };
+    folders.developing = {
+      id = "developing";
+      label = "Developing";
+      path = "/home/eztvn/developing";
+      type = "sendreceive";
+      devices = [ "laptop" "desktop" ];
+      rescanIntervalS = 10;
+      fsWatcherEnabled = true;
+      ignorePerms = true;
+      versioning = {
+        type = "simple";
+        params.keep = "5";
+      };
+    };
+  };
 
   # VPN mesh
   services.tailscale.enable = true;
@@ -98,7 +126,7 @@
     capSysAdmin = false;
   };
 
-  # SSH server (solo tailnet): la laptop sincroniza ~/developing con rsync.
+  # SSH server (solo tailnet), para administracion entre maquinas.
   services.openssh = {
     enable = true;
     settings = {

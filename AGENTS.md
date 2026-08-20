@@ -44,7 +44,7 @@ dotfiles/
 ├── scripts/
 │   ├── setup-nixos.sh   # Un comando en NixOS: clona + hardware-config + rebuild + Hermes
 │   ├── detect-machine.sh# Detecta laptop/desktop por hardware
-│   ├── sync-developing.sh # rsync laptop → desktop (~/developing)
+│   ├── sync-developing.sh # sync manual legacy; Syncthing sincroniza ~/developing
 │   ├── sync.sh          # (legacy)
 │   ├── setup-tts.sh     # TTS
 │   ├── setup-secrets.sh # Configura/verifica claves y secrets post-install
@@ -117,7 +117,7 @@ Config de keyd (Caps Lock como Super, overload leftalt→numpad, capa nav, compo
 |--------|-------------|
 | `detect-machine.sh` | Detecta `laptop`/`desktop` por **hardware** (DMI chassis_type, batería, backlight). NO lee `machine-type`. Usado por `setup-nixos.sh` para no asumir laptop por defecto |
 | `setup-nixos.sh` | **Un comando** en NixOS: clona repo + hardware-config + `nixos-rebuild` + Hermes. Detecta máquina por hardware; valida que el hardware-config coincida con el root UUID de la máquina actual |
-| `sync-developing.sh` | rsync unidireccional laptop → desktop de `~/developing/` |
+| `sync-developing.sh` | sync manual legacy; `~/developing/` usa Syncthing bidireccional |
 | `setup-tts.sh` | Instala/configura TTS |
 | `setup-secrets.sh` | Configura/verifica claves y secrets post-install (SSH host trust, tailscale auth, sunshine creds, gh auth, syncthing, handy Groq, machine-type). Idempotente, no destructivo |
 | `publish.sh` | Commit + push con confirmacion |
@@ -226,20 +226,16 @@ Config NVIDIA en `nixos/hosts/laptop.nix` (`prime.offload`, `powerManagement.ena
 **Systemd units:**
 - `trackpad-dwt.service` → solo laptop (home.nix)
 - `dotfiles-sync.service` + `dotfiles-sync.timer` → ambas máquinas (home.nix)
-- `developing-sync.service` + `developing-sync.timer` → solo laptop (home.nix)
+ - Syncthing `developing` → ambas máquinas (configuration.nix)
 
-### Sync de ~/developing (laptop → desktop)
+### Sync de ~/developing (laptop ↔ desktop)
 
-La laptop es la fuente de verdad de `~/developing/` (proyectos, datos de usuario,
-NO gestionado por dotfiles). `developing-sync.timer` corre rsync unidireccional
-laptop → desktop cada 10 min.
+`~/developing/` usa Syncthing bidireccional en tiempo real. NixOS configura ambos
+dispositivos y carpeta `developing` tipo `sendreceive`, con watcher de filesystem
+y versionado simple de cinco versiones. Puertos LAN: TCP/UDP 22000 y UDP 21027.
 
-- Script: `scripts/sync-developing.sh` (rsync -az --delete a `desktop:~/developing/`)
-- Units: `nixos/home.nix` (`lib.mkIf (machineType == "laptop")`)
-- Desktop NixOS necesita SSH: `services.openssh` + authorized key de la laptop en
-  `nixos/configuration.nix` (firewall: puerto 22 solo en `tailscale0`)
-- Requiere llave SSH de la laptop autorizada en el desktop y `~/.ssh/config`
-  (local, no se commitea) con `Host desktop` → IP tailscale
+`scripts/sync-developing.sh` queda como herramienta manual legacy; no existe timer
+rsync para evitar carreras y borrados unidireccionales.
 
 ### Sync entre máquinas
 

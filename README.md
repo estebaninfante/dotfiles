@@ -33,7 +33,7 @@ dotfiles/
 │   ├── setup-nixos.sh        # fresh install en un comando
 │   ├── detect-machine.sh     # detecta laptop/desktop por hardware
 │   ├── publish.sh            # commit + push
-│   └── sync-developing.sh    # rsync laptop → desktop
+│   └── sync-developing.sh    # sync manual legacy (Syncthing es automatico)
 ├── AGENTS.md
 └── README.md
 ```
@@ -74,6 +74,10 @@ El flake define dos hosts (`#laptop` y `#desktop`). La detección de máquina
 
 Los configs machine-specific (`hyprland.lua`, `hyprpaper-*.conf`, scripts de
 laptop) usan condicionales por machine type. Ver `AGENTS.md` para el detalle.
+
+`~/developing` se sincroniza en tiempo real entre laptop y desktop mediante
+Syncthing, en ambas direcciones. El proyecto Next de la laptop queda accesible
+por `http://192.168.1.16:3100/`.
 
 ## Agregar una nueva configuración
 

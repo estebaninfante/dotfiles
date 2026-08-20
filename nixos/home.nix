@@ -195,27 +195,6 @@ in
     RestartSec=2
   '';
 
-  # ── developing sync ─────────────────────────────────────────
-  # Solo en la laptop (fuente de verdad de ~/developing). El desktop
-  # solo recibe via rsync. Requiere openssh en el desktop (configuration.nix).
-  systemd.user.services.developing-sync = lib.mkIf (machineType == "laptop") {
-    Unit = {
-      Description = "Developing sync (rsync laptop -> desktop)";
-      After = [ "network-online.target" ];
-      Wants = [ "network-online.target" ];
-    };
-    Service = {
-      Type = "oneshot";
-      ExecStart = "${pkgs.rsync}/bin/rsync -az --delete %h/developing/ eztvn@desktop:%h/developing/";
-    };
-  };
-
-  systemd.user.timers.developing-sync = lib.mkIf (machineType == "laptop") {
-    Unit = { Description = "Developing sync periodic"; };
-    Timer = { OnBootSec = "3min"; OnUnitActiveSec = "10min"; };
-    Install = { WantedBy = [ "default.target" ]; };
-  };
-
   # ── keyd: SERVICIO DE SISTEMA (configuration.nix services.keyd) ──
   # keyd corre como root desde boot (GDM/TTY/sesión). El overload (leftalt/enter)
   # y la capa compuesta [control+numpad] garantizan Ctrl+Alt+F<N> (cambio de TTY).
