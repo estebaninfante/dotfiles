@@ -79,6 +79,9 @@ laptop) usan condicionales por machine type. Ver `AGENTS.md` para el detalle.
 Syncthing, en ambas direcciones. El proyecto Next de la laptop queda accesible
 por `http://192.168.1.16:3100/`.
 
+Fuera de casa, Syncthing usa Tailscale. Ambos equipos deben estar encendidos;
+si uno está apagado, cambios quedan pendientes y se aplican al volver a conectar.
+
 ## Agregar una nueva configuración
 
 1. Pon tus archivos en `linux/config/<app>/` o `linux/home/<archivo>`

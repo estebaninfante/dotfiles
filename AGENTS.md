@@ -233,6 +233,9 @@ Config NVIDIA en `nixos/hosts/laptop.nix` (`prime.offload`, `powerManagement.ena
 `~/developing/` usa Syncthing bidireccional en tiempo real. NixOS configura ambos
 dispositivos y carpeta `developing` tipo `sendreceive`, con watcher de filesystem
 y versionado simple de cinco versiones. Puertos LAN: TCP/UDP 22000 y UDP 21027.
+También anuncia IPs Tailscale para sincronizar fuera de casa cuando ambos equipos
+están encendidos. Si un equipo está apagado, Syncthing conserva cambios locales
+y los entrega al reconectar; no existe sincronización mientras equipo está apagado.
 
 `scripts/sync-developing.sh` queda como herramienta manual legacy; no existe timer
 rsync para evitar carreras y borrados unidireccionales.
