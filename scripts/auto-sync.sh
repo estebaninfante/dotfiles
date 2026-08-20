@@ -1,28 +1,44 @@
 #!/usr/bin/env bash
-# Auto-sync dotfiles: pull (ff-only) + commit + push.
+# Auto-sync dotfiles: pull (ff-only) + commit + push + rebuild si hay cambios.
 # Seguro: no pushea secrets, ff-only pull, skip si conflicto.
 set -euo pipefail
 
 DOTFILES="$HOME/dotfiles"
 cd "$DOTFILES"
 
+# ── Detectar machine type ──────────────────────────────────────
+MACHINE=$(cat ~/.config/machine-type 2>/dev/null || hostname -s)
+
 # ── 1. Pull (fast-forward only) ────────────────────────────────
+PULL_OUTPUT=""
 if git remote -v | grep -q .; then
-  if ! git pull --ff-only 2>/dev/null; then
+  PULL_OUTPUT=$(git pull --ff-only 2>&1) || {
     echo "[SKIP] Pull fallo (conflicto?). Resuelve manual."
     exit 0
-  fi
+  }
 fi
 
-# ── 2. Check si hay cambios locales ────────────────────────────
+# ── 2. Detectar si hubo cambios ────────────────────────────────
+HUBO_CAMBIOS=false
+if echo "$PULL_OUTPUT" | grep -qv "^Already up to date"; then
+  HUBO_CAMBIOS=true
+fi
+
+# ── 3. Check si hay cambios locales ────────────────────────────
 if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-  exit 0  # sin cambios, nada que hacer
+  # No hay nada que commitear, pero pudo haber cambios en pull
+  if [ "$HUBO_CAMBIOS" = true ]; then
+    echo "[PULL OK] Cambios recibidos. Rebuild..."
+    sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" 2>&1 | tail -5
+    echo "[REBUILD OK] Aplicado."
+  fi
+  exit 0
 fi
 
-# ── 3. Stage cambios ───────────────────────────────────────────
+# ── 4. Stage cambios ───────────────────────────────────────────
 git add -A
 
-# ── 4. Safety: detectar archivos sensibles en el stage ─────────
+# ── 5. Safety: detectar archivos sensibles en el stage ─────────
 SENSITIVE_PATTERNS=(
   "*.pem" "*.key" "*.env" ".env"
   "*password*" "*token*" "*secret*"
@@ -39,16 +55,24 @@ for pattern in "${SENSITIVE_PATTERNS[@]}"; do
   fi
 done
 
-# ── 5. Commit ─────────────────────────────────────────────────
+# ── 6. Commit ─────────────────────────────────────────────────
 CHANGED=$(git diff --cached --stat | tail -1)
 TIMESTAMP=$(date "+%Y-%m-%d %H:%M")
 git commit -m "auto: $TIMESTAMP | $CHANGED" --no-verify
 
-# ── 6. Push ────────────────────────────────────────────────────
+# ── 7. Push ────────────────────────────────────────────────────
 if git remote -v | grep -q .; then
   if ! git push 2>/dev/null; then
     echo "[WARN] Push fallo. Commit local hecho; resuelve manual."
     exit 0
   fi
-  echo "[OK] Sync completado."
 fi
+
+# ── 8. Rebuild si hubo cambios (locales o remotos) ─────────────
+if [ "$HUBO_CAMBIOS" = true ] || [ -n "$CHANGED" ]; then
+  echo "[REBUILD] Cambios detectados. Rebuilding..."
+  sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" 2>&1 | tail -5
+  echo "[REBUILD OK] Aplicado."
+fi
+
+echo "[OK] Sync completado."

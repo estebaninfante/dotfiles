@@ -27,6 +27,11 @@
         command = "/run/current-system/sw/bin/systemctl";
         options = [ "NOPASSWD" ];
       }
+      # nixos-rebuild switch (auto-sync post-pull)
+      {
+        command = "/run/current-system/sw/bin/nixos-rebuild";
+        options = [ "NOPASSWD" ];
+      }
     ];
   }
 ]
