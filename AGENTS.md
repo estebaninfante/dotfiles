@@ -226,7 +226,7 @@ Config NVIDIA en `nixos/hosts/laptop.nix` (`prime.offload`, `powerManagement.ena
 **Systemd units:**
 - `trackpad-dwt.service` → solo laptop (home.nix)
 - `dotfiles-sync.service` + `dotfiles-sync.timer` → ambas máquinas (home.nix)
- - Syncthing `developing` → ambas máquinas (configuration.nix)
+- Syncthing `developing` → ambas máquinas (configuration.nix)
 
 ### Sync de ~/developing (laptop ↔ desktop)
 
