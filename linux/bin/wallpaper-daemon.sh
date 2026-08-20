@@ -14,7 +14,8 @@ ID="${1:-$(cat "$ID_FILE" 2>/dev/null || echo 3464106929)}"
 SCALING="$(cat "$SCALING_FILE" 2>/dev/null || echo fill)"
 
 if [ -f "$CFG_DIR/machine-type" ] && [ "$(cat "$CFG_DIR/machine-type")" = "desktop" ]; then
-  SCREEN="DP-1"
+  SCREEN="$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.name != "eDP-1") | .name' | head -1)"
+  SCREEN="${SCREEN:-DP-2}"
 else
   SCREEN="eDP-1"
 fi
