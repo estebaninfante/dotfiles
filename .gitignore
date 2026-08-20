@@ -13,3 +13,6 @@ bun.lock
 # Las fuentes de verdad son config.laptop.toml / config.desktop.toml.
 linux/config/lan-mouse/config.toml
 linux/bin/__pycache__/
+
+# gh: hosts.yml contiene tokens de autenticación (NO trackear)
+linux/config/gh/hosts.yml
