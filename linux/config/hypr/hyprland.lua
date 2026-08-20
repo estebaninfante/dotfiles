@@ -96,8 +96,8 @@ hl.config({
             size   = 10,
             passes = 3
         }
-    },
-    })
+    }
+})
 
 hl.layer_rule({
     match = { namespace = "swaync" },

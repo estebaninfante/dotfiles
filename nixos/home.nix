@@ -127,19 +127,19 @@ in
   # Nota: en NixOS los binarios no estan en /usr/bin → rutas del store.
   systemd.user.services.dotfiles-sync = {
     Unit = {
-      Description = "Dotfiles auto-sync (git pull)";
+      Description = "Dotfiles auto-sync (pull + commit + push)";
       After = [ "network-online.target" ];
       Wants = [ "network-online.target" ];
     };
     Service = {
       Type = "oneshot";
-      ExecStart = "${pkgs.git}/bin/git -C %h/dotfiles pull --ff-only";
+      ExecStart = "${repo}/scripts/auto-sync.sh";
     };
   };
 
   systemd.user.timers.dotfiles-sync = {
-    Unit = { Description = "Dotfiles pull at boot"; };
-    Timer = { OnBootSec = "2min"; };
+    Unit = { Description = "Dotfiles sync periodico"; };
+    Timer = { OnBootSec = "2min"; OnUnitActiveSec = "5min"; };
     Install = { WantedBy = [ "default.target" ]; };
   };
 
@@ -284,6 +284,7 @@ in
         "WAYLAND_DISPLAY=wayland-1"
         "XDG_CURRENT_DESKTOP=Hyprland"
         "XDG_RUNTIME_DIR=/run/user/1000"
+        "LINUX_WALLPAPERENGINE=${pkgs.linux-wallpaperengine}/share/linux-wallpaperengine/linux-wallpaperengine"
       ];
       Restart = "on-failure";
       RestartSec = "5";

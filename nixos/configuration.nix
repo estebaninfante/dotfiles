@@ -35,6 +35,7 @@
   # LAN-Mouse: TCP (handshake) + UDP (input data)
   networking.firewall.allowedTCPPorts = [ 4242 ];
   networking.firewall.allowedUDPPorts = [ 4242 ];
+  networking.nameservers = [ "1.1.1.1" "8.8.8.8"];
 
   # ── Localizacion ──────────────────────────────────────────────
   # TODO: ajustar a tu zona horaria / locale si difiere
@@ -45,15 +46,6 @@
 
   # ── Paquetes del sistema ─────────────────────────────────────
   environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage; };
-
-  # Incluir las voces de Piper (share/piper-voices) en el profile del
-  # sistema. environment.pathsToLink es una lista restringida: si no se
-  # lista este prefijo, buildEnv descarta la salida de `piperVoices`
-  # (paquete sin binario, contenido solo en /share/piper-voices).
-  environment.pathsToLink = [ "/share/piper-voices" ];
-
-  # ── Variables de sesion ───────────────────────────────────────
-  environment.sessionVariables.XDG_DATA_HOME = "\${XDG_DATA_HOME:-$HOME/.local/share}";
 
   # ── Servicios base ────────────────────────────────────────────
   services.pipewire = {
@@ -127,43 +119,10 @@
   programs.steam.enable = true;
   programs.gamemode.enable = true;
 
-  # ── nix-ld: binarios pre-compilados FHS (antigravity-ide, etc.) ──
-  programs.nix-ld.enable = true;
-  programs.nix-ld.libraries = with pkgs; [
-    nspr
-    nss
-    nss_latest
-    alsa-lib
-    at-spi2-atk
-    at-spi2-core
-    atk
-    cairo
-    cups
-    dbus
-    expat
-    fontconfig
-    freetype
-    glib
-    gtk3
-    libX11
-    libXcomposite
-    libXdamage
-    libXext
-    libXfixes
-    libXrandr
-    libgbm
-    libglvnd
-    libxkbcommon
-    pango
-    udev
-    xorg.libxcb
-    libdrm
-    mesa
-    libnotify
-    libsecret
-    xorg.libXScrnSaver
-    xorg.xcbutilkeysyms
-  ];
+  # Logitech G923 (volante racing): oversteer para configurar FFB/range.
+  # El driver in-tree hid-logitech-hidpp (kernel 6.3+) soporta G923 Xbox.
+  # Para PS/PC: instalar new-lg4ff manualmente (no disponible como modulo NixOS).
+  services.udev.packages = with pkgs; [ oversteer ];
 
   # ── Login manager: GDM ──
   services.xserver.enable = true;
