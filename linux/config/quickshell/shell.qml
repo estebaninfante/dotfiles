@@ -28,7 +28,7 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened
+    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened
 
     implicitHeight: expanded ? expandedHeight : hotEdge
     exclusiveZone: implicitHeight
@@ -203,6 +203,7 @@ PanelWindow {
             anchors.right: parent.right
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
 
             Rectangle {
                 id: menuBtn
@@ -230,6 +231,32 @@ PanelWindow {
                     hoverEnabled: true
                     anchors.fill: parent
                     onClicked: widgetMenu.opened = !widgetMenu.opened
+                }
+            }
+
+            Rectangle {
+                id: powerBtn
+                width: 26
+                height: 19
+                radius: 8
+                color: powerMenu.opened ? "#e06c75" : powerBtnArea.containsMouse ? "white" : "#141414"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\uf011"
+                    color: powerMenu.opened ? "#11111b" : powerBtnArea.containsMouse ? "black" : "white"
+                    font.family: root.fontFamily
+                    font.pixelSize: 11
+                }
+
+                MouseArea {
+                    id: powerBtnArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: {
+                        powerMenu.pendingAction = "";
+                        powerMenu.opened = !powerMenu.opened;
+                    }
                 }
             }
         }
@@ -282,6 +309,162 @@ PanelWindow {
                         }
                     }
                 }
+            }
+        }
+
+        PopupWindow {
+            id: powerMenu
+            implicitWidth: 280
+            implicitHeight: powerCol.implicitHeight + 32
+            visible: opened
+            grabFocus: true
+            color: "transparent"
+            property bool opened: false
+            property string pendingAction: ""
+
+            anchor {
+                window: root
+                rect.x: root.width - powerMenu.implicitWidth - 12
+                rect.y: root.height + 8
+            }
+
+            Column {
+                id: powerCol
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 8
+
+                Text {
+                    text: "ENERGÍA"
+                    color: "#9a9aa7"
+                    font.family: root.fontFamily
+                    font.pixelSize: 10
+                    font.letterSpacing: 3
+                    font.bold: true
+                }
+
+                Text {
+                    width: parent.width
+                    text: powerMenu.pendingAction ? "¿Confirmar: " + powerMenu.pendingAction + "?" : "Selecciona una acción"
+                    color: "white"
+                    font.family: root.fontFamily
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                }
+
+                Repeater {
+                    model: ["SUSPENDER", "CERRAR SESIÓN", "REINICIAR", "APAGAR"]
+                    delegate: Rectangle {
+                        required property string modelData
+                        width: powerCol.width
+                        height: 34
+                        radius: 8
+                        color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#e06c75" : "#cba6f7") : "#262633"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: powerActionArea.containsMouse ? "#11111b" : "#cdd6f4"
+                            font.family: root.fontFamily
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            id: powerActionArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                powerMenu.pendingAction = modelData;
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: 6
+                    visible: powerMenu.pendingAction !== ""
+
+                    Rectangle {
+                        width: (parent.width - 6) / 2
+                        height: 34
+                        radius: 8
+                        color: cancelPowerArea.containsMouse ? "#454554" : "#262633"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "CANCELAR"
+                            color: "#cdd6f4"
+                            font.family: root.fontFamily
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
+                        MouseArea {
+                            id: cancelPowerArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: powerMenu.pendingAction = ""
+                        }
+                    }
+
+                    Rectangle {
+                        width: (parent.width - 6) / 2
+                        height: 34
+                        radius: 8
+                        color: confirmPowerArea.containsMouse ? "#e06c75" : "#55232a"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "CONFIRMAR"
+                            color: "white"
+                            font.family: root.fontFamily
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
+                        MouseArea {
+                            id: confirmPowerArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                powerAction.command = powerMenu.pendingAction === "SUSPENDER" ? ["systemctl", "suspend"] : powerMenu.pendingAction === "CERRAR SESIÓN" ? ["hyprctl", "dispatch", "exit"] : powerMenu.pendingAction === "REINICIAR" ? ["systemctl", "reboot"] : ["systemctl", "poweroff"];
+                                powerMenu.opened = false;
+                                powerMenu.pendingAction = "";
+                                powerAction.running = true;
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: "#30303b"
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 26
+                    radius: 7
+                    color: closePowerArea.containsMouse ? "#262633" : "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "CERRAR MENÚ"
+                        color: "#8a8a99"
+                        font.family: root.fontFamily
+                        font.pixelSize: 9
+                    }
+                    MouseArea {
+                        id: closePowerArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: powerMenu.opened = false
+                    }
+                }
+            }
+
+            Process {
+                id: powerAction
+                command: ["true"]
+                running: false
             }
         }
 
