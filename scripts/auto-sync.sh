@@ -1,13 +1,28 @@
 #!/usr/bin/env bash
-# Auto-sync dotfiles: pull (ff-only) + commit + push + rebuild si hay cambios.
+# Auto-sync dotfiles: pull (ff-only) + commit + push + rebuild + gc.
 # Seguro: no pushea secrets, ff-only pull, skip si conflicto.
 set -euo pipefail
 
 DOTFILES="$HOME/dotfiles"
 cd "$DOTFILES"
 
+GENERATIONS_TO_KEEP=5
+
 # ── Detectar machine type ──────────────────────────────────────
 MACHINE=$(cat ~/.config/machine-type 2>/dev/null || hostname -s)
+
+# ── Rebuild + cleanup ──────────────────────────────────────────
+do_rebuild() {
+  echo "[REBUILD] Aplicando..."
+  if sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" 2>&1 | tail -5; then
+    echo "[GC] Manteniendo últimas $GENERATIONS_TO_KEEP generaciones..."
+    sudo nix-env --profile /nix/var/nix/profiles/system --delete-generations +$GENERATIONS_TO_KEEP 2>/dev/null || true
+    sudo nix-collect-garbage -d 2>&1 | tail -2
+    echo "[REBUILD OK] Aplicado y limpio."
+  else
+    echo "[REBUILD FAIL] Revisa manualmente."
+  fi
+}
 
 # ── 1. Pull (fast-forward only) ────────────────────────────────
 PULL_OUTPUT=""
@@ -26,11 +41,9 @@ fi
 
 # ── 3. Check si hay cambios locales ────────────────────────────
 if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-  # No hay nada que commitear, pero pudo haber cambios en pull
   if [ "$HUBO_CAMBIOS" = true ]; then
-    echo "[PULL OK] Cambios recibidos. Rebuild..."
-    sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" 2>&1 | tail -5
-    echo "[REBUILD OK] Aplicado."
+    echo "[PULL OK] Cambios recibidos."
+    do_rebuild
   fi
   exit 0
 fi
@@ -49,7 +62,6 @@ for pattern in "${SENSITIVE_PATTERNS[@]}"; do
   # shellcheck disable=SC2086
   if git diff --cached --name-only | grep -qi $pattern; then
     echo "[SKIP] Archivo sensible detectado en stage: $pattern"
-    echo "[SKIP] No se hace commit. Revisa manualmente."
     git reset HEAD -- . 2>/dev/null
     exit 1
   fi
@@ -68,11 +80,9 @@ if git remote -v | grep -q .; then
   fi
 fi
 
-# ── 8. Rebuild si hubo cambios (locales o remotos) ─────────────
+# ── 8. Rebuild + GC ───────────────────────────────────────────
 if [ "$HUBO_CAMBIOS" = true ] || [ -n "$CHANGED" ]; then
-  echo "[REBUILD] Cambios detectados. Rebuilding..."
-  sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" 2>&1 | tail -5
-  echo "[REBUILD OK] Aplicado."
+  do_rebuild
 fi
 
 echo "[OK] Sync completado."
