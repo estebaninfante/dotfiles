@@ -46,7 +46,7 @@ if machine == "laptop" then
     hl.monitor({ output = "eDP-1",     mode = "2880x1800@120", position = "0x0",      scale = 2 })
     hl.monitor({ output = "HDMI-A-1",  mode = "2560x1440@144", position = "1440x-270", scale = 1 })
 elseif machine == "desktop" then
-    hl.monitor({ output = "DP-1",  mode = "2560x1440@144", position = "0x0", scale = 1 })
+    hl.monitor({ output = "DP-2",  mode = "2560x1440@144", position = "0x0", scale = 1 })
 end
 
 -- ========================
@@ -223,8 +223,8 @@ end
 -- AUTO-START (optimized order)
 -- ========================
 hl.on("hyprland.start", function()
-    -- 1. Wallpaper immediately (first visual priority)
-    hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-" .. machine .. ".conf")
+    -- 1. Wallpaper immediately (via systemd user service: linux-wallpaperengine)
+    -- Wallpaper Engine starts automatically via graphical-session.target
 
     -- 2. Bar and UI
     hl.exec_cmd("quickshell")

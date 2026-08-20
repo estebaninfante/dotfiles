@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
-# Cambia el wallpaper animado de Wallpaper Engine SIN hacer rebuild.
-#   (sin args)                : lista wallpapers de workshop descargados
-#   wallpaper-switch.sh <id|path> : pon ese wallpaper al instante
-#   wallpaper-switch.sh reset     : vuelve al wallpaper por defecto (home.nix)
+# Cambia el wallpaper animado de Wallpaper Engine de forma PERMANENTE.
+# Escribe ~/.config/wallpaper-current (+ scaling) y reinicia el servicio.
+#   (sin args)                 : lista wallpapers de workshop descargados
+#   wallpaper-switch.sh <id>   : pon ese wallpaper (persistente)
+#   wallpaper-switch.sh scaling <mode> : cambia scaling (stretch|fit|fill|default)
+#   wallpaper-switch.sh reset  : vuelve al wallpaper por defecto (home.nix)
 # Los ids de workshop viven en steamapps/workshop/content/431960/<id>/
-# Tambien acepta una ruta local a una carpeta de proyecto.
 set -euo pipefail
-
 WORKSHOP="$HOME/.steam/steam/steamapps/workshop/content/431960"
-ASSETS="$HOME/.local/share/Steam/steamapps/common/wallpaper_engine/assets"
-BIN="$(command -v linux-wallpaperengine)"
+CFG_DIR="$HOME/.config"
+ID_FILE="$CFG_DIR/wallpaper-current"
+SCALING_FILE="$CFG_DIR/wallpaper-scaling"
 SERVICE="linux-wallpaperengine.service"
-# Pantalla principal por maquina (coincide con home.nix / hyprland.lua)
-machine="$(cat "$HOME/.config/machine-type" 2>/dev/null || echo laptop)"
-SCREEN="${SCREEN:-$( [ "$machine" = "desktop" ] && echo DP-1 || echo eDP-1 )}"
-SCALING="${SCALING:-fill}"
-
+DEFAULT_ID="2981249186"
 list_wallpapers() {
   local dirs
   mapfile -t dirs < <(find "$WORKSHOP" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
@@ -31,29 +28,33 @@ list_wallpapers() {
     printf "%s  %s\n" "$id" "$name"
   done
 }
-
-run_manual() { # $1 = id o path de wallpaper
-  systemctl --user stop "$SERVICE" 2>/dev/null || true
-  pkill -f "linux-wallpaperengine.*--bg" 2>/dev/null || true
-  sleep 0.5
-  setsid nohup "$BIN" \
-    --assets-dir "$ASSETS" \
-    --screen-root "$SCREEN" \
-    --scaling "$SCALING" \
-    --bg "$1" </dev/null >/tmp/wallpaper-switch.log 2>&1 &
-  disown
-  echo "Wallpaper activo: $1 ($SCREEN)"
+restart_service() {
+  systemctl --user restart "$SERVICE" 2>/dev/null || true
 }
-
 case "${1:-}" in
   ""|-l|list)
     list_wallpapers
-    echo "Uso: wallpaper-switch.sh [<id-steam>|<path-local>|reset]"
+    echo "Uso: wallpaper-switch.sh [<id-steam>|scaling <mode>|reset]"
+    ;;
+  scaling)
+    mode="${2:-}"
+    case "$mode" in
+      stretch|fit|fill|default)
+        echo "$mode" > "$SCALING_FILE"
+        restart_service
+        echo "Scaling: $mode (persistente)"
+        ;;
+      *)
+        echo "Modes: stretch|fit|fill|default" >&2
+        exit 1
+        ;;
+    esac
     ;;
   reset)
-    pkill -f "linux-wallpaperengine.*--bg" 2>/dev/null || true
-    systemctl --user start "$SERVICE" 2>/dev/null || true
-    echo "Volviendo al wallpaper por defecto (home.nix)."
+    echo "$DEFAULT_ID" > "$ID_FILE"
+    echo "fill" > "$SCALING_FILE"
+    restart_service
+    echo "Wallpaper por defecto restaurado ($DEFAULT_ID)."
     ;;
   *)
     if [ ! -d "$WORKSHOP/$1" ] && [ ! -d "$1" ]; then
@@ -62,6 +63,8 @@ case "${1:-}" in
       list_wallpapers >&2
       exit 1
     fi
-    run_manual "$1"
+    echo "$1" > "$ID_FILE"
+    restart_service
+    echo "Wallpaper activo (persistente): $1"
     ;;
 esac

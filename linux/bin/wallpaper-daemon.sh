@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Daemon de wallpaper animado (Wallpaper Engine nativo).
+# Lee la config desde ~/.config/wallpaper-current y ~/.config/wallpaper-scaling.
+# Asi el wallpaper elegido con `wallpaper-switch.sh` persiste entre sesiones.
+set -euo pipefail
+
+CFG_DIR="$HOME/.config"
+ID_FILE="$CFG_DIR/wallpaper-current"
+SCALING_FILE="$CFG_DIR/wallpaper-scaling"
+ASSETS="$HOME/.local/share/Steam/steamapps/common/wallpaper_engine/assets"
+BIN="${LINUX_WALLPAPERENGINE:-$(command -v linux-wallpaperengine 2>/dev/null || echo "")}"
+if [ -z "$BIN" ] || [ ! -x "$BIN" ]; then
+  echo "ERROR: linux-wallpaperengine not found. Set LINUX_WALLPAPERENGINE env var." >&2
+  exit 1
+fi
+
+ID="${1:-$(cat "$ID_FILE" 2>/dev/null || echo 2981249186)}"
+SCALING="$(cat "$SCALING_FILE" 2>/dev/null || echo fill)"
+
+if [ -f "$CFG_DIR/machine-type" ] && [ "$(cat "$CFG_DIR/machine-type")" = "desktop" ]; then
+  SCREEN="DP-2"
+else
+  SCREEN="eDP-1"
+fi
+
+exec "$BIN" \
+  --assets-dir "$ASSETS" \
+  --screen-root "$SCREEN" \
+  --scaling "$SCALING" \
+  --bg "$ID"

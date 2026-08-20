@@ -21,7 +21,7 @@ let
   configDirs = [
     "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
-    "quickshell"
+    "quickshell" "tmux"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -36,7 +36,8 @@ let
     "power-mode.sh" "toggle-lid.sh" "agent.sh" "send-with-taildrop" "tv-toggle.sh"
     "tv-mode.sh" "rofi-file-search.sh" "rofi-context-menu.sh" "reiniciar.sh"
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
-    "super-hold-monitor.sh" "wallpaper-switch.sh"
+    "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
+    "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -73,6 +74,10 @@ in
     {
       ".config/lan-mouse/lan-mouse.pem" = { source = link (cfg + "/lan-mouse/lan-mouse.pem"); force = true; };
       ".config/lan-mouse/config.toml" = { source = link (cfg + "/lan-mouse/config.${machineType}.toml"); force = true; };
+    }
+    # ── Tmux: .desktop para lanzarlo desde rofi (drun) ─────────
+    {
+      ".local/share/applications/tmux.desktop" = { source = link (cfg + "/applications/tmux.desktop"); force = true; };
     }
     (lib.genAttrs (map configDirName configDirs) (d: {
       source = link (cfg + "/" + lib.removePrefix ".config/" d);
@@ -150,7 +155,22 @@ in
     };
     Service = {
       Type = "simple";
-      ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse daemon";
+      ExecStartPre = pkgs.writeShellScript "lan-mouse-wait" ''
+        # Wait for Wayland socket
+        SOCKET="/run/user/%U/wayland-1"
+        for i in $(seq 1 30); do
+          [ -S "$SOCKET" ] && break
+          sleep 0.5
+        done
+        # Wait for compositor protocols to initialize
+        sleep 3
+      '';
+      ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse --capture-backend layer-shell daemon";
+      ExecStopPost = pkgs.writeShellScript "lan-mouse-cleanup" ''
+        # Kill any lingering capture sessions if lan-mouse crashed
+        sleep 1
+        pkill -f "lan-mouse" 2>/dev/null || true
+      '';
       Restart = "always";
       RestartSec = "5";
       Environment = [
@@ -235,32 +255,42 @@ in
 
   # ── linux-wallpaperengine: wallpapers animados de Steam ────────
   # Requiere Steam + Wallpaper Engine instalados.
-  # Assets: ~/.local/share/Steam/steamapps/common/wallpaper_engine/assets
-  # wallpaperId: Steam Workshop ID o path local a la carpeta del wallpaper.
-  services.linux-wallpaperengine = {
-    enable = true;
-    assetsPath = "${config.home.homeDirectory}/.local/share/Steam/steamapps/common/wallpaper_engine/assets";
-    wallpapers = [
-      {
-        monitor = if machineType == "laptop" then "eDP-1" else "DP-1";
-        wallpaperId = "3464106929";
-      }
-    ];
-  };
+  # La config viva esta en ~/.config/wallpaper-current (id) y
+  # ~/.config/wallpaper-scaling. `wallpaper-switch.sh` las escribe y
+  # reinicia el servicio → persistente entre sesiones.
 
   # Inyectar variables de entorno Wayland que systemd user no hereda de Hyprland
   systemd.user.services.linux-wallpaperengine = {
-    Unit.After = [ "graphical-session.target" ];
+    Unit = {
+      Description = "Implementation of Wallpaper Engine on Linux";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+      StartLimitIntervalSec = "30";
+      StartLimitBurst = "3";
+    };
     Service = {
+      Type = "simple";
+      ExecStartPre = pkgs.writeShellScript "wallpaper-wait" ''
+        SOCKET="/run/user/%U/wayland-1"
+        for i in $(seq 1 30); do
+          [ -S "$SOCKET" ] && break
+          sleep 0.5
+        done
+        sleep 2
+      '';
+      ExecStart = "${config.home.homeDirectory}/.local/bin/wallpaper-daemon.sh";
       Environment = [
         "XDG_SESSION_TYPE=wayland"
         "WAYLAND_DISPLAY=wayland-1"
         "XDG_CURRENT_DESKTOP=Hyprland"
         "XDG_RUNTIME_DIR=/run/user/1000"
+        "LINUX_WALLPAPERENGINE=${pkgs.linux-wallpaperengine}/share/linux-wallpaperengine/linux-wallpaperengine"
       ];
+      Restart = "on-failure";
       RestartSec = "5";
-      StartLimitIntervalSec = "30";
-      StartLimitBurst = "3";
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
     };
   };
 
