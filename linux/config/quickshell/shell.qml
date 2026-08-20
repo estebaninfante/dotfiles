@@ -318,10 +318,12 @@ PanelWindow {
               }
 
               function refreshAudio() {
-                  if (activeSection === "audio" && !audioStatus.running) {
+                  if (activeSection === "dispositivos" && !audioStatus.running) {
                       audioCard.sinks.clear();
                       audioCard.sources.clear();
+                      audioCard.cameras.clear();
                       audioStatus.running = true;
+                      cameraStatus.running = true;
                   }
               }
 
@@ -386,7 +388,7 @@ PanelWindow {
                              height: 24
 
                             Text {
-                                text: "SISTEMA"
+                                 text: "SISTEMA  /  " + widgetMenu.activeSection.toUpperCase()
                                 color: "#9a9aa7"
                                 font.family: "JetBrainsMono Nerd Font"
                                  font.pixelSize: 10
@@ -422,15 +424,6 @@ PanelWindow {
                          }
                          }
 
-                         Text {
-                             width: parent.width
-                             text: "SISTEMA  /  " + widgetMenu.activeSection.toUpperCase()
-                             color: "#6c7086"
-                             font.family: root.fontFamily
-                             font.pixelSize: 9
-                             font.letterSpacing: 1.5
-                         }
-
                          Flickable {
                              width: parent.width
                               height: 36
@@ -443,7 +436,7 @@ PanelWindow {
                                  spacing: 6
 
                                  Repeater {
-                                     model: ["CONEXIONES", "MONITOREO", "PANTALLAS", "AUDIO"]
+                                     model: ["CONEXIONES", "MONITOREO", "PANTALLAS", "DISPOSITIVOS"]
 
                                      delegate: Rectangle {
                                          required property string modelData
@@ -672,12 +665,13 @@ PanelWindow {
                               color: "#16161c"
                               border.color: "#26262e"
                               border.width: 1
-                              visible: widgetMenu.activeSection === "audio"
+                              visible: widgetMenu.activeSection === "dispositivos"
 
                               property bool audioDetailsOpen: true
                               property string audioMessage: ""
                               property var sinks: ListModel {}
                               property var sources: ListModel {}
+                              property var cameras: ListModel {}
 
                               function parseAudio(line) {
                                   const parts = line.split("|");
@@ -688,6 +682,13 @@ PanelWindow {
                                       sinks.append(item);
                                   else if (parts[0] === "source")
                                       sources.append(item);
+                              }
+
+                              function parseCamera(line) {
+                                  const parts = line.split("|");
+                                  if (parts.length < 2)
+                                      return;
+                                  cameras.append({ device: parts[0], name: parts[1] || parts[0] });
                               }
 
                               function selectDevice(id, label) {
@@ -716,14 +717,14 @@ PanelWindow {
                                       spacing: 2
                                       Layout.fillWidth: true
                                       Text {
-                                          text: "AUDIO"
+                                          text: "DISPOSITIVOS"
                                           color: "#9a9aa7"
                                           font.family: root.fontFamily
                                           font.pixelSize: 9
                                           font.letterSpacing: 1.5
                                       }
                                       Text {
-                                          text: audioCard.sinks.count + " salidas · " + audioCard.sources.count + " entradas"
+                                          text: audioCard.sinks.count + " salidas · " + audioCard.sources.count + " entradas · " + audioCard.cameras.count + " cámaras"
                                           color: "white"
                                           font.family: root.fontFamily
                                           font.pixelSize: 14
@@ -753,6 +754,38 @@ PanelWindow {
                                   anchors.rightMargin: 14
                                   spacing: 8
                                   visible: audioCard.audioDetailsOpen
+
+                                  Text {
+                                      text: "CÁMARAS"
+                                      color: "#9a9aa7"
+                                      font.family: root.fontFamily
+                                      font.pixelSize: 9
+                                      font.bold: true
+                                  }
+
+                                  Repeater {
+                                      model: audioCard.cameras
+                                      delegate: Rectangle {
+                                          required property string device
+                                          required property string name
+                                          width: audioDetails.width
+                                          height: 34
+                                          radius: 8
+                                          color: "#1d1d26"
+                                          Text {
+                                              anchors.left: parent.left
+                                              anchors.leftMargin: 10
+                                              anchors.right: parent.right
+                                              anchors.rightMargin: 10
+                                              anchors.verticalCenter: parent.verticalCenter
+                                              text: "●  " + name + " (" + device + ")"
+                                              color: "white"
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 10
+                                              elide: Text.ElideRight
+                                          }
+                                      }
+                                  }
 
                                   Text {
                                       text: "SALIDAS"
@@ -843,13 +876,13 @@ PanelWindow {
 
                               Process {
                                   id: audioStatus
-                                  command: ["bash", "-c", "wpctl status | awk '/Sinks:/{s=\"sink\"; next} /Sources:/{s=\"source\"; next} /Filters:/{s=\"\"} s && match($0,/\\*?[[:space:]]*[0-9]+\\./){prefix=substr($0,RSTART,RLENGTH-1); star=(prefix ~ /\\*/ ? \"*\" : \"\"); gsub(/[^0-9]/,\"\",prefix); line=substr($0,RSTART+RLENGTH); sub(/^[[:space:]]+/,\"\",line); print s \"|\" prefix \"|\" line \"|\" star}'"]
+                                  command: ["bash", "-c", "wpctl status | awk '/^Audio$/{audio=1} /^Video$/{audio=0; s=\"\"} /Sinks:/ && audio{s=\"sink\"; next} /Sources:/ && audio{s=\"source\"; next} /Filters:/{s=\"\"; next} audio && s && match($0,/\\*?[[:space:]]*[0-9]+\\./){prefix=substr($0,RSTART,RLENGTH-1); star=(prefix ~ /\\*/ ? \"*\" : \"\"); gsub(/[^0-9]/,\"\",prefix); line=substr($0,RSTART+RLENGTH); sub(/^[[:space:]]+/,\"\",line); print s \"|\" prefix \"|\" line \"|\" star}'"]
                                   running: false
                                   stdout: SplitParser {
                                       splitMarker: "\n"
                                       onRead: line => audioCard.parseAudio(line)
                                   }
-                                  onExited: audioCard.audioMessage = audioStatus.exitCode === 0 ? "Selecciona dispositivo predeterminado" : "wpctl no disponible"
+                                  onExited: audioCard.audioMessage = "Selecciona dispositivo predeterminado"
                               }
 
                               Process {
@@ -859,6 +892,16 @@ PanelWindow {
                                   onExited: {
                                       audioCard.audioMessage = exitCode === 0 ? "Dispositivo predeterminado actualizado" : "No se pudo seleccionar dispositivo";
                                       audioStatus.running = true;
+                                  }
+                              }
+
+                              Process {
+                                  id: cameraStatus
+                                  command: ["bash", "-c", "for d in /dev/video*; do [ -e \"$d\" ] || continue; name=$(udevadm info -q property -n \"$d\" 2>/dev/null | awk -F= '/^ID_V4L_PRODUCT=/{print $2; exit}'); printf '%s|%s\\n' \"$d\" \"${name:-$d}\"; done"]
+                                  running: false
+                                  stdout: SplitParser {
+                                      splitMarker: "\n"
+                                      onRead: line => audioCard.parseCamera(line)
                                   }
                               }
                           }
@@ -882,8 +925,17 @@ PanelWindow {
                             property bool wifiDetailsOpen: false
                             property string wifiMessage: ""
                             property string selectedSsid: ""
-                            property string wifiPassword: ""
-                            property var wifiNetworks: ListModel {}
+                             property string wifiPassword: ""
+                             property bool wifiAdvancedOpen: false
+                             property string wifiIdentity: ""
+                             property string wifiAnonymousIdentity: ""
+                             property string wifiEap: "peap"
+                             property string wifiPhase2: "mschapv2"
+                             property string wifiCaCert: ""
+                             property string wifiClientCert: ""
+                             property string wifiClientKey: ""
+                             property string wifiDomain: ""
+                             property var wifiNetworks: ListModel {}
 
                             function refreshNetworks() {
                                 wifiCard.wifiMessage = "Buscando redes...";
@@ -892,7 +944,7 @@ PanelWindow {
                                 wifiScan.running = true;
                             }
 
-                            function parseNetwork(line) {
+                             function parseNetwork(line) {
                                 const match = line.trim().match(/^(.*):([0-9]+):(.*)$/);
                                 if (!match || !match[1])
                                     return;
@@ -907,8 +959,31 @@ PanelWindow {
                                     ssid: ssid,
                                     signal: signal,
                                     security: security || "Abierta"
-                                });
-                            }
+                                 });
+                             }
+
+                             function connectCommand() {
+                                 let args = ["nmcli", "dev", "wifi", "connect", wifiCard.selectedSsid];
+                                 if (wifiCard.wifiPassword)
+                                     args.push("password", wifiCard.wifiPassword);
+                                 if (wifiCard.wifiAdvancedOpen && wifiCard.wifiIdentity) {
+                                     args.push("wifi-sec.key-mgmt", "wpa-eap");
+                                     args.push("802-1x.identity", wifiCard.wifiIdentity);
+                                     args.push("802-1x.eap", wifiCard.wifiEap || "peap");
+                                     args.push("802-1x.phase2-auth", wifiCard.wifiPhase2 || "mschapv2");
+                                     if (wifiCard.wifiAnonymousIdentity)
+                                         args.push("802-1x.anonymous-identity", wifiCard.wifiAnonymousIdentity);
+                                     if (wifiCard.wifiCaCert)
+                                         args.push("802-1x.ca-cert", wifiCard.wifiCaCert);
+                                     if (wifiCard.wifiClientCert)
+                                         args.push("802-1x.client-cert", wifiCard.wifiClientCert);
+                                     if (wifiCard.wifiClientKey)
+                                         args.push("802-1x.private-key", wifiCard.wifiClientKey);
+                                     if (wifiCard.wifiDomain)
+                                         args.push("802-1x.domain", wifiCard.wifiDomain);
+                                 }
+                                 return args;
+                             }
 
                             RowLayout {
                                 anchors.left: parent.left
@@ -1066,7 +1141,129 @@ PanelWindow {
                                     }
                                 }
 
-                                ListView {
+                                 Rectangle {
+                                     width: parent.width
+                                     height: 32
+                                     radius: 8
+                                     color: wifiCard.wifiAdvancedOpen ? "#89b4fa" : wifiAdvancedArea.containsMouse ? "#262633" : "#1d1d26"
+                                     Text {
+                                         anchors.centerIn: parent
+                                         text: wifiCard.wifiAdvancedOpen ? "OCULTAR OPCIONES AVANZADAS" : "OPCIONES AVANZADAS (802.1X / UNIVERSIDAD)"
+                                         color: wifiCard.wifiAdvancedOpen ? "#11111b" : "#cdd6f4"
+                                         font.family: root.fontFamily
+                                         font.pixelSize: 9
+                                         font.bold: true
+                                     }
+                                     MouseArea {
+                                         id: wifiAdvancedArea
+                                         anchors.fill: parent
+                                         hoverEnabled: true
+                                         onClicked: wifiCard.wifiAdvancedOpen = !wifiCard.wifiAdvancedOpen
+                                     }
+                                 }
+
+                                 Column {
+                                     width: parent.width
+                                     spacing: 6
+                                     visible: wifiCard.wifiAdvancedOpen
+
+                                     Text {
+                                         text: "WPA-ENTERPRISE / 802.1X"
+                                         color: "#9a9aa7"
+                                         font.family: root.fontFamily
+                                         font.pixelSize: 9
+                                         font.bold: true
+                                     }
+
+                                     RowLayout {
+                                         width: parent.width
+                                         spacing: 6
+                                         TextInput {
+                                             Layout.fillWidth: true
+                                             height: 32
+                                             color: "white"
+                                             text: wifiCard.wifiIdentity
+                                             font.family: root.fontFamily
+                                             font.pixelSize: 10
+                                             padding: 7
+                                             onTextChanged: wifiCard.wifiIdentity = text
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Usuario / identidad"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                         }
+                                         TextInput {
+                                             Layout.fillWidth: true
+                                             height: 32
+                                             color: "white"
+                                             text: wifiCard.wifiEap
+                                             font.family: root.fontFamily
+                                             font.pixelSize: 10
+                                             padding: 7
+                                             onTextChanged: wifiCard.wifiEap = text
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "EAP: peap / tls"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                         }
+                                     }
+
+                                     RowLayout {
+                                         width: parent.width
+                                         spacing: 6
+                                         TextInput {
+                                             Layout.fillWidth: true
+                                             height: 32
+                                             color: "white"
+                                             text: wifiCard.wifiPhase2
+                                             font.family: root.fontFamily
+                                             font.pixelSize: 10
+                                             padding: 7
+                                             onTextChanged: wifiCard.wifiPhase2 = text
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Fase 2: mschapv2"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                         }
+                                         TextInput {
+                                             Layout.fillWidth: true
+                                             height: 32
+                                             color: "white"
+                                             text: wifiCard.wifiAnonymousIdentity
+                                             font.family: root.fontFamily
+                                             font.pixelSize: 10
+                                             padding: 7
+                                             onTextChanged: wifiCard.wifiAnonymousIdentity = text
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Identidad anónima (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                         }
+                                     }
+
+                                     RowLayout {
+                                         width: parent.width
+                                         spacing: 6
+                                         TextInput {
+                                             Layout.fillWidth: true
+                                             height: 32
+                                             color: "white"
+                                             text: wifiCard.wifiCaCert
+                                             font.family: root.fontFamily
+                                             font.pixelSize: 10
+                                             padding: 7
+                                             onTextChanged: wifiCard.wifiCaCert = text
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado CA (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                         }
+                                         TextInput {
+                                             Layout.fillWidth: true
+                                             height: 32
+                                             color: "white"
+                                             text: wifiCard.wifiDomain
+                                             font.family: root.fontFamily
+                                             font.pixelSize: 10
+                                             padding: 7
+                                             onTextChanged: wifiCard.wifiDomain = text
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                         }
+                                     }
+                                 }
+
+                                 ListView {
                                     width: parent.width
                                      height: Math.min(contentHeight, 190)
                                     visible: count > 0
@@ -1145,7 +1342,7 @@ PanelWindow {
                                         onClicked: {
                                             if (!wifiCard.selectedSsid)
                                                 return;
-                                            wifiConnect.command = wifiCard.wifiPassword ? ["nmcli", "dev", "wifi", "connect", wifiCard.selectedSsid, "password", wifiCard.wifiPassword] : ["nmcli", "dev", "wifi", "connect", wifiCard.selectedSsid];
+                                             wifiConnect.command = wifiCard.connectCommand();
                                             wifiCard.wifiMessage = "Conectando...";
                                             wifiConnect.running = false;
                                             wifiConnect.running = true;
@@ -1423,7 +1620,7 @@ PanelWindow {
                                     width: parent.width
                                     spacing: 4
                                     Repeater {
-                                        model: ["PAIR", "TRUST", "CONNECT"]
+                                         model: ["PAIR", "TRUST", "CONNECT", "DISCONNECT", "FORGET"]
                                         delegate: Rectangle {
                                             required property string modelData
                                             Layout.fillWidth: true
@@ -1446,10 +1643,10 @@ PanelWindow {
                                                     if (!bluetoothCard.selectedMac)
                                                         return;
                                                      bluetoothAction.routeAudio = modelData === "CONNECT";
-                                                     bluetoothAction.command = bluetoothAction.routeAudio ? ["bash", "-c", "bluetoothctl connect \"" + bluetoothCard.selectedMac + "\" && sleep 1"] : ["bluetoothctl", modelData.toLowerCase(), bluetoothCard.selectedMac];
+                                                     bluetoothAction.command = bluetoothAction.routeAudio ? ["bash", "-c", "bluetoothctl connect \"" + bluetoothCard.selectedMac + "\" && sleep 1"] : ["bluetoothctl", modelData === "FORGET" ? "remove" : modelData.toLowerCase(), bluetoothCard.selectedMac];
                                                     bluetoothCard.btMessage = modelData.toLowerCase() + "...";
-                                                    bluetoothAction.running = false;
-                                                    bluetoothAction.running = true;
+                                                     bluetoothAction.running = false;
+                                                     bluetoothAction.running = true;
                                                 }
                                             }
                                         }
