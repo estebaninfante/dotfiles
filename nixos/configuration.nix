@@ -23,6 +23,7 @@
 
   # ── Red ───────────────────────────────────────────────────────
   networking.networkmanager.enable = true;
+  hardware.bluetooth.enable = true;
   # Hostname por maquina (definido en hosts/*.nix)
   networking.hostName = lib.mkDefault "nixos";
 

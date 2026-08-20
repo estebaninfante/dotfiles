@@ -54,6 +54,7 @@ with pkgs; [  # ── Shell & terminal ──
   swappy
   grim
   networkmanagerapplet
+  bluez                  # bluetoothctl para quickshell
   slurp
   imv
   jq

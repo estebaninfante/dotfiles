@@ -551,6 +551,643 @@ PanelWindow {
                                 }
                             }
                         }
+
+                        Rectangle {
+                            id: wifiCard
+                            width: parent.width
+                            height: wifiDetailsOpen ? 70 + wifiDetails.implicitHeight + 12 : 70
+                            radius: 12
+                            color: "#16161c"
+                            border.color: "#26262e"
+                            border.width: 1
+
+                            property bool wifiOn: false
+                            property string network: "Sin conexión"
+                            property bool wifiDetailsOpen: false
+                            property string wifiMessage: ""
+                            property string selectedSsid: ""
+                            property string wifiPassword: ""
+                            property var wifiNetworks: ListModel {}
+
+                            function refreshNetworks() {
+                                wifiCard.wifiMessage = "Buscando redes...";
+                                wifiCard.wifiNetworks.clear();
+                                wifiScan.running = false;
+                                wifiScan.running = true;
+                            }
+
+                            function parseNetwork(line) {
+                                const match = line.trim().match(/^(.*):([0-9]+):(.*)$/);
+                                if (!match || !match[1])
+                                    return;
+                                const ssid = match[1].replace(/\\\\:/g, ":").replace(/\\\\\\\\/g, "\\\\");
+                                const signal = match[2];
+                                const security = match[3];
+                                for (let i = 0; i < wifiCard.wifiNetworks.count; i++) {
+                                    if (wifiCard.wifiNetworks.get(i).ssid === ssid)
+                                        return;
+                                }
+                                wifiCard.wifiNetworks.append({
+                                    ssid: ssid,
+                                    signal: signal,
+                                    security: security || "Abierta"
+                                });
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                anchors.topMargin: 10
+                                anchors.bottomMargin: 10
+                                spacing: 10
+
+                                Text {
+                                    text: wifiCard.wifiOn ? "\uf1eb" : "\uf127"
+                                    color: wifiCard.wifiOn ? "#89b4fa" : "#6c7086"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 21
+                                    Layout.preferredWidth: 28
+                                }
+
+                                Column {
+                                    spacing: 2
+
+                                    Text {
+                                        text: "WI-FI"
+                                        color: "#9a9aa7"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 9
+                                        font.letterSpacing: 1.5
+                                    }
+
+                                    Text {
+                                        text: wifiCard.wifiOn ? wifiCard.network : "Desactivado"
+                                        color: "white"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 15
+                                        elide: Text.ElideRight
+                                        width: 155
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: wifiCard.wifiDetailsOpen = !wifiCard.wifiDetailsOpen
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                Rectangle {
+                                    width: 48
+                                    height: 25
+                                    radius: 8
+                                    color: wifiToggleArea.containsMouse ? "#89b4fa" : "#262633"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: wifiCard.wifiOn ? "ON" : "OFF"
+                                        color: wifiToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                    }
+
+                                    MouseArea {
+                                        id: wifiToggleArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            wifiToggle.running = false;
+                                            wifiToggle.running = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                z: -1
+                                onClicked: wifiCard.wifiDetailsOpen = !wifiCard.wifiDetailsOpen
+                            }
+
+                            Column {
+                                id: wifiDetails
+                                anchors.top: parent.top
+                                anchors.topMargin: 75
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                spacing: 7
+                                visible: wifiCard.wifiDetailsOpen
+
+                                RowLayout {
+                                    width: parent.width
+                                    spacing: 6
+
+                                    TextInput {
+                                        id: wifiPasswordInput
+                                        Layout.fillWidth: true
+                                        height: 28
+                                        color: "white"
+                                        text: wifiCard.wifiPassword
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 11
+                                        echoMode: TextInput.Password
+                                        padding: 7
+                                        selectByMouse: true
+                                        clip: true
+                                        onTextChanged: wifiCard.wifiPassword = text
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            z: -1
+                                            radius: 6
+                                            color: "#0d0d12"
+                                            border.color: "#30303b"
+                                        }
+                                        Text {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 7
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: "Contraseña"
+                                            color: "#6c7086"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 11
+                                            visible: !wifiPasswordInput.text
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 74
+                                        height: 28
+                                        radius: 6
+                                        color: wifiRefreshArea.containsMouse ? "#89b4fa" : "#262633"
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "ESCANEAR"
+                                            color: wifiRefreshArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 9
+                                            font.bold: true
+                                        }
+                                        MouseArea {
+                                            id: wifiRefreshArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: wifiCard.refreshNetworks()
+                                        }
+                                    }
+                                }
+
+                                ListView {
+                                    width: parent.width
+                                    height: Math.min(contentHeight, 132)
+                                    visible: count > 0
+                                    clip: true
+                                    model: wifiCard.wifiNetworks
+                                    spacing: 3
+                                    delegate: Rectangle {
+                                        required property string ssid
+                                        required property string signal
+                                        required property string security
+                                        width: wifiDetails.width
+                                        height: 27
+                                        radius: 5
+                                        color: wifiNetworkArea.containsMouse ? "#252532" : "#1d1d26"
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 8
+                                            anchors.rightMargin: 8
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: ssid + "  " + signal + "%"
+                                                color: "white"
+                                                font.family: root.fontFamily
+                                                font.pixelSize: 10
+                                                elide: Text.ElideRight
+                                            }
+                                            Text {
+                                                text: security
+                                                color: "#9a9aa7"
+                                                font.family: root.fontFamily
+                                                font.pixelSize: 9
+                                            }
+                                        }
+                                        MouseArea {
+                                            id: wifiNetworkArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: {
+                                                wifiCard.selectedSsid = ssid;
+                                                wifiCard.wifiMessage = ssid + " seleccionado";
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    text: wifiCard.wifiNetworks.count ? wifiCard.wifiMessage : (wifiCard.wifiMessage || "Sin redes encontradas")
+                                    color: "#9a9aa7"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                    visible: text !== ""
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 28
+                                    radius: 6
+                                    color: wifiConnectArea.containsMouse ? "#89b4fa" : "#262633"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "CONECTAR" + (wifiCard.selectedSsid ? " · " + wifiCard.selectedSsid : "")
+                                        color: wifiConnectArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        width: parent.width - 12
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+                                    MouseArea {
+                                        id: wifiConnectArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (!wifiCard.selectedSsid)
+                                                return;
+                                            wifiConnect.command = wifiCard.wifiPassword ? ["nmcli", "dev", "wifi", "connect", wifiCard.selectedSsid, "password", wifiCard.wifiPassword] : ["nmcli", "dev", "wifi", "connect", wifiCard.selectedSsid];
+                                            wifiCard.wifiMessage = "Conectando...";
+                                            wifiConnect.running = false;
+                                            wifiConnect.running = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            Process {
+                                id: wifiScan
+                                command: ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "yes"]
+                                running: false
+                                stdout: SplitParser {
+                                    splitMarker: "\n"
+                                    onRead: line => wifiCard.parseNetwork(line)
+                                }
+                                onExited: wifiCard.wifiMessage = wifiCard.wifiNetworks.count ? "Selecciona una red" : "nmcli no disponible o sin redes"
+                            }
+
+                            Process {
+                                id: wifiConnect
+                                command: ["nmcli", "dev", "wifi", "connect", ""]
+                                running: false
+                                onExited: {
+                                    wifiCard.wifiMessage = exitCode === 0 ? "Conectado" : "No se pudo conectar";
+                                    wifiStatus.running = false;
+                                    wifiStatus.running = true;
+                                }
+                            }
+
+                            Process {
+                                id: wifiStatus
+                                command: ["bash", "-c", "enabled=$(nmcli -t -f WIFI g | head -n1); network=$(nmcli -t -f active,ssid dev wifi | awk -F: '$1==\"yes\"{sub(/^yes:/,\"\"); print; exit}'); printf '%s|%s' \"$enabled\" \"${network:-Sin conexión}\""]
+                                running: true
+
+                                stdout: StdioCollector {
+                                    onStreamFinished: {
+                                        const parts = this.text.trim().split("|");
+                                        wifiCard.wifiOn = parts[0] === "enabled";
+                                        wifiCard.network = parts[1] || "Sin conexión";
+                                    }
+                                }
+                            }
+
+                            Process {
+                                id: wifiToggle
+                                command: ["nmcli", "radio", "wifi", "toggle"]
+                                running: false
+
+                                onExited: {
+                                    wifiStatus.running = false;
+                                    wifiStatus.running = true;
+                                }
+                            }
+
+                            Timer {
+                                interval: 5000
+                                running: true
+                                repeat: true
+                                onTriggered: wifiStatus.running = true
+                            }
+                        }
+
+                        Rectangle {
+                            id: bluetoothCard
+                            width: parent.width
+                            height: btDetailsOpen ? 70 + btDetails.implicitHeight + 12 : 70
+                            radius: 12
+                            color: "#16161c"
+                            border.color: "#26262e"
+                            border.width: 1
+
+                            property bool btOn: false
+                            property string stateText: "No disponible"
+                            property bool btDetailsOpen: false
+                            property string btMessage: ""
+                            property string selectedMac: ""
+                            property var btDevices: ListModel {}
+
+                            function refreshDevices() {
+                                btMessage = "Buscando dispositivos...";
+                                btDevices.clear();
+                                btScan.running = false;
+                                btScan.running = true;
+                            }
+
+                            function parseDevice(line) {
+                                const match = line.trim().match(/^Device\\s+([^ ]+)\\s+(.+)$/);
+                                if (!match)
+                                    return;
+                                for (let i = 0; i < btDevices.count; i++) {
+                                    if (btDevices.get(i).mac === match[1])
+                                        return;
+                                }
+                                btDevices.append({
+                                    mac: match[1],
+                                    name: match[2]
+                                });
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                anchors.topMargin: 10
+                                anchors.bottomMargin: 10
+                                spacing: 10
+
+                                Text {
+                                    text: "\uf294"
+                                    color: bluetoothCard.btOn ? "#89dceb" : "#6c7086"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 21
+                                    Layout.preferredWidth: 28
+                                }
+
+                                Column {
+                                    spacing: 2
+
+                                    Text {
+                                        text: "BLUETOOTH"
+                                        color: "#9a9aa7"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 9
+                                        font.letterSpacing: 1.5
+                                    }
+
+                                    Text {
+                                        text: bluetoothCard.stateText
+                                        color: "white"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 15
+                                        elide: Text.ElideRight
+                                        width: 155
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: bluetoothCard.btDetailsOpen = !bluetoothCard.btDetailsOpen
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                Rectangle {
+                                    width: 48
+                                    height: 25
+                                    radius: 8
+                                    color: btToggleArea.containsMouse ? "#89dceb" : "#262633"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: bluetoothCard.btOn ? "ON" : "OFF"
+                                        color: btToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                    }
+
+                                    MouseArea {
+                                        id: btToggleArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            bluetoothToggle.running = false;
+                                            bluetoothToggle.running = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                z: -1
+                                onClicked: bluetoothCard.btDetailsOpen = !bluetoothCard.btDetailsOpen
+                            }
+
+                            Column {
+                                id: btDetails
+                                anchors.top: parent.top
+                                anchors.topMargin: 75
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                spacing: 7
+                                visible: bluetoothCard.btDetailsOpen
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 28
+                                    radius: 6
+                                    color: btRefreshArea.containsMouse ? "#89dceb" : "#262633"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "ESCANEAR BLUETOOTH"
+                                        color: btRefreshArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                    }
+                                    MouseArea {
+                                        id: btRefreshArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: bluetoothCard.refreshDevices()
+                                    }
+                                }
+
+                                ListView {
+                                    width: parent.width
+                                    height: Math.min(contentHeight, 132)
+                                    visible: count > 0
+                                    clip: true
+                                    model: bluetoothCard.btDevices
+                                    spacing: 3
+                                    delegate: Rectangle {
+                                        required property string mac
+                                        required property string name
+                                        width: btDetails.width
+                                        height: 48
+                                        radius: 5
+                                        color: btDeviceArea.containsMouse ? "#252532" : "#1d1d26"
+                                        Column {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 2
+                                            Text {
+                                                text: name
+                                                color: "white"
+                                                font.family: root.fontFamily
+                                                font.pixelSize: 10
+                                                elide: Text.ElideRight
+                                                width: btDetails.width - 16
+                                            }
+                                            Text {
+                                                text: mac
+                                                color: "#9a9aa7"
+                                                font.family: root.fontFamily
+                                                font.pixelSize: 9
+                                            }
+                                        }
+                                        MouseArea {
+                                            id: btDeviceArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: {
+                                                bluetoothCard.selectedMac = mac;
+                                                bluetoothCard.btMessage = name + " seleccionado";
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    width: parent.width
+                                    spacing: 4
+                                    Repeater {
+                                        model: ["PAIR", "TRUST", "CONNECT"]
+                                        delegate: Rectangle {
+                                            required property string modelData
+                                            Layout.fillWidth: true
+                                            height: 28
+                                            radius: 6
+                                            color: btActionArea.containsMouse ? "#89dceb" : "#262633"
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData
+                                                color: btActionArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                                font.family: root.fontFamily
+                                                font.pixelSize: 9
+                                                font.bold: true
+                                            }
+                                            MouseArea {
+                                                id: btActionArea
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                onClicked: {
+                                                    if (!bluetoothCard.selectedMac)
+                                                        return;
+                                                    bluetoothAction.command = ["bluetoothctl", modelData.toLowerCase(), bluetoothCard.selectedMac];
+                                                    bluetoothCard.btMessage = modelData.toLowerCase() + "...";
+                                                    bluetoothAction.running = false;
+                                                    bluetoothAction.running = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    text: bluetoothCard.btDevices.count ? bluetoothCard.btMessage : (bluetoothCard.btMessage || "Sin dispositivos encontrados")
+                                    color: "#9a9aa7"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                    visible: text !== ""
+                                }
+                            }
+
+                            Process {
+                                id: btScan
+                                command: ["bluetoothctl", "--timeout", "8", "scan", "on"]
+                                running: false
+                                onExited: {
+                                    btList.running = false;
+                                    btList.running = true;
+                                }
+                            }
+
+                            Process {
+                                id: btList
+                                command: ["bluetoothctl", "devices"]
+                                running: false
+                                stdout: SplitParser {
+                                    splitMarker: "\n"
+                                    onRead: line => bluetoothCard.parseDevice(line)
+                                }
+                                onExited: bluetoothCard.btMessage = bluetoothCard.btDevices.count ? "Selecciona un dispositivo" : "bluetoothctl no disponible o sin dispositivos"
+                            }
+
+                            Process {
+                                id: bluetoothAction
+                                command: ["bluetoothctl", "connect", ""]
+                                running: false
+                                onExited: {
+                                    bluetoothCard.btMessage = exitCode === 0 ? "Acción completada" : "Acción fallida";
+                                    bluetoothStatus.running = false;
+                                    bluetoothStatus.running = true;
+                                }
+                            }
+
+                            Process {
+                                id: bluetoothStatus
+                                command: ["bash", "-c", "bluetoothctl show 2>/dev/null | awk -F': ' '/Powered:/{print $2; exit}'"]
+                                running: true
+
+                                stdout: StdioCollector {
+                                    onStreamFinished: {
+                                        const powered = this.text.trim() === "yes";
+                                        bluetoothCard.btOn = powered;
+                                        bluetoothCard.stateText = powered ? "Activado" : "Desactivado";
+                                    }
+                                }
+                            }
+
+                            Process {
+                                id: bluetoothToggle
+                                command: ["bash", "-c", "powered=$(bluetoothctl show 2>/dev/null | awk -F': ' '/Powered:/{print $2; exit}'); bluetoothctl power $([[ \"$powered\" == \"yes\" ]] && echo off || echo on)"]
+                                running: false
+
+                                onExited: {
+                                    bluetoothStatus.running = false;
+                                    bluetoothStatus.running = true;
+                                }
+                            }
+
+                            Timer {
+                                interval: 5000
+                                running: true
+                                repeat: true
+                                onTriggered: bluetoothStatus.running = true
+                            }
+                        }
                     }
                 }
             }
