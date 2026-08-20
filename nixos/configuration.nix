@@ -19,7 +19,7 @@
 
   # ── Kernel / hardware base ────────────────────────────────────
   hardware.graphics.enable = true;
-  boot.kernelModules = [ "uhid" ]; # Sunshine: emulacion de DS5 controller
+  boot.kernelModules = [ "uhid" "hid-logitech-new" ]; # Sunshine + Logitech G923 FFB
 
   # ── Red ───────────────────────────────────────────────────────
   networking.networkmanager.enable = true;
@@ -120,8 +120,8 @@
   programs.gamemode.enable = true;
 
   # Logitech G923 (volante racing): oversteer para configurar FFB/range.
-  # El driver in-tree hid-logitech-hidpp (kernel 6.3+) soporta G923 Xbox.
-  # Para PS/PC: instalar new-lg4ff manualmente (no disponible como modulo NixOS).
+  # G923 PS/PC necesita new-lg4ff; hid-generic solo expone ejes, sin FFB.
+  boot.extraModulePackages = [ config.boot.kernelPackages."new-lg4ff" ];
   services.udev.packages = with pkgs; [ oversteer ];
 
   # ── Login manager: GDM ──
