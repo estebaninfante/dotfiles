@@ -303,7 +303,12 @@ PanelWindow {
              property bool opened: false
              property string activeSection: "conexiones"
 
-              function refreshConnections() {
+             onVisibleChanged: {
+                 if (!visible)
+                     opened = false;
+             }
+
+               function refreshConnections() {
                  if (activeSection !== "conexiones")
                      return;
                  if (wifiCard.wifiOn && !wifiScan.running)
