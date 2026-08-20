@@ -4,8 +4,8 @@ import QtQuick.Layouts
 Rectangle {
     id: cCard
     width: parent.width
-    height: 70
-    radius: 12
+    height: 84
+    radius: 14
     color: "#16161c"
     border.color: "#26262e"
     border.width: 1
@@ -26,10 +26,10 @@ Rectangle {
     Item {
         id: cInner
         anchors.fill: parent
-        anchors.leftMargin: 14
-        anchors.rightMargin: 14
-        anchors.topMargin: 12
-        anchors.bottomMargin: 8
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        anchors.topMargin: 14
+        anchors.bottomMargin: 10
 
         RowLayout {
             id: cTop
@@ -42,7 +42,7 @@ Rectangle {
                 text: cCard.cIcon
                 color: cCard.cAccent
                 font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 20
+                font.pixelSize: 23
                 Layout.preferredWidth: 28
             }
 
@@ -61,7 +61,7 @@ Rectangle {
                     text: cCard.cBig
                     color: "white"
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 18
+                    font.pixelSize: 21
                 }
             }
 
@@ -85,7 +85,7 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: cTop.bottom
-            anchors.topMargin: 10
+            anchors.topMargin: 12
             mv: cCard.cVal / 100
             mColor: cCard.cAccent
         }

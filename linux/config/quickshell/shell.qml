@@ -307,7 +307,14 @@ PanelWindow {
 
              onOpenedChanged: {
                  if (opened)
-                     refreshConnections();
+                     initialRefresh.restart();
+             }
+
+             Timer {
+                 id: initialRefresh
+                 interval: 700
+                 repeat: false
+                 onTriggered: widgetMenu.refreshConnections()
              }
 
             anchor {
@@ -766,7 +773,7 @@ PanelWindow {
                                     TextInput {
                                         id: wifiPasswordInput
                                         Layout.fillWidth: true
-                                        height: 28
+                                         height: 34
                                         color: "white"
                                         text: wifiCard.wifiPassword
                                         font.family: root.fontFamily
@@ -779,7 +786,7 @@ PanelWindow {
                                         Rectangle {
                                             anchors.fill: parent
                                             z: -1
-                                            radius: 6
+                                             radius: 8
                                             color: "#0d0d12"
                                             border.color: "#30303b"
                                         }
@@ -796,9 +803,9 @@ PanelWindow {
                                     }
 
                                     Rectangle {
-                                        width: 74
-                                        height: 28
-                                        radius: 6
+                                         width: 96
+                                         height: 34
+                                         radius: 8
                                         color: wifiRefreshArea.containsMouse ? "#89b4fa" : "#262633"
                                         Text {
                                             anchors.centerIn: parent
@@ -819,7 +826,7 @@ PanelWindow {
 
                                 ListView {
                                     width: parent.width
-                                    height: Math.min(contentHeight, 132)
+                                     height: Math.min(contentHeight, 190)
                                     visible: count > 0
                                     clip: true
                                     model: wifiCard.wifiNetworks
@@ -829,8 +836,8 @@ PanelWindow {
                                         required property string signal
                                         required property string security
                                         width: wifiDetails.width
-                                        height: 27
-                                        radius: 5
+                                         height: 34
+                                         radius: 7
                                         color: wifiNetworkArea.containsMouse ? "#252532" : "#1d1d26"
                                         RowLayout {
                                             anchors.fill: parent
@@ -841,7 +848,7 @@ PanelWindow {
                                                 text: ssid + "  " + signal + "%"
                                                 color: "white"
                                                 font.family: root.fontFamily
-                                                font.pixelSize: 10
+                                                 font.pixelSize: 11
                                                 elide: Text.ElideRight
                                             }
                                             Text {
@@ -865,7 +872,7 @@ PanelWindow {
 
                                 Text {
                                     width: parent.width
-                                    text: wifiCard.wifiNetworks.count ? wifiCard.wifiMessage : (wifiCard.wifiMessage || "Sin redes encontradas")
+                                    text: wifiCard.wifiNetworks.count ? wifiCard.wifiMessage : (wifiCard.wifiMessage || "Buscando redes...")
                                     color: "#9a9aa7"
                                     font.family: root.fontFamily
                                     font.pixelSize: 10
@@ -953,22 +960,29 @@ PanelWindow {
                             }
 
                             Timer {
-                                interval: 5000
+                                interval: 20000
                                 running: true
                                 repeat: true
-                                onTriggered: wifiStatus.running = true
+                                onTriggered: {
+                                    wifiStatus.running = true;
+                                    widgetMenu.refreshConnections();
+                                }
                             }
                         }
 
-                        Rectangle {
-                            id: bluetoothCard
+                         Rectangle {
+                             id: bluetoothCard
                             width: parent.width
                             height: btDetailsOpen ? 70 + btDetails.implicitHeight + 12 : 70
                             radius: 12
                             color: "#16161c"
                             border.color: "#26262e"
-                            border.width: 1
-                            visible: widgetMenu.activeSection === "conexiones"
+                             border.width: 1
+                             visible: widgetMenu.activeSection === "conexiones"
+
+                             Behavior on height {
+                                 NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                             }
 
                             property bool btOn: false
                             property string stateText: "No disponible"
@@ -1005,14 +1019,14 @@ PanelWindow {
                                 anchors.leftMargin: 14
                                 anchors.rightMargin: 14
                                 anchors.topMargin: 10
-                                height: 50
+                                 height: 58
                                 spacing: 10
 
                                 Text {
                                     text: "\uf294"
                                     color: bluetoothCard.btOn ? "#89dceb" : "#6c7086"
                                     font.family: root.fontFamily
-                                    font.pixelSize: 21
+                                     font.pixelSize: 24
                                     Layout.preferredWidth: 28
                                 }
 
@@ -1031,9 +1045,9 @@ PanelWindow {
                                         text: bluetoothCard.stateText
                                         color: "white"
                                         font.family: root.fontFamily
-                                        font.pixelSize: 15
+                                         font.pixelSize: 17
                                         elide: Text.ElideRight
-                                        width: 155
+                                         width: 245
                                         MouseArea {
                                             anchors.fill: parent
                                             onClicked: bluetoothCard.btDetailsOpen = !bluetoothCard.btDetailsOpen
@@ -1047,8 +1061,8 @@ PanelWindow {
 
                                 Rectangle {
                                     width: 48
-                                    height: 25
-                                    radius: 8
+                                    height: 30
+                                    radius: 9
                                     color: btToggleArea.containsMouse ? "#89dceb" : "#262633"
 
                                     Text {
@@ -1074,7 +1088,7 @@ PanelWindow {
 
                             MouseArea {
                                 anchors.fill: parent
-                                anchors.bottomMargin: parent.height - 70
+                                anchors.bottomMargin: parent.height - 78
                                 anchors.rightMargin: 62
                                 z: 1
                                 onClicked: bluetoothCard.btDetailsOpen = !bluetoothCard.btDetailsOpen
@@ -1083,18 +1097,23 @@ PanelWindow {
                             Column {
                                 id: btDetails
                                 anchors.top: parent.top
-                                anchors.topMargin: 75
+                                anchors.topMargin: 84
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.leftMargin: 14
                                 anchors.rightMargin: 14
-                                spacing: 7
+                                spacing: 9
                                 visible: bluetoothCard.btDetailsOpen
+                                opacity: bluetoothCard.btDetailsOpen ? 1 : 0
+
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                                }
 
                                 Rectangle {
                                     width: parent.width
-                                         height: 34
-                                    radius: 6
+                                     height: 34
+                                     radius: 8
                                     color: btRefreshArea.containsMouse ? "#89dceb" : "#262633"
                                     Text {
                                         anchors.centerIn: parent
@@ -1123,8 +1142,8 @@ PanelWindow {
                                         required property string mac
                                         required property string name
                                         width: btDetails.width
-                                        height: 48
-                                        radius: 5
+                                         height: 54
+                                         radius: 7
                                         color: btDeviceArea.containsMouse ? "#252532" : "#1d1d26"
                                         Column {
                                             anchors.left: parent.left
@@ -1135,7 +1154,7 @@ PanelWindow {
                                                 text: name
                                                 color: "white"
                                                 font.family: root.fontFamily
-                                                font.pixelSize: 10
+                                                 font.pixelSize: 11
                                                 elide: Text.ElideRight
                                                 width: btDetails.width - 16
                                             }
@@ -1196,7 +1215,7 @@ PanelWindow {
 
                                 Text {
                                     width: parent.width
-                                    text: bluetoothCard.btDevices.count ? bluetoothCard.btMessage : (bluetoothCard.btMessage || "Sin dispositivos encontrados")
+                                    text: bluetoothCard.btDevices.count ? bluetoothCard.btMessage : (bluetoothCard.btMessage || "Buscando dispositivos...")
                                     color: "#9a9aa7"
                                     font.family: root.fontFamily
                                     font.pixelSize: 10
@@ -1263,10 +1282,13 @@ PanelWindow {
                             }
 
                             Timer {
-                                interval: 5000
+                                interval: 20000
                                 running: true
                                 repeat: true
-                                onTriggered: bluetoothStatus.running = true
+                                onTriggered: {
+                                    bluetoothStatus.running = true;
+                                    widgetMenu.refreshConnections();
+                                }
                             }
                         }
                     }
