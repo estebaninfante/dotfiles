@@ -500,21 +500,27 @@ PanelWindow {
                       bluetoothCard.refreshDevices();
               }
 
-              function refreshAudio() {
+               function refreshAudio() {
                   if (activeSection === "dispositivos" && !audioStatus.running) {
                       audioCard.sinks.clear();
                       audioCard.sources.clear();
                       audioCard.cameras.clear();
                       audioStatus.running = true;
                       cameraStatus.running = true;
-                  }
-              }
+                   }
+               }
+
+               function refreshScreens() {
+                   if (activeSection === "pantallas" && !screenStatus.running)
+                       screenStatus.running = true;
+               }
 
               onOpenedChanged: {
-                  if (opened) {
-                      initialRefresh.restart();
-                      refreshAudio();
-                  }
+                   if (opened) {
+                       initialRefresh.restart();
+                       refreshAudio();
+                       refreshScreens();
+                   }
               }
 
              Timer {
@@ -843,7 +849,7 @@ PanelWindow {
                           Rectangle {
                               id: audioCard
                               width: parent.width
-                              height: audioDetailsOpen ? 70 + audioDetails.implicitHeight + 12 : 70
+                              height: audioDetailsOpen ? audioDetails.y + audioDetails.implicitHeight + 12 : 70
                               radius: 12
                               color: "#16161c"
                               border.color: "#26262e"
