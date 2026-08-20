@@ -293,6 +293,13 @@ PanelWindow {
             grabFocus: true
             color: "transparent"
 
+             Behavior on implicitHeight {
+                 NumberAnimation {
+                     duration: 260
+                     easing.type: Easing.OutCubic
+                 }
+             }
+
              property bool opened: false
              property string activeSection: "conexiones"
 
@@ -439,9 +446,10 @@ PanelWindow {
                             cIcon: "\uf03b9"
                             cAccent: "#cba6f7"
                             cTitle: "RAM"
-                            cBig: "--%"
-                            cSub: "---"
-                             cardOn: widgetMenu.opened && widgetMenu.activeSection === "monitoreo"
+                             cBig: "--%"
+                             cSub: "---"
+                              cardOn: widgetMenu.opened && widgetMenu.activeSection === "monitoreo"
+                             visible: widgetMenu.activeSection === "monitoreo"
 
                             property double usedGiB: 0
                             property double totGiB: 0
@@ -999,7 +1007,7 @@ PanelWindow {
                             }
 
                             function parseDevice(line) {
-                                const match = line.trim().match(/^Device\\s+([^ ]+)\\s+(.+)$/);
+                                 const match = line.trim().match(/^Device\s+([^ ]+)\s+(.+)$/);
                                 if (!match)
                                     return;
                                 for (let i = 0; i < btDevices.count; i++) {
