@@ -37,7 +37,7 @@ let
     "tv-mode.sh" "rofi-file-search.sh" "rofi-context-menu.sh" "reiniciar.sh"
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
-    "grid-move" "Hermes" "speak" "leia.sh"
+    "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -165,7 +165,12 @@ in
         # Wait for compositor protocols to initialize
         sleep 3
       '';
-      ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse daemon";
+      ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse --capture-backend layer-shell daemon";
+      ExecStopPost = pkgs.writeShellScript "lan-mouse-cleanup" ''
+        # Kill any lingering capture sessions if lan-mouse crashed
+        sleep 1
+        pkill -f "lan-mouse" 2>/dev/null || true
+      '';
       Restart = "always";
       RestartSec = "5";
       Environment = [
