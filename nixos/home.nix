@@ -68,14 +68,12 @@ in
     {
       ".config/machine-type".text = machineType;
     }
-    # ── Lan-mouse: PEM (shared, symlink) + config.toml (machine-specific, copy)
-    # PEM is read-only shared between machines → symlink to repo.
-    # config.toml is writable (lan-mouse saves state: fingerprints etc.)
-    # → .text creates a copy; lan-mouse can modify it without dirtying repo.
-    # On rebuild, config.toml is restored from repo (source of truth).
+    # ── Lan-mouse: PEM (shared) + config.toml (machine-specific)
+    # Both are symlinks to the repo. config.toml has authorized_fingerprints
+    # set once during pairing; lan-mouse saves runtime state elsewhere.
     {
       ".config/lan-mouse/lan-mouse.pem" = { source = link (cfg + "/lan-mouse/lan-mouse.pem"); force = true; };
-      ".config/lan-mouse/config.toml" = { text = builtins.readFile (cfg + "/lan-mouse/config.${machineType}.toml"); force = true; };
+      ".config/lan-mouse/config.toml" = { source = link (cfg + "/lan-mouse/config.${machineType}.toml"); force = true; };
     }
     # ── Tmux: .desktop para lanzarlo desde rofi (drun) ─────────
     {
