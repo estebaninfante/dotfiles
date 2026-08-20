@@ -68,13 +68,6 @@ in
     {
       ".config/machine-type".text = machineType;
     }
-    # ── Lan-mouse: PEM (shared) + config.toml (machine-specific)
-    # Both are symlinks to the repo. config.toml has authorized_fingerprints
-    # set once during pairing; lan-mouse saves runtime state elsewhere.
-    {
-      ".config/lan-mouse/lan-mouse.pem" = { source = link (cfg + "/lan-mouse/lan-mouse.pem"); force = true; };
-      ".config/lan-mouse/config.toml" = { source = link (cfg + "/lan-mouse/config.${machineType}.toml"); force = true; };
-    }
     # ── Tmux: .desktop para lanzarlo desde rofi (drun) ─────────
     {
       ".local/share/applications/tmux.desktop" = { source = link (cfg + "/applications/tmux.desktop"); force = true; };
@@ -112,6 +105,20 @@ in
       ".cargo/env" = { text = ""; };
     }
   ];
+
+  # Lan-mouse mutates config.toml while saving state. Copy both files instead
+  # of symlinking them, and recover from stale directory symlinks.
+  home.activation.lanMouseConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    lan_mouse_dir="$HOME/.config/lan-mouse"
+    if [ -L "$lan_mouse_dir" ]; then
+      rm "$lan_mouse_dir"
+    fi
+    mkdir -p "$lan_mouse_dir"
+    ${pkgs.coreutils}/bin/install -m 0644 \
+      "${cfg}/lan-mouse/lan-mouse.pem" "$lan_mouse_dir/lan-mouse.pem"
+    ${pkgs.coreutils}/bin/install -m 0644 \
+      "${cfg}/lan-mouse/config.${machineType}.toml" "$lan_mouse_dir/config.toml"
+  '';
 
   # ── Git credential helper ─────────────────────────────────────
   # El .gitconfig del repo apunta a /usr/bin/gh (ruta no-store).
