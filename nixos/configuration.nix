@@ -176,7 +176,7 @@
   services.keyd = {
     enable = true;
     keyboards.default = {
-      ids = [ "*" ];
+      ids = [ "*" "m:beef:dead" ];
       settings = {
         main = {
           # Caps Lock como Super (keyd, no XKB): aplica en TTY/GDM.
@@ -188,6 +188,7 @@
           enter = "overload(nav, enter)";
           # Chording: space+AltGr (rightalt) = escape, sin sacrificar space.
           "space+rightalt" = "escape";
+          middlemouse = "f7";
         };
         nav = {
           a = "left";
