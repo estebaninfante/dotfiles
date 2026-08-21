@@ -171,15 +171,8 @@ PanelWindow {
                 text: "RAM"
                 color: "white"
                 font.family: root.fontFamily
-                font.pixelSize: 10
+                font.pixelSize: 12
                 font.bold: true
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                z: 2
-                hoverEnabled: true
-                onClicked: ramMenu.opened = !ramMenu.opened
             }
 
             Text {
@@ -210,6 +203,12 @@ PanelWindow {
                 repeat: true
                 onTriggered: runMem.running = true
             }
+        }
+        MouseArea {
+            anchors.fill: ramRow
+            z: 2
+            hoverEnabled: true
+            onClicked: ramMenu.opened = !ramMenu.opened
         }
         Row {
             id: batteryRow
@@ -558,6 +557,77 @@ PanelWindow {
                 id: powerAction
                 command: ["true"]
                 running: false
+            }
+        }
+
+        PopupWindow {
+            id: ramMenu
+            implicitWidth: 300
+            implicitHeight: 300
+            visible: opened
+            grabFocus: true
+            color: "transparent"
+            property bool opened: false
+            property var processes: ListModel {}
+            anchor { window: root; rect.x: root.width - ramMenu.implicitWidth - 190; rect.y: root.height + 8 }
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: 14
+                color: "#e60d0d12"
+                border.color: "#383847"
+                border.width: 1
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 8
+                    RowLayout {
+                        width: parent.width
+                        Text { text: "RAM"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true }
+                        Item { Layout.fillWidth: true }
+                        Text { text: ramText.text; color: "white"; font.family: root.fontFamily; font.pixelSize: 11 }
+                    }
+                    Text { text: "10 PROCESOS CON MAYOR CONSUMO"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                    ListView {
+                        width: parent.width
+                        height: 220
+                        clip: true
+                        spacing: 4
+                        model: ramMenu.processes
+                        delegate: Rectangle {
+                            required property string processName
+                            required property string memory
+                            width: parent ? parent.width : 0
+                            height: 26
+                            radius: 6
+                            color: "#1d1d26"
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                Text { text: processName; color: "white"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: memory + " MB"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 9 }
+                            }
+                        }
+                    }
+                    Text { text: ramMenu.processes.count ? "Ordenados por RAM usada" : "Leyendo procesos..."; color: "#6c7086"; font.family: root.fontFamily; font.pixelSize: 9 }
+                }
+            }
+            Process {
+                id: ramMenuStatus
+                command: ["bash", "-c", "ps -eo comm=,rss= --sort=-rss | awk 'NR <= 10 {printf \"%s|%.0f\\n\", $1, $2/1024}'"]
+                running: false
+                stdout: SplitParser {
+                    splitMarker: "\n"
+                    onRead: line => { const p = line.trim().split("|"); if (p.length === 2) ramMenu.processes.append({ processName: p[0], memory: p[1] }); }
+                }
+            }
+            onOpenedChanged: {
+                if (opened) {
+                    ramMenu.processes.clear();
+                    ramMenuStatus.running = true;
+                }
             }
         }
 
