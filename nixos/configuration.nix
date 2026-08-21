@@ -36,8 +36,9 @@
   # LAN-Mouse: TCP (handshake) + UDP (input data)
   # Syncthing: TCP/UDP 22000 + descubrimiento local UDP 21027.
   # Proyecto leia: Next dev server en laptop, puerto 3100.
-  networking.firewall.allowedTCPPorts = [ 4242 22000 3100 ];
-  networking.firewall.allowedUDPPorts = [ 4242 21027 22000 ];
+  # LocalSend: TCP (transferencia) + UDP (descubrimiento local), puerto 53317.
+  networking.firewall.allowedTCPPorts = [ 4242 22000 3100 53317 ];
+  networking.firewall.allowedUDPPorts = [ 4242 21027 22000 53317 ];
   networking.nameservers = [ "1.1.1.1" "8.8.8.8"];
 
   # ── Localizacion ──────────────────────────────────────────────
