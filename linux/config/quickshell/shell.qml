@@ -186,6 +186,7 @@ PanelWindow {
             Text {
                 id: ramIcon
                 text: "RAM"
+                anchors.verticalCenter: parent.verticalCenter
                 color: "white"
                 font.family: root.fontFamily
                 font.pixelSize: 9
@@ -196,6 +197,7 @@ PanelWindow {
                 id: ramText
                 property double p: NaN
                 text: "--%"
+                anchors.verticalCenter: parent.verticalCenter
                 font.family: root.fontFamily
                 font.pixelSize: 9
                 color: ramText.p > 90 ? "#e06c75" : "white"
