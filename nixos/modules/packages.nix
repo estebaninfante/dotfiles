@@ -102,6 +102,7 @@ with pkgs; [  # ── Shell & terminal ──
   gimp
   inkscape
   yt-dlp
+  audacity
 
   # ── Speech-to-Text ──
   # handy: se usa el paquete del flake upstream (github:cjpais/Handy),

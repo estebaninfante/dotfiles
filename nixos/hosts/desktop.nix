@@ -15,6 +15,13 @@
   # o la build C++ con 24 jobs OOM y congela (sin swap).
   services.sunshine.package = (pkgs.sunshine.override { cudaSupport = true; });
 
+  # ── DaVinci Resolve (solo desktop) ──────────────────────────
+  # Edicion de video con aceleracion CUDA (RTX 3070). Unfree pero
+  # permitido por nixpkgs.config.allowUnfree. Nota: version FREE no
+  # soporta H.264/H.265/AAC en Linux → convertir a DNxHR con ffmpeg.
+  # No corre Wayland nativo (qtwayland) → lanzar con QT_QPA_PLATFORM=xcb.
+  environment.systemPackages = [ pkgs.davinci-resolve ];
+
   # ── NVIDIA (RTX 3070 / GA104, unica GPU) ────────────────────
   # GPU dedicada manejando el display directo → driver nvidia con
   # modesetting. SIN prime.offload (eso es para hibridas con iGPU).
