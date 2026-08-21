@@ -31,7 +31,7 @@ PanelWindow {
         right: true
     }
 
-    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened || ramMenu.opened
+    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened || ramMenu.opened || dateMenu.opened
 
     implicitHeight: expanded ? expandedHeight : hotEdge
     exclusiveZone: implicitHeight
@@ -143,6 +143,21 @@ PanelWindow {
             font.pixelSize: 12
         }
 
+        MouseArea {
+            id: clockArea
+            anchors.fill: clock
+            z: 2
+            hoverEnabled: true
+            onClicked: dateMenu.opened = !dateMenu.opened
+        }
+
+        Rectangle {
+            anchors.fill: ramRow
+            z: -1
+            radius: 8
+            color: ramArea.containsMouse || ramMenu.opened ? "#5D3FD3" : "#141414"
+        }
+
         Process {
             id: runDate
             command: ["date"]
@@ -161,17 +176,19 @@ PanelWindow {
         }
         Row {
             id: ramRow
+            width: 52
+            height: 19
             anchors.right: batteryRow.left
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
+            spacing: 4
 
             Text {
                 id: ramIcon
                 text: "RAM"
                 color: "white"
                 font.family: root.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: 9
                 font.bold: true
             }
 
@@ -180,7 +197,7 @@ PanelWindow {
                 property double p: NaN
                 text: "--%"
                 font.family: root.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: 9
                 color: ramText.p > 90 ? "#e06c75" : "white"
             }
 
@@ -205,6 +222,7 @@ PanelWindow {
             }
         }
         MouseArea {
+            id: ramArea
             anchors.fill: ramRow
             z: 2
             hoverEnabled: true
@@ -262,7 +280,7 @@ PanelWindow {
                     width: 48
                     height: 19
                     radius: 8
-                    color: brightnessArea.containsMouse ? "#cba6f7" : "#141414"
+                    color: brightnessArea.containsMouse ? "#5D3FD3" : "#141414"
                     Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessArea.containsMouse ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 9 }
                     MouseArea {
                         id: brightnessArea
@@ -277,8 +295,8 @@ PanelWindow {
                     width: 52
                     height: 19
                     radius: 8
-                    color: volumeArea.containsMouse || volumeMenu.opened ? "#cba6f7" : "#141414"
-                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: volumeArea.containsMouse || volumeMenu.opened ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 9 }
+                    color: volumeArea.containsMouse || volumeMenu.opened ? "#5D3FD3" : "#141414"
+                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 9 }
                     MouseArea {
                         id: volumeArea
                         anchors.fill: parent
@@ -293,7 +311,7 @@ PanelWindow {
                 width: 26
                 height: 19
                 radius: 8
-                color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.containsMouse ? "white" : "#141414"
+                 color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.containsMouse ? "#5D3FD3" : "#141414"
 
                 Behavior on color {
                     ColorAnimation {
@@ -304,7 +322,7 @@ PanelWindow {
                 Text {
                     anchors.centerIn: parent
                     text: "\uf009"
-                    color: widgetMenu.opened ? "#0d0d12" : menuBtnArea.containsMouse ? "black" : "white"
+                     color: "white"
                     font.family: root.fontFamily
                     font.pixelSize: 11
                 }
@@ -322,12 +340,12 @@ PanelWindow {
                 width: 26
                 height: 19
                 radius: 8
-                color: powerMenu.opened ? "#e06c75" : powerBtnArea.containsMouse ? "white" : "#141414"
+                 color: powerMenu.opened ? "#e06c75" : powerBtnArea.containsMouse ? "#5D3FD3" : "#141414"
 
                 Text {
                     anchors.centerIn: parent
                     text: "\uf011"
-                    color: powerMenu.opened ? "#11111b" : powerBtnArea.containsMouse ? "black" : "white"
+                     color: "white"
                     font.family: root.fontFamily
                     font.pixelSize: 11
                 }
@@ -557,6 +575,34 @@ PanelWindow {
                 id: powerAction
                 command: ["true"]
                 running: false
+            }
+        }
+
+        PopupWindow {
+            id: dateMenu
+            implicitWidth: 320
+            implicitHeight: 150
+            visible: opened
+            grabFocus: true
+            color: "transparent"
+            property bool opened: false
+            anchor { window: root; rect.x: (root.width - dateMenu.implicitWidth) / 2; rect.y: root.height + 8 }
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: 14
+                color: "#e60d0d12"
+                border.color: "#383847"
+                border.width: 1
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 8
+                    Text { text: "CENTRO DE TAREAS"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+                    Text { text: clock.text; color: "white"; font.family: root.fontFamily; font.pixelSize: 22; font.bold: true }
+                    Text { text: "Calendario, tareas y actividad aparecerán aquí"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 10; wrapMode: Text.WordWrap }
+                }
             }
         }
 
