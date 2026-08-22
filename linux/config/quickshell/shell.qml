@@ -21,10 +21,25 @@ PanelWindow {
     property double volumePct: 0
     property bool volumeMuted: false
     property double brightnessPct: 0
+    property var audioSinks: ListModel {}
+    property var audioSources: ListModel {}
 
     function resetHover(area) {
-        area.hoverEnabled = false;
-        area.hoverEnabled = true;
+        if (area.hov !== undefined)
+            area.hov = false;
+    }
+
+    function scanAudioDevices() {
+        audioSinks.clear();
+        audioSources.clear();
+        audioStatus.running = false;
+        audioStatus.running = true;
+    }
+
+    function setDefaultDevice(id) {
+        audioSetDefault.command = ["wpctl", "set-default", id];
+        audioSetDefault.running = false;
+        audioSetDefault.running = true;
     }
 
     color: "transparent"
@@ -99,6 +114,37 @@ PanelWindow {
     }
 
     Process {
+        id: audioStatus
+        command: ["bash", "-c", "wpctl status | awk '/^Audio$/{audio=1} /^Video$/{audio=0; s=\"\"} /Sinks:/ && audio{s=\"sink\"; next} /Sources:/ && audio{s=\"source\"; next} /Filters:/{s=\"\"; next} audio && s && match($0,/\\*?[[:space:]]*[0-9]+\\./){prefix=substr($0,RSTART,RLENGTH-1); star=(prefix ~ /\\*/ ? \"*\" : \"\"); gsub(/[^0-9]/,\"\",prefix); line=substr($0,RSTART+RLENGTH); sub(/^[[:space:]]+/,\"\",line); print s \"|\" prefix \"|\" line \"|\" star}'"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.trim().split("\n");
+                for (const line of lines) {
+                    const p = line.split("|");
+                    if (p.length < 4)
+                        continue;
+                    const item = { deviceId: p[1], name: p[2], selected: p[3] === "*" };
+                    if (p[0] === "sink")
+                        root.audioSinks.append(item);
+                    else if (p[0] === "source")
+                        root.audioSources.append(item);
+                }
+            }
+        }
+    }
+
+    Process {
+        id: audioSetDefault
+        command: ["wpctl", "set-default", "0"]
+        running: false
+        onExited: {
+            audioCard.audioMessage = exitCode === 0 ? "Dispositivo predeterminado actualizado" : "No se pudo seleccionar dispositivo";
+            root.scanAudioDevices();
+        }
+    }
+
+    Process {
         id: brightnessStatus
         command: ["bash", "-c", "brightnessctl -m 2>/dev/null | awk -F, '{gsub(/%/,\"\",$4); print $4}'"]
         running: root.hasBattery
@@ -160,7 +206,7 @@ PanelWindow {
             anchors.fill: ramRow
             z: -1
             radius: 8
-            color: ramArea.containsMouse || ramMenu.opened ? "#5D3FD3" : "#141414"
+            color: ramArea.hov || ramMenu.opened ? "#5D3FD3" : "#141414"
         }
 
         Process {
@@ -230,9 +276,12 @@ PanelWindow {
         }
         MouseArea {
             id: ramArea
+            property bool hov: false
             anchors.fill: ramRow
             z: 2
             hoverEnabled: true
+            onEntered: hov = true
+            onExited: hov = false
             onClicked: ramMenu.opened = !ramMenu.opened
         }
         Row {
@@ -302,12 +351,15 @@ PanelWindow {
                     width: 52
                     height: 19
                     radius: 8
-                    color: volumeArea.containsMouse || volumeMenu.opened ? "#5D3FD3" : "#141414"
+                    color: volumeArea.hov || volumeMenu.opened ? "#5D3FD3" : "#141414"
                     Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 9 }
                     MouseArea {
                         id: volumeArea
+                        property bool hov: false
                         anchors.fill: parent
                         hoverEnabled: true
+                        onEntered: hov = true
+                        onExited: hov = false
                         onClicked: volumeMenu.opened = !volumeMenu.opened
                         onWheel: wheel => { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", wheel.angleDelta.y > 0 ? "5%+" : "5%-"]; volumeAdjust.running = true; }
                     }
@@ -318,7 +370,7 @@ PanelWindow {
                 width: 26
                 height: 19
                 radius: 8
-                 color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.containsMouse ? "#5D3FD3" : "#141414"
+                 color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.hov ? "#5D3FD3" : "#141414"
 
                 Behavior on color {
                     ColorAnimation {
@@ -336,8 +388,11 @@ PanelWindow {
 
                 MouseArea {
                     id: menuBtnArea
+                    property bool hov: false
                     hoverEnabled: true
                     anchors.fill: parent
+                    onEntered: hov = true
+                    onExited: hov = false
                     onClicked: widgetMenu.opened = !widgetMenu.opened
                 }
             }
@@ -347,7 +402,7 @@ PanelWindow {
                 width: 26
                 height: 19
                 radius: 8
-                 color: powerMenu.opened ? "#e06c75" : powerBtnArea.containsMouse ? "#5D3FD3" : "#141414"
+                 color: powerMenu.opened ? "#e06c75" : powerBtnArea.hov ? "#5D3FD3" : "#141414"
 
                 Text {
                     anchors.centerIn: parent
@@ -359,8 +414,11 @@ PanelWindow {
 
                 MouseArea {
                     id: powerBtnArea
+                    property bool hov: false
                     anchors.fill: parent
                     hoverEnabled: true
+                    onEntered: hov = true
+                    onExited: hov = false
                     onClicked: {
                         powerMenu.pendingAction = "";
                         powerMenu.opened = !powerMenu.opened;
@@ -690,14 +748,27 @@ PanelWindow {
 
         PopupWindow {
             id: volumeMenu
-            implicitWidth: 190
-            implicitHeight: 132
+            implicitWidth: 236
+            implicitHeight: Math.max(132, volCol.implicitHeight + 26)
             visible: opened
             grabFocus: true
             color: "transparent"
             property bool opened: false
             anchor { window: root; rect.x: root.width - volumeMenu.implicitWidth - 72; rect.y: root.height + 8 }
-            onOpenedChanged: if (!opened) root.resetHover(volumeArea)
+            onOpenedChanged: {
+                if (opened) {
+                    root.scanAudioDevices();
+                } else {
+                    root.resetHover(volumeArea);
+                }
+            }
+
+            Behavior on implicitHeight {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -707,6 +778,7 @@ PanelWindow {
                 border.color: "#383847"
                 border.width: 1
                 Column {
+                    id: volCol
                     anchors.fill: parent
                     anchors.margins: 12
                     spacing: 8
@@ -747,6 +819,96 @@ PanelWindow {
                             Rectangle { anchors.fill: parent; z: -1; radius: 7; color: "#0d0d12"; border.color: "#30303b" }
                         }
                     }
+
+                    Rectangle { width: parent.width; height: 1; color: "#30303b" }
+
+                    Text {
+                        text: "SALIDAS"
+                        color: "#9a9aa7"
+                        font.family: root.fontFamily
+                        font.pixelSize: 8
+                        font.bold: true
+                        font.letterSpacing: 1.5
+                        visible: root.audioSinks.count > 0
+                    }
+
+                    Repeater {
+                        model: root.audioSinks
+
+                        delegate: Rectangle {
+                            required property string deviceId
+                            required property string name
+                            required property bool selected
+                            width: parent.width
+                            height: 22
+                            radius: 6
+                            color: volSinkArea.containsMouse ? "#252532" : selected ? "#29233b" : "#14141b"
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 8
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (selected ? "●  " : "○  ") + name
+                                color: selected ? "#cba6f7" : "white"
+                                font.family: root.fontFamily
+                                font.pixelSize: 9
+                                elide: Text.ElideRight
+                            }
+
+                            MouseArea {
+                                id: volSinkArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.setDefaultDevice(deviceId)
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "ENTRADAS"
+                        color: "#9a9aa7"
+                        font.family: root.fontFamily
+                        font.pixelSize: 8
+                        font.bold: true
+                        font.letterSpacing: 1.5
+                        visible: root.audioSources.count > 0
+                    }
+
+                    Repeater {
+                        model: root.audioSources
+
+                        delegate: Rectangle {
+                            required property string deviceId
+                            required property string name
+                            required property bool selected
+                            width: parent.width
+                            height: 22
+                            radius: 6
+                            color: volSourceArea.containsMouse ? "#252532" : selected ? "#29233b" : "#14141b"
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 8
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (selected ? "●  " : "○  ") + name
+                                color: selected ? "#cba6f7" : "white"
+                                font.family: root.fontFamily
+                                font.pixelSize: 9
+                                elide: Text.ElideRight
+                            }
+
+                            MouseArea {
+                                id: volSourceArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.setDefaultDevice(deviceId)
+                            }
+                        }
+                    }
                 }
             }
             Process { id: volumeAdjust; command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]; running: false; onExited: volumeStatus.running = true }
@@ -784,15 +946,12 @@ PanelWindow {
                       bluetoothCard.refreshDevices();
               }
 
-               function refreshAudio() {
-                  if (activeSection === "dispositivos" && !audioStatus.running) {
-                      audioCard.sinks.clear();
-                      audioCard.sources.clear();
-                      audioCard.cameras.clear();
-                      audioStatus.running = true;
-                      cameraStatus.running = true;
-                   }
-               }
+                function refreshAudio() {
+                    if (activeSection !== "dispositivos")
+                        return;
+                    root.scanAudioDevices();
+                    audioCard.refreshCameras();
+                }
 
                function refreshScreens() {
                    if (activeSection === "pantallas" && !screenStatus.running)
@@ -1175,19 +1334,12 @@ PanelWindow {
 
                               property bool audioDetailsOpen: true
                               property string audioMessage: ""
-                              property var sinks: ListModel {}
-                              property var sources: ListModel {}
                               property var cameras: ListModel {}
 
-                              function parseAudio(line) {
-                                  const parts = line.split("|");
-                                  if (parts.length < 4)
-                                      return;
-                                  const item = { deviceId: parts[1], name: parts[2], selected: parts[3] === "*" };
-                                  if (parts[0] === "sink")
-                                      sinks.append(item);
-                                  else if (parts[0] === "source")
-                                      sources.append(item);
+                              function refreshCameras() {
+                                  cameras.clear();
+                                  cameraStatus.running = false;
+                                  cameraStatus.running = true;
                               }
 
                               function parseCamera(line) {
@@ -1198,17 +1350,18 @@ PanelWindow {
                               }
 
                               function selectDevice(id, label) {
-                                  audioSetDefault.command = ["wpctl", "set-default", id];
                                   audioCard.audioMessage = "Seleccionando " + label + "...";
-                                  audioSetDefault.running = true;
+                                  root.setDefaultDevice(id);
                               }
 
                               RowLayout {
-                                  anchors.fill: parent
+                                  anchors.left: parent.left
+                                  anchors.right: parent.right
+                                  anchors.top: parent.top
                                   anchors.leftMargin: 14
                                   anchors.rightMargin: 14
                                   anchors.topMargin: 10
-                                  anchors.bottomMargin: 10
+                                  height: 58
                                   spacing: 10
 
                                   Text {
@@ -1230,7 +1383,7 @@ PanelWindow {
                                           font.letterSpacing: 1.5
                                       }
                                       Text {
-                                          text: audioCard.sinks.count + " salidas · " + audioCard.sources.count + " entradas · " + audioCard.cameras.count + " cámaras"
+                                          text: root.audioSinks.count + " salidas · " + root.audioSources.count + " entradas · " + audioCard.cameras.count + " cámaras"
                                           color: "white"
                                           font.family: root.fontFamily
                                           font.pixelSize: 14
@@ -1267,6 +1420,7 @@ PanelWindow {
                                       font.family: root.fontFamily
                                       font.pixelSize: 9
                                       font.bold: true
+                                      visible: audioCard.cameras.count > 0
                                   }
 
                                   Repeater {
@@ -1299,10 +1453,11 @@ PanelWindow {
                                       font.family: root.fontFamily
                                       font.pixelSize: 9
                                       font.bold: true
+                                      visible: root.audioSinks.count > 0
                                   }
 
                                   Repeater {
-                                      model: audioCard.sinks
+                                      model: root.audioSinks
                                       delegate: Rectangle {
                                           required property string deviceId
                                           required property string name
@@ -1338,10 +1493,11 @@ PanelWindow {
                                       font.family: root.fontFamily
                                       font.pixelSize: 9
                                       font.bold: true
+                                      visible: root.audioSources.count > 0
                                   }
 
                                   Repeater {
-                                      model: audioCard.sources
+                                      model: root.audioSources
                                       delegate: Rectangle {
                                           required property string deviceId
                                           required property string name
@@ -1377,27 +1533,6 @@ PanelWindow {
                                       font.family: root.fontFamily
                                       font.pixelSize: 10
                                       elide: Text.ElideRight
-                                  }
-                              }
-
-                              Process {
-                                  id: audioStatus
-                                  command: ["bash", "-c", "wpctl status | awk '/^Audio$/{audio=1} /^Video$/{audio=0; s=\"\"} /Sinks:/ && audio{s=\"sink\"; next} /Sources:/ && audio{s=\"source\"; next} /Filters:/{s=\"\"; next} audio && s && match($0,/\\*?[[:space:]]*[0-9]+\\./){prefix=substr($0,RSTART,RLENGTH-1); star=(prefix ~ /\\*/ ? \"*\" : \"\"); gsub(/[^0-9]/,\"\",prefix); line=substr($0,RSTART+RLENGTH); sub(/^[[:space:]]+/,\"\",line); print s \"|\" prefix \"|\" line \"|\" star}'"]
-                                  running: false
-                                  stdout: SplitParser {
-                                      splitMarker: "\n"
-                                      onRead: line => audioCard.parseAudio(line)
-                                  }
-                                  onExited: audioCard.audioMessage = "Selecciona dispositivo predeterminado"
-                              }
-
-                              Process {
-                                  id: audioSetDefault
-                                  command: ["wpctl", "set-default", "0"]
-                                  running: false
-                                  onExited: {
-                                      audioCard.audioMessage = exitCode === 0 ? "Dispositivo predeterminado actualizado" : "No se pudo seleccionar dispositivo";
-                                      audioStatus.running = true;
                                   }
                               }
 
