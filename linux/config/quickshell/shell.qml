@@ -966,15 +966,15 @@ PanelWindow {
 
             Process {
                 id: wallAudioStatus
-                command: ["bash", "-c", "wpctl status | sed -n '/^Audio$/,/^Video$/p' | grep -i wallpaper"]
+                command: ["bash", "-c", "id=$(wpctl status | sed -n '/^Audio$/,/^Video$/p' | grep -i wallpaper | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\\.$/) {gsub(/\\./,\"\",$i); print $i; exit}}'); [ -n \"$id\" ] && { printf '%s|' \"$id\"; wpctl get-volume \"$id\"; }"]
                 running: false
                 stdout: StdioCollector {
                     onStreamFinished: {
-                        const line = this.text.trim().split("\n")[0] || "";
-                        volumeMenu.wallpaperFound = line !== "";
-                        const m = line.match(/(\d+)\./);
-                        volumeMenu.wallpaperSinkId = m ? m[1] : "";
-                        volumeMenu.wallpaperMuted = /MUTED/.test(line);
+                        const t = this.text.trim();
+                        const bar = t.indexOf("|");
+                        volumeMenu.wallpaperFound = bar > 0;
+                        volumeMenu.wallpaperSinkId = bar > 0 ? t.slice(0, bar) : "";
+                        volumeMenu.wallpaperMuted = /MUTED/.test(t);
                     }
                 }
             }
