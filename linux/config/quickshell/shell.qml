@@ -754,10 +754,14 @@ PanelWindow {
             grabFocus: true
             color: "transparent"
             property bool opened: false
+            property bool wallpaperMuted: false
+            property bool wallpaperFound: false
+            property string wallpaperSinkId: ""
             anchor { window: root; rect.x: root.width - volumeMenu.implicitWidth - 72; rect.y: root.height + 8 }
             onOpenedChanged: {
                 if (opened) {
                     root.scanAudioDevices();
+                    wallAudioStatus.running = true;
                 } else {
                     root.resetHover(volumeArea);
                 }
@@ -821,6 +825,53 @@ PanelWindow {
                     }
 
                     Rectangle { width: parent.width; height: 1; color: "#30303b" }
+
+                    Row {
+                        width: parent.width
+                        spacing: 6
+                        visible: volumeMenu.wallpaperFound
+
+                        Text {
+                            width: parent.width - 54
+                            height: 26
+                            verticalAlignment: Text.AlignVCenter
+                            text: "\uf001  Audio del wallpaper"
+                            color: "white"
+                            font.family: root.fontFamily
+                            font.pixelSize: 10
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            width: 48
+                            height: 26
+                            radius: 7
+                            color: wallAudioToggleArea.containsMouse ? "#cba6f7" : volumeMenu.wallpaperMuted ? "#262633" : "#29233b"
+                            border.color: "#30303b"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: volumeMenu.wallpaperMuted ? "OFF" : "ON"
+                                color: wallAudioToggleArea.containsMouse ? "#11111b" : volumeMenu.wallpaperMuted ? "#cdd6f4" : "#cba6f7"
+                                font.family: root.fontFamily
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: wallAudioToggleArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    if (!volumeMenu.wallpaperSinkId)
+                                        return;
+                                    wallAudioToggle.command = ["wpctl", "set-mute", volumeMenu.wallpaperSinkId, volumeMenu.wallpaperMuted ? "0" : "1"];
+                                    wallAudioToggle.running = false;
+                                    wallAudioToggle.running = true;
+                                }
+                            }
+                        }
+                    }
 
                     Text {
                         text: "SALIDAS"
@@ -912,6 +963,28 @@ PanelWindow {
                 }
             }
             Process { id: volumeAdjust; command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]; running: false; onExited: volumeStatus.running = true }
+
+            Process {
+                id: wallAudioStatus
+                command: ["bash", "-c", "wpctl status | sed -n '/^Audio$/,/^Video$/p' | grep -i wallpaper"]
+                running: false
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        const line = this.text.trim().split("\n")[0] || "";
+                        volumeMenu.wallpaperFound = line !== "";
+                        const m = line.match(/(\d+)\./);
+                        volumeMenu.wallpaperSinkId = m ? m[1] : "";
+                        volumeMenu.wallpaperMuted = /MUTED/.test(line);
+                    }
+                }
+            }
+
+            Process {
+                id: wallAudioToggle
+                command: ["true"]
+                running: false
+                onExited: wallAudioStatus.running = true
+            }
         }
 
         PopupWindow {
