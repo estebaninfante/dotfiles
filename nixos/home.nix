@@ -192,6 +192,17 @@ in
         done
         # Wait for compositor protocols to initialize
         sleep 3
+        # Wait for peer to be reachable (extract IP from config.toml)
+        CONFIG="$HOME/.config/lan-mouse/config.toml"
+        if [ -f "$CONFIG" ]; then
+          PEER_IP=$(grep -E '^\s*ips\s*=' "$CONFIG" | head -1 | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1)
+          if [ -n "$PEER_IP" ]; then
+            for i in $(seq 1 60); do
+              ping -c 1 -W 1 "$PEER_IP" >/dev/null 2>&1 && break
+              sleep 1
+            done
+          fi
+        fi
       '';
       ExecStart = "${pkgs.lan-mouse}/bin/lan-mouse --capture-backend layer-shell daemon";
       ExecStopPost = pkgs.writeShellScript "lan-mouse-cleanup" ''
