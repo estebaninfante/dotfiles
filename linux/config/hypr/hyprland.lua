@@ -237,8 +237,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     -- Los paths /usr/libexec no existen en NixOS (store). Arrancar via
     -- systemd da a la unit el env (WAYLAND_DISPLAY) que necesita su condicion.
-    hl.exec_cmd("sleep 1 && systemctl --user start xdg-desktop-portal-hyprland")
-    hl.exec_cmd("systemctl --user restart xdg-desktop-portal")
+    hl.exec_cmd("sleep 1 && systemctl --user start xdg-desktop-portal-hyprland && systemctl --user restart xdg-desktop-portal && systemctl --user restart lan-mouse")
 
     -- 4. Background services
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")

@@ -206,7 +206,7 @@ in
         "XDG_RUNTIME_DIR=/run/user/%U"
       ];
     };
-    Install = { WantedBy = [ "graphical-session.target" ]; };
+    Install = { };
   };
 
   # Clipboard sync externo recomendado por comunidad lan-mouse. SSH transporta
