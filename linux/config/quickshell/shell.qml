@@ -251,33 +251,35 @@ PanelWindow {
              repeat: true
             onTriggered: runDate.running = true
         }
-        Row {
+        Item {
             id: ramRow
             width: 52
             height: 19
             anchors.right: batteryRow.left
-            anchors.rightMargin: 12
+            anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 4
 
-            Text {
-                id: ramIcon
-                text: "RAM"
-                anchors.verticalCenter: parent.verticalCenter
-                color: "white"
-                font.family: root.fontFamily
-                font.pixelSize: 9
-                font.bold: true
-            }
+            Row {
+                anchors.centerIn: parent
+                spacing: 4
 
-            Text {
-                id: ramText
-                property double p: NaN
-                text: "--%"
-                anchors.verticalCenter: parent.verticalCenter
-                font.family: root.fontFamily
-                font.pixelSize: 9
-                color: ramText.p > 90 ? "#e06c75" : "white"
+                Text {
+                    id: ramIcon
+                    text: "RAM"
+                    color: "white"
+                    font.family: root.fontFamily
+                    font.pixelSize: 9
+                    font.bold: true
+                }
+
+                Text {
+                    id: ramText
+                    property double p: NaN
+                    text: "--%"
+                    font.family: root.fontFamily
+                    font.pixelSize: 9
+                    color: ramText.p > 90 ? "#e06c75" : "white"
+                }
             }
 
             Process {
