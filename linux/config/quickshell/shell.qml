@@ -11,7 +11,7 @@ PanelWindow {
     id: root
     property bool superDown: false
     property bool superHeld: false
-    property int expandedHeight: 34
+    property int expandedHeight: 40
     property int hotEdge: 3
 
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
@@ -230,7 +230,6 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: ramRow
-            z: -1
             radius: 8
             color: ramArea.hov || ramMenu.opened ? "#5D3FD3" : "#141414"
         }
@@ -459,8 +458,8 @@ PanelWindow {
 
             Rectangle {
                 id: powerBtn
-                width: 26
-                height: 19
+                width: 32
+                height: 22
                 radius: 8
                  color: powerMenu.opened ? "#e06c75" : powerBtnArea.hov ? "#5D3FD3" : "#141414"
 
@@ -469,7 +468,7 @@ PanelWindow {
                     text: "\uf011"
                      color: "white"
                     font.family: root.fontFamily
-                    font.pixelSize: 11
+                    font.pixelSize: 14
                 }
 
                 MouseArea {
