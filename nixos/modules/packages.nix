@@ -167,6 +167,7 @@ with pkgs; [  # ── Shell & terminal ──
 
   # ── Gaming ──
   heroic                  # Heroic Games Launcher (Epic/GOG/Amazon)
+  cartridges              # biblioteca unificada (Steam/Heroic/Lutris) — modo juegos
   lutris
   wineWow64Packages.full  # wine + wine-mono + wine-gecko (wineWowPackages deprecado)
   dxvk                    # wine-dxvk
