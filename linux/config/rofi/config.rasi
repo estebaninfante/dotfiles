@@ -27,6 +27,9 @@ configuration {
 /*	drun-exclude-categories: ;*/
 	drun-show-actions: true;
 	drun-use-desktop-cache: true;
+	/* Re-escanear apps nuevas al iniciar; sin esto, apps recien instaladas
+	   no aparecen hasta borrar ~/.cache/rofi* a mano. */
+	drun-reload-desktop-cache: true;
 	display-combi: "";
 	combi-hide-mode-prefix: true;
 /*	drun-display-format: "{name} [<span weight='light' size='small'><i>({generic})</i></span>]";*/
