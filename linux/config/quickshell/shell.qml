@@ -253,9 +253,9 @@ PanelWindow {
         }
         Item {
             id: ramRow
-            width: 52
-            height: 19
-            anchors.right: batteryRow.left
+            width: 64
+            height: 22
+            anchors.right: root.hasBattery ? batteryRow.left : menuRow.left
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
 
@@ -268,7 +268,7 @@ PanelWindow {
                     text: "RAM"
                     color: "white"
                     font.family: root.fontFamily
-                    font.pixelSize: 9
+                    font.pixelSize: 12
                     font.bold: true
                 }
 
@@ -277,7 +277,7 @@ PanelWindow {
                     property double p: NaN
                     text: "--%"
                     font.family: root.fontFamily
-                    font.pixelSize: 9
+                    font.pixelSize: 12
                     color: ramText.p > 90 ? "#e06c75" : "white"
                 }
             }
@@ -340,14 +340,14 @@ PanelWindow {
                 text: batteryRow.icon()
                 color: batteryText.color
                 font.family: root.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: 15
             }
 
             Text {
                 id: batteryText
                 text: Math.round(root.battPct) + "%"
                 font.family: root.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: 14
                 color: root.battPct <= 20 ? "#e06c75" : root.batt.state === UPowerDeviceState.Charging ? "#98c379" : "white"
             }
         }
@@ -361,11 +361,11 @@ PanelWindow {
                 Rectangle {
                     id: brightnessIndicator
                     visible: root.hasBattery
-                    width: 48
-                    height: 19
+                    width: 60
+                    height: 22
                     radius: 8
                     color: brightnessArea.containsMouse ? "#5D3FD3" : "#141414"
-                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessArea.containsMouse ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 9 }
+                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessArea.containsMouse ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: brightnessArea
                         anchors.fill: parent
@@ -376,11 +376,11 @@ PanelWindow {
 
                 Rectangle {
                     id: volumeIndicator
-                    width: 52
-                    height: 19
+                    width: 62
+                    height: 22
                     radius: 8
                     color: volumeArea.hov || volumeMenu.opened ? "#5D3FD3" : "#141414"
-                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 9 }
+                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: volumeArea
                         property bool hov: false
@@ -395,8 +395,8 @@ PanelWindow {
 
                 Rectangle {
                     id: kbdBtn
-                    width: 36
-                    height: 19
+                    width: 44
+                    height: 22
                     radius: 8
                     color: kbdArea.hov ? "#5D3FD3" : "#141414"
 
@@ -405,7 +405,7 @@ PanelWindow {
                         text: root.kbLabels[root.kbIndex]
                         color: "white"
                         font.family: root.fontFamily
-                        font.pixelSize: 9
+                        font.pixelSize: 12
                         font.bold: true
                     }
 
@@ -427,8 +427,8 @@ PanelWindow {
 
             Rectangle {
                 id: menuBtn
-                width: 26
-                height: 19
+                width: 32
+                height: 22
                 radius: 8
                  color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.hov ? "#5D3FD3" : "#141414"
 
@@ -443,7 +443,7 @@ PanelWindow {
                     text: "\uf009"
                      color: "white"
                     font.family: root.fontFamily
-                    font.pixelSize: 11
+                    font.pixelSize: 14
                 }
 
                 MouseArea {
