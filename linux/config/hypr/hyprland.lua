@@ -55,8 +55,8 @@ end
 -- ========================
 hl.config({
     input = {
-        kb_layout   = "dvk_prog,es",
-        kb_variant  = "basic,",
+        kb_layout   = "dvk_prog,es,us",
+        kb_variant  = "basic,,",
         follow_mouse = 1,
         sensitivity = 0
     }

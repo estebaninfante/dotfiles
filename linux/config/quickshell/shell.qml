@@ -21,6 +21,8 @@ PanelWindow {
     property double volumePct: 0
     property bool volumeMuted: false
     property double brightnessPct: 0
+    property int kbIndex: 0
+    readonly property var kbLabels: ["DV", "ES", "US"]
     property var audioSinks: ListModel {}
     property var audioSources: ListModel {}
 
@@ -110,6 +112,30 @@ PanelWindow {
                 if (!volumeInput.activeFocus)
                     volumeInput.text = Math.round(root.volumePct).toString();
             }
+        }
+    }
+
+    Process {
+        id: kbStatus
+        command: ["bash", "-c", "hyprctl devices -j | jq -r '.keyboards[] | select(.main) | .active_keymap'"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = this.text.trim();
+                if (!m)
+                    return;
+                root.kbIndex = /dvorak|programador/i.test(m) ? 0 : /spanish|espa\u00f1ol/i.test(m) ? 1 : 2;
+            }
+        }
+    }
+
+    Process {
+        id: kbSwitch
+        command: ["true"]
+        running: false
+        onExited: {
+            kbStatus.running = false;
+            kbStatus.running = true;
         }
     }
 
@@ -362,6 +388,38 @@ PanelWindow {
                         onExited: hov = false
                         onClicked: volumeMenu.opened = !volumeMenu.opened
                         onWheel: wheel => { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", wheel.angleDelta.y > 0 ? "5%+" : "5%-"]; volumeAdjust.running = true; }
+                    }
+                }
+
+                Rectangle {
+                    id: kbdBtn
+                    width: 36
+                    height: 19
+                    radius: 8
+                    color: kbdArea.hov ? "#5D3FD3" : "#141414"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.kbLabels[root.kbIndex]
+                        color: "white"
+                        font.family: root.fontFamily
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+
+                    MouseArea {
+                        id: kbdArea
+                        property bool hov: false
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: hov = true
+                        onExited: hov = false
+                        onClicked: {
+                            const next = (root.kbIndex + 1) % root.kbLabels.length;
+                            kbSwitch.command = ["bash", "-c", "for k in $(hyprctl devices -j | jq -r '.keyboards[].name'); do hyprctl switchxkblayout \"$k\" " + next + " >/dev/null 2>&1; done"];
+                            kbSwitch.running = false;
+                            kbSwitch.running = true;
+                        }
                     }
                 }
 
