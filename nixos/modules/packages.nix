@@ -166,6 +166,7 @@ with pkgs; [  # ── Shell & terminal ──
   docker-compose
 
   # ── Gaming ──
+  heroic                  # Heroic Games Launcher (Epic/GOG/Amazon)
   lutris
   wineWow64Packages.full  # wine + wine-mono + wine-gecko (wineWowPackages deprecado)
   dxvk                    # wine-dxvk
