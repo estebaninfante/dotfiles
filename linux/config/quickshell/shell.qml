@@ -22,6 +22,11 @@ PanelWindow {
     property bool volumeMuted: false
     property double brightnessPct: 0
 
+    function resetHover(area) {
+        area.hoverEnabled = false;
+        area.hoverEnabled = true;
+    }
+
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
 
@@ -424,6 +429,7 @@ PanelWindow {
             color: "transparent"
             property bool opened: false
             property string pendingAction: ""
+            onOpenedChanged: if (!opened) root.resetHover(powerBtnArea)
 
             anchor {
                 window: root
@@ -589,6 +595,7 @@ PanelWindow {
             color: "transparent"
             property bool opened: false
             anchor { window: root; rect.x: (root.width - dateMenu.implicitWidth) / 2; rect.y: root.height + 8 }
+            onOpenedChanged: if (!opened) root.resetHover(clockArea)
 
             Rectangle {
                 anchors.fill: parent
@@ -675,6 +682,8 @@ PanelWindow {
                 if (opened) {
                     ramMenu.processes.clear();
                     ramMenuStatus.running = true;
+                } else {
+                    root.resetHover(ramArea);
                 }
             }
         }
@@ -688,6 +697,7 @@ PanelWindow {
             color: "transparent"
             property bool opened: false
             anchor { window: root; rect.x: root.width - volumeMenu.implicitWidth - 72; rect.y: root.height + 8 }
+            onOpenedChanged: if (!opened) root.resetHover(volumeArea)
 
             Rectangle {
                 anchors.fill: parent
@@ -794,6 +804,8 @@ PanelWindow {
                        initialRefresh.restart();
                        refreshAudio();
                        refreshScreens();
+                   } else {
+                       root.resetHover(menuBtnArea);
                    }
               }
 
