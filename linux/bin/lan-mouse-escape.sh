@@ -18,7 +18,7 @@ systemctl --user stop lan-mouse.service 2>/dev/null && echo "[OK] service stoppe
 
 # Restart quickshell if it died
 if ! pgrep -x quickshell > /dev/null 2>&1; then
-    quickshell &
+    quickshell --no-duplicate &
     echo "[OK] quickshell restarted"
 else
     echo "[SKIP] quickshell running"

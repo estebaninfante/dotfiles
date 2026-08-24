@@ -229,7 +229,7 @@ hl.on("hyprland.start", function()
     -- Wallpaper Engine starts automatically via graphical-session.target
 
     -- 2. Bar and UI
-    hl.exec_cmd("env QT_SCALE_FACTOR=1.25 quickshell")
+    hl.exec_cmd("env QT_SCALE_FACTOR=1 quickshell --no-duplicate")
     hl.exec_cmd("swaync")
 
     -- 3. D-Bus environment and portals
