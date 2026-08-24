@@ -44,7 +44,7 @@ let
     "wifi-reconnect.sh" "shot" "waybar-battery-top"
     "clean-temp.sh" "pomodoro-waybar.sh" "lid-inhibit-waybar.sh"
     "waybar-ram-top" "keyboard-layout-waybar.sh" "tts-send" "tts-server" "tts" "rofi-scripts-launcher.sh"
-    "power-mode.sh" "toggle-lid.sh" "agent.sh" "send-with-taildrop" "tv-toggle.sh"
+    "power-mode.sh" "battery-power-guard.sh" "toggle-lid.sh" "agent.sh" "send-with-taildrop" "tv-toggle.sh"
     "tv-mode.sh" "rofi-file-search.sh" "rofi-context-menu.sh" "reiniciar.sh"
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"

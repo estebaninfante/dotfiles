@@ -23,6 +23,7 @@
 
   # ── Red ───────────────────────────────────────────────────────
   networking.networkmanager.enable = true;
+  networking.networkmanager.wifi.powersave = lib.mkIf (machineType == "laptop") true;
   hardware.bluetooth.enable = true;
   # Hostname por maquina (definido en hosts/*.nix)
   networking.hostName = lib.mkDefault "nixos";
@@ -282,16 +283,16 @@
   # provee la API UPower.PowerProfiles, no el estado de batería.
   services.upower.enable = true;
 
-  # ── GPU NVIDIA: guarda automática por fuente de energía ──────
-  # Al desconectar el cargador (AC online=0) → gpu-mode.sh guard pone
-  # la dGPU en battery (D3cold, ahorro). Al conectar no toca nada.
-  # Solo laptop (hibrida); en desktop no hay fuente Mains que dispare.
+  # ── Ahorro laptop: guarda automática por fuente de energía ────
+  # Al desconectar cargador → power-saver + dGPU en D3cold.
+  # En AC no cambia selección manual del usuario.
   systemd.services.gpu-power-guard = lib.mkIf (machineType == "laptop") {
-    description = "NVIDIA GPU: switch a battery mode al desenchufar";
+    description = "Laptop: aplicar ahorro máximo al desenchufar";
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.bash}/bin/bash /home/eztvn/dotfiles/linux/bin/gpu-mode.sh guard";
+      Environment = "PATH=/run/current-system/sw/bin:/run/wrappers/bin";
+      ExecStart = "${pkgs.bash}/bin/bash /home/eztvn/dotfiles/linux/bin/battery-power-guard.sh";
     };
   };
 
