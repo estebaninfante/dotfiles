@@ -22,6 +22,7 @@ PanelWindow {
     property bool volumeMuted: false
     property double brightnessPct: 0
     property int kbIndex: 0
+    property string powerProfile: ""
     readonly property var kbLabels: ["DV", "ES", "US"]
     property var audioSinks: ListModel {}
     property var audioSources: ListModel {}
@@ -186,6 +187,25 @@ PanelWindow {
         onExited: brightnessStatus.running = true
     }
 
+    Process {
+        id: powerProfileStatus
+        command: ["powerprofilesctl", "get"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.powerProfile = this.text.trim()
+        }
+    }
+
+    Process {
+        id: powerProfileSet
+        command: ["powerprofilesctl", "set", "balanced"]
+        running: false
+        onExited: {
+            powerProfileStatus.running = false;
+            powerProfileStatus.running = true;
+        }
+    }
+
     Timer {
         interval: 3000
         running: true
@@ -348,6 +368,15 @@ PanelWindow {
                 font.family: root.fontFamily
                 font.pixelSize: 14
                 color: root.battPct <= 20 ? "#e06c75" : root.batt.state === UPowerDeviceState.Charging ? "#98c379" : "white"
+            }
+
+        }
+        MouseArea {
+            anchors.fill: batteryRow
+            z: 2
+            onClicked: {
+                powerMenu.pendingAction = "";
+                powerMenu.opened = !powerMenu.opened;
             }
         }
             Row {
@@ -546,7 +575,15 @@ PanelWindow {
             color: "transparent"
             property bool opened: false
             property string pendingAction: ""
-            onOpenedChanged: if (!opened) root.resetHover(powerBtnArea)
+            property bool powerProfilesOpen: false
+            onOpenedChanged: {
+                if (!opened) {
+                    powerProfilesOpen = false;
+                    root.resetHover(powerBtnArea);
+                } else {
+                    powerProfileStatus.running = true;
+                }
+            }
 
             anchor {
                 window: root
@@ -585,6 +622,100 @@ PanelWindow {
                     font.family: root.fontFamily
                     font.pixelSize: 13
                     elide: Text.ElideRight
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 34
+                    radius: 8
+                    color: profileHeaderArea.containsMouse || powerMenu.powerProfilesOpen ? "#29233b" : "#262633"
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        Text {
+                            text: "\uf0e7"
+                            color: "#cba6f7"
+                            font.family: root.fontFamily
+                            font.pixelSize: 13
+                        }
+                        Text {
+                            text: "PERFIL DE ENERGÍA"
+                            color: "#cdd6f4"
+                            font.family: root.fontFamily
+                            font.pixelSize: 9
+                            font.bold: true
+                            Layout.fillWidth: true
+                        }
+                        Text {
+                            text: (root.powerProfile || "desconocido").toUpperCase() + "  \uf078"
+                            color: "#9a9aa7"
+                            font.family: root.fontFamily
+                            font.pixelSize: 8
+                        }
+                    }
+
+                    MouseArea {
+                        id: profileHeaderArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: powerMenu.powerProfilesOpen = !powerMenu.powerProfilesOpen
+                    }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 4
+                    visible: powerMenu.powerProfilesOpen
+
+                    Repeater {
+                        model: ["power-saver", "balanced", "performance"]
+                        delegate: Rectangle {
+                            required property string modelData
+                            width: parent.width
+                            height: 30
+                            radius: 7
+                            color: profileArea.containsMouse ? "#3a3850" : root.powerProfile === modelData ? "#29233b" : "#1d1d26"
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 10
+                                Text {
+                                    text: root.powerProfile === modelData ? "●" : "○"
+                                    color: root.powerProfile === modelData ? "#cba6f7" : "#6c7086"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 10
+                                }
+                                Text {
+                                    text: modelData === "power-saver" ? "AHORRO" : modelData === "balanced" ? "EQUILIBRADO" : "RENDIMIENTO"
+                                    color: "#cdd6f4"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: modelData
+                                    color: "#6c7086"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 8
+                                }
+                            }
+
+                            MouseArea {
+                                id: profileArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    powerProfileSet.command = ["powerprofilesctl", "set", modelData];
+                                    powerProfileSet.running = true;
+                                    powerMenu.powerProfilesOpen = false;
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Repeater {
@@ -2687,4 +2818,3 @@ PanelWindow {
         }
     }
 }
-
