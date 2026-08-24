@@ -6,8 +6,8 @@ release_bind = [
 ]
 
 [[clients]]
-hostname = "192.168.1.16"
-ips = ["192.168.1.16"]
+hostname = "192.168.1.240"
+ips = ["192.168.1.240"]
 position = "left"
 activate_on_startup = true
 

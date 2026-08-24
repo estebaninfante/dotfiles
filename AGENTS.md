@@ -354,8 +354,8 @@ ejecutar EN el desktop):
 
 **Pairing Moonlight (celular):**
 - App Moonlight → añadir host (IP LAN o tailscale) → PIN → emparejar.
-- Desktop: LAN `192.168.1.17` · tailscale `100.118.58.7`.
-- Laptop: ver `tailscale ip -4 laptop`.
+- Desktop: LAN `192.168.1.241` · tailscale `100.118.58.7`.
+- Laptop: LAN `192.168.1.240` · ver `tailscale ip -4 laptop`.
 - Encoder NVENC ya auto-detectado en desktop (`h264_nvenc`/`hevc_nvenc`); AV1
   no soportado por RTX 3070.
 

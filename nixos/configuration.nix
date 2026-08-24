@@ -24,6 +24,14 @@
   # ── Red ───────────────────────────────────────────────────────
   networking.networkmanager.enable = true;
   networking.networkmanager.wifi.powersave = lib.mkIf (machineType == "laptop") true;
+  # Dispatcher NM: reinicia lan-mouse en redes de casa y vigila conflictos
+  # de la IP estática LAN (fuente de verdad: linux/system/NetworkManager/)
+  networking.networkmanager.dispatcherScripts = [
+    {
+      source = ../linux/system/NetworkManager/dispatcher.d/90-lan-mouse;
+      type = "basic";
+    }
+  ];
   hardware.bluetooth.enable = true;
   # Hostname por maquina (definido en hosts/*.nix)
   networking.hostName = lib.mkDefault "nixos";
@@ -90,8 +98,8 @@
       laptop = {
         id = "CL2PRT2-ZIZVS42-UFZJQL4-ATHFXNT-FA7XYJC-AIWBAVW-HAM52GU-25TMEAL";
         addresses = [
-          "tcp://192.168.1.16:22000"
-          "quic://192.168.1.16:22000"
+          "tcp://192.168.1.240:22000"
+          "quic://192.168.1.240:22000"
           "tcp://100.81.24.119:22000"
           "quic://100.81.24.119:22000"
         ];
@@ -99,8 +107,8 @@
       desktop = {
         id = "EMW3K4G-36KQAKL-73EKS3M-53AXVRU-PTCOZFR-5VOXQJL-6YTELPO-R2QHLAE";
         addresses = [
-          "tcp://192.168.1.18:22000"
-          "quic://192.168.1.18:22000"
+          "tcp://192.168.1.241:22000"
+          "quic://192.168.1.241:22000"
           "tcp://100.118.58.7:22000"
           "quic://100.118.58.7:22000"
         ];
