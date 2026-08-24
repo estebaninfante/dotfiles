@@ -38,12 +38,14 @@ end
 -- reemplazamos el PATH, Hyprland no encuentra kitty/waybar/rofi.
 hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. os.getenv("PATH"))
 hl.env("XDG_DATA_HOME", os.getenv("HOME") .. "/.local/share")
--- WebKitGTK DMA-BUF can render Handy's Wayland overlay fully transparent
--- with the desktop NVIDIA stack. Force software WebKit compositing.
-hl.env("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
--- gtk-layer-shell overlay is transparent on this desktop's Wayland stack;
--- use Handy's regular always-on-top recording window instead.
-hl.env("HANDY_NO_GTK_LAYER_SHELL", "1")
+if machine == "desktop" then
+    -- WebKitGTK DMA-BUF can render Handy's Wayland overlay fully transparent
+    -- with the desktop NVIDIA stack. Force software WebKit compositing.
+    hl.env("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+    -- gtk-layer-shell overlay is transparent on this desktop's Wayland stack;
+    -- use Handy's regular always-on-top recording window instead.
+    hl.env("HANDY_NO_GTK_LAYER_SHELL", "1")
+end
 
 -- ========================
 -- MONITORS
@@ -285,6 +287,11 @@ hl.window_rule({ match = { class = "swayosd-server" }, float = 1 })
 hl.window_rule({ match = { class = "swayosd-server" }, move = "1% 40%" })
 hl.window_rule({ match = { class = "swayosd-server" }, size = "200 20" })
 hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
+-- Handy fallback overlay is a normal window on desktop NVIDIA. Keep it
+-- visible without changing the target application's focus or blur state.
+if machine == "desktop" then
+    hl.window_rule({ match = { class = "handy", title = "Recording" }, float = 1, no_initial_focus = 1, no_blur = 1, border_size = 0 })
+end
 
 -- Modo juegos: Cartridges fullscreen en workspace 10
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, workspace = "10" })
