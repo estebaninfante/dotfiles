@@ -10,9 +10,15 @@
     # handy (speech-to-text): nixpkgs va atrasado (0.9.1); el flake
     # upstream tiene 0.9.5+ y cachix propio (handy-computer).
     handy.url = "github:cjpais/Handy/v0.9.5";
+    # Flatpak declarativo: services.flatpak.packages (sincroniza apps
+    # fuera de nixpkgs entre maquinas).
+    nix-flatpak = {
+      url = "github:gmodena/nix-flatpak";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, home-manager, handy, ... }:
+  outputs = { self, nixpkgs, home-manager, handy, nix-flatpak, ... }:
     let
       system = "x86_64-linux";
       lib = nixpkgs.lib;
@@ -22,6 +28,7 @@
       # (el repo es la unica fuente de verdad).
       baseModules = [
         ./nixos/configuration.nix
+        nix-flatpak.nixosModules.nix-flatpak
         home-manager.nixosModules.home-manager
         {
           home-manager.useGlobalPkgs = true;

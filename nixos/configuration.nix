@@ -148,7 +148,16 @@
   };
 
   # Flatpak (apps que no esten en nixpkgs)
-  services.flatpak.enable = true;
+  # Declarativo: sincronizado entre maquinas via rebuild.
+  services.flatpak = {
+    enable = true;
+    remotes = [{ name = "flathub"; location = "https://dl.flathub.org/repo/flathub.flatpakrepo"; }];
+    packages = [
+      "com.stremio.Stremio"
+      # "it.mijorus.gearlever" / "com.vixalien.protonplus": en README pero
+      # no instalados en ninguna maquina. Anadir aqui para instalarlos.
+    ];
+  };
 
   # ── Virtualizacion / contenedores ─────────────────────────────
   virtualisation.libvirtd.enable = true;
