@@ -115,7 +115,8 @@ Config de keyd (Caps Lock como Super, overload leftalt→numpad, capa nav, compo
 
 | Script | Descripción |
 |--------|-------------|
-| `detect-machine.sh` | Detecta `laptop`/`desktop` por **hardware** (DMI chassis_type, batería, backlight). NO lee `machine-type`. Usado por `setup-nixos.sh` para no asumir laptop por defecto |
+| `detect-machine.sh` | Detecta `laptop`/`desktop` por **hardware** (DMI chassis_type, batería, backlight). NO lee `machine-type`. Usado por `setup-nixos.sh` y `rebuild.sh` para no asumir laptop por defecto |
+| `rebuild.sh` | **Wrapper OBLIGATORIO de `nixos-rebuild`**: detecta máquina por hardware + valida root UUID contra `hardware-configuration.<machine>.nix`; aborta si no coinciden. Uso: `bash ~/dotfiles/scripts/rebuild.sh [switch|boot|test|build|dry-build]` |
 | `setup-nixos.sh` | **Un comando** en NixOS: clona repo + hardware-config + `nixos-rebuild` + Hermes. Detecta máquina por hardware; valida que el hardware-config coincida con el root UUID de la máquina actual |
 | `sync-developing.sh` | sync manual legacy; `~/developing/` usa Syncthing bidireccional |
 | `setup-tts.sh` | Instala/configura TTS |
@@ -126,7 +127,7 @@ Config de keyd (Caps Lock como Super, overload leftalt→numpad, capa nav, compo
 
 1. Editar archivos dentro de `~/dotfiles/`.
 2. Para cambios de configs symlinkeadas (hypr, waybar, nvim, etc.), se aplican al instante (symlink directo al repo).
-3. Para cambios de sistema/paquetes/home-manager: `sudo nixos-rebuild switch --flake ~/dotfiles#laptop` (o `#desktop`).
+3. Para cambios de sistema/paquetes/home-manager: `bash ~/dotfiles/scripts/rebuild.sh` (detecta la máquina, valida el hardware-config y ejecuta `nixos-rebuild switch`). **PROHIBIDO** pasar el host a mano (`#laptop`/`#desktop`) — un host equivocado genera una generación con hardware de otra máquina y rompe el boot (emergency mode). Esto ya pasó: gen 72 inservible en desktop.
 4. Ejecutar `~/dotfiles/scripts/publish.sh` para commitear (y pushear con confirmacion).
 
 ### Fresh install (NixOS)
@@ -280,6 +281,7 @@ ssh eztvn@laptop
 2. **Configs compartidas** (keybinds, appearance, animations, window rules) se pueden editar libremente.
 3. **Al agregar un script machine-specific**, añadirlo a `laptopScripts` en `nixos/home.nix`.
 4. **Al agregar una unit systemd**, añadirla en `nixos/home.nix` (`systemd.user.services`).
+5. **NUNCA ejecutar `sudo nixos-rebuild` con host hardcodeado** (`#laptop`/`#desktop`). SIEMPRE `bash ~/dotfiles/scripts/rebuild.sh`, que detecta la máquina por hardware y valida el root UUID. Un rebuild con host equivocado rompe el boot (ya ocurrió: gen 72 inservible en desktop).
 
 ## Handy (Speech-to-Text)
 
@@ -338,7 +340,8 @@ services.sunshine = {
 
 **⚠️ Build NVENC:** `sunshine.override { cudaSupport = true; }` recompila
 sunshine desde fuente. Compilar con paralelismo default (`max-jobs=24`, sin
-swap) OOM y congela el sistema. Usar SIEMPRE paralelismo controlado:
+swap) OOM y congela el sistema. Usar SIEMPRE paralelismo controlado (solo
+ejecutar EN el desktop):
 `sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" nixos-rebuild switch --flake ~/dotfiles#desktop`.
 
 **Web UI + credenciales:**
@@ -393,7 +396,7 @@ a `linux/config/`, `linux/home/` y `linux/bin/` via `mkOutOfStoreSymlink`.
 2. Al añadir un config nuevo, añadirlo al inventario de `nixos/home.nix`.
 3. Los `hardware-configuration.*.nix` son por-máquina y se commitean con el hardware real de cada una (`nixos-generate-config`). Excepción a la regla de no commitear datos de máquina: el hardware-config es necesario para fresh installs; `setup-nixos.sh` valida por root UUID y regenera si la máquina difiere. **Lo que NO se commitea**: claves, tokens, passwords ni datos de usuario.
 4. Los scripts de `linux/bin/` se symlinkean via `allScripts`; los laptop-only siguen la lista `laptopScripts`.
-5. Comandos: `sudo nixos-rebuild switch --flake ~/dotfiles#laptop` (o `#desktop`).
+5. Comandos: SIEMPRE via `bash ~/dotfiles/scripts/rebuild.sh [switch|boot|test|build|dry-build]`. Nunca invocar `nixos-rebuild` con `--flake ~/dotfiles#laptop|#desktop` hardcodeado: el script detecta la máquina por hardware y valida el root UUID contra `hardware-configuration.<machine>.nix`; aborta si no coinciden.
 
 Ver `nixos/README.md` para la guía de instalación completa.
 

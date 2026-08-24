@@ -27,6 +27,13 @@ PanelWindow {
     property var audioSinks: ListModel {}
     property var audioSources: ListModel {}
 
+    // ── Modo juegos ──
+    property bool gameModeActive: false   // expande root a fullscreen
+    property bool gameShown: false        // fase de fade-in del overlay
+    property bool gameClosing: false      // fase de fade-out
+    property bool gameLaunching: false    // lanzando cartridges/steam
+    property bool gameArmed: false        // modo activo (Cartridges corriendo)
+
     function resetHover(area) {
         if (area.hov !== undefined)
             area.hov = false;
@@ -45,6 +52,38 @@ PanelWindow {
         audioSetDefault.running = true;
     }
 
+    function gameEnter() {
+        root.gameShown = true;
+        root.gameClosing = false;
+        root.gameModeActive = true;
+    }
+    function gameCancel() {
+        if (!root.gameModeActive) return;
+        root.gameClosing = true;
+        gameModeHide.restart();
+    }
+    function gameGo() {
+        root.gameLaunching = true;
+        gameLaunch.running = true;
+    }
+    function gameConfirmClose() {
+        gameLaunch.command = ["game-mode.sh"];
+        gameGo();
+    }
+    function gameConfirmNoClose() {
+        gameLaunch.command = ["game-mode.sh", "noclose"];
+        gameGo();
+    }
+    function gameExit() {
+        gameExitProc.running = true;
+        root.gameArmed = false;
+        root.gameCancel();
+    }
+    function gameToggle() {
+        if (root.gameModeActive) root.gameCancel();
+        else root.gameEnter();
+    }
+
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
 
@@ -52,12 +91,13 @@ PanelWindow {
         top: true
         left: true
         right: true
+        bottom: root.gameModeActive
     }
 
     readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened || ramMenu.opened || dateMenu.opened
 
     implicitHeight: expanded ? expandedHeight : hotEdge
-    exclusiveZone: implicitHeight
+    exclusiveZone: root.gameModeActive ? 2000 : implicitHeight
     Behavior on implicitHeight {
         NumberAnimation {
             duration: 80
@@ -99,6 +139,47 @@ PanelWindow {
                     root.superDown = false;
             }
         }
+    }
+
+    // Monitor de volante (botón PS, BTN_MODE): emite "1" → toglea modo juegos.
+    Process {
+        id: wheelMonitor
+        command: ["wheel-mode-monitor.sh"]
+        running: true
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                if (data === "1")
+                    root.gameToggle();
+            }
+        }
+    }
+
+    Timer {
+        id: gameModeHide
+        interval: 240
+        onTriggered: {
+            root.gameModeActive = false;
+            root.gameShown = false;
+            root.gameClosing = false;
+            root.gameLaunching = false;
+        }
+    }
+
+    Process {
+        id: gameLaunch
+        command: ["true"]
+        running: false
+        onExited: {
+            root.gameArmed = true;
+            gameModeHide.restart();
+        }
+    }
+
+    Process {
+        id: gameExitProc
+        command: ["game-mode.sh", "exit"]
+        running: false
     }
 
     Process {
@@ -510,6 +591,39 @@ PanelWindow {
                     onClicked: {
                         powerMenu.pendingAction = "";
                         powerMenu.opened = !powerMenu.opened;
+                    }
+                }
+            }
+
+            Rectangle {
+                id: gameBtn
+                width: 32
+                height: 22
+                radius: 8
+                color: root.gameArmed ? "#98c379" : root.gameModeActive ? "#cba6f7" : gameBtnArea.hov ? "#5D3FD3" : "#141414"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\uf11b"
+                    color: "white"
+                    font.family: root.fontFamily
+                    font.pixelSize: 13
+                }
+
+                MouseArea {
+                    id: gameBtnArea
+                    property bool hov: false
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: hov = true
+                    onExited: hov = false
+                    onClicked: {
+                        if (root.gameArmed)
+                            root.gameExit();
+                        else if (root.gameModeActive)
+                            root.gameCancel();
+                        else
+                            root.gameEnter();
                     }
                 }
             }
@@ -2815,6 +2929,193 @@ PanelWindow {
                     }
                 }
             }
+        }
+    }
+    // ── Modo juegos — overlay fullscreen (dentro de root) ───────
+    Rectangle {
+        id: gameModeFade
+        anchors.fill: parent
+        color: "transparent"
+        opacity: (root.gameShown && !root.gameClosing) ? 1 : 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 220
+                easing.type: Easing.OutCubic
+            }
+        }
+    
+        // Bloquear el input de lo que haya detrás mientras el overlay está arriba.
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.gameModeActive
+        }
+    
+        Rectangle {
+            anchors.fill: parent
+            color: "#ff0d0d12"
+        }
+    
+        Text {
+            anchors.top: parent.top
+            anchors.topMargin: 56
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "\uf11b  MODO JUEGOS"
+            color: "#cba6f7"
+            font.family: root.fontFamily
+            font.pixelSize: 22
+            font.bold: true
+            font.letterSpacing: 8
+        }
+    
+        Rectangle {
+            id: gameCard
+            width: 440
+            height: gameConfirmCol.implicitHeight + 44
+            visible: !root.gameLaunching
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 14
+            radius: 16
+            color: "#e60d0d12"
+            border.color: "#383847"
+            border.width: 1
+    
+            Column {
+                id: gameConfirmCol
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 8
+    
+                Text {
+                    text: "CERRAR APLICACIONES"
+                    color: "#9a9aa7"
+                    font.family: root.fontFamily
+                    font.pixelSize: 10
+                    font.bold: true
+                    font.letterSpacing: 3
+                }
+    
+                Text {
+                    width: parent.width
+                    text: "Se cierran las demás apps para liberar recursos. Discord, WhatsApp y Spotify se quedan abiertas."
+                    color: "white"
+                    font.family: root.fontFamily
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+    
+                Rectangle {
+                    width: parent.width
+                    height: 42
+                    radius: 8
+                    color: gameSiArea.containsMouse ? "#e06c75" : "#55232a"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "SÍ, CERRAR Y JUGAR"
+                        color: "white"
+                        font.family: root.fontFamily
+                        font.pixelSize: 11
+                        font.bold: true
+                    }
+                    MouseArea {
+                        id: gameSiArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.gameConfirmClose()
+                    }
+                }
+    
+                Rectangle {
+                    width: parent.width
+                    height: 42
+                    radius: 8
+                    color: gameNoArea.containsMouse ? "#5D3FD3" : "#262633"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "NO, SOLO ABRIR"
+                        color: "#cdd6f4"
+                        font.family: root.fontFamily
+                        font.pixelSize: 11
+                        font.bold: true
+                    }
+                    MouseArea {
+                        id: gameNoArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.gameConfirmNoClose()
+                    }
+                }
+    
+                Rectangle {
+                    width: parent.width
+                    height: 42
+                    radius: 8
+                    color: gameCancelArea.containsMouse ? "#454554" : "#262633"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "CANCELAR"
+                        color: "#cdd6f4"
+                        font.family: root.fontFamily
+                        font.pixelSize: 11
+                        font.bold: true
+                    }
+                    MouseArea {
+                        id: gameCancelArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.gameCancel()
+                    }
+                }
+            }
+        }
+    
+        Item {
+            anchors.fill: parent
+            visible: root.gameLaunching
+
+            Column {
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: 20
+                spacing: 18
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "\uf11b"
+                    color: "#cba6f7"
+                    font.family: root.fontFamily
+                    font.pixelSize: 64
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.2; duration: 420; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1; duration: 420; easing.type: Easing.InOutSine }
+                    }
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "CARGANDO JUEGOS…"
+                    color: "#cdd6f4"
+                    font.family: root.fontFamily
+                    font.pixelSize: 20
+                    font.bold: true
+                    font.letterSpacing: 6
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Steam y Cartridges están abriéndose"
+                    color: "#9a9aa7"
+                    font.family: root.fontFamily
+                    font.pixelSize: 13
+                }
+            }
+        }
+    
+        Text {
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 44
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "El botón PS del volante también abre y cierra este modo"
+            color: "#6f6f7b"
+            font.family: root.fontFamily
+            font.pixelSize: 11
         }
     }
 }

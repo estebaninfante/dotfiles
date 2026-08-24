@@ -3,6 +3,7 @@
 
 with pkgs; [  # ── Shell & terminal ──
   kitty
+  warp-terminal
   fish
   pnpm
   tmux
@@ -119,6 +120,38 @@ with pkgs; [  # ── Shell & terminal ──
   opencode
   opencode-desktop
 
+  # ── Orca ADE (Agent Development Environment, stablyai/orca) ──
+  # No esta en nixpkgs: AppImage de GitHub Releases envuelto en FHS (wrapType2)
+  # + .desktop e icono extraidos del propio AppImage.
+  (let
+    orcaAdeSrc = fetchurl {
+      url = "https://github.com/stablyai/orca/releases/download/v1.4.188/orca-linux.AppImage";
+      hash = "sha256-LnDLXhmXQeVgKnBgglV1MZ9eA7wvqkuJzScyjz9V1LQ=";
+    };
+    orcaAdeWrapped = appimageTools.wrapType2 {
+      pname = "orca-ade";
+      version = "1.4.188";
+      src = orcaAdeSrc;
+    };
+    orcaAdeExtracted = appimageTools.extract {
+      pname = "orca-ade";
+      version = "1.4.188";
+      src = orcaAdeSrc;
+    };
+  in
+  symlinkJoin {
+    name = "orca-ade";
+    paths = [ orcaAdeWrapped ];
+    postBuild = ''
+      mkdir -p $out/share/applications
+      install -Dm644 ${orcaAdeExtracted}/orca-ide.png \
+        $out/share/icons/hicolor/512x512/apps/orca-ide.png
+      substitute ${orcaAdeExtracted}/orca-ide.desktop $out/share/applications/orca-ade.desktop \
+        --replace-fail 'Exec=AppRun --no-sandbox %U' 'Exec=orca-ade %U'
+      sed -i '/X-AppImage-Version/d' $out/share/applications/orca-ade.desktop
+    '';
+  })
+
   # ── RStudio ──
   rstudio
 
@@ -128,6 +161,7 @@ with pkgs; [  # ── Shell & terminal ──
   cmake
   clang
   nodejs
+  live-server # servidor estatico con recarga (live-server.nvim)
   python3
   python3Packages.pip
   python3Packages.evdev   # python3-evdev
@@ -167,6 +201,10 @@ with pkgs; [  # ── Shell & terminal ──
 
   # ── Gaming ──
   heroic                  # Heroic Games Launcher (Epic/GOG/Amazon)
+  # cartridges: parche para crash con biblioteca vacia (label=games_no int).
+  (cartridges.overrideAttrs (old: {
+    patches = (old.patches or []) ++ [ ../../linux/patches/cartridges-games-label.patch ];
+  }))
   cartridges              # biblioteca unificada (Steam/Heroic/Lutris) — modo juegos
   lutris
   wineWow64Packages.full  # wine + wine-mono + wine-gecko (wineWowPackages deprecado)

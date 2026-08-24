@@ -280,6 +280,10 @@ hl.window_rule({ match = { class = "swayosd-server" }, move = "1% 40%" })
 hl.window_rule({ match = { class = "swayosd-server" }, size = "200 20" })
 hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
 
+-- Modo juegos: Cartridges fullscreen en workspace 10
+hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, workspace = "10" })
+hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
+
 -- ========================
 -- KEYBINDS: SYSTEM & APPS
 -- ========================

@@ -1,0 +1,12 @@
+Fix cartridges crash con biblioteca vacia (label=games_no int).
+--- a/cartridges/window.py
++++ b/cartridges/window.py
+@@ -161,7 +161,7 @@
+ 
+             row.append(
+                 games_no_label := Gtk.Label(
+-                    label=games_no,
++                    label=str(games_no),
+                     hexpand=True,
+                     halign=Gtk.Align.END,
+                 )
