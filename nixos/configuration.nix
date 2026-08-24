@@ -283,6 +283,13 @@
   # provee la API UPower.PowerProfiles, no el estado de batería.
   services.upower.enable = true;
 
+  # Si no hay actividad, suspender conserva batería mucho mejor que dejar
+  # pantalla apagada indefinidamente. Solo laptop.
+  services.logind.settings.Login = lib.mkIf (machineType == "laptop") {
+    IdleAction = "suspend";
+    IdleActionSec = "15min";
+  };
+
   # ── Ahorro laptop: guarda automática por fuente de energía ────
   # Al desconectar cargador → power-saver + dGPU en D3cold.
   # En AC no cambia selección manual del usuario.

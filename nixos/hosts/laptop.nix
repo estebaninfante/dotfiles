@@ -11,6 +11,13 @@
   # Protege de OOM cuando la RAM llega al maximo.
   swapDevices = [ { device = "/swapfile"; } ];
 
+  # Ahorro de enlaces PCIe y USB cuando dispositivos están inactivos.
+  # No fuerza ASPM: firmware/kernel siguen pudiendo rechazarlo si no es seguro.
+  boot.kernelParams = [
+    "pcie_aspm.policy=powersupersave"
+    "usbcore.autosuspend=2"
+  ];
+
   # ── NVIDIA hybrid ────────────────────────────────────────────
   # iGPU AMD (amdgpu) maneja el display; dGPU NVIDIA solo para juegos.
   # gpu-mode.sh controla el runtime PM manualmente (battery/gaming),
