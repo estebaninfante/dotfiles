@@ -38,6 +38,12 @@ end
 -- reemplazamos el PATH, Hyprland no encuentra kitty/waybar/rofi.
 hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. os.getenv("PATH"))
 hl.env("XDG_DATA_HOME", os.getenv("HOME") .. "/.local/share")
+-- WebKitGTK DMA-BUF can render Handy's Wayland overlay fully transparent
+-- with the desktop NVIDIA stack. Force software WebKit compositing.
+hl.env("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+-- gtk-layer-shell overlay is transparent on this desktop's Wayland stack;
+-- use Handy's regular always-on-top recording window instead.
+hl.env("HANDY_NO_GTK_LAYER_SHELL", "1")
 
 -- ========================
 -- MONITORS
