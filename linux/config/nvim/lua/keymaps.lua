@@ -53,3 +53,6 @@ vim.keymap.set("n", "K", vim.lsp.buf.hover, { desc = "Ver documentación (hover)
 -- Live Server (preview web con recarga en navegador)
 vim.keymap.set("n", "<leader>lo", "<cmd>LiveServerStart<cr>", { desc = "Live server: iniciar" })
 vim.keymap.set("n", "<leader>lx", "<cmd>LiveServerStop<cr>", { desc = "Live server: detener" })
+
+-- Auto-guardado
+vim.keymap.set("n", "<leader>ua", "<cmd>ASToggle<cr>", { desc = "Toggle auto-guardado" })
