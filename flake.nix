@@ -12,10 +12,7 @@
     handy.url = "github:cjpais/Handy/v0.9.5";
     # Flatpak declarativo: services.flatpak.packages (sincroniza apps
     # fuera de nixpkgs entre maquinas).
-    nix-flatpak = {
-      url = "github:gmodena/nix-flatpak";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    nix-flatpak.url = "github:gmodena/nix-flatpak";
   };
 
   outputs = { self, nixpkgs, home-manager, handy, nix-flatpak, ... }:
