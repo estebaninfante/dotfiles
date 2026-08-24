@@ -49,3 +49,7 @@ vim.keymap.set("n", "<leader>ff", "<cmd>Telescope find_files<cr>", { desc = "Bus
 vim.keymap.set("n", "<leader>ft", "<cmd>Telescope live_grep<cr>", { desc = "Buscar texto (grep)" })
 vim.keymap.set("n", "gd", vim.lsp.buf.definition, { desc = "Ir a definición" })
 vim.keymap.set("n", "K", vim.lsp.buf.hover, { desc = "Ver documentación (hover)" })
+
+-- Live Server (preview web con recarga en navegador)
+vim.keymap.set("n", "<leader>lo", "<cmd>LiveServerStart<cr>", { desc = "Live server: iniciar" })
+vim.keymap.set("n", "<leader>lx", "<cmd>LiveServerStop<cr>", { desc = "Live server: detener" })
