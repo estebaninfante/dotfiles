@@ -359,6 +359,13 @@ hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl v -m ctrl"))
 -- F7: transcribir SIEMPRE con post-procesado (prompt custom en Handy)
 hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-post-process"))
 
+-- ── Voz local (sistema voice, ver linux/voice + ~/.local/bin/voice) ──
+-- Push-to-talk: 1a pulsacion graba, 2a corta; el silencio corta automatico.
+-- Nota: SUPER+V esta ocupado por el workspaces 3 en el mapa Dvorak-prog
+-- (ws_keys = {M,W,V,...}) — la voz usa SUPER+I para no romper ese mapa.
+-- Para cambiarla: bindear otra tecla a "~/.local/bin/voice listen".
+hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice listen"))
+
 -- OpenCode / TV toggle
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles -e ~/.opencode/bin/opencode"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))

@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+# voice — CLI del sistema de voz local (TTS + STT + daemon).
+#
+# Uso:
+#   voice status                         estado completo
+#   voice speak "texto"                  TTS (via daemon si activo, si no directo)
+#   voice listen                         graba (Super+V) → STT → transcribe
+#   voice test                           test TTS + STT
+#   voice backend [cpu|cuda|auto]        ver/cambiar backend STT
+#   voice gpu                            estado GPU NVIDIA
+#   voice battery                        estado bateria/AC
+#   voice tts [on|off]                   activar/desactivar anuncios de opencode
+#   voice voice [nombre]                 ver/cambiar voz (voz actual si sin arg)
+#   voice voices                         listar voces piper instaladas
+#   voice lang [es|en]                   ver/cambiar idioma
+#   voice mode [summary|full]            ver/cambiar modo de resumen
+#   voice model [fetch] [modelo]         ver/cambiar modelo STT (o predescarga)
+#   voice transcribe <wav>               STT sobre un archivo
+#   voice stop                           vaciar cola TTS + cortar playback
+#   voice daemon start|stop|restart      control del servicio systemd user
+#
+# Arquitectura de capas:
+#   TTS  → linux/voice/daemon.py (cola) + pesos piper en /run/current-system/sw
+#   STT  → linux/voice/stt.py via env faster-whisper (voice-stt-cpu/-cuda)
+#   CLI  → este script
+#   OpenCode → plugin linux/config/opencode/plugins/voice/plugin.js
+#
+# Toogles runtime → ~/.local/state/voice/state.json (por-maquina, no en repo).
+
+set -uo pipefail
+
+REPO="${VOICE_REPO:-$HOME/dotfiles}"
+VOICE_DIR="$REPO/linux/voice"
+CONFIG_DIR="$HOME/.config/voice"
+CACHE_DIR="${VOICE_CACHE_DIR:-$HOME/.cache/voice}"
+STATE_FILE="$HOME/.local/state/voice/state.json"
+FIFO="$CACHE_DIR/tts.fifo"
+PID_FILE="$CACHE_DIR/daemon.pid"
+LISTEN_PID="$CACHE_DIR/listen.pid"
+OC_FILE="$CACHE_DIR/to-opencode.json"
+
+PY="${PY:-python3}"
+
+# ── helpers ─────────────────────────────────────────────────────────────
+js_escape() { "$PY" -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
+
+daemon_alive() {
+  [ -f "$PID_FILE" ] || return 1
+  local pid; pid=$(cat "$PID_FILE")
+  kill -0 "$pid" 2>/dev/null
+}
+
+get_set() {  # get_set <sección> <clave> [valor]
+  if [ "$#" -ge 3 ]; then
+    "$PY" "$VOICE_DIR/engine.py" set "$1" "$2" "$3"
+  else
+    "$PY" - "$1" "$2" <<'PYEOF'
+import json, os, sys
+sec, key = sys.argv[1], sys.argv[2]
+try:
+    st = json.load(open(os.path.expanduser("~/.local/state/voice/state.json")))
+    print(st.get(sec, {}).get(key, ""))
+except Exception:
+    print("")
+PYEOF
+  fi
+}
+
+config_val() {  # config_val <sección> <clave> — valor efectivo de config+state
+  "$PY" - "$1" "$2" <<'PYEOF'
+import json, os, sys
+sec, key = sys.argv[1], sys.argv[2]
+def parse_toml(path):
+    cfg, section = {}, None
+    try:
+        for line in open(path):
+            line = line.strip()
+            if not line or line.startswith("#"): continue
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1].strip(); cfg.setdefault(section, {})
+            elif "=" in line and section:
+                k, v = [x.strip() for x in line.split("=", 1)]
+                if v.lower() in ("true","false"): v = (v.lower()=="true")
+                elif v.startswith('"') and v.endswith('"'): v = v[1:-1]
+                cfg[section][k] = v
+    except OSError: pass
+    return cfg
+cfg = parse_toml(os.path.expanduser("~/.config/voice/config.toml"))
+try:
+    st = json.load(open(os.path.expanduser("~/.local/state/voice/state.json")))
+except Exception:
+    st = {}
+if sec in st and key in st[sec]:
+    print(st[sec][key])
+elif sec in cfg and key in cfg[sec]:
+    print(cfg[sec][key])
+else:
+    print("")
+PYEOF
+}
+
+# ── comandos ────────────────────────────────────────────────────────────
+speak() {
+  local text="$*"
+  [ -n "$text" ] || { echo "voice: sin texto" >&2; return 1; }
+  local enabled; enabled=$(config_val tts enabled)
+  if [ "$enabled" = "false" ]; then return 0; fi
+  if daemon_alive; then
+    local voice engine lang
+    voice=$(config_val tts "voice_$(config_val tts lang)")
+    [ -n "$voice" ] || voice=$(config_val tts voice_es)
+    engine=$(config_val tts engine)
+    lang=$(config_val tts lang)
+    exec 9<>"$FIFO"
+    printf '%s\n' "{\"text\":$(js_escape "$text"),\"voice\":$(js_escape "$voice"),\"engine\":$(js_escape "$engine"),\"lang\":$(js_escape "$lang")}" >&9
+    exec 9>&-
+  else
+    # daemon caido → sintesis directa en background (no bloquea al llamador)
+    setsid nohup "$0" __speak_direct "$text" >/dev/null 2>&1 &
+  fi
+}
+
+__speak_direct() {
+  local text="$*"
+  local voice engine
+  voice=$(config_val tts "voice_$(config_val tts lang)"); [ -n "$voice" ] || voice=$(config_val tts voice_es)
+  engine=$(config_val tts engine)
+  if [ "$engine" = "espeak" ]; then
+    espeak-ng -v "$(config_val tts lang)" -s 160 -p 50 "$text"
+    return $?
+  fi
+  exec 9>"$CACHE_DIR/speak.lock"
+  flock -n 9 || return 0
+  if command -v "$HOME/.local/bin/speak" >/dev/null 2>&1; then
+    "$HOME/.local/bin/speak" -v "$voice" "$text"
+  else
+    speak_core_piper "$voice" "$text"
+  fi
+}
+
+speak_core_piper() { # speak_core_piper <voz> <texto> — sin flock, sin daemon
+  local voice="$1"; shift
+  local model json rate
+  for d in /run/current-system/sw/share/piper-voices \
+           "/nix/var/nix/profiles/default/share/piper-voices" \
+           "$HOME/.local/share/tts/piper/voices"; do
+    if [ -f "$d/$voice/$voice.onnx" ]; then model="$d/$voice/$voice.onnx"; break; fi
+  done
+  [ -n "${model:-}" ] || { echo "voice: voz $voice no encontrada" >&2; return 1; }
+  json="${model}.json"
+  rate=$(jq -r '.audio.sample_rate // 22050' "$json" 2>/dev/null || echo 22050)
+  piper --model "$model" --output-raw 2>/dev/null <<<"$*" |
+    pw-play --raw --format=s16 --rate "$rate" --channels=1 - >/dev/null 2>&1
+}
+
+listen() {
+  command -v rec >/dev/null 2>&1 || { echo "voice: 'rec' (sox) no instalado" >&2; return 1; }
+  local wav="$CACHE_DIR/listen.wav"
+  mkdir -p "$CACHE_DIR"
+
+  # toggle: segunda pulsacion corta la grabacion
+  if [ -f "$LISTEN_PID" ]; then
+    local pid; pid=$(cat "$LISTEN_PID")
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null
+      rm -f "$LISTEN_PID"
+      echo "voice: grabación detenida"
+      return 0
+    fi
+    rm -f "$LISTEN_PID"
+  fi
+
+  # señuelo visual en swayosd/notify
+  swayosd-client --custom-symbol "mic" --custom-message "Grabando… (vuelve a Super+V para cortar o espera silencio)" >/dev/null 2>&1 &
+  echo "voice: grabando (silence auto-stop, max 15s)…" >&2
+
+  rec -q "$wav" rate 16k channels 1 silence 1 0.3 0.8% 1 0.9 0.8% timeout 15 &
+  local rpid=$!
+  echo "$rpid" > "$LISTEN_PID"
+  wait "$rpid" 2>/dev/null
+  rm -f "$LISTEN_PID"
+  pkill -f "swayosd-client.*Grabando" 2>/dev/null
+
+  [ -s "$wav" ] || { echo "voice: sin audio capturado" >&2; return 1; }
+  local text; text=$(transcribe "$wav")
+  [ -n "$text" ] || { echo "voice: no se entendio la frase" >&2; return 1; }
+  echo "$text"
+  command -v wl-copy >/dev/null 2>&1 && echo "$text" | wl-copy >/dev/null 2>&1 &
+
+  # rutear a opencode si esta corriendo (lo levanta el plugin voice)
+  if pgrep -u "$(id -u)" -f "opencode.*session" >/dev/null 2>&1 || pgrep -f "/bin/opencode" >/dev/null 2>&1; then
+    local tmp="$CACHE_DIR/to-opencode.json.tmp"
+    printf '{"text":%s,"ts":%s}\n' "$(js_escape "$text")" "$(date +%s)" > "$tmp"
+    mv "$tmp" "$OC_FILE"
+    echo "voice: enviado a opencode" >&2
+  fi
+}
+
+transcribe() {
+  local wav="$1"
+  local backend model lang eff
+  backend=$(config_val stt backend)
+  model=$(config_val stt model)
+  lang=$(config_val stt lang)
+  eff=$("$PY" - <<PYEOF
+import sys
+sys.path.insert(0, "$VOICE_DIR")
+from engine import choose_stt_backend
+print(choose_stt_backend("$backend"))
+PYEOF
+)
+  local runner="voice-stt-cpu"
+  [ "$eff" = "cuda" ] && runner="voice-stt-cuda"
+  local pybin
+  if command -v "$runner" >/dev/null 2>&1; then
+    pybin="$runner"
+  else
+    pybin="$PY"
+    echo "voice: env '$runner' no en PATH, usando python3 del sistema" >&2
+  fi
+  "$pybin" "$VOICE_DIR/stt.py" transcribe "$wav" --model "$model" --backend "$eff" --lang "$lang"
+}
+
+usage() { sed -n '2,20p' "$0"; }
+
+# ── despacho ────────────────────────────────────────────────────────────
+case "${1:-status}" in
+  __speak_direct) shift; __speak_direct "$@" ;;
+  status) "$PY" "$VOICE_DIR/engine.py" status ;;
+  speak) shift; speak "$@" ;;
+  listen) listen ;;
+  test)
+    speak "Hola. Esto es una prueba del sistema de voz local."
+    sleep 1.5
+    echo "— Ahora habla tras el pitido (STT)…"
+    listen
+    ;;
+  stop)
+    if daemon_alive; then
+      exec 9<>"$FIFO"; printf '{"cmd":"stop"}\n' >&9; exec 9>&-
+      echo "voice: cola vaciada"
+    else
+      pkill -f "pw-play" 2>/dev/null; echo "voice: sin daemon, playback detenido"
+    fi
+    ;;
+  backend)
+    if [ "$#" -ge 2 ]; then get_set stt backend "$2"; else
+      echo "backend configurado: $(config_val stt backend) | efectivo: $("$PY" - <<PYEOF
+import sys; sys.path.insert(0, "$VOICE_DIR")
+from engine import choose_stt_backend, detect
+print(choose_stt_backend("$(config_val stt backend)", detect()))
+PYEOF
+)"; fi
+    ;;
+  gpu)
+    if [ -d /dev/nvidia0 ] || [ -e /dev/nvidia0 ]; then
+      nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+    else
+      echo "sin GPU NVIDIA"
+    fi
+    ;;
+  battery)
+    "$PY" "$VOICE_DIR/engine.py" detect | grep -E "battery|on_ac" || true
+    [ -d /sys/class/power_supply ] && for b in /sys/class/power_supply/BAT*; do
+      [ -e "$b/uevent" ] || continue
+      echo "  $b: $(cat "$b/uevent" 2>/dev/null | tr '\n' ' ')"
+    done
+    ;;
+  tts)
+    if [ "$#" -ge 2 ]; then
+      case "$2" in
+        on|true|1) get_set tts enabled true; echo "voice: TTS ON" ;;
+        off|false|0) get_set tts enabled false; echo "voice: TTS OFF" ;;
+        *) echo "voice: tts on|off" >&2; exit 2 ;;
+      esac
+    else echo "TTS: $(config_val tts enabled)"; fi
+    ;;
+  voice)
+    if [ "$#" -ge 2 ]; then
+      get_set tts "voice_$(config_val tts lang)" "$2"
+      echo "voz: $2"
+    else echo "voz actual: $(config_val tts "voice_$(config_val tts lang)")"; fi
+    ;;
+  voices) "$PY" "$VOICE_DIR/engine.py" voices || echo "(ninguna voz piper instalada)" ;;
+  lang)
+    if [ "$#" -ge 2 ]; then get_set tts lang "$2"; echo "idioma: $2"
+    else echo "idioma: $(config_val tts lang)"; fi
+    ;;
+  mode)
+    if [ "$#" -ge 2 ]; then get_set tts mode "$2"; echo "modo: $2 (summary|full)"
+    else echo "modo: $(config_val tts mode)"; fi
+    ;;
+  model)
+    if [ "$#" -ge 2 ] && [ "$2" = "fetch" ]; then
+      local m="${3:-$(config_val stt model)}"
+      local b; b=$(config_val stt backend)
+      "$(command -v voice-stt-cpu || echo "$PY")" "$VOICE_DIR/stt.py" fetch "$m" --backend "$b"
+    elif [ "$#" -ge 2 ]; then
+      get_set stt model "$2"; echo "modelo STT: $2"
+    else echo "modelo STT: $(config_val stt model)"; fi
+    ;;
+  transcribe)
+    [ "$#" -ge 2 ] || { echo "uso: voice transcribe <wav>" >&2; exit 2; }
+    transcribe "$2"
+    ;;
+  daemon)
+    case "${2:-status}" in
+      start) systemctl --user start voice-daemon ;;
+      stop)  systemctl --user stop voice-daemon ;;
+      restart) systemctl --user restart voice-daemon ;;
+      status) systemctl --user is-active voice-daemon ;;
+      *) cat <<EOU
+use: voice daemon start|stop|restart|status
+    (unit: voice-daemon.service, ver nixos/home.nix)
+EOU
+        ;;
+    esac
+    ;;
+  -h|--help|help) usage ;;
+  *) echo "voice: comando desconocido: $1" >&2; usage >&2; exit 2 ;;
+esac

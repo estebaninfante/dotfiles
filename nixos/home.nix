@@ -32,7 +32,7 @@ let
   configDirs = [
     "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
-    "quickshell" "tmux"
+    "quickshell" "tmux" "voice"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -49,6 +49,7 @@ let
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
     "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh" "clipboard-sync"
+    "voice" "voice-daemon"
   ];
   # Solo laptop
   laptopScripts = [
@@ -330,9 +331,31 @@ in
       Restart = "on-failure";
       RestartSec = "2";
     };
-    Install = {
-      WantedBy = [ "graphical-session.target" ];
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # ── voice-daemon: cola TTS + reproduccion (sistema de voz) ───────────
+  # Capa daemon del sistema de voz local (linux/voice/daemon.py). Habla
+  # via PipeWire (pw-play); CLI `voice speak` y plugin opencode voice
+  # escriben por el FIFO ~/.cache/voice/tts.fifo.
+  systemd.user.services.voice-daemon = {
+    Unit = {
+      Description = "Voice daemon (TTS queue + playback)";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
     };
+    Service = {
+      Type = "simple";
+      ExecStart = "${bin}/voice-daemon";
+      Restart = "on-failure";
+      RestartSec = "3";
+      Environment = [
+        "XDG_RUNTIME_DIR=/run/user/%U"
+        "XDG_SESSION_TYPE=wayland"
+        "PULSE_SERVER=unix:/run/user/%U/pulse/native"
+      ];
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
   };
 
 }

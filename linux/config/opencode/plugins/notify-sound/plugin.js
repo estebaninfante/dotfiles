@@ -72,7 +72,13 @@ function dbg(msg) {
 // Lee el texto en voz alta (Piper TTS). No bloquea: spawn + no await.
 // opencode usa la voz es_MX-claude-high (espanol latino, femenina, Clara).
 // `key` identifica el evento (sesion/permiso + sessionID) para el dedup.
+//
+// NOTA: el plugin plugins/voice/plugin.js es ahora el encargado del TTS
+// (resumenes, anuncios). Este plugin mantiene SOLO el push a ntfy.sh para
+// no duplicar la voz. Re-habilitar el TTS local aqui (p.ej. como fallback):
+//   NOTIFY_SOUND_TTS=1
 function speak(text, key) {
+  if (process.env.NOTIFY_SOUND_TTS !== '1') { dbg(`tts off (voice plugin a cargo): ${key}`); return; }
   if (!key) { dbg(`speak (no key, skip): ${text}`); return; }
   const release = acquireLock(key);
   if (release === false) {

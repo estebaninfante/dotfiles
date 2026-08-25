@@ -114,6 +114,78 @@ with pkgs; [  # ── Shell & terminal ──
   # pasado como handyPackage desde flake.nix. nixpkgs va atrasado (0.9.1).
   handyPackage
 
+  # ── Voz local (sistema de voz: STT + TTS, ver linux/voice + CLI voice) ──
+  # TTS: piper (default) + espeak-ng (fallback) + kokoro (opcional).
+  # STT: faster-whisper en dos envs → CPU (voice-stt-cpu) y CUDA
+  #      (voice-stt-cuda). CPU por defecto; GPU opcional vía `voice backend`.
+  # Voces piper: fetchurl de rhasspy/piper-voices → $out/share/piper-voices
+  # (ahí las buscan `speak` y linux/voice/engine.py). No hay package de
+  # voces en nixpkgs (verificado).
+  piper-tts
+  espeak-ng
+  sox
+  (let
+    voiceFetch = { name, path, onnxHash, jsonHash }:
+      pkgs.runCommand "piper-voice-${name}" { } ''
+        mkdir -p $out/share/piper-voices/${name}
+        cp ${pkgs.fetchurl { url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/${path}/${name}.onnx"; hash = onnxHash; }} \
+          $out/share/piper-voices/${name}/${name}.onnx
+        cp ${pkgs.fetchurl { url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/${path}/${name}.onnx.json"; hash = jsonHash; }} \
+          $out/share/piper-voices/${name}/${name}.onnx.json
+      '';
+    piperVoices =
+      pkgs.symlinkJoin {
+        name = "piper-voices";
+        paths = map voiceFetch [
+          { name = "es_MX-claude-high";
+            path = "es/es_MX/claude/high";
+            onnxHash = "sha256-181y101fw0hfy7ili73wnjh6gynwxk9afvvymgc2r1b3x9qhmx1y";
+            jsonHash = "sha256-0bf14dvmbdayrxq02zw00s4ajm4bdc4wl3bw9lxwpr600gvq3z0s"; }
+          { name = "es_MX-ald-medium";
+            path = "es/es_MX/ald/medium";
+            onnxHash = "sha256-0qwvaxn1jw3v9wadfvvq9r8rl84970xfblkd415f74rw541ki6q1";
+            jsonHash = "sha256-0g5hsslc29fhh5dka5lq85ayd765cdpb9lb3s3aiscp5c9p77azg"; }
+          { name = "es_ES-davefx-medium";
+            path = "es/es_ES/davefx/medium";
+            onnxHash = "sha256-05x94bi45i62crywl6wy5ly3b4qkpim8kab5qbj6wcbc38xv0n36";
+            jsonHash = "sha256-0hj8qngdzyymcclslxyaglr2y9frh1ill9zzf63z7xijqy3xl38f"; }
+          { name = "en_US-amy-medium";
+            path = "en/en_US/amy/medium";
+            onnxHash = "sha256-063c43bbs0nb09f86l4avnf9mxah38b1h9ffl3kgpixqaxxy99mk";
+            jsonHash = "sha256-0xvxjxk59byydx9gj6rdvvydp5zm8mzsrf9vyy6x6299sjs3x8lm"; }
+        ];
+      };
+  in
+  piperVoices)
+  (let
+    sttCpu = pkgs.python313.withPackages (ps: [ ps.faster-whisper ]);
+    sttCuda = pkgs.python313.withPackages (ps: [
+      (ps.faster-whisper.override {
+        ctranslate2 = ps.ctranslate2.override { withCUDA = true; };
+      })
+    ]);
+  in
+  [
+    (pkgs.writeShellScriptBin "voice-stt-cpu" ''
+      exec ${sttCpu}/bin/python3 "$@"
+    '')
+    (pkgs.writeShellScriptBin "voice-stt-cuda" ''
+      exec ${sttCuda}/bin/python3 "$@"
+    '')
+  ])
+  # kokoro (TTS neural, opcional): el daemon conmuta a este motor con
+  # `voice` en config (engine = "kokoro"). Voces se descargan en el primer
+  # uso (hexgrad/Kokoro-82M) a ~/.cache/huggingface.
+  (let
+    kokoroEnv = pkgs.python313.withPackages (ps: [ ps.kokoro ]);
+  in
+  pkgs.writeShellScriptBin "voice-kokoro" ''
+    repo="''${VOICE_REPO:-$HOME/dotfiles}"
+    test -f "$repo/linux/voice/kokoro.py" \
+      || { echo "voice-kokoro: repositorio no encontrado" >&2; exit 1; }
+    exec ${kokoroEnv}/bin/python3 "$repo/linux/voice/kokoro.py" "$@"
+  '')
+
   # ── Compartir teclado/raton entre maquinas ──
   deskflow
   (lan-mouse.overrideAttrs (old: {

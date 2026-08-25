@@ -1,0 +1,23 @@
+# Voice system — configuraciones por defecto (commiteadas).
+#
+# Runtime overrides (voice backend cuda, voice lang en, ...) se guardan en
+# ~/.local/state/voice/state.json (por-maquina, NO en el repo).
+# Este archivo es la fuente de verdad en divergencia config.toml vs state.json
+# (state.json pisa sobre estas claves).
+
+[tts]
+enabled = true            # false = opencode no anuncia nada por voz
+engine = "piper"          # piper | kokoro | espeak
+voice_es = "es_MX-claude-high"
+voice_en = "en_US-amy-medium"
+lang = "es"               # es | en
+mode = "summary"          # summary = resumen de la respuesta; full = texto completo
+
+[stt]
+backend = "cpu"           # cpu | cuda | auto  (auto = GPU si NVIDIA y (desktop o AC))
+model = "small"           # tiny | base | small | medium
+lang = "es"
+
+[power]
+cpu_on_battery = true     # bateria → STT siempre CPU
+gpu_on_ac = true          # AC → permitir GPU
