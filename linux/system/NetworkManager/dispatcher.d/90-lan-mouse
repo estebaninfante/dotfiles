@@ -1,6 +1,8 @@
 #!/bin/bash
 # NetworkManager dispatcher para LAN-Mouse KVM y watchdog de IP.
-# - Reinicia lan-mouse al conectar a una red de casa.
+# - Handoff cable/WiFi: la IP estática KVM vive en UNA sola interfaz.
+#   Ethernet tiene prioridad; si se cae, el WiFi toma el relevo.
+# - Reinicia lan-mouse ante cambios de red en casa.
 # - Detecta conflicto de la IP estática LAN (otro host responde ARP,
 #   o la dirección no se pudo configurar) y avisa por ntfy.
 #
@@ -12,6 +14,7 @@ IFACE="$1"
 ACTION="$2"
 USER="eztvn"
 
+WIFI_IF="wlo1"
 HOME_SSIDS=("Familia_Infante_PLUS" "Familia Villamil" "Familia Villamil 1")
 NTFY_TOPIC="opencode-laptop"
 
@@ -33,6 +36,10 @@ is_home_network() {
     return 1
 }
 
+is_ethernet() {
+    [ "$(nmcli -t -f TYPE device show "$IFACE" 2>/dev/null)" = "ethernet" ]
+}
+
 restart_lan_mouse() {
     local uid uid=$(id -u "$USER" 2>/dev/null) || return 1
     su "$USER" -c "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user restart lan-mouse.service" 2>/dev/null
@@ -46,8 +53,11 @@ notify_ntfy() {
 check_ip_conflict() {
     sleep 8
 
+    # La interfaz puede ya no existir (ej. cable desconectado)
+    [ -d "/sys/class/net/$IFACE" ] || return
+
     # IP configurada? Si no, probablemente hay conflicto (NM la rechaza).
-    if ! ip -4 addr show dev "$IFACE" | grep -q "$LAN_IP/"; then
+    if ! ip -4 addr show dev "$IFACE" 2>/dev/null | grep -q "$LAN_IP/"; then
         notify_ntfy "Red: IP no configurada en $(hostname)" \
             "$LAN_IP no se pudo configurar en $IFACE tras conectar. Probable conflicto de IP."
         return
@@ -65,16 +75,28 @@ check_ip_conflict() {
     fi
 }
 
+# Handoff cable <-> WiFi: la IP estática debe vivir en una sola interfaz.
+medium_handoff() {
+    if is_ethernet; then
+        if [ "$ACTION" = "up" ]; then
+            # El cable manda: baja el WiFi
+            nmcli device disconnect "$WIFI_IF" >/dev/null 2>&1
+        else
+            # Cable caído: el WiFi toma el relevo (reaplica la IP de casa)
+            if ! ip -4 addr show dev "$WIFI_IF" 2>/dev/null | grep -q inet; then
+                nmcli device connect "$WIFI_IF" >/dev/null 2>&1
+            fi
+        fi
+        return 0
+    fi
+    return 1
+}
+
 case "$ACTION" in
-    up)
-        if is_home_network; then
+    up|down)
+        if medium_handoff || is_home_network; then
             restart_lan_mouse
             check_ip_conflict &
-        fi
-        ;;
-    down)
-        if is_home_network; then
-            restart_lan_mouse
         fi
         ;;
 esac
