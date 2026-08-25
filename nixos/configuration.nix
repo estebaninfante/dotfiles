@@ -4,7 +4,7 @@
 # Se genera por maquina con `nixos-generate-config` durante la instalacion
 # (ver README.md). Cada host importa el suyo en hosts/<host>.nix.
 
-{ config, pkgs, lib, handyPackage, machineType, ... }:
+{ config, pkgs, lib, handyPackage, machineType, piperVoices, ... }:
 
 {
   imports = [
@@ -58,7 +58,7 @@
   # lo pone en dvk_prog (tu layout custom).
 
   # ── Paquetes del sistema ─────────────────────────────────────
-  environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage; };
+  environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage piperVoices; };
 
   # ── Servicios base ────────────────────────────────────────────
   services.pipewire = {
