@@ -61,7 +61,7 @@ with pkgs; [  # ── Shell & terminal ──
 
   # ── Navegadores ──
   brave
-  google-chrome
+  (google-chrome.override { commandLineArgs = "--enable-speech-dispatcher"; })
   firefox
 
   # ── Utilidades ──
