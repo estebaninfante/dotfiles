@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Controla la GPU NVIDIA via Runtime PM (laptop híbrida AMD + RTX).
-#   battery : GPU en D3cold cuando está inactiva → máximo ahorro de batería
+#   battery : GPU en D3cold cuando está inactiva
 #   gaming  : GPU forzada activa + persistence mode → lista para jugar
+#   enable  : arranca especialización NVIDIA y reinicia
+#   disable : vuelve al perfil AMD y reinicia
 #   guard   : automático por fuente de energía (batería → battery, AC → sin cambios)
 # Uso: gpu-mode.sh [battery|gaming|toggle|guard|status]
 set -euo pipefail
@@ -30,6 +32,32 @@ ac_status() {
   echo "bateria"
 }
 
+driver_active() {
+  [ -e "/sys/bus/pci/devices/$GPU_PCI/driver" ] &&
+    [ "$(basename "$(readlink "/sys/bus/pci/devices/$GPU_PCI/driver")")" = "nvidia" ]
+}
+
+switch_profile() {
+  local profile="$1"
+  local switcher
+  if [ "$profile" = "nvidia" ]; then
+    switcher="/run/current-system/specialisation/nvidia/bin/switch-to-configuration"
+  else
+    switcher="/run/current-system/bin/switch-to-configuration"
+  fi
+  if [ ! -x "$switcher" ]; then
+    echo "Perfil NVIDIA no disponible: ejecuta rebuild primero" >&2
+    exit 1
+  fi
+  if [ "$(id -u)" = "0" ]; then
+    "$switcher" boot
+  else
+    sudo "$switcher" boot
+  fi
+  notify-send "GPU NVIDIA" "Perfil $profile seleccionado; reiniciando" 2>/dev/null || true
+  systemctl reboot
+}
+
 current_mode() {
   [ "$(cat "$CTRL")" = "on" ] && echo "gaming" || echo "battery"
 }
@@ -49,13 +77,30 @@ if ! find_gpu; then
   exit 1
 fi
 
-mode=$(current_mode)
+mode="disabled"
+if driver_active; then
+  mode=$(current_mode)
+fi
 
 case "${1:-status}" in
+  enable)
+    switch_profile nvidia
+    ;;
+  disable)
+    switch_profile amd
+    ;;
   battery)
+    if [ "$mode" = "disabled" ]; then
+      echo "NVIDIA ya está desactivada"
+      exit 0
+    fi
     set_mode auto 0
     ;;
   gaming)
+    if [ "$mode" = "disabled" ]; then
+      echo "NVIDIA desactivada; usa gpu-mode.sh enable y reinicia" >&2
+      exit 1
+    fi
     set_mode on 1
     ;;
   guard)
@@ -66,18 +111,22 @@ case "${1:-status}" in
     fi
     ;;
   toggle)
-    if [ "$mode" = "gaming" ]; then
+    if [ "$mode" = "disabled" ]; then
+      switch_profile nvidia
+    elif [ "$mode" = "gaming" ]; then
       set_mode auto 0
     else
       set_mode on 1
     fi
     ;;
   status)
-    echo "GPU: $(cat "$STATE")  Modo: $mode  Fuente: $(ac_status)"
+    state="desactivada"
+    driver_active && state=$(cat "$STATE")
+    echo "GPU: $state  Modo: $mode  Fuente: $(ac_status)"
     exit 0
     ;;
   *)
-    echo "Uso: gpu-mode.sh [battery|gaming|toggle|guard|status]" >&2
+    echo "Uso: gpu-mode.sh [enable|disable|battery|gaming|toggle|guard|status]" >&2
     exit 1
     ;;
 esac

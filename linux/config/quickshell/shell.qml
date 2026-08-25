@@ -98,13 +98,6 @@ PanelWindow {
 
     implicitHeight: expanded ? expandedHeight : hotEdge
     exclusiveZone: root.gameModeActive ? 2000 : implicitHeight
-    Behavior on implicitHeight {
-        NumberAnimation {
-            duration: 35
-            easing.type: Easing.OutQuad
-        }
-    }
-
     HoverHandler {
         id: hot
     }
@@ -307,12 +300,6 @@ PanelWindow {
         color: "#95000000"
         clip: true
         opacity: expanded ? 1 : 0
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 50
-            }
-        }
-
         Text {
             id: clock
             anchors.centerIn: parent
@@ -541,12 +528,6 @@ PanelWindow {
                 radius: 8
                  color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.hov ? "#5D3FD3" : "#141414"
 
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                    }
-                }
-
                 Text {
                     anchors.centerIn: parent
                     text: "\uf009"
@@ -665,17 +646,6 @@ PanelWindow {
                         }
                     }
 
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 200
-                        }
-                    }
-
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: 200
-                        }
-                    }
                 }
             }
         }
@@ -1071,13 +1041,6 @@ PanelWindow {
                 }
             }
 
-            Behavior on implicitHeight {
-                NumberAnimation {
-                    duration: 180
-                    easing.type: Easing.OutCubic
-                }
-            }
-
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: 1
@@ -1299,13 +1262,6 @@ PanelWindow {
             grabFocus: true
             color: "transparent"
 
-             Behavior on implicitHeight {
-                 NumberAnimation {
-                     duration: 260
-                     easing.type: Easing.OutCubic
-                 }
-             }
-
              property bool opened: false
              property string activeSection: "conexiones"
 
@@ -1373,16 +1329,6 @@ PanelWindow {
                      opacity: widgetMenu.opened ? 1 : 0
                      scale: widgetMenu.opened ? 1 : 0.94
                      transformOrigin: Item.TopRight
-
-                     Behavior on opacity {
-                         NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-                     }
-                     Behavior on scale {
-                         NumberAnimation { duration: 220; easing.type: Easing.OutBack }
-                     }
-                     Behavior on height {
-                         NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
-                     }
 
              Column {
                  id: cards
@@ -1636,11 +1582,11 @@ PanelWindow {
 
                         Card {
                             id: gpuCard
-                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : "\uf06c"
-                            cAccent: gpuCard.modo === "gaming" ? "#98c379" : "#cba6f7"
+                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.modo === "disabled" ? "\uf011" : "\uf06c"
+                            cAccent: gpuCard.modo === "gaming" ? "#98c379" : gpuCard.modo === "disabled" ? "#e06c75" : "#cba6f7"
                             cTitle: "GPU NVIDIA"
-                            cBig: gpuCard.modo === "gaming" ? "Juegos" : "Bater\u00eda"
-                            cSub: gpuCard.fuente ? (gpuCard.modo === "gaming" ? "Click: modo bater\u00eda" : "Click: modo juegos") : "---"
+                            cBig: gpuCard.modo === "gaming" ? "Juegos" : gpuCard.modo === "disabled" ? "Desactivada" : "Bater\u00eda"
+                            cSub: gpuCard.fuente ? (gpuCard.modo === "gaming" ? "Click: modo bater\u00eda" : gpuCard.modo === "disabled" ? "Click: activar y reiniciar" : "Click: modo juegos") : "---"
                             dDel: 120
                             cardOn: widgetMenu.opened
                              visible: root.hasBattery && widgetMenu.activeSection === "monitoreo"
@@ -2053,10 +1999,6 @@ PanelWindow {
                               border.width: 1
                               visible: widgetMenu.activeSection === "conexiones"
 
-                             Behavior on height {
-                                 NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
-                             }
-
                              property bool wifiOn: false
                              property string network: "Sin conexión"
                              property bool wifiDetailsOpen: false
@@ -2262,10 +2204,6 @@ PanelWindow {
                                 spacing: 9
                                 visible: wifiCard.wifiDetailsOpen
                                 opacity: wifiCard.wifiDetailsOpen ? 1 : 0
-
-                                Behavior on opacity {
-                                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-                                }
 
                                       RowLayout {
                                           width: parent.width
@@ -2679,10 +2617,6 @@ PanelWindow {
                              border.width: 1
                              visible: widgetMenu.activeSection === "conexiones"
 
-                             Behavior on height {
-                                 NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
-                             }
-
                             property bool btOn: false
                             property string stateText: "No disponible"
                             property bool btDetailsOpen: false
@@ -2804,10 +2738,6 @@ PanelWindow {
                                 spacing: 9
                                 visible: bluetoothCard.btDetailsOpen
                                 opacity: bluetoothCard.btDetailsOpen ? 1 : 0
-
-                                Behavior on opacity {
-                                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-                                }
 
                                 Rectangle {
                                     width: parent.width
@@ -3021,13 +2951,6 @@ PanelWindow {
         anchors.fill: parent
         color: "transparent"
         opacity: (root.gameShown && !root.gameClosing) ? 1 : 0
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 220
-                easing.type: Easing.OutCubic
-            }
-        }
-    
         // Bloquear el input de lo que haya detrás mientras el overlay está arriba.
         MouseArea {
             anchors.fill: parent

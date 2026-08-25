@@ -13,12 +13,5 @@ Rectangle {
         width: parent.width * parent.mv
         radius: parent.radius
         color: parent.mColor
-
-        Behavior on width {
-            NumberAnimation {
-                duration: 700
-                easing.type: Easing.OutQuint
-            }
-        }
     }
 }

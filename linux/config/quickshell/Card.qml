@@ -119,31 +119,4 @@ Rectangle {
         }
     ]
 
-    transitions: Transition {
-        to: "*"
-        reversible: true
-        SequentialAnimation {
-            PauseAnimation {
-                duration: cCard.dDel
-            }
-            ParallelAnimation {
-                NumberAnimation {
-                    property: "opacity"
-                    duration: 160
-                    easing.type: Easing.OutQuad
-                }
-                NumberAnimation {
-                    property: "scale"
-                    duration: 300
-                    easing.type: Easing.OutBack
-                }
-                NumberAnimation {
-                    target: cT
-                    property: "y"
-                    duration: 300
-                    easing.type: Easing.OutCubic
-                }
-            }
-        }
-    }
 }

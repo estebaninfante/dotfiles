@@ -18,10 +18,21 @@
     "usbcore.autosuspend=2"
   ];
 
+  # Perfil normal: no cargar NVIDIA. AMD controla toda la sesión y la dGPU
+  # queda completamente fuera del kernel para maximizar batería.
+  boot.blacklistedKernelModules = [
+    "nvidia" "nvidia_drm" "nvidia_modeset" "nvidia_uvm" "nvidia_peermem"
+  ];
+
+  # `gpu-mode.sh enable` selecciona este perfil y reinicia para jugar.
+  specialisation.nvidia.configuration = {
+    boot.blacklistedKernelModules = lib.mkForce [];
+  };
+
   # ── NVIDIA hybrid ────────────────────────────────────────────
   # iGPU AMD (amdgpu) maneja el display; dGPU NVIDIA solo para juegos.
-  # gpu-mode.sh controla el runtime PM manualmente (battery/gaming),
-  # por eso powerManagement.enable = false (no pelear con el script).
+   # gpu-mode.sh controla runtime PM dentro de especialización nvidia.
+   # powerManagement.enable = false evita que otro gestor cambie estado.
   #
   # ⚠️ "nvidia" en videoDrivers es OBLIGATORIO: sin esto el modulo de
   # nixpkgs no activa nada (nvidiaEnabled = elem "nvidia" videoDrivers).
