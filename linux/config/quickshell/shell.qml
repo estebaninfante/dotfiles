@@ -2015,16 +2015,37 @@ PanelWindow {
                              property string wifiPhase2: "mschapv2"
                              property string wifiCaCert: ""
                              property string wifiClientCert: ""
-                             property string wifiClientKey: ""
-                             property string wifiDomain: ""
-                             property var wifiNetworks: ListModel {}
+                              property string wifiClientKey: ""
+                              property string wifiDomain: ""
+                              property var wifiNetworks: ListModel {}
+                              property var wifiScanNetworks: ListModel {}
 
-                             function refreshNetworks() {
-                                 wifiCard.wifiMessage = "Buscando redes...";
-                                 wifiCard.wifiNetworks.clear();
-                                 wifiScan.running = false;
-                                 wifiScan.running = true;
-                             }
+                              function refreshNetworks() {
+                                  wifiCard.wifiMessage = "Buscando redes...";
+                                  wifiScanNetworks.clear();
+                                  wifiScan.running = false;
+                                  wifiScan.running = true;
+                              }
+
+                              function toggleNetwork(index) {
+                                  for (let i = 0; i < wifiNetworks.count; i++)
+                                      wifiNetworks.setProperty(i, "expanded", i === index ? !wifiNetworks.get(i).expanded : false);
+                                  wifiCard.selectedSsid = wifiNetworks.get(index).ssid;
+                                  wifiCard.wifiAdvancedOpen = false;
+                                  wifiCard.wifiMessage = wifiCard.selectedSsid + " seleccionada";
+                              }
+
+                              function connectNetwork(ssid) {
+                                  wifiCard.selectedSsid = ssid;
+                                  if (wifiCard.wifiState === "connecting")
+                                      return;
+                                  wifiConnect.command = wifiCard.connectCommand();
+                                  wifiCard.wifiState = "connecting";
+                                  wifiCard.lastError = "";
+                                  wifiCard.wifiMessage = "Conectando a " + ssid + "…";
+                                  wifiConnect.running = false;
+                                  wifiConnect.running = true;
+                              }
 
                              function connErrorMessage(raw, code) {
                                  const t = (raw || "").trim();
@@ -2056,11 +2077,12 @@ PanelWindow {
                                     if (wifiCard.wifiNetworks.get(i).ssid === ssid)
                                         return;
                                 }
-                                wifiCard.wifiNetworks.append({
-                                    ssid: ssid,
-                                    signal: signal,
-                                    security: security || "Abierta"
-                                 });
+                                 wifiScanNetworks.append({
+                                     ssid: ssid,
+                                     signal: signal,
+                                     security: security || "Abierta",
+                                     expanded: false
+                                  });
                              }
 
                              function connectCommand() {
@@ -2202,11 +2224,12 @@ PanelWindow {
                                 anchors.leftMargin: 14
                                 anchors.rightMargin: 14
                                 spacing: 9
-                                visible: wifiCard.wifiDetailsOpen
-                                opacity: wifiCard.wifiDetailsOpen ? 1 : 0
+                                       visible: wifiCard.wifiDetailsOpen
+                                       opacity: wifiCard.wifiDetailsOpen ? 1 : 0
 
-                                      RowLayout {
-                                          width: parent.width
+                                       RowLayout {
+                                           visible: false
+                                           width: parent.width
                                           spacing: 6
 
                                     TextInput {
@@ -2264,8 +2287,9 @@ PanelWindow {
 
                                    }
 
-                                 Rectangle {
-                                     width: parent.width
+                                   Rectangle {
+                                       visible: false
+                                       width: parent.width
                                      height: 32
                                      radius: 8
                                      color: wifiCard.wifiAdvancedOpen ? "#89b4fa" : wifiAdvancedArea.containsMouse ? "#262633" : "#1d1d26"
@@ -2285,10 +2309,10 @@ PanelWindow {
                                      }
                                  }
 
-                                  Column {
-                                      width: parent.width
-                                      spacing: 6
-                                      visible: wifiCard.wifiAdvancedOpen
+                                   Column {
+                                       width: parent.width
+                                       spacing: 6
+                                       visible: false
 
                                       Text {
                                           text: "RED UNIVERSITARIA O DE EMPRESA"
@@ -2421,26 +2445,52 @@ PanelWindow {
                                               Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
                                               Text { anchors.fill: parent; anchors.margins: 7; text: "Clave privada (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
                                           }
+                                       }
+                                   }
+
+                                  RowLayout {
+                                      width: parent.width
+                                      spacing: 6
+                                      Text {
+                                          text: wifiCard.wifiNetworks.count ? "REDES DISPONIBLES" : wifiCard.wifiMessage
+                                          color: "#9a9aa7"
+                                          font.family: root.fontFamily
+                                          font.pixelSize: 9
+                                          font.bold: true
+                                          Layout.fillWidth: true
+                                          elide: Text.ElideRight
+                                      }
+                                      Rectangle {
+                                          width: 86
+                                          height: 28
+                                          radius: 7
+                                          color: wifiScanArea.containsMouse ? "#89b4fa" : "#262633"
+                                          Text { anchors.centerIn: parent; text: "ESCANEAR"; color: wifiScanArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                          MouseArea { id: wifiScanArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.refreshNetworks() }
                                       }
                                   }
 
-                                 ListView {
-                                    width: parent.width
-                                     height: Math.min(contentHeight, 190)
-                                    visible: count > 0
+                                  ListView {
+                                     width: parent.width
+                                      height: Math.min(contentHeight, 360)
+                                     visible: count > 0
                                     clip: true
                                     model: wifiCard.wifiNetworks
                                     spacing: 3
-                                    delegate: Rectangle {
-                                        required property string ssid
-                                        required property string signal
-                                        required property string security
-                                        width: wifiDetails.width
-                                         height: 34
-                                         radius: 7
-                                        color: wifiNetworkArea.containsMouse ? "#252532" : "#1d1d26"
-                                        RowLayout {
-                                            anchors.fill: parent
+                                     delegate: Rectangle {
+                                         required property string ssid
+                                         required property string signal
+                                         required property string security
+                                         required property bool expanded
+                                         width: wifiDetails.width
+                                          height: expanded ? 34 + networkDetails.implicitHeight + 10 : 34
+                                          radius: 7
+                                         color: wifiNetworkArea.containsMouse ? "#252532" : "#1d1d26"
+                                         RowLayout {
+                                             anchors.left: parent.left
+                                             anchors.right: parent.right
+                                             anchors.top: parent.top
+                                             height: 34
                                             anchors.leftMargin: 8
                                             anchors.rightMargin: 8
                                             Text {
@@ -2458,21 +2508,128 @@ PanelWindow {
                                                 font.pixelSize: 9
                                             }
                                         }
-                                        MouseArea {
-                                            id: wifiNetworkArea
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            onClicked: {
-                                                wifiCard.selectedSsid = ssid;
-                                                wifiCard.wifiMessage = ssid + " seleccionado";
-                                                if (wifiCard.wifiState === "failed") {
-                                                    wifiCard.wifiState = "disconnected";
-                                                    wifiCard.lastError = "";
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                         MouseArea {
+                                             id: wifiNetworkArea
+                                             anchors.left: parent.left
+                                             anchors.right: parent.right
+                                             anchors.top: parent.top
+                                             height: 34
+                                             hoverEnabled: true
+                                             onClicked: {
+                                                 wifiCard.toggleNetwork(index);
+                                                 if (wifiCard.wifiState === "failed") {
+                                                     wifiCard.wifiState = "disconnected";
+                                                     wifiCard.lastError = "";
+                                                 }
+                                             }
+                                         }
+
+                                         Column {
+                                             id: networkDetails
+                                             anchors.left: parent.left
+                                             anchors.right: parent.right
+                                             anchors.top: parent.top
+                                             anchors.topMargin: 40
+                                             spacing: 6
+                                             visible: expanded
+
+                                             RowLayout {
+                                                 width: parent.width
+                                                 spacing: 6
+                                                 TextInput {
+                                                     id: networkPasswordInput
+                                                     Layout.fillWidth: true
+                                                     height: 32
+                                                     color: "white"
+                                                     text: wifiCard.wifiPassword
+                                                     font.family: root.fontFamily
+                                                     font.pixelSize: 10
+                                                     echoMode: TextInput.Password
+                                                     padding: 7
+                                                     onTextChanged: wifiCard.wifiPassword = text
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Contraseña"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                 }
+                                                 Rectangle {
+                                                     width: 84
+                                                     height: 32
+                                                     radius: 8
+                                                     color: wifiCard.wifiAdvancedOpen ? "#89b4fa" : networkAdvancedArea.containsMouse ? "#262633" : "#1d1d26"
+                                                     Text { anchors.centerIn: parent; text: "AVANZADO"; color: wifiCard.wifiAdvancedOpen ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                                     MouseArea { id: networkAdvancedArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.wifiAdvancedOpen = !wifiCard.wifiAdvancedOpen }
+                                                 }
+                                             }
+
+                                             Column {
+                                                 width: parent.width
+                                                 spacing: 6
+                                                 visible: wifiCard.wifiAdvancedOpen
+                                                 Text { text: "RED EMPRESARIAL / 802.1X"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                                 RowLayout {
+                                                     width: parent.width
+                                                     spacing: 6
+                                                     TextInput {
+                                                         Layout.fillWidth: true; height: 32; color: "white"; text: wifiCard.wifiIdentity; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                         onTextChanged: wifiCard.wifiIdentity = text
+                                                         Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                         Text { anchors.fill: parent; anchors.margins: 7; text: "Usuario / identidad"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     }
+                                                     TextInput {
+                                                         Layout.fillWidth: true; height: 32; color: "white"; text: wifiCard.wifiEap; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                         onTextChanged: wifiCard.wifiEap = text
+                                                         Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                         Text { anchors.fill: parent; anchors.margins: 7; text: "EAP: peap / tls"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     }
+                                                 }
+                                                 TextInput {
+                                                     width: parent.width; height: 32; color: "white"; text: wifiCard.wifiPhase2; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                     onTextChanged: wifiCard.wifiPhase2 = text
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Fase 2: mschapv2"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                 }
+                                                 TextInput {
+                                                     width: parent.width; height: 32; color: "white"; text: wifiCard.wifiAnonymousIdentity; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                     onTextChanged: wifiCard.wifiAnonymousIdentity = text
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Identidad anónima (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                 }
+                                                 TextInput {
+                                                     width: parent.width; height: 32; color: "white"; text: wifiCard.wifiCaCert; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                     onTextChanged: wifiCard.wifiCaCert = text
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado CA (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                 }
+                                                 TextInput {
+                                                     width: parent.width; height: 32; color: "white"; text: wifiCard.wifiDomain; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                     onTextChanged: wifiCard.wifiDomain = text
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                 }
+                                                 TextInput {
+                                                     width: parent.width; height: 32; color: "white"; text: wifiCard.wifiClientCert; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                     onTextChanged: wifiCard.wifiClientCert = text
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado cliente (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                 }
+                                                 TextInput {
+                                                     width: parent.width; height: 32; color: "white"; text: wifiCard.wifiClientKey; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
+                                                     onTextChanged: wifiCard.wifiClientKey = text
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Clave privada (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                 }
+                                             }
+
+                                             Rectangle {
+                                                 width: parent.width
+                                                 height: 34
+                                                 radius: 8
+                                                 color: wifiCard.wifiState === "connecting" ? "#1d1d26" : networkConnectArea.containsMouse ? "#89b4fa" : "#262633"
+                                                 Text { anchors.centerIn: parent; text: wifiCard.wifiState === "connecting" ? "CONECTANDO…" : "CONECTAR"; color: wifiCard.wifiState === "connecting" ? "#6c7086" : networkConnectArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                                                 MouseArea { id: networkConnectArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.connectNetwork(ssid) }
+                                             }
+                                         }
+                                     }
+                                 }
 
                                 Text {
                                     width: parent.width
@@ -2484,8 +2641,9 @@ PanelWindow {
                                     visible: text !== ""
                                 }
 
-                                Rectangle {
-                                    width: parent.width
+                                  Rectangle {
+                                      visible: false
+                                      width: parent.width
                                     height: 34
                                     radius: 8
                                     color: wifiCard.wifiState === "connecting" ? "#1d1d26" : wifiConnectArea.containsMouse ? "#89b4fa" : "#262633"
@@ -2522,11 +2680,25 @@ PanelWindow {
                                 id: wifiScan
                                 command: ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "yes"]
                                 running: false
-                                stdout: SplitParser {
-                                    splitMarker: "\n"
-                                    onRead: line => wifiCard.parseNetwork(line)
-                                }
-                                onExited: wifiCard.wifiMessage = wifiCard.wifiNetworks.count ? "Selecciona una red" : "nmcli no disponible o sin redes"
+                                 stdout: SplitParser {
+                                     splitMarker: "\n"
+                                     onRead: line => wifiCard.parseNetwork(line)
+                                 }
+                                 onExited: {
+                                     if (wifiCard.wifiScanNetworks.count) {
+                                         wifiCard.wifiNetworks.clear();
+                                         for (let i = 0; i < wifiCard.wifiScanNetworks.count; i++) {
+                                             const network = wifiCard.wifiScanNetworks.get(i);
+                                             wifiCard.wifiNetworks.append({ ssid: network.ssid, signal: network.signal, security: network.security, expanded: false });
+                                         }
+                                         wifiCard.wifiMessage = "Selecciona una red";
+                                     } else if (!wifiCard.wifiNetworks.count) {
+                                         wifiCard.wifiMessage = "nmcli no disponible o sin redes";
+                                     } else {
+                                         wifiCard.wifiMessage = "No se encontraron redes nuevas";
+                                     }
+                                     wifiCard.wifiScanNetworks.clear();
+                                 }
                             }
 
                             Process {
