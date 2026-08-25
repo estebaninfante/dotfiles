@@ -100,8 +100,8 @@ PanelWindow {
     exclusiveZone: root.gameModeActive ? 2000 : implicitHeight
     Behavior on implicitHeight {
         NumberAnimation {
-            duration: 80
-            easing.type: Easing.OutCubic
+            duration: 35
+            easing.type: Easing.OutQuad
         }
     }
 
