@@ -144,6 +144,20 @@
         params.keep = "5";
       };
     };
+    folders.books = {
+      id = "books";
+      label = "Books";
+      path = "/home/eztvn/books";
+      type = "sendreceive";
+      devices = [ "laptop" "desktop" ];
+      rescanIntervalS = 10;
+      fsWatcherEnabled = true;
+      ignorePerms = true;
+      versioning = {
+        type = "simple";
+        params.keep = "5";
+      };
+    };
   };
 
   # VPN mesh
