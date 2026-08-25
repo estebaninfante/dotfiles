@@ -115,9 +115,9 @@ with pkgs; [  # ── Shell & terminal ──
   handyPackage
 
   # ── Voz local (sistema de voz: STT + TTS, ver linux/voice + CLI voice) ──
-  # TTS: piper (default) + espeak-ng (fallback) + kokoro (opcional).
-  # STT: faster-whisper en dos envs → CPU (voice-stt-cpu) y CUDA
-  #      (voice-stt-cuda). CPU por defecto; GPU opcional vía `voice backend`.
+  # TTS: router por-idioma (kokoro neural / piper / espeak-ng fallback).
+  # STT: Handy (whisper local, GPU via Vulkan o CPU) — handyPackage, en el
+  #      bloque anterior. Sin faster-whisper/CUDA (se evita compilar CUDA).
   # Voces piper: fetchurl de rhasspy/piper-voices → $out/share/piper-voices
   # (ahí las buscan `speak` y linux/voice/engine.py). No hay package de
   # voces en nixpkgs (verificado).
@@ -157,34 +157,6 @@ with pkgs; [  # ── Shell & terminal ──
       };
   in
   piperVoices)
-  (let
-    sttCpu = pkgs.python313.withPackages (ps: [ ps.faster-whisper ]);
-    # GPU (CUDA): withCUDA vive en ctranslate2-cpp; el binding python lo
-    # reexpone via override. RTX 3070/4060 → sm_86/sm_89.
-    sttCudaCpp = pkgs.ctranslate2.override {
-      withCUDA = true;
-      withCuDNN = true;
-    };
-    sttCuda = pkgs.python313.withPackages (ps: [
-      (ps.faster-whisper.override {
-        ctranslate2 = ps.ctranslate2.override { ctranslate2-cpp = sttCudaCpp; };
-      })
-    ]);
-  in
-  pkgs.symlinkJoin {
-    name = "voice-stt";
-    paths = [
-      (pkgs.writeShellScriptBin "voice-stt-cpu" ''
-        exec ${sttCpu}/bin/python3 "$@"
-      '')
-      (pkgs.writeShellScriptBin "voice-stt-cuda" ''
-        exec ${sttCuda}/bin/python3 "$@"
-      '')
-    ];
-  })
-  # kokoro (TTS neural, opcional): el daemon conmuta a este motor con
-  # `voice` en config (engine = "kokoro"). Voces se descargan en el primer
-  # uso (hexgrad/Kokoro-82M) a ~/.cache/huggingface.
   (let
     kokoroEnv = pkgs.python313.withPackages (ps: [ ps.kokoro ]);
   in
