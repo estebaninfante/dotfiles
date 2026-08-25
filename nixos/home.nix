@@ -6,7 +6,7 @@
 #
 # Recibe `machineType` (laptop|desktop) via extraSpecialArgs desde flake.nix.
 
-{ config, pkgs, lib, machineType, ... }:
+{ config, pkgs, lib, machineType, piperVoices, ... }:
 
 let
   repo = "/home/eztvn/dotfiles";
@@ -115,6 +115,16 @@ in
     #    en NixOS cargo va en el store, no hay env → no romper el shell ──
     {
       ".cargo/env" = { text = ""; };
+    }
+    # ── Voces piper: ~/.local/share/tts/piper/voices ─────────────────────
+    # Ruta que buscan `speak` y linux/voice/engine.py. NO usar /sw/share
+    # (system-path solo expone bin/). Del derivación piperVoices (flake.nix).
+    {
+      ".local/share/tts/piper/voices" = {
+        source = "${piperVoices}/share/piper-voices";
+        recursive = true;
+        force = true;
+      };
     }
   ];
 
