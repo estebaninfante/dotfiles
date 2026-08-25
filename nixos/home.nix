@@ -50,7 +50,7 @@ let
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
     "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh" "clipboard-sync"
     "voice" "voice-daemon" "handy-paste.sh" "middle-click.sh"
-    "bedtime.sh" "bedtime-skip.sh"
+    "bedtime.sh" "bedtime-skip.sh" "notify-lid-suspend.sh" "temperature-log.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -197,6 +197,7 @@ in
     Unit = { Description = "Suspend laptop after lid inhibit timeout"; };
     Service = {
       Type = "oneshot";
+      ExecStartPre = "${bin}/notify-lid-suspend.sh";
       ExecStart = [
         "${pkgs.systemd}/bin/systemctl --user stop lid-inhibit.timer lid-inhibit.service"
         "${pkgs.systemd}/bin/systemctl suspend"
@@ -210,6 +211,25 @@ in
       OnActiveSec = "30min";
       Unit = "lid-inhibit-timeout.service";
     };
+  };
+
+  # Guarda temperaturas de sensores termicos disponibles cada 5 minutos.
+  systemd.user.services.temperature-log = {
+    Unit = { Description = "Log thermal sensor temperatures"; };
+    Service = {
+      Type = "oneshot";
+      ExecStart = "${bin}/temperature-log.sh";
+    };
+  };
+
+  systemd.user.timers.temperature-log = {
+    Unit = { Description = "Periodic thermal sensor log"; };
+    Timer = {
+      OnBootSec = "5min";
+      OnUnitActiveSec = "5min";
+      Persistent = true;
+    };
+    Install = { WantedBy = [ "default.target" ]; };
   };
 
   # ── lan-mouse: KVM por red (mouse+teclado compartido) ─────────
