@@ -60,6 +60,22 @@
   # ── Paquetes del sistema ─────────────────────────────────────
   environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage piperVoices; };
 
+  # ── Entorno de sesión ────────────────────────────────────────
+  # Garantiza ~/.local/bin (rtk y scripts propios), ~/.opencode/bin y
+  # ~/.cargo/bin en TODA sesión (Warp, GUI, systemd user), incluso cuando
+  # la app no pasa por .bashrc interactivo. Prepend idempotente.
+  environment.extraInit = ''
+    for d in "$HOME/.local/bin" "$HOME/.opencode/bin" "$HOME/.cargo/bin"; do
+      if [ -d "$d" ]; then
+        case ":$PATH:" in
+          *":$d:"*) ;;
+          *) PATH="$d:$PATH" ;;
+        esac
+      fi
+    done
+    export PATH
+  '';
+
   # ── Servicios base ────────────────────────────────────────────
   services.pipewire = {
     enable = true;
@@ -329,6 +345,30 @@
       StopWhenUnneeded = true;
       ExecStart = "${pkgs.coreutils}/bin/true";
       ExecStop = "${pkgs.systemd}/bin/systemctl restart fprintd.service";
+    };
+  };
+
+  # ── Higiene de sueño: apagado automático 21:00 ────────────────
+  # Timer dispara bedtime.service a las 20:55 → aviso + poweroff a las 21:00.
+  # Persistent=true: si la máquina estaba apagada a las 21:00 y se enciende
+  # después, el trigger perdido compensa al boot → avisa y apaga igual.
+  # Escape puntual: `bedtime-skip` (flag /run/bedtime-skip con fecha de hoy,
+  # muere al reboot). Fuente de verdad: linux/bin/bedtime.sh
+  systemd.services.bedtime = {
+    description = "Apagado 21:00 (higiene de sueño)";
+    serviceConfig = {
+      Type = "oneshot";
+      Environment = "PATH=/run/current-system/sw/bin:/run/wrappers/bin";
+      ExecStart = "${pkgs.bash}/bin/bash /home/eztvn/dotfiles/linux/bin/bedtime.sh";
+    };
+  };
+  systemd.timers.bedtime = {
+    description = "Aviso 20:55 → apagado 21:00";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 20:55:00";
+      Persistent = true;
+      Unit = "bedtime.service";
     };
   };
 

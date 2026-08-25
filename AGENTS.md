@@ -393,6 +393,21 @@ Usa `fetch` nativo de Bun (sin curl). Tópico en `TOPIC` (`opencode-laptop`).
 
 **Suscripción:** abrir `https://ntfy.sh/opencode-laptop` o la app ntfy (Android/iOS) y agregar el tópico.
 
+## Higiene de sueño (apagado 21:00)
+
+Ambas máquinas se apagan solas a las 21:00 (hora Colombia, `time.timeZone = "America/Bogota"`).
+
+- Timer systemd de sistema `bedtime.timer` (compartido en
+  `nixos/configuration.nix`): dispara `bedtime.service` a las **20:55** →
+  aviso (`notify-send` + `wall`) + gracia 5 min → `poweroff` a las 21:00.
+- `Persistent = true`: si la máquina estaba apagada a las 21:00 y se enciende
+  después (ej. 11PM), el trigger perdido compensa al boot → avisa y apaga igual.
+- Escape puntual: **`bedtime-skip`** crea flag `/run/bedtime-skip` con fecha de
+  hoy; cancela el apagado de esa noche incluso durante los 5 min de gracia.
+  Muere al reboot (la noche siguiente vuelve el apagado).
+- Fuente de verdad del script: `linux/bin/bedtime.sh` (ambos scripts en
+  `allScripts`, `nixos/home.nix`). Servicio corre como root con PATH de sistema.
+
 ## Lo que NO se gestiona
 
 Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes (Python, npm, etc.).

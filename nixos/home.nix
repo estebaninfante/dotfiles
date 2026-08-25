@@ -49,7 +49,8 @@ let
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
     "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh" "clipboard-sync"
-    "voice" "voice-daemon"
+    "voice" "voice-daemon" "handy-paste.sh" "middle-click.sh"
+    "bedtime.sh" "bedtime-skip.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -364,6 +365,21 @@ in
         "XDG_SESSION_TYPE=wayland"
         "PULSE_SERVER=unix:/run/user/%U/pulse/native"
       ];
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  systemd.user.services.dotoold = {
+    Unit = {
+      Description = "dotool daemon (uinput persistente para middle-click Warp)";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.dotool}/bin/dotoold";
+      Restart = "on-failure";
+      RestartSec = "3";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
