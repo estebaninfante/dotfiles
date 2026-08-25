@@ -261,9 +261,14 @@ Para lan-mouse/syncthing ambas máquinas usan IP fija **fuera del pool DHCP**
 
 - Laptop: `192.168.1.240` · Desktop: `192.168.1.241`
 - Configuradas via `nmcli` en los perfiles de red de casa (`ipv4.method=manual`,
-  `802-11-wireless.powersave=2` para evitar stalls de KVM). Los perfiles NM
+  `802-11-wireless.powersave=2` y `bssid` pineado al router para minimizar
+  stalls de KVM). Los perfiles NM
   viven en `/etc/NetworkManager/system-connections/` (local a cada máquina,
   NO gestionados por el repo).
+- ⚠️ Lag de lan-mouse en WiFi: el router usa canal 5GHz DFS (112/5560MHz) y hay
+  un repetidor propio co-canal (`74:93:da:a1:0f:1a`, IP .48). Ráfagas de
+  100-200ms incluso hacia el gateway. Fix real: fijar router a canal 5GHz
+  no-DFS (36-48) — pendiente del usuario en el router.
 - Referencias hardcodeadas: `linux/config/lan-mouse/config.*.toml`,
   syncthing en `nixos/configuration.nix`, docs.
 - Dispatcher `90-lan-mouse` (instalado via `networking.networkmanager.dispatcherScripts`):
