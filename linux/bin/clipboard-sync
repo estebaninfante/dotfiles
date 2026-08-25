@@ -21,20 +21,27 @@ choose_mime() {
 
 send() {
   local mime tmp digest
+  # Single-flight: si un send previo sigue colgado (peer offline, clipboard
+  # atascado), saltar en vez de acumular procesos bloqueados.
+  exec 9>"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/clipboard-sync.lock"
+  flock -n 9 || exit 0
   mime="$(choose_mime)"
   [[ -n "$mime" ]] || exit 0
   tmp="$(mktemp)"
   trap 'rm -f "$tmp"' RETURN
-  wl-paste --no-newline --type "$mime" > "$tmp"
+  # Timeout tambien en la lectura: un clipboard cuyo dueño no responde datos
+  # bloquea wl-paste indefinidamente y congela todo el pipeline.
+  timeout 10 wl-paste --no-newline --type "$mime" > "$tmp" || exit 0
   digest="$( { printf '%s\0' "$mime"; sha256sum "$tmp"; } | sha256sum | cut -d' ' -f1 )"
   if [[ -f "$STATE_FILE" ]] && [[ $(<"$STATE_FILE") == "$digest" ]]; then
     rm -f "$STATE_FILE"
     exit 0
   fi
-  ssh -4 -o BatchMode=yes -o ConnectTimeout=3 -o IdentitiesOnly=yes \
+  # ConnectTimeout no cubre DNS lento (MagicDNS con peer offline): capar total.
+  timeout 10 ssh -4 -o BatchMode=yes -o ConnectTimeout=3 -o IdentitiesOnly=yes \
     -i "$SSH_KEY" "$PEER" \
     "/home/eztvn/.local/bin/clipboard-sync receive '$mime' '$digest'" < "$tmp" \
-    >/dev/null 2>&1 || true
+    >/dev/null 2>&1 </dev/null || true
 }
 
 receive() {
