@@ -4,12 +4,12 @@
 # Uso:
 #   voice status                         estado completo
 #   voice speak "texto"                  TTS (via daemon si activo, si no directo)
-#   voice listen                         graba (Super+V) → STT → transcribe
+#   voice send --agent <nombre> --text "..."   API por-agente (Hermes, opencode, ...)
 #   voice test                           test TTS + STT
 #   voice accelerator [auto|gpu|cpu]     ver/cambiar dispositivo STT Handy
 #   voice gpu                            estado GPU NVIDIA
 #   voice battery                        estado bateria/AC
-#   voice tts [on|off]                   activar/desactivar anuncios de opencode
+#   voice tts [on|off|toggle]            activar/desactivar/toggle anuncios de opencode
 #   voice voice [nombre]                 ver/cambiar voz (por-idioma segun lang)
 #   voice voices                         listar voces piper instaladas
 #   voice lang [es|en]                   ver/cambiar idioma (voz principal)
@@ -23,9 +23,9 @@
 #
 # Arquitectura de capas:
 #   TTS  → linux/voice/daemon.py (cola, router kokoro/piper/espeak por-idioma)
-#   STT  → linux/voice/stt.py (Handy: whisper local GPU Vulkan / CPU)
-#   CLI  → este script
-#   OpenCode → plugin linux/config/opencode/plugins/voice/plugin.js
+#   STT  → dictado con Handy (F7) de forma independiente (desacoplado)
+#   CLI  → este script (speak/send/status/toggle)
+#   OpenCode → plugin linux/config/opencode/plugins/voice/plugin.js (solo voz)
 #
 # Toogles runtime → ~/.local/state/voice/state.json (por-maquina, no en repo).
 
@@ -103,8 +103,8 @@ PYEOF
 }
 
 # ── comandos ────────────────────────────────────────────────────────────
-speak() {
-  local text="$*"
+speak() {  # speak <texto> [key] — key opcional = dedup en el daemon
+  local text="${1:-}"; local key="${2:-}"
   [ -n "$text" ] || { echo "voice: sin texto" >&2; return 1; }
   local enabled; enabled=$(config_val tts enabled)
   if [ "$enabled" = "false" ]; then return 0; fi
@@ -114,7 +114,10 @@ speak() {
     voice=$(config_val tts "voice_$lang"); [ -n "$voice" ] || voice=$(config_val tts voice_es)
     engine=$(config_val tts "engine_$lang"); [ -n "$engine" ] || engine=$(config_val tts engine)
     exec 9<>"$FIFO"
-    printf '%s\n' "{\"text\":$(js_escape "$text"),\"voice\":$(js_escape "$voice"),\"engine\":$(js_escape "$engine"),\"lang\":$(js_escape "$lang")}" >&9
+    local json="{\"text\":$(js_escape "$text"),\"voice\":$(js_escape "$voice"),\"engine\":$(js_escape "$engine"),\"lang\":$(js_escape "$lang")"
+    [ -n "$key" ] && json="$json,\"key\":$(js_escape "$key")"
+    json="$json}"
+    printf '%s\n' "$json" >&9
     exec 9>&-
   else
     # daemon caido → sintesis directa en background (no bloquea al llamador)
@@ -232,6 +235,19 @@ PYEOF
 
 usage() { sed -n '2,20p' "$0"; }
 
+send_agent() {  # send_agent --agent <nombre> --text "texto"
+  local agent="" text=""
+  while [ "$#" -ge 2 ]; do
+    case "$1" in
+      --agent) agent="${2:?falta nombre agente}"; shift 2 ;;
+      --text)  text="${2:?falta texto}"; shift 2 ;;
+      *) break ;;
+    esac
+  done
+  if [ -z "$text" ]; then echo "uso: voice send --agent <nombre> --text \"texto\"" >&2; return 2; fi
+  speak "$text" "${agent:-send}"
+}
+
 # ── despacho ────────────────────────────────────────────────────────────
 case "${1:-status}" in
   __speak_direct) shift; __speak_direct "$@" ;;
@@ -285,7 +301,13 @@ PYEOF
       case "$2" in
         on|true|1) get_set tts enabled true; echo "voice: TTS ON" ;;
         off|false|0) get_set tts enabled false; echo "voice: TTS OFF" ;;
-        *) echo "voice: tts on|off" >&2; exit 2 ;;
+        toggle)
+          if [ "$(config_val tts enabled)" = "false" ]; then
+            get_set tts enabled true; echo "voice: TTS ON"
+          else
+            get_set tts enabled false; echo "voice: TTS OFF"
+          fi ;;
+        *) echo "voice: tts on|off|toggle" >&2; exit 2 ;;
       esac
     else echo "TTS: $(config_val tts enabled)"; fi
     ;;
@@ -322,6 +344,14 @@ PYEOF
     else echo "modelo STT: $(config_val stt model) — models instalados: $("$PY" "$VOICE_DIR/stt.py" models | wc -l)"; fi
     ;;
   benchmark) "$PY" "$VOICE_DIR/benchmark.py" "${@:2}" ;;
+  send)
+    # API de salida por agente: `voice send --agent <nombre> --text "..."`.
+    # Habla el texto via el daemon TTS (igual que speak) con una `key` por
+    # agente (dedup) — sin depender de STT/Handy. Interfaz estable para
+    # integrar Hermes, opencode u otros agentes.
+    shift
+    send_agent "$@"
+    ;;
   transcribe)
     [ "$#" -ge 2 ] || { echo "uso: voice transcribe <wav>" >&2; exit 2; }
     transcribe "$2"

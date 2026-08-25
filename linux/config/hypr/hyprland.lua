@@ -317,10 +317,6 @@ hl.bind(mainMod .. " + B", hl.dsp.focus({ workspace = "special" }))
 hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
 hl.bind(mainMod .. " + SHIFT + X", hl.dsp.exit())
 
--- Voz: mantener/soltar Super+I = hablar (rec auto-stop en silencio);
--- pulsar de nuevo mientras graba = cortar.
-hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice listen"))
-
 -- ========================
 -- VOLUME (SwayOSD)
 -- ========================
@@ -355,20 +351,22 @@ hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/sh
 -- ========================
 -- MOUSE BUTTONS
 -- ========================
--- Atras (BTN_SIDE): copiar | Adelante (BTN_EXTRA): pegar | Rueda: KeyD → F7
+-- Atras (BTN_SIDE): copiar | Adelante (BTN_EXTRA): pegar
+-- Rueda (mouse:274): Warp → Ctrl derecho mantenido | resto → Handy F7 (toggle)
 hl.bind("mouse:275", hl.dsp.exec_cmd("wtype -M ctrl c -m ctrl"))
 hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl v -m ctrl"))
+hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh down"))
+hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { release = true })
 
 -- Handy (speech-to-text)
 -- F7: transcribir SIEMPRE con post-procesado (prompt custom en Handy)
 hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-post-process"))
 
 -- ── Voz local (sistema voice, ver linux/voice + ~/.local/bin/voice) ──
--- Push-to-talk: 1a pulsacion graba, 2a corta; el silencio corta automatico.
--- Nota: SUPER+V esta ocupado por el workspaces 3 en el mapa Dvorak-prog
--- (ws_keys = {M,W,V,...}) — la voz usa SUPER+I para no romper ese mapa.
--- Para cambiarla: bindear otra tecla a "~/.local/bin/voice listen".
-hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice listen"))
+-- Toggle TTS: activa/desactiva la voz (daemon + alertas de opencode).
+-- El dictado se hace con Handy (F7); la voz solo habla respuestas.
+-- Para cambiarla: bindear otra tecla a "~/.local/bin/voice tts toggle".
+hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice tts toggle"))
 
 -- OpenCode / TV toggle
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles -e ~/.opencode/bin/opencode"))

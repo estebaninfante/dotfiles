@@ -8,11 +8,8 @@
 //    - permiso       → anuncia el comando que opencode quiere ejecutar
 //    - session.error → anuncia el error sin leer el stack trace
 //    - tool activity → (opcional, throttled) "opencode esta ejecutando <tool>"
-// 2. Entrada (STT → opencode): vigila ~/.cache/voice/to-opencode.json. Cuando
-//    `voice listen` transcribe una frase, este plugin la inyecta en la sesion
-//    activa via client.session.prompt. LA VOZ NO BYPASSEA PERMISOS: la frase
-//    entra como un prompt mas del usuario y pasa por el flujo de permisos
-//    normal de opencode.
+// (La entrada STT se desacoplo de Handy: el dictado se hace con Handy (F7)
+//  de forma independiente; este plugin solo emite voz de salida.)
 //
 // TTS habla via `~/.local/bin/voice speak <texto>` (cola del daemon si
 // voice-daemon.service esta activo; si no, sintesis directa en background).
@@ -26,7 +23,6 @@ import fs, os from 'fs';
 const HOME = process.env.HOME;
 const VOICE = `${HOME}/.local/bin/voice`;
 const CACHE = process.env.VOICE_CACHE_DIR || `${HOME}/.cache/voice`;
-const OC_FILE = `${CACHE}/to-opencode.json`;
 const LOG_FILE = process.env.VOICE_LOG || `${CACHE}/opencode-voice.log`;
 const LOCK_DIR = '/tmp/opencode/voice-locks';
 const LOCK_TTL_MS = 60000;
@@ -139,8 +135,6 @@ function toolAnnounce(e) {
 }
 
 // ── sesion activa trackeada ─────────────────────────────────────────────
-let lastSessionId = '';
-
 async function summaryForSession(client, sid, mode) {
   try {
     const res = await client.session.messages({ path: { id: sid } });
@@ -165,47 +159,14 @@ async function onIdle(client, sid) {
   speak(`Termine. ${summary}`, `idle-${sid || 'default'}`);
 }
 
-// ── entrada voz → opencode: to-opencode.json ────────────────────────────
-let lastTs = 0;
-let watchT = null;
-
-async function consumeVoiceInjection(client) {
-  if (!fs.existsSync(OC_FILE)) return;
-  let entry;
-  try { entry = JSON.parse(fs.readFileSync(OC_FILE, 'utf8')); } catch { return; }
-  const text = entry?.text;
-  if (!text || (entry.ts || 0) <= lastTs) return;
-  lastTs = entry.ts;
-  // elimina el archivo (un solo consumidor gana; los demas ven ENOENT)
-  try { fs.unlinkSync(OC_FILE); } catch {}
-  const sid = entry.sessionID || lastSessionId;
-  if (!sid) { dbg('voice injection: sin sesion activa (escuchando en otra?)'); return; }
-  const state = readState();
-  try {
-    await client.session.prompt({ path: { id: sid }, body: { text } });
-    dbg(`voice injection → session ${sid}: ${text.slice(0, 120)}`);
-    if (state.enabled !== false) speak('Recibido.', `inject-${sid}`);
-  } catch (e) { dbg(`prompt ERR: ${e.message}`); }
-}
-
-function armWatcher(client) {
-  try {
-    fs.watch(CACHE, { persistent: false }, (_evt, filename) => {
-      if (filename !== 'to-opencode.json') return;
-      if (watchT) clearTimeout(watchT);
-      watchT = setTimeout(() => consumeVoiceInjection(client), 250);
-    });
-  } catch (e) { dbg(`watch ERR: ${e.message}`); }
-}
+// ── entrada voz → opencode: eliminada (desacoplada de Handy) ────────────
 
 export default async ({ $, client }) => {
   dbg('plugin init (voice)');
-  armWatcher(client);
   return {
     event: async ({ event }) => {
       try {
         const sid = sessionIdOf(event);
-        if (sid) lastSessionId = sid;
 
         if (isSessionIdle(event)) {
           dbg('→ idle');

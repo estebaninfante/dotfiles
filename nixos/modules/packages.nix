@@ -48,6 +48,7 @@ with pkgs; [  # ── Shell & terminal ──
   polkit_gnome           # polkit-gnome (attr en nixpkgs es polkit_gnome)
   wl-clipboard
   wtype                  # Handy paste en Wayland (Hyprland)
+  dotool                 # inyeccion uinput: Warp ignora eventos de wtype (virtual-keyboard)
   evtest                 # monitor de teclado (super-hold-monitor.sh)
   xdg-desktop-portal-hyprland
   xdg-desktop-portal-gtk
@@ -143,6 +144,9 @@ with pkgs; [  # ── Shell & terminal ──
   # ── opencode (CLI + Desktop) ──
   opencode
   opencode-desktop
+
+  # ── pi coding agent (earendil-works/pi) ──
+  pi-coding-agent
 
   # ── Orca ADE (Agent Development Environment, stablyai/orca) ──
   # No esta en nixpkgs: AppImage de GitHub Releases envuelto en FHS (wrapType2)

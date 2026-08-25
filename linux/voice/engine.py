@@ -89,6 +89,17 @@ def load_config() -> dict:
     return cfg
 
 
+def _norm_val(v):
+    """Normaliza strings 'true'/'false'/'1'/'0' a bool/int para state.json."""
+    if isinstance(v, str):
+        low = v.strip().lower()
+        if low in ("true", "1"):
+            return True
+        if low in ("false", "0"):
+            return False
+    return v
+
+
 def save_state(patch: dict) -> None:
     """Merge `patch` (formato json) en state.json."""
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
@@ -100,9 +111,12 @@ def save_state(patch: dict) -> None:
         pass
     for sec, vals in patch.items():
         if isinstance(vals, dict):
-            state.setdefault(sec, {}).update(vals)
+            merged = {}
+            for k, v in vals.items():
+                merged[k] = _norm_val(v)
+            state.setdefault(sec, {}).update(merged)
         else:
-            state[sec] = vals
+            state[sec] = _norm_val(vals)
     tmp = STATE_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(state, fh, indent=2)
