@@ -213,6 +213,7 @@ with pkgs; [  # ── Shell & terminal ──
   telegram-desktop
   thunderbird
   libreoffice
+  calibre
   qbittorrent
   nextcloud-client
   filezilla
