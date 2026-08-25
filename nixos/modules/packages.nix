@@ -139,40 +139,49 @@ with pkgs; [  # ── Shell & terminal ──
         paths = map voiceFetch [
           { name = "es_MX-claude-high";
             path = "es/es_MX/claude/high";
-            onnxHash = "sha256-181y101fw0hfy7ili73wnjh6gynwxk9afvvymgc2r1b3x9qhmx1y";
-            jsonHash = "sha256-0bf14dvmbdayrxq02zw00s4ajm4bdc4wl3bw9lxwpr600gvq3z0s"; }
+            onnxHash = "sha256-PvQKcepjhSzYq35vp9Ls3PpnoLR8nEjj8Q4C7gIIPqA=";
+            jsonHash = "sha256-GvyB9wPA5Ms7TXwNyglri1SpiAaAfwFwz161VXcjwS0="; }
           { name = "es_MX-ald-medium";
             path = "es/es_MX/ald/medium";
-            onnxHash = "sha256-0qwvaxn1jw3v9wadfvvq9r8rl84970xfblkd415f74rw541ki6q1";
-            jsonHash = "sha256-0g5hsslc29fhh5dka5lq85ayd765cdpb9lb3s3aiscp5c9p77azg"; }
+            onnxHash = "sha256-AZs4Ayk8k+NKIG3S5To4iSCaUU54b9cUT3twGWxXm2M=";
+            jsonHash = "sha256-76tzbmLlMh3V0GPRtG5jxZzmVUGYFjVbgdAlwajWsDw="; }
           { name = "es_ES-davefx-medium";
             path = "es/es_ES/davefx/medium";
-            onnxHash = "sha256-05x94bi45i62crywl6wy5ly3b4qkpim8kab5qbj6wcbc38xv0n36";
-            jsonHash = "sha256-0hj8qngdzyymcclslxyaglr2y9frh1ill9zzf63z7xijqy3xl38f"; }
+            onnxHash = "sha256-ZliwOxpsMW7kwmWpiWq8E5M1PC2eG8p9ZsLEQuIiqRc=";
+            jsonHash = "sha256-Dg3ah8cy9vOHcf8nSmOA2SUvMn3Kd6opY9X7357FSEI="; }
           { name = "en_US-amy-medium";
             path = "en/en_US/amy/medium";
-            onnxHash = "sha256-063c43bbs0nb09f86l4avnf9mxah38b1h9ffl3kgpixqaxxy99mk";
-            jsonHash = "sha256-0xvxjxk59byydx9gj6rdvvydp5zm8mzsrf9vyy6x6299sjs3x8lm"; }
+            onnxHash = "sha256-s6bke1e4x/vmoM4lGBYaUPWanN2KUINcAssCvdYgbBg=";
+            jsonHash = "sha256-laI+tNQpCdON9zu5rH9F9Zfb/N4tG/lSb96vVGaXfXc="; }
         ];
       };
   in
   piperVoices)
   (let
     sttCpu = pkgs.python313.withPackages (ps: [ ps.faster-whisper ]);
+    # GPU (CUDA): withCUDA vive en ctranslate2-cpp; el binding python lo
+    # reexpone via override. RTX 3070/4060 → sm_86/sm_89.
+    sttCudaCpp = pkgs.ctranslate2.override {
+      withCUDA = true;
+      withCuDNN = true;
+    };
     sttCuda = pkgs.python313.withPackages (ps: [
       (ps.faster-whisper.override {
-        ctranslate2 = ps.ctranslate2.override { withCUDA = true; };
+        ctranslate2 = ps.ctranslate2.override { ctranslate2-cpp = sttCudaCpp; };
       })
     ]);
   in
-  [
-    (pkgs.writeShellScriptBin "voice-stt-cpu" ''
-      exec ${sttCpu}/bin/python3 "$@"
-    '')
-    (pkgs.writeShellScriptBin "voice-stt-cuda" ''
-      exec ${sttCuda}/bin/python3 "$@"
-    '')
-  ])
+  pkgs.symlinkJoin {
+    name = "voice-stt";
+    paths = [
+      (pkgs.writeShellScriptBin "voice-stt-cpu" ''
+        exec ${sttCpu}/bin/python3 "$@"
+      '')
+      (pkgs.writeShellScriptBin "voice-stt-cuda" ''
+        exec ${sttCuda}/bin/python3 "$@"
+      '')
+    ];
+  })
   # kokoro (TTS neural, opcional): el daemon conmuta a este motor con
   # `voice` en config (engine = "kokoro"). Voces se descargan en el primer
   # uso (hexgrad/Kokoro-82M) a ~/.cache/huggingface.

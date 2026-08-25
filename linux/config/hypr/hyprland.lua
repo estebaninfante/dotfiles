@@ -317,6 +317,10 @@ hl.bind(mainMod .. " + B", hl.dsp.focus({ workspace = "special" }))
 hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
 hl.bind(mainMod .. " + SHIFT + X", hl.dsp.exit())
 
+-- Voz: mantener/soltar Super+I = hablar (rec auto-stop en silencio);
+-- pulsar de nuevo mientras graba = cortar.
+hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice listen"))
+
 -- ========================
 -- VOLUME (SwayOSD)
 -- ========================
