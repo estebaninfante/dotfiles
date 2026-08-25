@@ -183,6 +183,35 @@ in
     Install = { WantedBy = [ "default.target" ]; };
   };
 
+  # F10 permite mantener laptop despierta con tapa cerrada, pero solo por
+  # 30 minutos. Luego suspende aunque tapa ya este cerrada.
+  systemd.user.services.lid-inhibit = lib.mkIf (machineType == "laptop") {
+    Unit = { Description = "Allow laptop to stay awake with lid closed"; };
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.systemd}/bin/systemd-inhibit --what=handle-lid-switch --mode=block ${pkgs.coreutils}/bin/sleep infinity";
+    };
+  };
+
+  systemd.user.services.lid-inhibit-timeout = lib.mkIf (machineType == "laptop") {
+    Unit = { Description = "Suspend laptop after lid inhibit timeout"; };
+    Service = {
+      Type = "oneshot";
+      ExecStart = [
+        "${pkgs.systemd}/bin/systemctl --user stop lid-inhibit.timer lid-inhibit.service"
+        "${pkgs.systemd}/bin/systemctl suspend"
+      ];
+    };
+  };
+
+  systemd.user.timers.lid-inhibit = lib.mkIf (machineType == "laptop") {
+    Unit = { Description = "Limit lid inhibit duration"; };
+    Timer = {
+      OnActiveSec = "30min";
+      Unit = "lid-inhibit-timeout.service";
+    };
+  };
+
   # ── lan-mouse: KVM por red (mouse+teclado compartido) ─────────
   # Config: config.${machineType}.toml enlazado desde el repo.
   # PEM: compartido entre machines. config.toml es writable (lan-mouse
