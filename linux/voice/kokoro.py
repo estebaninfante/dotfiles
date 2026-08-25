@@ -11,12 +11,19 @@
 
 import argparse
 import os
+import sys
 import wave
 
 import numpy as np
 
 
 def main() -> None:
+    # Este script se llama kokoro.py y vive en linux/voice → enmascara al
+    # paquete pip `kokoro`. Muevo el dir del script al final de sys.path para
+    # que `from kokoro import KPipeline` resuelva al paquete instalado.
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path = [p for p in sys.path if os.path.abspath(p or "") != here] \
+        + [here]
     ap = argparse.ArgumentParser(prog="voice-kokoro")
     ap.add_argument("-t", "--text", required=True)
     ap.add_argument("-o", "--out", default=os.path.join("/tmp", "voice-kokoro.wav"))
