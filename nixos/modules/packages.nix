@@ -61,11 +61,7 @@ with pkgs; [  # ── Shell & terminal ──
   jq
 
   # ── Navegadores ──
-  ((brave.override { commandLineArgs = "--enable-speech-dispatcher"; }).overrideAttrs (old: {
-    postFixup = (old.postFixup or "") + ''
-      wrapProgram $out/bin/brave --prefix LD_LIBRARY_PATH : ${pkgs.speechd}/lib
-    '';
-  }))
+  brave
   (google-chrome.override { commandLineArgs = "--enable-speech-dispatcher"; })
   firefox
 
