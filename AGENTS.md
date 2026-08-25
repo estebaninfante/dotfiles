@@ -254,6 +254,22 @@ bash ~/dotfiles/scripts/publish.sh
 
 La otra máquina recibe los cambios automáticamente.
 
+### IPs LAN estáticas (fuera del pool DHCP)
+
+Para lan-mouse/syncthing ambas máquinas usan IP fija **fuera del pool DHCP**
+(el router nunca las asignará a otro equipo):
+
+- Laptop: `192.168.1.240` · Desktop: `192.168.1.241`
+- Configuradas via `nmcli` en los perfiles de red de casa (`ipv4.method=manual`,
+  `802-11-wireless.powersave=2` para evitar stalls de KVM). Los perfiles NM
+  viven en `/etc/NetworkManager/system-connections/` (local a cada máquina,
+  NO gestionados por el repo).
+- Referencias hardcodeadas: `linux/config/lan-mouse/config.*.toml`,
+  syncthing en `nixos/configuration.nix`, docs.
+- Dispatcher `90-lan-mouse` (instalado via `networking.networkmanager.dispatcherScripts`):
+  reinicia lan-mouse al conectar a red de casa + watchdog que detecta conflicto
+  ARP/IP no configurable y avisa por ntfy (`opencode-laptop`).
+
 ### SSH entre máquinas
 
 Ambas máquinas tienen `services.openssh` habilitado (solo llave pública, sin
