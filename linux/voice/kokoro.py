@@ -21,22 +21,21 @@ def main() -> None:
     ap.add_argument("-t", "--text", required=True)
     ap.add_argument("-o", "--out", default=os.path.join("/tmp", "voice-kokoro.wav"))
     ap.add_argument("-l", "--lang", default="en")
+    ap.add_argument("-v", "--voice", default=None,
+                    help="voz kokoro (es: ef_dora|em_alex|em_santa; en: af_heart|af_bella|...)")
     a = ap.parse_args()
 
     from kokoro import KPipeline  # import tardío: solo si se usa kokoro
 
-    # lang_code de KPipeline: 'a'=en-US, 'b'=en-UK, 'e'=es (multilingüe,
-    # voces disponibles según el paquete; si 'e' falla se cae a 'a').
-    voice_map = {"a": "af_heart", "b": "bf_emma", "e": "em_england"}
-    for code in ({"en": "a", "es": "e", "es-MX": "e", "es-ES": "e"}.get(a.lang, "a"), "a"):
-        try:
-            pipeline = KPipeline(lang_code=code, repo_id="hexgrad/Kokoro-82M")
-            voice = voice_map[code]
-            chunks = [audio for _, _, audio in pipeline(a.text, voice=voice, speed=1.0)]
-            break
-        except Exception:
-            if code == "a":
-                raise
+    # lang_code de KPipeline: 'a'=en-US, 'b'=en-UK, 'e'=es (multilingüe).
+    # El español de kokoro es "thin" (3 voces, sin grade) → por defecto se
+    # usa piper para es; kokoro brilla en inglés (af_heart, calidad A).
+    code_map = {"en": "a", "es": "e", "es-MX": "e", "es-ES": "e"}
+    voice_map = {"a": "af_heart", "b": "bf_emma", "e": "ef_dora"}
+    code = code_map.get(a.lang, "a")
+    voice = a.voice or voice_map[code]
+    pipeline = KPipeline(lang_code=code, repo_id="hexgrad/Kokoro-82M")
+    chunks = [audio for _, _, audio in pipeline(a.text, voice=voice, speed=1.0)]
     full = np.concatenate(chunks)
     s16 = (full * 32767).astype(np.int16)
     with wave.open(a.out, "wb") as w:

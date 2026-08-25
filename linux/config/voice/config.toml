@@ -1,23 +1,32 @@
-# Voice system — configuraciones por defecto (commiteadas).
+# Voice system — configuración por defecto (commiteada).
 #
-# Runtime overrides (voice backend cuda, voice lang en, ...) se guardan en
-# ~/.local/state/voice/state.json (por-maquina, NO en el repo).
-# Este archivo es la fuente de verdad en divergencia config.toml vs state.json
-# (state.json pisa sobre estas claves).
+# Runtime overrides (voice accelerator gpu, voice lang en, ...) se guardan en
+# ~/.local/state/voice/state.json (por-máquina, NO en el repo).
+# state.json pisa sobre estas claves.
 
 [tts]
-enabled = true            # false = opencode no anuncia nada por voz
-engine = "piper"          # piper | kokoro | espeak
-voice_es = "es_MX-claude-high"
-voice_en = "en_US-amy-medium"
-lang = "es"               # es | en
+enabled = true            # false = opencode/daemon no anuncian nada por voz
+lang = "es"               # idioma de la voz principal: es | en
 mode = "summary"          # summary = resumen de la respuesta; full = texto completo
 
+# Router por-idioma: cada idioma tiene su motor + voz.
+# es → piper (es_MX-claude-high suena mejor que el es de kokoro, que es thin)
+# en → kokoro (af_heart, calidad A, en estupendo)
+engine_es = "piper"       # piper | kokoro | espeak  (motor para es)
+voice_es = "es_MX-claude-high"
+engine_en = "kokoro"      # piper | kokoro | espeak  (motor para en)
+voice_en = "af_heart"
+
+# Voces kokoro disponibles (es): ef_dora (f), em_alex, em_santa (m)
+# Voces kokoro disponibles (en): af_heart (A), af_bella (A-), af_nicole, bf_emma
+# Voces piper (es): es_MX-claude-high, es_MX-ald-medium, es_ES-davefx-medium
+# Voces piper (en): en_US-amy-medium
+
 [stt]
-backend = "cpu"           # cpu | cuda | auto  (auto = GPU si NVIDIA y (desktop o AC))
-model = "small"           # tiny | base | small | medium
+accelerator = "auto"      # auto | gpu | cpu  (Handy: GPU via Vulkan / CPU)
+model = "whisper-medium"  # modelo Handy instalado (ver: voice model list)
 lang = "es"
 
 [power]
-cpu_on_battery = true     # bateria → STT siempre CPU
-gpu_on_ac = true          # AC → permitir GPU
+cpu_on_battery = true     # batería → STT/TTS prefieren CPU (no GPU)
+gpu_on_ac = true          # AC → permitir GPU (STT via Vulkan)

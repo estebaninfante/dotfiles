@@ -56,47 +56,61 @@ def log(msg: str) -> None:
 
 # ── Sintesis + reproduccion ─────────────────────────────────────────────
 def synth_and_play(req: dict) -> bool:
-    """Sintetiza `req['text']` con el motor elegido y lo reproduce. Devuelve OK."""
+    """Sintetiza `req['text']` y reproduce. Router TTS por-idioma con
+    cadena de fallback: motor principal → piper → espeak.
+    """
     cfg = load_config()
-    tcfg = tts_command(cfg)
+    lang = req.get("lang") or cfg["tts"]["lang"]
+    tcfg = tts_command(cfg, lang)
     engine = req.get("engine") or tcfg["engine"]
     voice = req.get("voice") or tcfg["voice"]
-    lang = req.get("lang") or tcfg["lang"]
     text = req.get("text", "").strip()
     if not text:
         return False
 
     wav = os.path.join(tempfile.gettempdir(),
                        f"voice-{os.getpid()}-{int(time.time()*1000)}.wav")
-    ok = False
 
-    if engine == "piper":
-        if voice != tcfg["voice"]:
-            tcfg = {**tcfg, "voice": voice}
-        model = find_piper_model(voice)
-        if not model:
-            log(f"piper: voz '{voice}' no instalada — busco fallback espeak")
-            engine = "espeak"
-        else:
-            rate = _piper_sample_rate(model + ".json")
-            ok = _run(["piper", "--model", model, "--output_file", wav], text) and _play(wav, rate)
-    elif engine == "kokoro":
-        kokoro = "/run/current-system/sw/bin/voice-kokoro"
-        if os.path.exists(kokoro):
-            langc = "en" if lang == "en" else "es"
-            ok = _run([kokoro, "-o", wav, "-l", langc, "-t", text], None) and _play(wav, None)
-        else:
-            log("kokoro: wrapper voice-kokoro no disponible — fallback espeak")
-            engine = "espeak"
-    if engine == "espeak":
-        ok = _run(["espeak-ng", "-v", lang, "-s", "160", "-p", "50", "-w", wav, text], None) \
-            and _play(wav, None)
+    # Cadena de motores a probar en orden. engine puede estar explícito en req.
+    chain = [engine] + [s for s in ("piper", "espeak") if s != engine]
+    ok = False
+    for eng in chain:
+        ok = _synth(eng, voice, lang, text, wav) and _play(wav)
+        if ok:
+            break
+        log(f"fallback: {eng} -> siguiente motor de la cadena")
+        if os.path.exists(wav):
+            try:
+                os.remove(wav)
+            except OSError:
+                pass
 
     try:
-        os.remove(wav)
+        if os.path.exists(wav):
+            os.remove(wav)
     except OSError:
         pass
     return ok
+
+
+def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
+    """Sintetiza `text` a `wav` con el motor dado. Devuelve OK (wav creado)."""
+    if engine == "piper":
+        model = find_piper_model(voice)
+        if not model:
+            log(f"piper: voz '{voice}' no instalada")
+            return False
+        rate = _piper_sample_rate(model + ".json")
+        return _run(["piper", "--model", model, "--output_file", wav], text)
+    if engine == "kokoro":
+        kokoro = "/run/current-system/sw/bin/voice-kokoro"
+        if not os.path.exists(kokoro):
+            log("kokoro: wrapper voice-kokoro no disponible")
+            return False
+        langc = "en" if lang == "en" else "es"
+        return _run([kokoro, "-o", wav, "-l", langc, "-t", text, "-v", voice], None)
+    # espeak (final)
+    return _run(["espeak-ng", "-v", lang, "-s", "160", "-p", "50", "-w", wav, text], None)
 
 
 def _piper_sample_rate(json_path: str) -> int | None:
@@ -125,7 +139,7 @@ def _run(argv: list[str], text: str | None) -> bool:
         return False
 
 
-def _play(wav: str, rate: int | None) -> bool:
+def _play(wav: str) -> bool:
     if not os.path.isfile(wav):
         return False
     argv = ["pw-play", wav]

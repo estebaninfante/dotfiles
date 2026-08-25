@@ -2,20 +2,21 @@
 # engine.py — capas compartidas del sistema de voz.
 #
 # Separacion de capas:
-#   - tts/: piper (default), kokoro (opcional), espeak-ng (fallback ligero)
-#   - stt/: faster-whisper (cpu default, cuda opcional)
+#   - tts/: router por-idioma (kokoro principal, piper, espeak-ng fallback)
+#   - stt/: Handy (whisper local via Vulkan/CPU — sin compilar CUDA)
 #   - daemon/: cola + reproduccion (daemon.py)
 #   - cli/: voice (linux/bin/voice)
 #
 # Este modulo solo contiene: carga de config, estado por-maquina, deteccion
-# de GPU/energia y resolucion del backend de STT. Sin logica de audio.
+# de GPU/energia, selector de dispositivo Handy y resolucion del router TTS.
+# Sin logica de audio.
 #
 # Uso como modulo:  from engine import load_config, detect, ...
-# Uso como script:  engine.py detect | status
+# Uso como script:  engine.py detect | status | devices | accelerator
 
 import json
 import os
-import shutil
+import subprocess
 import sys
 
 HOME = os.path.expanduser("~")
@@ -26,13 +27,16 @@ STATE_FILE = os.environ.get(
     "VOICE_STATE_FILE", os.path.join(HOME, ".local", "state", "voice", "state.json")
 )
 CACHE_DIR = os.environ.get("VOICE_CACHE_DIR", os.path.join(HOME, ".cache", "voice"))
-MODEL_DIR = os.environ.get("VOICE_MODEL_DIR", os.path.join(HOME, ".local", "share", "voice", "models"))
 MACHINE_FILE = os.path.join(HOME, ".config", "machine-type")
 
+# × idioma: engine_<lang>=motor, voice_<lang>=voz.
+# es → piper (es_MX-claude-high suena mejor que el es de kokoro, que es thin).
+# en → kokoro (af_heart, calidad A).
 DEFAULTS = {
-    "tts": {"enabled": True, "engine": "piper", "voice_es": "es_MX-claude-high",
-            "voice_en": "en_US-amy-medium", "lang": "es", "mode": "summary"},
-    "stt": {"backend": "cpu", "model": "small", "lang": "es"},
+    "tts": {"enabled": True, "lang": "es", "mode": "summary",
+            "engine_es": "piper", "voice_es": "es_MX-claude-high",
+            "engine_en": "kokoro", "voice_en": "af_heart"},
+    "stt": {"accelerator": "auto", "model": "whisper-medium", "lang": "es"},
     "power": {"cpu_on_battery": True, "gpu_on_ac": True},
 }
 
@@ -128,27 +132,24 @@ def detect() -> dict:
 
     has_battery = len(battery_paths) > 0
     on_ac = True if not has_battery else None
-    for p in battery_paths:
-        ac_file = os.path.join(supply_dir, "AC", "online")
-        if os.path.exists(ac_file):
-            with open(ac_file, "r") as fh:
-                on_ac = fh.read().strip() == "1"
-            break
-        bat = os.path.join(p, "online")  # algunos kernels: battery/online
-        if os.path.exists(bat):
-            with open(bat, "r") as fh:
-                on_ac = fh.read().strip() == "1"
-            break
+    ac_online = os.path.join(supply_dir, "AC", "online")
+    if os.path.exists(ac_online):
+        with open(ac_online, "r") as fh:
+            on_ac = fh.read().strip() == "1"
+    if on_ac is None:
+        for p in battery_paths:
+            bat = os.path.join(p, "online")
+            if os.path.exists(bat):
+                with open(bat, "r") as fh:
+                    on_ac = fh.read().strip() == "1"
+                break
 
     try:
-        import subprocess
         r = subprocess.run(["upower", "-i", "/org/freedesktop/UPower/devices/DisplayDevice"],
                             capture_output=True, text=True, timeout=5)
         for line in r.stdout.splitlines():
             if "state" in line and "discharging" in line:
                 on_ac = False
-            if "percentage" in line and "missing" not in line and has_battery:
-                pass
     except Exception:
         pass
 
@@ -160,52 +161,86 @@ def detect() -> dict:
     }
 
 
-def choose_stt_backend(configured: str = None, info: dict = None) -> str:
-    """Backend STT efectivo segun config + energia + GPU.
-    - cpu          → cpu siempre (respetando cpu_on_battery)
-    - cuda         → cuda si hay NVIDIA; si no, cpu (warning en stderr)
-    - auto         → cuda si NVIDIA y (desktop o AC o gpu_on_ac); si no cpu
-    """
-    cfg = load_config() if configured is None else None
-    if configured is None:
-        configured = (cfg or {}).get("stt", {}).get("backend", "cpu")
-        cpu_on_battery = (cfg or {}).get("power", {}).get("cpu_on_battery", True)
-        gpu_on_ac = (cfg or {}).get("power", {}).get("gpu_on_ac", True)
-    else:
-        cfg = load_config()
-        cpu_on_battery = cfg.get("power", {}).get("cpu_on_battery", True)
-        gpu_on_ac = cfg.get("power", {}).get("gpu_on_ac", True)
+# ── STT: selector de dispositivo Handy (Vulkan GPU / CPU) ───────────────
+def handy_devices() -> list[dict]:
+    """Parse `handy --list-devices`. Devuelve [{index, kind, name, vram}]."""
+    out: list[dict] = []
+    try:
+        r = subprocess.run(["handy", "--list-devices"],
+                           capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return out
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("index=") or "kind=" not in line:
+            continue
+        fields = dict(
+            part.split("=", 1) for part in line.split()
+            if "=" in part
+        )
+        if "index" in fields and "kind" in fields:
+            out.append({
+                "index": int(fields["index"]),
+                "kind": fields["kind"],
+                "name": fields.get("name", "").strip("'"),
+                "vram": fields.get("vram", ""),
+            })
+    return out
 
+
+def choose_handy_device(configured: str = None, info: dict = None) -> dict:
+    """Selector de dispositivo STT efectivo (Handy).
+    configured: auto | gpu | cpu.
+    Devuelve {index:int|None, accelerator:'gpu'|'cpu'}.
+    - gpu → primer dispositivo kind=vulkan (NVIDIA); si no hay, cpu.
+    - cpu → primer dispositivo kind=cpu.
+    - auto→ gpu si (sin bateria /desktop/, o en AC, o gpu_on_ac); si no cpu.
+    """
+    cfg = load_config()
+    if configured is None:
+        configured = cfg.get("stt", {}).get("accelerator", "auto")
+    cpu_on_battery = cfg.get("power", {}).get("cpu_on_battery", True)
+    gpu_on_ac = cfg.get("power", {}).get("gpu_on_ac", True)
     if info is None:
         info = detect()
 
+    devs = handy_devices()
+    gpu_dev = next((d for d in devs if d["kind"] == "vulkan"), None)
+    cpu_dev = next((d for d in devs if d["kind"] == "cpu"), None)
+
     if configured == "cpu":
-        return "cpu"
-    if configured in ("cuda", "auto"):
-        if not info["nvidia"]:
-            return "cpu"
-        if configured == "cuda":
-            return "cuda"
-        # auto
-        if info["has_battery"] and not info["on_ac"] and cpu_on_battery:
-            return "cpu"
-        if info["has_battery"] and info["on_ac"] and not gpu_on_ac:
-            return "cpu"
-        return "cuda"
-    return "cpu"
+        return {"index": cpu_dev["index"] if cpu_dev else None, "accelerator": "cpu"}
+    if configured == "gpu":
+        if gpu_dev:
+            return {"index": gpu_dev["index"], "accelerator": "gpu"}
+        return {"index": cpu_dev["index"] if cpu_dev else None, "accelerator": "cpu"}
+    # auto
+    use_gpu = gpu_dev is not None and (
+        (info["has_battery"] and info["on_ac"] and gpu_on_ac)
+        or (info["has_battery"] and not info["on_ac"] and not cpu_on_battery)
+        or not info["has_battery"]
+    )
+    if use_gpu:
+        return {"index": gpu_dev["index"], "accelerator": "gpu"}
+    return {"index": cpu_dev["index"] if cpu_dev else None, "accelerator": "cpu"}
 
 
-# ── Resolucion del motor TTS ────────────────────────────────────────────
-def tts_command(cfg: dict = None) -> dict:
-    """Devuelve {engine, voice, lang, mode, enabled} efectivos."""
+# ── TTS: router por-idioma ──────────────────────────────────────────────
+def tts_command(cfg: dict = None, lang: str = None) -> dict:
+    """Devuelve {engine, voice, lang, mode, enabled} efectivos para `lang`.
+    Motor y voz por-idioma: cfg.tts['engine_<lang>'] / cfg.tts['voice_<lang>'],
+    con respaldo al prefijo generico engine/voice si el lang-prefijo falta.
+    """
     if cfg is None:
         cfg = load_config()
     t = cfg.get("tts", {})
     enabled = bool(t.get("enabled", True))
-    engine = t.get("engine", "piper")
-    lang = t.get("lang", "es")
     mode = t.get("mode", "summary")
-    voice = t.get("voice_" + lang, t.get("voice_es", "es_MX-claude-high"))
+    if lang is None:
+        lang = t.get("lang", "es")
+    engine = t.get("engine_" + lang) or t.get("engine", "piper")
+    voice = t.get("voice_" + lang) or (
+        "es_MX-claude-high" if lang == "es" else "af_heart")
     return {"engine": engine, "voice": voice, "lang": lang, "mode": mode, "enabled": enabled}
 
 
@@ -249,17 +284,20 @@ def list_piper_voices() -> list[str]:
 def status_text() -> str:
     cfg = load_config()
     info = detect()
-    t = tts_command(cfg)
-    backend = choose_stt_backend(cfg["stt"]["backend"], info)
+    t_es = tts_command(cfg, "es")
+    t_en = tts_command(cfg, "en")
+    stt = choose_handy_device(cfg["stt"]["accelerator"], info)
     lines = [
         "voice system",
         f"  machine    : {info['machine']}",
         f"  battery    : {'si' if info['has_battery'] else 'no'}"
         f" | {'AC' if info['on_ac'] else 'BATERIA'}",
-        f"  nvidia gpu : {'si (' + (os.popen('nvidia-smi --query-gpu=name --format=csv,noheader').read().strip() if os.path.exists('/usr/bin/nvidia-smi') or os.path.exists('/run/current-system/sw/bin/nvidia-smi') else '') + ')' if info['nvidia'] else 'no'}",
-        f"  tts        : {t['engine']} | voz={t['voice']} | lang={t['lang']} | "
-        f"mode={t['mode']} | {'ON' if t['enabled'] else 'OFF'}",
-        f"  stt        : backend={cfg['stt']['backend']} (efectivo: {backend}) | "
+        f"  nvidia gpu : {'si' if info['nvidia'] else 'no'}",
+        f"  tts es     : {t_es['engine']} | voz={t_es['voice']} | "
+        f"mode={cfg['tts']['mode']} | {'ON' if t_es['enabled'] else 'OFF'}",
+        f"  tts en     : {t_en['engine']} | voz={t_en['voice']}",
+        f"  stt        : accelerator={cfg['stt']['accelerator']} "
+        f"(efectivo: {stt['accelerator']} idx={stt['index']}) | "
         f"model={cfg['stt']['model']} | lang={cfg['stt'].get('lang', 'es')}",
         f"  daemon     : {daemon_alive()}",
     ]
@@ -281,8 +319,12 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     if cmd == "detect":
         print(json.dumps(detect(), indent=2))
-    elif cmd == "backend":
-        print(choose_stt_backend())
+    elif cmd == "devices":
+        for d in handy_devices():
+            print(f"index={d['index']} kind={d['kind']} name={d['name']} vram={d['vram']}")
+    elif cmd == "accelerator":
+        d = choose_handy_device()
+        print(f"{d['accelerator']} {d['index']}")
     elif cmd == "voices":
         print("\n".join(list_piper_voices()))
     elif cmd == "set" and len(sys.argv) >= 4:

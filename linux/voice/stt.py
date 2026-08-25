@@ -1,80 +1,75 @@
 #!/usr/bin/env python3
-# stt.py — Speech-to-Text local via faster-whisper.
+# stt.py — Speech-to-Text local via Handy (whisper, GPU Vulkan / CPU).
+#
+# Handy ya es un paquete del sistema y trae whisper-medium instalado. Aquí
+# solo envolvemos su CLI headless, MSIME:
+#   handy --transcribe-file <wav> --json [--model <id>] [--device-index <N>]
+# La salida es una única línea JSON:
+#   {"audio_secs":...,"best_ms":...,"bound_backend":"Vulkan0","load_ms":...,
+#    "model":"...whisper-medium-Q8_0.gguf","text":"...","transcribe_ms":[...]}
 #
 # Uso (interno, via el CLI voice):
-#   stt.py transcribe <wav> [--model small] [--backend cpu|cuda] [--lang es]
-#   stt.py fetch <model> [--backend cpu|cuda]      # predescarga el modelo
-#   stt.py models                                   # modelos locales
+#   stt.py transcribe <wav> [--model id] [--device index] [--lang es]
+#   stt.py devices            # lista dispositivos handy (vulkan/cpu)
+#   stt.py models [--json]    # modelos Handy instalados
+#   stt.py accelerator        # dispositivo efectivo (via engine)
 #
-# Backend:
-#   - cpu  → compute_type int8 (CT2). Reproducible y bajo consumo.
-#   - cuda → compute_type float16 + device 0 (requiere env faster-whisper
-#            con ctranslate2 com CUDA; paquete voice-stt-cuda).
-#
-# Modelos auto-descargados a ~/.local/share/voice/models (HF download_root)
-# en el primer uso. Tras el download inicial el sistema queda 100% offline.
+# Sin descargas de modelos (Handy los gestiona). STT = leer `text` del JSON.
 
 import argparse
+import json
 import os
+import subprocess
 import sys
 
-import faster_whisper
+from engine import choose_handy_device, load_config
 
-from engine import MODEL_DIR, detect, load_config
-
-LANG_MAP = {"es": "es", "en": "en"}
-
-
-def resolve() -> dict:
-    cfg = load_config()
-    stt = cfg.get("stt", {})
-    return {
-        "model": stt.get("model", "small"),
-        "backend": stt.get("backend", "cpu"),
-        "lang": stt.get("lang", "es"),
-    }
+# Handy escribe warnings de fontconfig a stderr; lo suprimimos para que stdout
+# (el JSON) quede limpio y parseable.
+HANDY = "/run/current-system/sw/bin/handy"
 
 
-def whisper_model(model: str, backend: str):
-    """Instancia e incializa el modelo; descarga si falta."""
-    if backend == "cuda" and not os.path.exists("/dev/nvidia0"):
-        print("stt: no hay GPU NVIDIA, uso CPU", file=sys.stderr)
-        backend = "cpu"
-    if backend == "cuda":
-        device = "cuda"
-        compute = "float16"
-    else:
-        device = "cpu"
-        compute = "int8"
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    return faster_whisper.WhisperModel(
-        model,
-        device=device,
-        compute_type=compute,
-        download_root=MODEL_DIR,
-    )
+def _run_handy(argv: list[str], timeout: int = 300) -> subprocess.CompletedProcess:
+    return subprocess.run([HANDY] + argv, capture_output=True, text=True,
+                          timeout=timeout)
 
 
-def transcribe(wav: str, model: str, backend: str, lang: str) -> str:
+def transcribe(wav: str, model: str | None, device_index: int | None, lang: str) -> str:
     if not os.path.isfile(wav):
         raise SystemExit(f"stt: no encuentro '{wav}'")
-    m = whisper_model(model, backend)
-    segments, _info = m.transcribe(
-        wav,
-        language=lang,
-        beam_size=1,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 300},
-        condition_on_previous_text=False,
-    )
-    text = " ".join(seg.text.strip() for seg in segments).strip()
+    argv = ["--transcribe-file", wav, "--json"]
+    if model:
+        argv += ["--model", model]
+    if device_index is not None:
+        argv += ["--device-index", str(device_index)]
+    r = _run_handy(argv)
+    if r.returncode != 0:
+        raise SystemExit(f"stt: handy rc={r.returncode}: {r.stderr[-300:]}")
+    try:
+        data = json.loads((r.stdout or "").strip() or "null")
+    except json.JSONDecodeError:
+        raise SystemExit("stt: handy no devolvió JSON válido")
+    if not data:
+        return ""
+    text = (data.get("text") or "").strip()
     return text
 
 
-def fetch(model: str, backend: str) -> None:
-    print(f"stt: descargando modelo '{model}' (backend {backend}, dir {MODEL_DIR})")
-    whisper_model(model, backend)
-    print("stt: listo")
+def list_devices() -> None:
+    argv = ["--list-devices"]
+    r = _run_handy(argv)
+    print((r.stdout or "").strip())
+
+
+def list_models(json_out: bool) -> None:
+    argv = ["--list-models"]
+    r = _run_handy(argv)
+    lines = [ln for ln in (r.stdout or "").splitlines()]
+    if json_out:
+        print(json.dumps(lines))
+    else:
+        for ln in lines:
+            print(ln)
 
 
 def main() -> None:
@@ -83,45 +78,40 @@ def main() -> None:
 
     p = sub.add_parser("transcribe")
     p.add_argument("wav")
-    p.add_argument("--model", default=None)
-    p.add_argument("--backend", default=None)
+    p.add_argument("--model", default=None,
+                   help="id completo del catálogo Handy, ej. handy-computer/…/whisper-medium-Q8_0.gguf")
+    p.add_argument("--device", type=int, default=None)
     p.add_argument("--lang", default=None)
 
-    p = sub.add_parser("fetch")
-    p.add_argument("model")
-    p.add_argument("--backend", default=None)
+    sub.add_parser("devices")
+    p = sub.add_parser("models")
+    p.add_argument("--json", action="store_true")
 
-    sub.add_parser("models")
+    sub.add_parser("accelerator")
 
     args = ap.parse_args()
     cfg = load_config()
 
-    info = detect()
-    backend = args.backend or cfg["stt"]["backend"]
-    stt_backend = {
-        "cpu": "cpu",
-        "cuda": "cuda",
-    }.get(backend, "cpu")
+    if args.cmd == "devices":
+        list_devices()
+        return
+    if args.cmd == "models":
+        list_models(args.json)
+        return
 
-    # auto → elegir segun energia (engine.choose_stt_backend es tdf del daemon)
-    if backend == "auto":
-        import engine
-        stt_backend = engine.choose_stt_backend("auto", info)
+    info = {}
+    from engine import detect
+    info = detect()
+    dev = choose_handy_device(cfg["stt"]["accelerator"], info)
+
+    if args.cmd == "accelerator":
+        print(f"accelerator={dev['accelerator']} device_index={dev['index']}")
+        return
 
     model = args.model or cfg["stt"]["model"]
     lang = args.lang or cfg["stt"].get("lang", "es")
-
-    if args.cmd == "transcribe":
-        text = transcribe(args.wav, model, stt_backend, lang)
-        print(text)
-    elif args.cmd == "fetch":
-        fetch(args.model or model, stt_backend)
-    elif args.cmd == "models":
-        if os.path.isdir(MODEL_DIR):
-            for name in sorted(os.listdir(MODEL_DIR)):
-                print(name)
-        else:
-            print("(sin modelos descargados)")
+    text = transcribe(args.wav, model, dev["index"], lang)
+    print(text)
 
 
 if __name__ == "__main__":

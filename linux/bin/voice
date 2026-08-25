@@ -6,22 +6,24 @@
 #   voice speak "texto"                  TTS (via daemon si activo, si no directo)
 #   voice listen                         graba (Super+V) → STT → transcribe
 #   voice test                           test TTS + STT
-#   voice backend [cpu|cuda|auto]        ver/cambiar backend STT
+#   voice accelerator [auto|gpu|cpu]     ver/cambiar dispositivo STT Handy
 #   voice gpu                            estado GPU NVIDIA
 #   voice battery                        estado bateria/AC
 #   voice tts [on|off]                   activar/desactivar anuncios de opencode
-#   voice voice [nombre]                 ver/cambiar voz (voz actual si sin arg)
+#   voice voice [nombre]                 ver/cambiar voz (por-idioma segun lang)
 #   voice voices                         listar voces piper instaladas
-#   voice lang [es|en]                   ver/cambiar idioma
+#   voice lang [es|en]                   ver/cambiar idioma (voz principal)
+#   voice engine [kokoro|piper|espeak] [es|en]   motor TTS por idioma
 #   voice mode [summary|full]            ver/cambiar modo de resumen
-#   voice model [fetch] [modelo]         ver/cambiar modelo STT (o predescarga)
+#   voice model list|set <id>            listar/cambiar modelo STT Handy
 #   voice transcribe <wav>               STT sobre un archivo
+#   voice benchmark                      benchmark TTS (kokoro/piper/espeak × es/en)
 #   voice stop                           vaciar cola TTS + cortar playback
 #   voice daemon start|stop|restart      control del servicio systemd user
 #
 # Arquitectura de capas:
-#   TTS  → linux/voice/daemon.py (cola) + pesos piper en /run/current-system/sw
-#   STT  → linux/voice/stt.py via env faster-whisper (voice-stt-cpu/-cuda)
+#   TTS  → linux/voice/daemon.py (cola, router kokoro/piper/espeak por-idioma)
+#   STT  → linux/voice/stt.py (Handy: whisper local GPU Vulkan / CPU)
 #   CLI  → este script
 #   OpenCode → plugin linux/config/opencode/plugins/voice/plugin.js
 #
@@ -107,10 +109,9 @@ speak() {
   if [ "$enabled" = "false" ]; then return 0; fi
   if daemon_alive; then
     local voice engine lang
-    voice=$(config_val tts "voice_$(config_val tts lang)")
-    [ -n "$voice" ] || voice=$(config_val tts voice_es)
-    engine=$(config_val tts engine)
     lang=$(config_val tts lang)
+    voice=$(config_val tts "voice_$lang"); [ -n "$voice" ] || voice=$(config_val tts voice_es)
+    engine=$(config_val tts "engine_$lang"); [ -n "$engine" ] || engine=$(config_val tts engine)
     exec 9<>"$FIFO"
     printf '%s\n' "{\"text\":$(js_escape "$text"),\"voice\":$(js_escape "$voice"),\"engine\":$(js_escape "$engine"),\"lang\":$(js_escape "$lang")}" >&9
     exec 9>&-
@@ -122,16 +123,28 @@ speak() {
 
 __speak_direct() {
   local text="$*"
-  local voice engine
-  voice=$(config_val tts "voice_$(config_val tts lang)"); [ -n "$voice" ] || voice=$(config_val tts voice_es)
-  engine=$(config_val tts engine)
+  local voice engine lang
+  lang=$(config_val tts lang)
+  voice=$(config_val tts "voice_$lang"); [ -n "$voice" ] || voice=$(config_val tts voice_es)
+  engine=$(config_val tts "engine_$lang"); [ -n "$engine" ] || engine=$(config_val tts engine)
   if [ "$engine" = "espeak" ]; then
-    espeak-ng -v "$(config_val tts lang)" -s 160 -p 50 "$text"
+    espeak-ng -v "$lang" -s 160 -p 50 "$text"
     return $?
+  fi
+  if [ "$engine" = "kokoro" ]; then
+    local kokoro=voice-kokoro
+    if command -v "$kokoro" >/dev/null 2>&1; then
+      command -v "$kokoro" | xargs -I{} {} -t "$text" -l "$lang" -v "$voice" -o /tmp/voice-kokoro-direct.wav >/dev/null 2>&1 \
+        && pw-play /tmp/voice-kokoro-direct.wav >/dev/null 2>&1
+      return $?
+    fi
+    engine=piper
   fi
   exec 9>"$CACHE_DIR/speak.lock"
   flock -n 9 || return 0
-  if command -v "$HOME/.local/bin/speak" >/dev/null 2>&1; then
+  if [ "$engine" = "piper" ]; then
+    speak_core_piper "$voice" "$text"
+  elif command -v "$HOME/.local/bin/speak" >/dev/null 2>&1; then
     "$HOME/.local/bin/speak" -v "$voice" "$text"
   else
     speak_core_piper "$voice" "$text"
@@ -198,27 +211,22 @@ listen() {
 
 transcribe() {
   local wav="$1"
-  local backend model lang eff
-  backend=$(config_val stt backend)
+  local model lang devarg
   model=$(config_val stt model)
   lang=$(config_val stt lang)
-  eff=$("$PY" - <<PYEOF
-import sys
-sys.path.insert(0, "$VOICE_DIR")
-from engine import choose_stt_backend
-print(choose_stt_backend("$backend"))
+  devarg=$("$PY" - <<PYEOF
+import sys; sys.path.insert(0, "$VOICE_DIR")
+from engine import choose_handy_device, detect
+print(choose_handy_device("$(config_val stt accelerator)" , detect())["index"])
 PYEOF
 )
-  local runner="voice-stt-cpu"
-  [ "$eff" = "cuda" ] && runner="voice-stt-cuda"
-  local pybin
-  if command -v "$runner" >/dev/null 2>&1; then
-    pybin="$runner"
+  # ES la capa STT global (Handy): micrófono/voz → texto. Parámetro `--device`
+  # solo si elegimos un dispositivo explícito (no "auto").
+  if [ -n "$devarg" ] && [ "$devarg" != "None" ]; then
+    "$PY" "$VOICE_DIR/stt.py" transcribe "$wav" --model "$model" --device "$devarg"
   else
-    pybin="$PY"
-    echo "voice: env '$runner' no en PATH, usando python3 del sistema" >&2
+    "$PY" "$VOICE_DIR/stt.py" transcribe "$wav" --model "$model"
   fi
-  "$pybin" "$VOICE_DIR/stt.py" transcribe "$wav" --model "$model" --backend "$eff" --lang "$lang"
 }
 
 usage() { sed -n '2,20p' "$0"; }
@@ -243,14 +251,19 @@ case "${1:-status}" in
       pkill -f "pw-play" 2>/dev/null; echo "voice: sin daemon, playback detenido"
     fi
     ;;
-  backend)
-    if [ "$#" -ge 2 ]; then get_set stt backend "$2"; else
-      echo "backend configurado: $(config_val stt backend) | efectivo: $("$PY" - <<PYEOF
+  accelerator)
+    if [ "$#" -ge 2 ]; then
+      case "$2" in auto|gpu|cpu) get_set stt accelerator "$2"; echo "accelerator: $2" ;;
+        *) echo "voice: accelerator auto|gpu|cpu" >&2; exit 2 ;; esac
+    else
+      echo "accelerator configurado: $(config_val stt accelerator) | efectivo: $("$PY" - <<PYEOF
 import sys; sys.path.insert(0, "$VOICE_DIR")
-from engine import choose_stt_backend, detect
-print(choose_stt_backend("$(config_val stt backend)", detect()))
+from engine import choose_handy_device, detect
+dev = choose_handy_device("$(config_val stt accelerator)", detect())
+print(f"{dev['accelerator']} (device_index={dev['index']})")
 PYEOF
-)"; fi
+)"
+    fi
     ;;
   gpu)
     if [ -d /dev/nvidia0 ] || [ -e /dev/nvidia0 ]; then
@@ -290,15 +303,24 @@ PYEOF
     if [ "$#" -ge 2 ]; then get_set tts mode "$2"; echo "modo: $2 (summary|full)"
     else echo "modo: $(config_val tts mode)"; fi
     ;;
+  engine)
+    if [ "$#" -ge 3 ]; then
+      local e_lang="${3:-$(config_val tts lang)}"
+      get_set tts "engine_$e_lang" "$2"; echo "motor TTS [$e_lang]: $2"
+    else
+      echo "motor es: $(config_val tts engine_es) | en: $(config_val tts engine_en)"
+    fi
+    ;;
   model)
-    if [ "$#" -ge 2 ] && [ "$2" = "fetch" ]; then
-      local m="${3:-$(config_val stt model)}"
-      local b; b=$(config_val stt backend)
-      "$(command -v voice-stt-cpu || echo "$PY")" "$VOICE_DIR/stt.py" fetch "$m" --backend "$b"
+    if [ "$#" -ge 2 ] && [ "$2" = "list" ]; then
+      "$PY" "$VOICE_DIR/stt.py" models
+    elif [ "$#" -ge 3 ] && [ "$2" = "set" ]; then
+      get_set stt model "$3"; echo "modelo STT: $3"
     elif [ "$#" -ge 2 ]; then
       get_set stt model "$2"; echo "modelo STT: $2"
-    else echo "modelo STT: $(config_val stt model)"; fi
+    else echo "modelo STT: $(config_val stt model) — models instalados: $("$PY" "$VOICE_DIR/stt.py" models | wc -l)"; fi
     ;;
+  benchmark) "$PY" "$VOICE_DIR/benchmark.py" "${@:2}" ;;
   transcribe)
     [ "$#" -ge 2 ] || { echo "uso: voice transcribe <wav>" >&2; exit 2; }
     transcribe "$2"
