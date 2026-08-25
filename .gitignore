@@ -14,5 +14,8 @@ bun.lock
 linux/config/lan-mouse/config.toml
 linux/bin/__pycache__/
 
+# __pycache__ python compilado (linux/voice)
+linux/voice/__pycache__/
+
 # gh: hosts.yml contiene tokens de autenticación (NO trackear)
 linux/config/gh/hosts.yml

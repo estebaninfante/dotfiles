@@ -58,7 +58,7 @@ def _parse_toml(path: str) -> dict:
                 if "=" in line:
                     key, val = line.split("=", 1)
                     key = key.strip()
-                    val = val.strip()
+                    val = val.split("#", 1)[0].strip()   # quitar comentario inline
                     if val.lower() in ("true", "false"):
                         val = val.lower() == "true"
                     elif val.startswith('"') and val.endswith('"'):

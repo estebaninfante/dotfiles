@@ -82,6 +82,7 @@ def parse_toml(path):
                 section = line[1:-1].strip(); cfg.setdefault(section, {})
             elif "=" in line and section:
                 k, v = [x.strip() for x in line.split("=", 1)]
+                v = v.split("#", 1)[0].strip()   # quitar comentario inline
                 if v.lower() in ("true","false"): v = (v.lower()=="true")
                 elif v.startswith('"') and v.endswith('"'): v = v[1:-1]
                 cfg[section][k] = v
