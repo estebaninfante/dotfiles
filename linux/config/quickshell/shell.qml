@@ -2047,21 +2047,24 @@ PanelWindow {
                               id: wifiCard
                              width: parent.width
                              height: wifiDetailsOpen ? 70 + wifiDetails.implicitHeight + 12 : 70
-                             radius: 12
-                             color: "#16161c"
-                             border.color: "#26262e"
-                             border.width: 1
-                             visible: widgetMenu.activeSection === "conexiones"
+                              radius: 12
+                              color: "#16161c"
+                              border.color: wifiCard.wifiState === "failed" ? "#e06c75" : "#26262e"
+                              border.width: 1
+                              visible: widgetMenu.activeSection === "conexiones"
 
                              Behavior on height {
                                  NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
                              }
 
-                            property bool wifiOn: false
-                            property string network: "Sin conexión"
-                            property bool wifiDetailsOpen: false
-                            property string wifiMessage: ""
-                            property string selectedSsid: ""
+                             property bool wifiOn: false
+                             property string network: "Sin conexión"
+                             property bool wifiDetailsOpen: false
+                             property string wifiMessage: ""
+                             property string selectedSsid: ""
+                             property string wifiState: "disconnected" // off | disconnected | connecting | connected | failed
+                             property string lastError: ""
+                             property int wifiSignal: 0
                              property string wifiPassword: ""
                              property bool wifiAdvancedOpen: false
                              property string wifiIdentity: ""
@@ -2074,12 +2077,31 @@ PanelWindow {
                              property string wifiDomain: ""
                              property var wifiNetworks: ListModel {}
 
-                            function refreshNetworks() {
-                                wifiCard.wifiMessage = "Buscando redes...";
-                                wifiCard.wifiNetworks.clear();
-                                wifiScan.running = false;
-                                wifiScan.running = true;
-                            }
+                             function refreshNetworks() {
+                                 wifiCard.wifiMessage = "Buscando redes...";
+                                 wifiCard.wifiNetworks.clear();
+                                 wifiScan.running = false;
+                                 wifiScan.running = true;
+                             }
+
+                             function connErrorMessage(raw, code) {
+                                 const t = (raw || "").trim();
+                                 if (!t)
+                                     return "No se pudo conectar (error " + code + ")";
+                                 if (/secret|password|contrase/i.test(t))
+                                     return "Contraseña incorrecta o rechazada";
+                                 if (/timed?[\s-]*out|timeout/i.test(t))
+                                     return "Tiempo agotado — reintenta cerca del router";
+                                 if (/no network with ssid/i.test(t))
+                                     return "Red no encontrada — escanea de nuevo";
+                                 if (/no suitable device|not enabled|not available/i.test(t))
+                                     return "Wi-Fi desactivado o sin adaptador";
+                                 const lines = t.split("\n").filter(l => l.trim());
+                                 const reason = lines.length ? lines[lines.length - 1].trim().replace(/^.*?:\s*/, "") : "";
+                                 if (!reason)
+                                     return "No se pudo conectar (error " + code + ")";
+                                 return "No se pudo conectar: " + (reason.length > 70 ? reason.slice(0, 67) + "…" : reason);
+                             }
 
                              function parseNetwork(line) {
                                 const match = line.trim().match(/^(.*):([0-9]+):(.*)$/);
@@ -2134,7 +2156,7 @@ PanelWindow {
 
                                 Text {
                                     text: wifiCard.wifiOn ? "\uf1eb" : "\uf127"
-                                    color: wifiCard.wifiOn ? "#89b4fa" : "#6c7086"
+                                    color: wifiCard.wifiState === "connected" ? "#a6e3a1" : wifiCard.wifiState === "connecting" ? "#cba6f7" : wifiCard.wifiState === "failed" ? "#e06c75" : wifiCard.wifiOn ? "#89b4fa" : "#6c7086"
                                     font.family: root.fontFamily
                                      font.pixelSize: 24
                                     Layout.preferredWidth: 28
@@ -2152,8 +2174,17 @@ PanelWindow {
                                     }
 
                                     Text {
-                                        text: wifiCard.wifiOn ? wifiCard.network : "Desactivado"
-                                        color: "white"
+                                        text: {
+                                            if (!wifiCard.wifiOn)
+                                                return "Desactivado";
+                                            if (wifiCard.wifiState === "connecting")
+                                                return "Conectando a " + (wifiCard.selectedSsid || "red") + "…";
+                                            if (wifiCard.wifiState === "failed")
+                                                return wifiCard.lastError || "No se pudo conectar";
+                                            const sig = wifiCard.wifiSignal > 0 && wifiCard.wifiState === "connected" && !wifiCard.network.startsWith("Cable:") ? "  ·  " + wifiCard.wifiSignal + "%" : "";
+                                            return wifiCard.network + sig;
+                                        }
+                                        color: wifiCard.wifiState === "failed" ? "#e06c75" : wifiCard.wifiState === "connecting" ? "#89b4fa" : wifiCard.wifiState === "connected" ? "#a6e3a1" : "white"
                                         font.family: root.fontFamily
                                          font.pixelSize: 17
                                         elide: Text.ElideRight
@@ -2167,6 +2198,22 @@ PanelWindow {
 
                                 Item {
                                     Layout.fillWidth: true
+                                }
+
+                                Text {
+                                    visible: wifiCard.wifiState === "connecting"
+                                    text: "\uf110"
+                                    color: "#89b4fa"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 13
+
+                                    RotationAnimation on rotation {
+                                        running: wifiCard.wifiState === "connecting"
+                                        loops: Animation.Infinite
+                                        duration: 1000
+                                        from: 0
+                                        to: 360
+                                    }
                                 }
 
                                 Rectangle {
@@ -2480,6 +2527,10 @@ PanelWindow {
                                             onClicked: {
                                                 wifiCard.selectedSsid = ssid;
                                                 wifiCard.wifiMessage = ssid + " seleccionado";
+                                                if (wifiCard.wifiState === "failed") {
+                                                    wifiCard.wifiState = "disconnected";
+                                                    wifiCard.lastError = "";
+                                                }
                                             }
                                         }
                                     }
@@ -2488,7 +2539,7 @@ PanelWindow {
                                 Text {
                                     width: parent.width
                                     text: wifiCard.wifiNetworks.count ? wifiCard.wifiMessage : (wifiCard.wifiMessage || "Buscando redes...")
-                                    color: "#9a9aa7"
+                                    color: wifiCard.wifiState === "failed" ? "#e06c75" : wifiCard.wifiState === "connecting" ? "#89b4fa" : "#9a9aa7"
                                     font.family: root.fontFamily
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
@@ -2499,11 +2550,11 @@ PanelWindow {
                                     width: parent.width
                                     height: 34
                                     radius: 8
-                                    color: wifiConnectArea.containsMouse ? "#89b4fa" : "#262633"
+                                    color: wifiCard.wifiState === "connecting" ? "#1d1d26" : wifiConnectArea.containsMouse ? "#89b4fa" : "#262633"
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "CONECTAR" + (wifiCard.selectedSsid ? " · " + wifiCard.selectedSsid : "")
-                                        color: wifiConnectArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        text: wifiCard.wifiState === "connecting" ? "CONECTANDO…" : "CONECTAR" + (wifiCard.selectedSsid ? " · " + wifiCard.selectedSsid : "")
+                                        color: wifiCard.wifiState === "connecting" ? "#6c7086" : wifiConnectArea.containsMouse ? "#11111b" : "#cdd6f4"
                                         font.family: root.fontFamily
                                         font.pixelSize: 9
                                         font.bold: true
@@ -2516,10 +2567,12 @@ PanelWindow {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onClicked: {
-                                            if (!wifiCard.selectedSsid)
+                                            if (!wifiCard.selectedSsid || wifiCard.wifiState === "connecting")
                                                 return;
                                              wifiConnect.command = wifiCard.connectCommand();
-                                            wifiCard.wifiMessage = "Conectando...";
+                                            wifiCard.wifiState = "connecting";
+                                            wifiCard.lastError = "";
+                                            wifiCard.wifiMessage = "Conectando a " + wifiCard.selectedSsid + "…";
                                             wifiConnect.running = false;
                                             wifiConnect.running = true;
                                         }
@@ -2542,8 +2595,21 @@ PanelWindow {
                                 id: wifiConnect
                                 command: ["nmcli", "dev", "wifi", "connect", ""]
                                 running: false
+                                stderr: StdioCollector {
+                                    id: wifiConnectErr
+                                }
                                 onExited: {
-                                    wifiCard.wifiMessage = exitCode === 0 ? "Conectado" : "No se pudo conectar";
+                                    if (exitCode === 0) {
+                                        wifiCard.wifiState = "connected";
+                                        wifiCard.lastError = "";
+                                        wifiCard.wifiMessage = "Conectado a " + wifiCard.selectedSsid;
+                                        wifiCard.wifiPassword = "";
+                                        wifiPasswordInput.text = "";
+                                    } else {
+                                        wifiCard.wifiState = "failed";
+                                        wifiCard.lastError = wifiCard.connErrorMessage(wifiConnectErr.text, exitCode);
+                                        wifiCard.wifiMessage = wifiCard.lastError;
+                                    }
                                     wifiStatus.running = false;
                                     wifiStatus.running = true;
                                 }
@@ -2551,14 +2617,32 @@ PanelWindow {
 
                             Process {
                                 id: wifiStatus
-                                 command: ["bash", "-c", "enabled=$(nmcli -t -f WIFI g | head -n1); network=$(nmcli -t -f active,ssid dev wifi | awk -F: '$1==\"yes\"{sub(/^yes:/,\"\"); print; exit}'); wired=$(nmcli -t -f TYPE,STATE,CONNECTION dev | awk -F: '$1==\"ethernet\" && $2==\"connected\"{print $3; exit}'); printf '%s|%s|%s' \"$enabled\" \"$network\" \"$wired\""]
+                                 command: ["bash", "-c", "export LC_ALL=C; enabled=$(nmcli -t -f WIFI g | head -n1); network=$(nmcli -t -f active,ssid dev wifi | awk -F: '$1==\"yes\"{sub(/^yes:/,\"\"); print; exit}'); signal=$(nmcli -t -f active,signal dev wifi | awk -F: '$1==\"yes\"{print $2; exit}'); wired=$(nmcli -t -f TYPE,STATE,CONNECTION dev | awk -F: '$1==\"ethernet\" && $2==\"connected\"{print $3; exit}'); printf '%s|%s|%s|%s' \"$enabled\" \"$network\" \"$wired\" \"$signal\""]
                                 running: true
 
                                 stdout: StdioCollector {
                                     onStreamFinished: {
+                                        if (wifiCard.wifiState === "connecting")
+                                            return;
                                         const parts = this.text.trim().split("|");
                                         wifiCard.wifiOn = parts[0] === "enabled";
-                                         wifiCard.network = parts[1] || (parts[2] ? "Cable: " + parts[2] : "Sin conexión");
+                                        wifiCard.wifiSignal = parseInt(parts[3]) || 0;
+                                        const net = parts[1] || "";
+                                        const wired = parts[2] || "";
+                                        if (!wifiCard.wifiOn) {
+                                            wifiCard.network = "Desactivado";
+                                            wifiCard.wifiState = "off";
+                                        } else if (net) {
+                                            wifiCard.network = net;
+                                            wifiCard.wifiState = "connected";
+                                        } else if (wired) {
+                                            wifiCard.network = "Cable: " + wired;
+                                            wifiCard.wifiState = "connected";
+                                        } else {
+                                            wifiCard.network = "Sin conexión";
+                                            if (wifiCard.wifiState !== "failed")
+                                                wifiCard.wifiState = "disconnected";
+                                        }
                                     }
                                 }
                             }
