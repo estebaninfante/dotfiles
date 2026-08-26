@@ -114,7 +114,9 @@ with pkgs; [  # ── Shell & terminal ──
   # ── Voz local (sistema de voz: STT + TTS, ver linux/voice + CLI voice) ──
   # TTS: router por-idioma (kokoro neural / piper / espeak-ng fallback).
   # STT: Handy (whisper local, GPU via Vulkan o CPU) — handyPackage, en el
-  #      bloque anterior. Sin faster-whisper/CUDA (se evita compilar CUDA).
+  #      bloque anterior. Sin faster-whisper/CUDA.
+  # Kokoro usa torch: en desktop lleva CUDA (nixpkgs.config.cudaSupport=true
+  # en hosts/desktop.nix → build largo desde fuente); en laptop queda CPU.
   # Voces piper: definidas en flake.nix (voiceFetch/piperVoices) y pasadas
   # como arg. Viven en ~/.local/share/tts/piper/voices via home-manager
   # (NO en /sw/share: system-path solo expone bin, no share).
@@ -122,7 +124,12 @@ with pkgs; [  # ── Shell & terminal ──
   espeak-ng
   sox
   (let
-    kokoroEnv = pkgs.python313.withPackages (ps: [ ps.kokoro ]);
+    # spacy-models.en_core_web_sm: modelo para voces EN de kokoro (misaki[en]
+    # lanza spacy en runtime; sin el modelo falla "No package installer").
+    kokoroEnv = pkgs.python313.withPackages (ps: [
+      ps.kokoro
+      ps.spacy-models.en_core_web_sm
+    ]);
   in
   pkgs.writeShellScriptBin "voice-kokoro" ''
     repo="''${VOICE_REPO:-$HOME/dotfiles}"

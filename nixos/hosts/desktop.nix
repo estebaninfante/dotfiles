@@ -30,6 +30,17 @@
   # nixpkgs no activa nada (nvidiaEnabled = elem "nvidia" videoDrivers).
   services.xserver.videoDrivers = [ "nvidia" ];
 
+  # ── CUDA para ML/TTS (torch/Kokoro) ─────────────────────────
+  # cudaSupport=true → nixpkgs compila python torch CON CUDA (RTX 3070).
+  # El env de voz (pkgs celestiales kokoro/kokoroEnv en packages.nix) usa
+  # torch → se infiere cudaSupport de pkgs.config. Solo desktop: la laptop
+  # evita el build CUDA (la usa para jugar, no para ML).
+  # ⚠️ Build LARGO: torch se compila desde fuente (horas). Correr con
+  #    paralelismo controlado y seguir el log en otra terminal:
+  #    sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" nixos-rebuild switch
+  #    (o bash ~/dotfiles/scripts/rebuild.sh con NIX_CONFIG seteado).
+  nixpkgs.config.cudaSupport = true;
+
   hardware.nvidia = {
     # Driver propietario.
     # RTX 3070 (Ampere) → open = false (el open kernel module soporta
