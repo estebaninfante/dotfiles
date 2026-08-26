@@ -68,6 +68,18 @@
     powerManagement.enable = false;
   };
 
+  # ── CUDA para ML/TTS (torch/Kokoro) ─────────────────────────
+  # Igual que desktop: cudaSupport=true compila torch CON CUDA (RTX 4060).
+  # ⚠️ Usable SOLO dentro de specialisation.nvidia (la dGPU carga su driver
+  # ahí). En perfil normal (AMD, batería) la dGPU está fuera del kernel →
+  # torch.torch.cuda.is_available()=False y kokoro cae a CPU. Sin problema.
+  # Build = mismo torch que desktop (mismo nixpkgs+flags → mismo hash store):
+  # NO recompilar; tirar los paths ya compilados con:
+  #   nix copy --from <desktop-nixdaemon-ssh> \
+  #     $(nix-store -qR .#nixosConfigurations.laptop.config.system.build.toplevel...)
+  # entonces en laptop rebuild baja binarios sin compilar otra vez.
+  nixpkgs.config.cudaSupport = true;
+
   # El driver amdgpu es el default para GPUs AMD; nada extra que configurar.
   # (El layout XKB dvk_prog ahora vive en nixos/modules/keyboard.nix —
   #  aplica a TTY, X11/GDM y Wayland en laptop y desktop.)
