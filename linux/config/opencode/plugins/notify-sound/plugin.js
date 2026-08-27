@@ -235,8 +235,15 @@ async function buildTranscript(client, sessionID) {
   if (!client?.session?.messages || !sessionID) return '';
   const list = await fetchMessages(client, sessionID);
   if (!list || !Array.isArray(list)) return '';
+  // Normalizar orden por timestamp: la API puede entregar newest-first y
+  // slice(-14) tomaria el INICIO de la sesion en vez de la cola.
+  const sorted = [...list].sort((a, b) => {
+    const ta = a?.info?.time?.created ?? 0;
+    const tb = b?.info?.time?.created ?? 0;
+    return ta - tb;
+  });
   const out = [];
-  for (const m of list) {
+  for (const m of sorted) {
     const role = m?.info?.role;
     if (role !== 'user' && role !== 'assistant') continue;
     let text = '';
@@ -249,7 +256,8 @@ async function buildTranscript(client, sessionID) {
   }
   // Solo la cola: lo ultimo es lo que importa para "como termino".
   const tail = out.slice(-14).join('\n');
-  dbg(`transcript: ${list.length} msgs totales, ${out.length} usadas`);
+  const users = out.filter((l) => l.startsWith('Usuario:'));
+  dbg(`transcript: ${list.length} msgs totales, ${out.length} usadas; primera="${(users[0] || '').slice(0, 50)}" ultima="${(users[users.length - 1] || '').slice(0, 50)}"`);
   return tail;
 }
 
@@ -271,6 +279,8 @@ async function groqSummary(transcript, ctxTitle) {
           + 'Responde SIEMPRE en español técnico SIMPLE, plano y directo, '
           + 'sin jerga innecesaria ni anglicismos evitables. '
           + 'Una sola frase corta (máximo ~20 palabras) que diga QUÉ se hizo y SI funcionó. '
+          + 'Prioriza SIEMPRE lo MÁS RECIENTE: los últimos mensajes del final son lo que cuenta, '
+          + 'ignora el tema inicial de la sesión si el final siguió otra cosa. '
           + 'Si hubo errores, dilo claramente ("falló", "quedó pendiente"). '
           + 'No des saludos ni explicaciones: solo la frase.',
       },

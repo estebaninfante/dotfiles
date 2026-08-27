@@ -60,6 +60,13 @@
   # ── Paquetes del sistema ─────────────────────────────────────
   environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage piperVoices; };
 
+  # Fix "disable touchpad while typing" con keyd (ver archivo):
+  # keyd re-emite teclas por su teclado virtual (externo para libinput), asi
+  # que el touchpad nunca se desactiva al teclear. Estos quirks marcan los
+  # virtuales de keyd como internos. Fuente de verdad: linux/system/libinput/.
+  environment.etc."libinput/local-overrides.quirks".source =
+    ../linux/system/libinput/local-overrides.quirks;
+
   # ── Entorno de sesión ────────────────────────────────────────
   # Garantiza ~/.local/bin (rtk y scripts propios), ~/.opencode/bin y
   # ~/.cargo/bin en TODA sesión (Warp, GUI, systemd user), incluso cuando

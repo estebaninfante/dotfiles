@@ -1,0 +1,23 @@
+# Fix "disable touchpad while typing" con keyd.
+#
+# keyd graba los teclados fisicos (grab default=true) y re-emite las teclas
+# por su teclado virtual, que libinput registra como EXTERNO. Como libinput
+# solo aplica "disable while typing" cuando el teclado que teclea es INTERNO
+# (AttrKeyboardIntegration=internal), el touchpad nunca se desactiva al teclear.
+#
+# Estos quirks marcan los teclados virtuales de keyd (el de remapeo y el
+# passthrough) como internos para restaurar el comportamiento.
+# Mismo fix que askubuntu.com/questions/1386598 (local-overrides.quirks).
+#
+# Instalado via `environment.etc."libinput/local-overrides.quirks"` en
+# configuration.nix (fuente de verdad, no se toca /etc a mano).
+
+[keyd virtual keyboard]
+MatchName=keyd virtual keyboard
+MatchUdevType=keyboard
+AttrKeyboardIntegration=internal
+
+[Keyboard passthrough]
+MatchName=Keyboard passthrough
+MatchUdevType=keyboard
+AttrKeyboardIntegration=internal

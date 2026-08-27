@@ -24,7 +24,8 @@ return {
           api_key = "GROQ_API_KEY",
           name = "Groq",
           end_point = "https://api.groq.com/openai/v1/chat/completions",
-          model = "llama-3.3-70b-versatile", -- rápido; si va lento: llama-3.1-8b-instant
+          model = "qwen/qwen3.8-27b", -- válido en esta cuenta Groq; si va lento: gpt-oss-20b
+          stream = false, -- Groq no parsea streaming en minuet (llega vacío); non-stream funciona
           optional = {
             max_tokens = 128, -- sugerencias cortas, menos intrusivas
             top_p = 0.9,
@@ -32,8 +33,6 @@ return {
         },
       },
       virtualtext = {
-        enable = true,
-        auto_trigger = true,
         auto_trigger_ft = { "*" }, -- requerido: sin esto el auto-trigger nunca se activa
         show_on_completion_menu = false, -- oculto cuando abre menú nvim-cmp
         keymap = {
