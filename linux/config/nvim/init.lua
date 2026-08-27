@@ -13,6 +13,7 @@ vim.opt.rtp:prepend(lazypath)
 
 vim.filetype.add({ extension = { qml = "qml" } })
 
+require("config.options")
 require("keymaps")
 
 require("lazy").setup("plugins")

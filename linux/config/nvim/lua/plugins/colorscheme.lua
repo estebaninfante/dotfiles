@@ -4,26 +4,25 @@ return {
     name = "rose-pine",
     priority = 1000,
     config = function()
+      -- dawn = variante CLARA cálida (combina con kitty crema #FDF8F0)
       require("rose-pine").setup({
-        variant = "main", -- 'auto', 'main', 'moon', or 'dawn'
+        variant = "dawn", -- 'auto', 'main' (oscuro), 'moon', or 'dawn'
         dark_variant = "main",
         bold_vert_split = false,
-        dim_nc_background = false,
+        dim_nc_background = true, -- fondo de ventana inactiva atenuado
         disable_background = false,
         disable_float_background = false,
         styles = {
           bold = true,
-          italic = true,
+          italic = false, -- astigmatismo: nada de itálicas
           transparency = false,
         },
         highlight_groups = {
-          -- Intensificar los acentos rojos (Love)
-          CursorLine = { bg = "#1f1d2e" },
-          StatusLine = { fg = "#eb6f92", bg = "#191724" },
-          NvimTreeNormal = { bg = "#191724" },
+          CursorLine = { bg = "#f2ede3" }, -- crema sutil sobre base clara
+          Visual = { bg = "#e0dacf" },
         },
       })
-      vim.cmd("colorscheme rose-pine-main")
+      vim.cmd("colorscheme rose-pine-dawn")
     end,
   },
 }
