@@ -34,6 +34,7 @@ return {
       virtualtext = {
         enable = true,
         auto_trigger = true,
+        auto_trigger_ft = { "*" }, -- requerido: sin esto el auto-trigger nunca se activa
         show_on_completion_menu = false, -- oculto cuando abre menú nvim-cmp
         keymap = {
           accept = "<Tab>",
