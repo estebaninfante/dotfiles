@@ -407,11 +407,16 @@ quickshell; ausente = comportamiento indicado):
 Key Groq: `~/.local/state/opencode/notify-groq-key` (chmod 600, NUNCA en
 el repo). Privacidad: sin key, la conversación no sale de la máquina.
 
-Plugins anidados NO se autodescubren: todo plugin en subdirectorio de
-`~/.config/opencode/plugins/` debe registrarse en `opencode.json`
-(`"plugin": ["file:///..."]`). Eventos: idle llega como `session.idle`
-derivado Y como `session.status` crudo (dedup interno); permisos como
+oopencode SÍ autodescubre plugins recursivamente en
+`~/.config/opencode/plugins/` (cualquier `*.js`/`*.ts`, incluso en
+subdirectorios): si un plugin debe estar DORMIDO, renombra su archivo a
+`plugin.js.disabled` — quitarlo de `opencode.json` NO basta. Registro
+explícito en `"plugin": [...]` solo necesario para rutas fuera del dir
+de plugins. Eventos: idle llega como `session.idle` derivado Y como
+`session.status` crudo (dedup interno); permisos como
 `permission.updated`.
+Kill switch TTS global (daemon): `~/.local/state/voice/state.json` =
+`{"tts": {"enabled": false}}`.
 
 **Suscripción push:** abrir `https://ntfy.sh/opencode-laptop` o la app
 ntfy (Android/iOS) y agregar el tópico.
