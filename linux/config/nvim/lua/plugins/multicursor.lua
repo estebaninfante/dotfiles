@@ -6,43 +6,48 @@ return {
     event = "VeryLazy",
     config = function()
       local mc = require("multicursor-nvim")
-
       mc.setup()
 
       local set = vim.keymap.set
 
-      -- Deshabilitar la completado nativo al usar multi-cursor
-      set("n", { "<Leader>x", "<Leader>X" }, function()
-        mc.addCursor()
-      end, { desc = "Añadir cursor en la siguiente ocurrencia" })
+      set({ "n", "x" }, "<Leader>n", function()
+        mc.matchAddCursor(1)
+      end, { desc = "MC: cursor en siguiente coincidencia" })
 
-      set({ "n", "v" }, "<C-S-down>", mc.lineAddCursor, { desc = "Añadir cursor línea abajo" })
-      set({ "n", "v" }, "<C-S-up>", mc.lineAddCursorReverse, { desc = "Añadir cursor línea arriba" })
-      set({ "n", "v" }, "<C-down>", mc.lineSkipCursor, { desc = "Saltar cursor línea abajo" })
-      set({ "n", "v" }, "<C-up>", mc.lineSkipCursorReverse, { desc = "Saltar cursor línea arriba" })
+      set({ "n", "x" }, "<Leader>N", function()
+        mc.matchAddCursor(-1)
+      end, { desc = "MC: cursor en coincidencia anterior" })
 
-      -- Deshacer cambios de multi-cursor con una tecla
-      set("n", "<C-c>", mc.undoCursor, { desc = "Deshacer cursor" })
-      set("n", "<C-r>", mc.redoCursor, { desc = "Rehacer cursor" })
+      set({ "n", "x" }, "<Leader>S", function()
+        mc.matchSkipCursor(1)
+      end, { desc = "MC: saltar siguiente coincidencia" })
 
-      -- Mover cursor arriba/abajo
-      set("n", "<C-p>", mc.prevCursor, { desc = "Cursor anterior" })
-      set("n", "<C-n>", mc.nextCursor, { desc = "Cursor siguiente" })
+      set({ "n", "x" }, "<Leader>B", function()
+        mc.matchSkipCursor(-1)
+      end, { desc = "MC: saltar coincidencia anterior" })
 
-      -- Pegar junto al cursor
-      set("n", "<leader>P", mc.paste, { desc = "Pegar" })
+      set({ "n", "x" }, "<Leader>j", function()
+        mc.lineAddCursor(1)
+      end, { desc = "MC: añadir cursor línea abajo" })
 
-      -- Copiar las líneas afectadas
-      set("n", "<C-s>", mc.yankLines, { desc = "Copiar líneas afectadas" })
+      set({ "n", "x" }, "<Leader>k", function()
+        mc.lineAddCursor(-1)
+      end, { desc = "MC: añadir cursor línea arriba" })
 
-      -- Detectar cuando se pulse una tecla inusual
-      local suggestions = mc.getSuggestions
-      set("n", "<C-l>", function()
-        suggestions()
-      end, { desc = "Mostrar sugerencias de multi-cursor" })
+      mc.addKeymapLayer(function(layer)
+        layer({ "n", "x" }, "<left>", mc.prevCursor, { desc = "MC: cursor anterior" })
+        layer({ "n", "x" }, "<right>", mc.nextCursor, { desc = "MC: cursor siguiente" })
+        layer({ "n", "x" }, "<Leader>x", mc.deleteCursor, { desc = "MC: borrar cursor actual" })
+        layer({ "n", "x" }, "<c-q>", mc.toggleCursor, { desc = "MC: habilitar/deshabilitar" })
 
-      -- Salir del modo multi-cursor
-      set("n", "<ESC>", mc.exit, { desc = "Salir de multi-cursor" })
+        layer("n", "<esc>", function()
+          if mc.cursorsEnabled() then
+            mc.clearCursors()
+          else
+            mc.enableCursors()
+          end
+        end, { desc = "MC: volver a un cursor" })
+      end)
     end,
   },
 }
