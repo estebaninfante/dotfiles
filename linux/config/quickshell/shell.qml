@@ -1393,7 +1393,7 @@ PanelWindow {
                                  spacing: 6
 
                                  Repeater {
-                                     model: ["CONEXIONES", "MONITOREO", "PANTALLAS", "DISPOSITIVOS"]
+                                      model: ["CONEXIONES", "MONITOREO", "PANTALLAS", "DISPOSITIVOS", "NOTIFICACIONES"]
 
                                      delegate: Rectangle {
                                          required property string modelData
@@ -3111,6 +3111,153 @@ PanelWindow {
                                     widgetMenu.refreshConnections();
                                 }
                             }
+                        }
+
+                        Rectangle {
+                            id: notifCard
+                            width: parent.width
+                            height: 168
+                            radius: 12
+                            color: "#16161c"
+                            border.color: "#26262e"
+                            border.width: 1
+                            visible: widgetMenu.activeSection === "notificaciones"
+                            property bool soundOn: true
+
+                            function refresh() {
+                                soundStateRead.running = false;
+                                soundStateRead.running = true;
+                            }
+
+                            function writeState(on) {
+                                soundStateWrite.command = ["bash", "-c", "mkdir -p \"$HOME/.local/state/opencode\" && printf '" + (on ? "1" : "0") + "' > \"$HOME/.local/state/opencode/notify-sound-enabled\""];
+                                soundStateWrite.running = false;
+                                soundStateWrite.running = true;
+                            }
+
+                            onVisibleChanged: if (visible) refresh()
+
+                            Process {
+                                id: soundStateRead
+                                command: ["bash", "-c", "cat \"$HOME/.local/state/opencode/notify-sound-enabled\" 2>/dev/null || echo 1"]
+                                running: false
+                                stdout: StdioCollector {
+                                    onStreamFinished: notifCard.soundOn = this.text.trim() !== "0"
+                                }
+                            }
+                            Process { id: soundStateWrite; command: ["true"]; running: false }
+
+                            Column {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                anchors.topMargin: 12
+                                spacing: 10
+
+                                RowLayout {
+                                    width: parent.width
+
+                                    Text {
+                                        text: "\uf0f3"
+                                        color: notifCard.soundOn ? "#cba6f7" : "#6c7086"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 22
+                                        Layout.preferredWidth: 28
+                                    }
+
+                                    Column {
+                                        spacing: 2
+                                        Layout.fillWidth: true
+
+                                        Text {
+                                            text: "NOTIFICACIONES"
+                                            color: "#9a9aa7"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 9
+                                            font.letterSpacing: 1.5
+                                        }
+
+                                        Text {
+                                            text: notifCard.soundOn ? "Sonido activado" : "Sonido silenciado"
+                                            color: notifCard.soundOn ? "white" : "#6c7086"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 14
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 48
+                                        height: 30
+                                        radius: 9
+                                        color: soundToggleArea.containsMouse ? "#cba6f7" : "#262633"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: notifCard.soundOn ? "ON" : "OFF"
+                                            color: soundToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                        }
+
+                                        MouseArea {
+                                            id: soundToggleArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: {
+                                                const next = !notifCard.soundOn;
+                                                notifCard.soundOn = next;
+                                                notifCard.writeState(next);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    width: parent.width
+                                    spacing: 8
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 34
+                                        radius: 8
+                                        color: soundTestArea.containsMouse ? "#5D3FD3" : "#29233b"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "\uf028  PROBAR SONIDO"
+                                            color: "white"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 9
+                                            font.bold: true
+                                        }
+
+                                        MouseArea {
+                                            id: soundTestArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: {
+                                                soundTest.command = ["bash", "-c", "pw-play /run/current-system/sw/share/sounds/freedesktop/stereo/complete.oga"];
+                                                soundTest.running = false;
+                                                soundTest.running = true;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: "Campana al terminar cada sesi\u00f3n de opencode"
+                                    color: "#6c7086"
+                                    font.family: root.fontFamily
+                                    font.pixelSize: 9
+                                    elide: Text.ElideRight
+                                    width: parent.width
+                                }
+                            }
+
+                            Process { id: soundTest; command: ["true"]; running: false }
                         }
                     }
                 }

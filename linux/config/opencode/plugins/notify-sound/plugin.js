@@ -1,16 +1,15 @@
 // notify-sound — opencode plugin
 //
-// Notifica en dos canales:
-//   1. Voz local (TTS Piper via `speak`) en:
-//      - sesion idle         → la sesion termino
-//      - permiso pedido      → opencode pide permiso para ejecutar
-//   2. Push al celular via ntfy.sh:
-//      - sesion idle         → "opencode: sesion terminada"
-//      - permiso pedido      → "opencode: pide permiso" (prioridad alta)
+// Notifica el fin de sesión con UN sonido agradable (sin voz):
+//   1. Chime local via pw-play (freedesktop sound theme).
+//   2. Push al celular via ntfy.sh (reutiliza patrón previo).
+//
+// Toggle del sonido local:
+//   ~/.local/state/opencode/notify-sound-enabled   ('0' = apagado)
+//   Ausente o cualquier otro valor → sonido activado.
+//   El panel de NOTIFICACIONES de quickshell escribe este archivo.
 //
 // El push usa fetch nativo de Bun → sin dependencia de curl.
-// El TTS usa `~/.local/bin/speak` (script del repo en linux/bin/speak,
-// symlinkeado por home-manager; lee texto via argumento).
 // El topico se configura en TOPIC.
 //
 // NOTA sobre eventos (version-dependent):
@@ -28,48 +27,30 @@ const TOPIC = 'opencode-laptop';
 
 const DEBUG_LOG = process.env.NOTIFY_SOUND_LOG || '/tmp/opencode/notify-sound.log';
 
-// Ruta absoluta a `speak` (evita depender del PATH del proceso).
-const SPEAK = `${process.env.HOME}/.local/bin/speak`;
+import { readFileSync, appendFileSync } from 'fs';
 
-// dedup entre procesos: lock atomico via mkdir en /tmp, con TTL. 
-// Varias instancias de opencode pueden recibir el mismo `session.idle`;
-// solo habla la que gane el lock, el resto lo ignora.
-import { mkdirSync, statSync, writeFileSync, rmSync, readFileSync, appendFileSync } from 'fs';
+const SOUND_STATE_FILE = `${process.env.HOME}/.local/state/opencode/notify-sound-enabled`;
 
-const LOCK_DIR = '/tmp/opencode/speak-locks';
-const LOCK_TTL_MS = 90000; // 90s: suficiente para que la frase termine
-const PUSH_STATE_FILE = `${process.env.HOME}/.local/state/opencode/notify-push-enabled`;
+// Sonido "lindo" para fin de tarea: completo/acierto del tema freedesktop.
+const CHIME_FILE = process.env.NOTIFY_SOUND_FILE
+  || '/run/current-system/sw/share/sounds/freedesktop/stereo/complete.oga';
+
+function soundEnabled() {
+  try {
+    return readFileSync(SOUND_STATE_FILE, 'utf8').trim() !== '0';
+  } catch {
+    return true; // sin estado → sonido activado
+  }
+}
 
 // Ausencia de estado conserva comportamiento actual: push activado.
+const PUSH_STATE_FILE = `${process.env.HOME}/.local/state/opencode/notify-push-enabled`;
+
 function pushEnabled() {
   try {
     return readFileSync(PUSH_STATE_FILE, 'utf8').trim() !== '0';
   } catch {
     return true;
-  }
-}
-
-function acquireLock(key) {
-  try {
-    const dir = `${LOCK_DIR}/${key}`;
-    try {
-      mkdirSync(dir, { recursive: false });
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      const age = Date.now() - statSync(dir).mtimeMs;
-      if (age > LOCK_TTL_MS) {
-        rmSync(dir, { recursive: true, force: true });
-        mkdirSync(dir, { recursive: false });
-      } else {
-        return false; // ocupado: otro proceso/evento ya hablo
-      }
-    }
-    writeFileSync(`${dir}/pid`, String(process.pid));
-    return () => {
-      try { writeFileSync(`${dir}/ts`, String(Date.now())); } catch {}
-    };
-  } catch {
-    return () => {};
   }
 }
 
@@ -79,33 +60,26 @@ function dbg(msg) {
   } catch {}
 }
 
-// Lee el texto en voz alta (Piper TTS). No bloquea: spawn + no await.
-// opencode usa la voz es_MX-claude-high (espanol latino, femenina, Clara).
-// `key` identifica el evento (sesion/permiso + sessionID) para el dedup.
-//
-// NOTA: el plugin plugins/voice/plugin.js es ahora el encargado del TTS
-// (resumenes, anuncios). Este plugin mantiene SOLO el push a ntfy.sh para
-// no duplicar la voz. Re-habilitar el TTS local aqui (p.ej. como fallback):
-//   NOTIFY_SOUND_TTS=1
-function speak(text, key) {
-  if (process.env.NOTIFY_SOUND_TTS !== '1') { dbg(`tts off (voice plugin a cargo): ${key}`); return; }
-  if (!key) { dbg(`speak (no key, skip): ${text}`); return; }
-  const release = acquireLock(key);
-  if (release === false) {
-    dbg(`speak (dedup, skip): ${text}`);
-    return;
-  }
+// Reproduce el chime local (PipeWire primero, paplay como fallback).
+// No bloquea: spawn + no await. El toggle se lee en cada evento.
+function playChime() {
+  if (!soundEnabled()) { dbg('sound off (toggle quickshell)'); return; }
+  const cmd = ['pw-play', CHIME_FILE];
   try {
-    Bun.spawn([SPEAK, '-v', 'es_MX-claude-high', text], { stdio: ['ignore', 'ignore', 'ignore'] });
-    dbg(`speak: ${text}`);
+    Bun.spawn(cmd, { stdio: ['ignore', 'ignore', 'ignore'] });
+    dbg(`chime: ${CHIME_FILE}`);
   } catch (e) {
-    dbg(`speak ERROR: ${e.message}`);
-  } finally {
-    release();
+    dbg(`chime ERROR (${cmd[0]}): ${e.message}`);
+    try {
+      Bun.spawn(['paplay', CHIME_FILE], { stdio: ['ignore', 'ignore', 'ignore'] });
+      dbg(`chime fallback: paplay`);
+    } catch (e2) {
+      dbg(`chime ERROR (paplay): ${e2.message}`);
+    }
   }
 }
 
-// Push a ntfy.sh. Prioridad: 4 = alta (permiso), 3 = default (termino).
+// Push a ntfy.sh. Prioridad: 3 = default (termino), 4 = alta (permiso).
 async function push(title, message, priority) {
   if (!pushEnabled()) {
     dbg(`push off: ${title}`);
@@ -193,12 +167,11 @@ export default async ({ $, client }) => {
 
         if (isSessionIdle(event)) {
           dbg('  → session idle detected');
-          speak(`Opencode: sesion terminada${ctx}`, `idle-${sid || 'default'}`);
+          playChime();
           await push('opencode', `Sesion terminada${ctx}`, 3);
         } else if (isPermissionAsked(event)) {
           dbg('  → permission asked detected');
           const detail = permissionDetail(event);
-          speak(`Opencode pide permiso para: ${detail || 'ejecutar'}`, `perm-${sid || 'default'}`);
           await push('opencode: permiso', `${detail ? `Pide permiso: ${detail}` : 'Pide permiso'}${ctx}`, 4);
         }
       } catch (e) {

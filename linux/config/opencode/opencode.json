@@ -2,7 +2,6 @@
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     "file:///home/eztvn/.config/opencode/plugins/notify-sound/plugin.js",
-    "file:///home/eztvn/.config/opencode/plugins/voice/plugin.js",
     "file:///home/eztvn/.config/opencode/plugins/caveman/plugin.js"
   ],
   "permission": {
