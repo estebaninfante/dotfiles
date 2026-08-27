@@ -18,7 +18,7 @@
 // Runtime config: lee tts.enabled / tts.mode desde
 // ~/.local/state/voice/state.json (overrides por-maquina de config.toml).
 
-import fs, os from 'fs';
+import fs from 'fs';
 
 const HOME = process.env.HOME;
 const VOICE = `${HOME}/.local/bin/voice`;

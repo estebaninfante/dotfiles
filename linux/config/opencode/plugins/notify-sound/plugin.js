@@ -34,7 +34,7 @@ const SPEAK = `${process.env.HOME}/.local/bin/speak`;
 // dedup entre procesos: lock atomico via mkdir en /tmp, con TTL. 
 // Varias instancias de opencode pueden recibir el mismo `session.idle`;
 // solo habla la que gane el lock, el resto lo ignora.
-import { mkdirSync, statSync, writeFileSync, rmSync, readFileSync } from 'fs';
+import { mkdirSync, statSync, writeFileSync, rmSync, readFileSync, appendFileSync } from 'fs';
 
 const LOCK_DIR = '/tmp/opencode/speak-locks';
 const LOCK_TTL_MS = 90000; // 90s: suficiente para que la frase termine
@@ -75,7 +75,7 @@ function acquireLock(key) {
 
 function dbg(msg) {
   try {
-    Bun.write(DEBUG_LOG, `[${new Date().toISOString()}] [pid ${process.pid}] ${msg}\n`, { append: true });
+    appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] [pid ${process.pid}] ${msg}\n`);
   } catch {}
 }
 
