@@ -380,18 +380,41 @@ ejecutar EN el desktop):
 - Encoder NVENC ya auto-detectado en desktop (`h264_nvenc`/`hevc_nvenc`); AV1
   no soportado por RTX 3070.
 
-## Notificaciones al celular (ntfy.sh)
+## Notificaciones fin de sesión (notify-sound)
 
-`linux/config/opencode/plugins/notify-sound/plugin.js` notifica en dos canales cuando opencode trabaja:
+`linux/config/opencode/plugins/notify-sound/plugin.js` (registrado en
+`linux/config/opencode/opencode.json`) notifica al terminar cada sesión:
 
-1. **Sonido local** (`paplay`) en `session.idle` y `permission.asked`.
-2. **Push al celular** vía ntfy.sh:
-   - `session.idle` → "Sesion terminada" (prioridad 3)
-   - `permission.asked` → "Pide permiso: <comando>" (prioridad 4)
+1. **Campana local** (`pw-play complete.oga` del tema freedesktop) en `session.idle`.
+2. **Resumen**: lee la transcripción via SDK y si existe key Groq
+   (`llama-3.1-8b-instant`) genera UNA frase en español técnico simple
+   (qué se hizo y si funcionó). Sale por `notify-send`; por voz solo con
+   el toggle VOZ activo (comando `voice speak`). Sin key → fallback
+   "Sesión <título> terminada".
+3. **Push al celular** vía ntfy.sh (`fetch` nativo de Bun, sin curl):
+   - `session.idle` → "Sesion terminada — <resumen>" (prioridad 3)
+   - `permission.updated` → "Pide permiso: <detalle>" (prioridad 4)
 
-Usa `fetch` nativo de Bun (sin curl). Tópico en `TOPIC` (`opencode-laptop`).
+**Toggles** (estado local, escritos por la sección NOTIFICACIONES de
+quickshell; ausente = comportamiento indicado):
 
-**Suscripción:** abrir `https://ntfy.sh/opencode-laptop` o la app ntfy (Android/iOS) y agregar el tópico.
+| Archivo (`~/.local/state/opencode/`) | Valor |
+|--------------------------------------|-------|
+| `notify-sound-enabled` | `'0'` = sin campana |
+| `notify-voice-enabled` | `'1'` = hablar resumen (default apagado) |
+| `notify-push-enabled` | `'0'` = sin push ntfy |
+
+Key Groq: `~/.local/state/opencode/notify-groq-key` (chmod 600, NUNCA en
+el repo). Privacidad: sin key, la conversación no sale de la máquina.
+
+Plugins anidados NO se autodescubren: todo plugin en subdirectorio de
+`~/.config/opencode/plugins/` debe registrarse en `opencode.json`
+(`"plugin": ["file:///..."]`). Eventos: idle llega como `session.idle`
+derivado Y como `session.status` crudo (dedup interno); permisos como
+`permission.updated`.
+
+**Suscripción push:** abrir `https://ntfy.sh/opencode-laptop` o la app
+ntfy (Android/iOS) y agregar el tópico.
 
 ## Higiene de sueño (apagado 21:00)
 

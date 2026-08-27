@@ -205,28 +205,36 @@ function alreadyFired(kind, sid) {
 }
 
 // Transcripcion compacta de la sesion via SDK (client.session.messages).
-// Forma v1.x: [{ info: { role, ... }, parts: [{ type:'text', text }] }]
-function buildTranscript(client, sessionID) {
-  if (!client?.session?.messages || !sessionID) return null;
+// Forma esperada: [{ info: { role }, parts: [{ type:'text', text }] }].
+// El resultado puede venir como array directo, promesa o RequestResult
+// ({ data }) segun build de la SDK → se desenvuelve en capas.
+async function fetchMessages(client, sessionID) {
+  let res;
   try {
-    let msgs;
-    try {
-      msgs = client.session.messages({ path: { id: sessionID } });
-    } catch {
-      msgs = client.session.messages({ query: { id: sessionID } });
-    }
-    if (Array.isArray(msgs)) return shapeTranscript(msgs);
-    // Algunos builds devuelven promesa
-    return msgs && typeof msgs.then === 'function'
-      ? msgs.then(shapeTranscript).catch(e => { dbg(`transcript ERROR: ${e.message}`); return null; })
-      : null;
-  } catch (e) {
-    dbg(`transcript ERROR: ${e.message}`);
+    res = client.session.messages({ path: { id: sessionID } });
+  } catch (e1) {
+    dbg(`messages(path) ERROR: ${e1.message}`);
     return null;
   }
+  let val;
+  try {
+    val = await res;
+  } catch (e2) {
+    dbg(`messages(await) ERROR: ${e2.message}`);
+    return null;
+  }
+  const list = val?.data ?? val?.response ?? val;
+  if (!Array.isArray(list)) {
+    dbg(`messages shape inesperado: ${Object.prototype.toString.call(list)} keys=${list && typeof list === 'object' ? Object.keys(list).slice(0, 6).join(',') : String(list)}`);
+    return null;
+  }
+  return list;
 }
 
-function shapeTranscript(list) {
+async function buildTranscript(client, sessionID) {
+  if (!client?.session?.messages || !sessionID) return '';
+  const list = await fetchMessages(client, sessionID);
+  if (!list || !Array.isArray(list)) return '';
   const out = [];
   for (const m of list) {
     const role = m?.info?.role;
@@ -240,7 +248,9 @@ function shapeTranscript(list) {
     if (text) out.push(`${role === 'user' ? 'Usuario' : 'Asistente'}: ${text}`);
   }
   // Solo la cola: lo ultimo es lo que importa para "como termino".
-  return out.slice(-14).join('\n');
+  const tail = out.slice(-14).join('\n');
+  dbg(`transcript: ${list.length} msgs totales, ${out.length} usadas`);
+  return tail;
 }
 
 async function groqSummary(transcript, ctxTitle) {
@@ -329,15 +339,9 @@ export default async ({ $, client }) => {
           // Resumen: transcripcion → Groq (si hay key) → notificar.
           const ctxTitle = title || '';
           let summary = '';
-          const transcript = buildTranscript(client, sid);
-          const t = transcript && typeof transcript.then === 'function'
-            ? await transcript
-            : transcript;
-          if (t) {
-            summary = await groqSummary(t, ctxTitle);
-          } else if (!groqKey()) {
-            dbg('sin key groq ni mensajes → resumen fallback');
-          }
+          const t = await buildTranscript(client, sid);
+          if (t) summary = await groqSummary(t, ctxTitle);
+          else dbg('sin transcripcion o sin mensajes → resumen fallback');
           if (!summary) {
             // Fallback sin nube (sin key, sin mensajes o Groq caido).
             summary = ctxTitle ? `Sesión "${ctxTitle}" terminada` : 'Sesión terminada';

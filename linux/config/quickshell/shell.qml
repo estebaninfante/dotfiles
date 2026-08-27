@@ -3116,24 +3116,29 @@ PanelWindow {
                         Rectangle {
                             id: notifCard
                             width: parent.width
-                            height: 168
+                            height: 208
                             radius: 12
                             color: "#16161c"
                             border.color: "#26262e"
                             border.width: 1
                             visible: widgetMenu.activeSection === "notificaciones"
                             property bool soundOn: true
+                            property bool voiceOn: false
 
                             function refresh() {
                                 soundStateRead.running = false;
                                 soundStateRead.running = true;
+                                voiceStateRead.running = false;
+                                voiceStateRead.running = true;
                             }
 
-                            function writeState(on) {
-                                soundStateWrite.command = ["bash", "-c", "mkdir -p \"$HOME/.local/state/opencode\" && printf '" + (on ? "1" : "0") + "' > \"$HOME/.local/state/opencode/notify-sound-enabled\""];
+                            function writeFile(name, val) {
+                                soundStateWrite.command = ["bash", "-c", "mkdir -p \"$HOME/.local/state/opencode\" && printf '" + val + "' > \"$HOME/.local/state/opencode/" + name + "\""];
                                 soundStateWrite.running = false;
                                 soundStateWrite.running = true;
                             }
+
+                            function fmtBool(b) { return b ? "1" : "0"; }
 
                             onVisibleChanged: if (visible) refresh()
 
@@ -3143,6 +3148,14 @@ PanelWindow {
                                 running: false
                                 stdout: StdioCollector {
                                     onStreamFinished: notifCard.soundOn = this.text.trim() !== "0"
+                                }
+                            }
+                            Process {
+                                id: voiceStateRead
+                                command: ["bash", "-c", "cat \"$HOME/.local/state/opencode/notify-voice-enabled\" 2>/dev/null || echo 0"]
+                                running: false
+                                stdout: StdioCollector {
+                                    onStreamFinished: notifCard.voiceOn = this.text.trim() === "1"
                                 }
                             }
                             Process { id: soundStateWrite; command: ["true"]; running: false }
@@ -3209,7 +3222,66 @@ PanelWindow {
                                             onClicked: {
                                                 const next = !notifCard.soundOn;
                                                 notifCard.soundOn = next;
-                                                notifCard.writeState(next);
+                                                notifCard.writeFile("notify-sound-enabled", notifCard.fmtBool(next));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    width: parent.width
+
+                                    Text {
+                                        text: "\uf5a2"
+                                        color: notifCard.voiceOn ? "#89dceb" : "#6c7086"
+                                        font.family: root.fontFamily
+                                        font.pixelSize: 20
+                                        Layout.preferredWidth: 28
+                                    }
+
+                                    Column {
+                                        spacing: 2
+                                        Layout.fillWidth: true
+
+                                        Text {
+                                            text: "VOZ DEL RESUMEN"
+                                            color: "#9a9aa7"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 9
+                                            font.letterSpacing: 1.5
+                                        }
+
+                                        Text {
+                                            text: notifCard.voiceOn ? "Habla el resumen al terminar" : "Solo notificación escrita"
+                                            color: notifCard.voiceOn ? "white" : "#6c7086"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 13
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 48
+                                        height: 30
+                                        radius: 9
+                                        color: voiceToggleArea.containsMouse ? "#89dceb" : "#262633"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: notifCard.voiceOn ? "ON" : "OFF"
+                                            color: voiceToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                            font.family: root.fontFamily
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                        }
+
+                                        MouseArea {
+                                            id: voiceToggleArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: {
+                                                const next = !notifCard.voiceOn;
+                                                notifCard.voiceOn = next;
+                                                notifCard.writeFile("notify-voice-enabled", notifCard.fmtBool(next));
                                             }
                                         }
                                     }
@@ -3248,7 +3320,7 @@ PanelWindow {
                                 }
 
                                 Text {
-                                    text: "Campana al terminar cada sesi\u00f3n de opencode"
+                                    text: "Campana + resumen (Groq) al terminar cada sesión"
                                     color: "#6c7086"
                                     font.family: root.fontFamily
                                     font.pixelSize: 9
