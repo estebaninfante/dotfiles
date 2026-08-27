@@ -34,10 +34,20 @@ const SPEAK = `${process.env.HOME}/.local/bin/speak`;
 // dedup entre procesos: lock atomico via mkdir en /tmp, con TTL. 
 // Varias instancias de opencode pueden recibir el mismo `session.idle`;
 // solo habla la que gane el lock, el resto lo ignora.
-import { mkdirSync, statSync, writeFileSync, rmSync } from 'fs';
+import { mkdirSync, statSync, writeFileSync, rmSync, readFileSync } from 'fs';
 
 const LOCK_DIR = '/tmp/opencode/speak-locks';
 const LOCK_TTL_MS = 90000; // 90s: suficiente para que la frase termine
+const PUSH_STATE_FILE = `${process.env.HOME}/.local/state/opencode/notify-push-enabled`;
+
+// Ausencia de estado conserva comportamiento actual: push activado.
+function pushEnabled() {
+  try {
+    return readFileSync(PUSH_STATE_FILE, 'utf8').trim() !== '0';
+  } catch {
+    return true;
+  }
+}
 
 function acquireLock(key) {
   try {
@@ -97,6 +107,10 @@ function speak(text, key) {
 
 // Push a ntfy.sh. Prioridad: 4 = alta (permiso), 3 = default (termino).
 async function push(title, message, priority) {
+  if (!pushEnabled()) {
+    dbg(`push off: ${title}`);
+    return;
+  }
   try {
     dbg(`push: ${title} | ${message}`);
     const res = await fetch(`https://ntfy.sh/${TOPIC}`, {

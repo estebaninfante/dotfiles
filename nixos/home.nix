@@ -50,7 +50,7 @@ let
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
     "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh" "clipboard-sync"
     "voice" "voice-daemon" "handy-paste.sh" "middle-click.sh"
-    "bedtime.sh" "bedtime-skip.sh" "notify-lid-suspend.sh" "temperature-log.sh"
+    "bedtime.sh" "bedtime-skip.sh" "notify-lid-suspend.sh" "notify-push-toggle.sh" "temperature-log.sh"
   ];
   # Solo laptop
   laptopScripts = [

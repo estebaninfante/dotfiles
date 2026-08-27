@@ -362,6 +362,9 @@ hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { relea
 -- F7: transcribir SIEMPRE con post-procesado (prompt custom en Handy)
 hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-post-process"))
 
+-- F5: activa/desactiva push de Notify de OpenCode al celular.
+hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
+
 -- ── Voz local (sistema voice, ver linux/voice + ~/.local/bin/voice) ──
 -- Toggle TTS: activa/desactiva la voz (daemon + alertas de opencode).
 -- El dictado se hace con Handy (F7); la voz solo habla respuestas.
