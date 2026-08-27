@@ -24,10 +24,13 @@ if skip; then
   exit 0
 fi
 
-# Ventana estricta: solo apagar si el disparo ocurre a partir de las 21h.
-# Persistent=true compensa triggers perdidos al encender la maquina
-# (ej. 4AM tras una noche apagada) — sin este guard apagaria al boot.
-if [ "$(date +%H)" -lt 21 ]; then
+# Ventana estricta: solo apagar si el disparo ocurre desde 20:55.
+# Incluye los 5 min de gracia previos a las 21:00 — un guard de solo hora
+# (>=21) mataria el disparo principal de las 20:55. Persistent=true
+# compensa triggers perdidos al encender la maquina (ej. 4AM) — este
+# guard evita que apague en horario normal de uso.
+NOW_MIN=$(date +%H%M)
+if [ "$NOW_MIN" -lt 2055 ]; then
   echo "bedtime: fuera de ventana (hora $(date +%H:%M)), sin accion"
   exit 0
 fi
