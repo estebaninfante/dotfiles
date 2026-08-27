@@ -9,9 +9,15 @@ return {
     "hrsh7th/cmp-path",
     "L3MON4D3/LuaSnip",
     "saadparwaiz1/cmp_luasnip",
+    "rafamadriz/friendly-snippets",
   },
   config = function()
     require("mason").setup()
+
+    -- Snippets: friendly-snippets (HTML, CSS, JS, TS, React, Next.js, ...)
+    -- + snippets propios en lua/snippets/ (formato LuaSnip)
+    require("luasnip.loaders.from_vscode").lazy_load()
+    require("luasnip.loaders.from_lua").lazy_load({ paths = vim.fn.stdpath("config") .. "/lua/snippets" })
     local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
     vim.lsp.config("*", { capabilities = capabilities })

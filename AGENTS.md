@@ -387,7 +387,7 @@ ejecutar EN el desktop):
 
 1. **Campana local** (`pw-play complete.oga` del tema freedesktop) en `session.idle`.
 2. **Resumen**: lee la transcripción via SDK y si existe key Groq
-   (`llama-3.1-8b-instant`) genera UNA frase en español técnico simple
+   (`openai/gpt-oss-20b`, `reasoning_effort: low`) genera UNA frase en español técnico simple
    (qué se hizo y si funcionó). Sale por `notify-send`; por voz solo con
    el toggle VOZ activo (comando `voice speak`). Sin key → fallback
    "Sesión <título> terminada".

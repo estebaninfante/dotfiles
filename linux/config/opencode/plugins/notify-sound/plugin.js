@@ -14,7 +14,7 @@
 //
 // RESUMEN al terminar la sesión:
 //   - Lee los mensajes de la sesion via SDK y pide a Groq
-//     (llama-3.1-8b-instant) una sola frase en ESPAÑOL TÉCNICO SIMPLE
+//     (openai/gpt-oss-20b) una sola frase en ESPAÑOL TÉCNICO SIMPLE
 //     que diga qué se hizo y si funcionó.
 //   - Sale siempre por notify-send; por voz SOLO si el toggle esta activo.
 //   - Key: ~/.local/state/opencode/notify-groq-key (chmod 600, nunca repo).
@@ -257,9 +257,12 @@ async function groqSummary(transcript, ctxTitle) {
   const key = groqKey();
   if (!key) return '';
   const body = {
-    model: 'llama-3.1-8b-instant',
-    max_tokens: 120,
-    temperature: 0.3,
+      model: 'openai/gpt-oss-20b',
+      max_tokens: 500,
+      temperature: 0.3,
+      // gpt-oss es reasoning: sin esto gasta el presupuesto de tokens
+      // pensando y el content llega vacío.
+      reasoning_effort: 'low',
     messages: [
       {
         role: 'system',
@@ -349,7 +352,7 @@ export default async ({ $, client }) => {
           notifyDesktop(summary, ctxTitle);
           speakIfEnabled(summary);
 
-          await push('opencode', `Sesion terminada${ctx ? '' : ''}${summary ? ` — ${summary}` : ctx}`, 3);
+          await push('opencode', summary ? `Sesion terminada — ${summary}` : `Sesion terminada${ctx}`, 3);
         } else if (isPermissionAsked(event)) {
           if (alreadyFired('perm', sid)) return;
           dbg('  → permission asked detected');
