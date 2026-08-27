@@ -12,11 +12,29 @@
 // El push usa fetch nativo de Bun → sin dependencia de curl.
 // El topico se configura en TOPIC.
 //
+// RESUMEN al terminar la sesión:
+//   - Lee los mensajes de la sesion via SDK y pide a Groq
+//     (llama-3.1-8b-instant) una sola frase en ESPAÑOL TÉCNICO SIMPLE
+//     que diga qué se hizo y si funcionó.
+//   - Sale siempre por notify-send; por voz SOLO si el toggle esta activo.
+//   - Key: ~/.local/state/opencode/notify-groq-key (chmod 600, nunca repo).
+//   - Sin key o si Groq falla → fallback: titulo + nº de mensajes.
+//
+// Toggles (el panel NOTIFICACIONES de quickshell los escribe):
+//   ~/.local/state/opencode/notify-sound-enabled  ('0' = sin campana)
+//   ~/.local/state/opencode/notify-voice-enabled  ('1' = hablar resumen;
+//                                                  default apagado)
+//   ~/.local/state/opencode/notify-push-enabled   ('0' = sin push ntfy)
+//   Ausente u otro valor => comportamiento indicado arriba.
+//
+// Privacidad: el texto de la conversacion se envia a la nube de Groq
+// para generar el resumen. Sin key no hay envio externo.
+//
 // NOTA sobre eventos (version-dependent):
 //   - opencode deriva `session.idle` desde `session.status` (status.type
 //     == "idle") en el cliente; el hook `event` del plugin puede recibir
 //     el crudo (`session.status`) en vez del derivado (`session.idle`).
-//     Por eso se manejan ambos.
+//     Por eso se manejan ambos, con dedup para no disparar doble.
 //   - La SDK v1.18.x emite `permission.updated` para permisos pedidos
 //     (la doc web dice `permission.asked`). Se manejan ambos.
 //
@@ -30,6 +48,8 @@ const DEBUG_LOG = process.env.NOTIFY_SOUND_LOG || '/tmp/opencode/notify-sound.lo
 import { readFileSync, appendFileSync } from 'fs';
 
 const SOUND_STATE_FILE = `${process.env.HOME}/.local/state/opencode/notify-sound-enabled`;
+const VOICE_STATE_FILE = `${process.env.HOME}/.local/state/opencode/notify-voice-enabled`;
+const GROQ_KEY_FILE = `${process.env.HOME}/.local/state/opencode/notify-groq-key`;
 
 // Sonido "lindo" para fin de tarea: completo/acierto del tema freedesktop.
 const CHIME_FILE = process.env.NOTIFY_SOUND_FILE
@@ -40,6 +60,24 @@ function soundEnabled() {
     return readFileSync(SOUND_STATE_FILE, 'utf8').trim() !== '0';
   } catch {
     return true; // sin estado → sonido activado
+  }
+}
+
+// Voz del resumen: apagada por defecto (el usuario la activa en el panel).
+function voiceEnabled() {
+  try {
+    return readFileSync(VOICE_STATE_FILE, 'utf8').trim() === '1';
+  } catch {
+    return false;
+  }
+}
+
+function groqKey() {
+  try {
+    const k = readFileSync(GROQ_KEY_FILE, 'utf8').trim();
+    return k || '';
+  } catch {
+    return '';
   }
 }
 
@@ -155,6 +193,121 @@ async function sessionTitle(client, sessionID) {
   }
 }
 
+// Dedup por (tipo, sessionID): idle llega como evento derivado Y crudo.
+const recent = new Map();
+function alreadyFired(kind, sid) {
+  const key = `${kind}:${sid || 'nosid'}`;
+  const now = Date.now();
+  if (now - (recent.get(key) || 0) < 15000) return true;
+  recent.set(key, now);
+  if (recent.size > 64) for (const [k, t] of recent) if (now - t > 60000) recent.delete(k);
+  return false;
+}
+
+// Transcripcion compacta de la sesion via SDK (client.session.messages).
+// Forma v1.x: [{ info: { role, ... }, parts: [{ type:'text', text }] }]
+function buildTranscript(client, sessionID) {
+  if (!client?.session?.messages || !sessionID) return null;
+  try {
+    let msgs;
+    try {
+      msgs = client.session.messages({ path: { id: sessionID } });
+    } catch {
+      msgs = client.session.messages({ query: { id: sessionID } });
+    }
+    if (Array.isArray(msgs)) return shapeTranscript(msgs);
+    // Algunos builds devuelven promesa
+    return msgs && typeof msgs.then === 'function'
+      ? msgs.then(shapeTranscript).catch(e => { dbg(`transcript ERROR: ${e.message}`); return null; })
+      : null;
+  } catch (e) {
+    dbg(`transcript ERROR: ${e.message}`);
+    return null;
+  }
+}
+
+function shapeTranscript(list) {
+  const out = [];
+  for (const m of list) {
+    const role = m?.info?.role;
+    if (role !== 'user' && role !== 'assistant') continue;
+    let text = '';
+    for (const p of m.parts || []) {
+      if (p.type === 'text' && p.text) text += p.text + ' ';
+      else if (p.type === 'tool' && p.tool) text += `[tool:${p.tool}] `;
+    }
+    text = text.replace(/\s+/g, ' ').trim().slice(0, 400);
+    if (text) out.push(`${role === 'user' ? 'Usuario' : 'Asistente'}: ${text}`);
+  }
+  // Solo la cola: lo ultimo es lo que importa para "como termino".
+  return out.slice(-14).join('\n');
+}
+
+async function groqSummary(transcript, ctxTitle) {
+  const key = groqKey();
+  if (!key) return '';
+  const body = {
+    model: 'llama-3.1-8b-instant',
+    max_tokens: 120,
+    temperature: 0.3,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Eres un asistente que resume sesiones de un agente de código. '
+          + 'Responde SIEMPRE en español técnico SIMPLE, plano y directo, '
+          + 'sin jerga innecesaria ni anglicismos evitables. '
+          + 'Una sola frase corta (máximo ~20 palabras) que diga QUÉ se hizo y SI funcionó. '
+          + 'Si hubo errores, dilo claramente ("falló", "quedó pendiente"). '
+          + 'No des saludos ni explicaciones: solo la frase.',
+      },
+      {
+        role: 'user',
+        content: `Sesión${ctxTitle ? ` "${ctxTitle}"` : ''}. Mensajes recientes:\n${transcript}\n\nResume en una frase en español técnico simple.`,
+      },
+    ],
+  };
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errTxt = (await res.text()).slice(0, 200);
+      dbg(`groq HTTP ${res.status}: ${errTxt}`);
+      return '';
+    }
+    const data = await res.json();
+    const txt = data?.choices?.[0]?.message?.content?.trim() || '';
+    dbg(`groq ok: ${txt}`);
+    return txt;
+  } catch (e) {
+    dbg(`groq ERROR: ${e.message}`);
+    return '';
+  }
+}
+
+// Notificacion escrita local (siempre) + voz opcional (toggle panel).
+function notifyDesktop(summary, ctxTitle) {
+  const title = ctxTitle ? `opencode: ${ctxTitle}` : 'opencode: sesión terminada';
+  try {
+    Bun.spawn(['notify-send', '-t', '8000', title, summary], { stdio: ['ignore', 'ignore', 'ignore'] });
+  } catch (e) {
+    dbg(`notify-send ERROR: ${e.message}`);
+  }
+}
+
+function speakIfEnabled(summary) {
+  if (!voiceEnabled()) { dbg('voice off (toggle quickshell)'); return; }
+  try {
+    Bun.spawn(['voice', 'speak', summary], { stdio: ['ignore', 'ignore', 'ignore'] });
+    dbg('voice speak enviado');
+  } catch (e) {
+    dbg(`voice ERROR: ${e.message}`);
+  }
+}
+
 export default async ({ $, client }) => {
   dbg('plugin init');
   return {
@@ -167,9 +320,34 @@ export default async ({ $, client }) => {
 
         if (isSessionIdle(event)) {
           dbg('  → session idle detected');
+          if (alreadyFired('idle', sid)) {
+            dbg('  → dedup: idle ya procesado, skip');
+            return;
+          }
           playChime();
-          await push('opencode', `Sesion terminada${ctx}`, 3);
+
+          // Resumen: transcripcion → Groq (si hay key) → notificar.
+          const ctxTitle = title || '';
+          let summary = '';
+          const transcript = buildTranscript(client, sid);
+          const t = transcript && typeof transcript.then === 'function'
+            ? await transcript
+            : transcript;
+          if (t) {
+            summary = await groqSummary(t, ctxTitle);
+          } else if (!groqKey()) {
+            dbg('sin key groq ni mensajes → resumen fallback');
+          }
+          if (!summary) {
+            // Fallback sin nube (sin key, sin mensajes o Groq caido).
+            summary = ctxTitle ? `Sesión "${ctxTitle}" terminada` : 'Sesión terminada';
+          }
+          notifyDesktop(summary, ctxTitle);
+          speakIfEnabled(summary);
+
+          await push('opencode', `Sesion terminada${ctx ? '' : ''}${summary ? ` — ${summary}` : ctx}`, 3);
         } else if (isPermissionAsked(event)) {
+          if (alreadyFired('perm', sid)) return;
           dbg('  → permission asked detected');
           const detail = permissionDetail(event);
           await push('opencode: permiso', `${detail ? `Pide permiso: ${detail}` : 'Pide permiso'}${ctx}`, 4);
