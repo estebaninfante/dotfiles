@@ -1,66 +1,62 @@
--- Snippets propios Next.js/React (friendly-snippets no cubre todo).
--- Complementa: HTML/CSS/input/form/img vienen de friendly-snippets.
+-- Snippets propios Next.js/React. friendly-snippets cubre el resto
+-- (HTML, CSS, tailwind, etc.)
 local ls = require("luasnip")
 local s = ls.snippet
-local t = ls.text_node
 local i = ls.insert_node
 local fmt = require("luasnip.extras.fmt").fmt
 
-local M = {}
-
-M.next_component = {
-  -- Server Component (default en App Router)
-  s("nsc", fmt([[
-export default function {}() {{
+local function define(ft)
+  ls.add_snippets(ft, {
+    -- Server Component (App Router)
+    s("nsc", fmt([[
+export default function {1}() {{
   return (
-    <{}>{}</{}>
+    <{2}>{3}</{2}>
   )
-}}]], { i(1, "Componente"), i(2, "div"), i(3), l_rep(2) })),
+}}]], { i(1, "Componente"), i(2, "div"), i(3) })),
 
-  -- Client Component con useState
-  s("ncc", fmt([[
+    -- Client Component con estado
+    s("ncc", fmt([[
 'use client'
 
 import {{ useState }} from 'react'
 
-export default function {}() {{
-  const [{} , set{}] = useState({})
+export default function {1}() {{
+  const [{3}, set{3}] = useState({4})
   return (
-    <div>{}</div>
+    <{2}>{5}</{2}>
   )
-}}]], { i(1, "Componente"), i(2, "valor"), l_rep(2, true), i(4, ""), i(5) })),
+}}]], { i(1, "Componente"), i(2, "div"), i(3, "estado"), i(4, ""), i(5) })),
 
-  -- Metadata export (layout.tsx / page.tsx)
-  s("nmeta", fmt([[
+    -- Metadata export
+    s("nmeta", fmt([[
 import type {{ Metadata }} from 'next'
 
 export const metadata: Metadata = {{
-  title: '{}',
-  description: '{}',
+  title: '{1}',
+  description: '{2}',
 }}]], { i(1, "Título"), i(2, "Descripción") })),
-}
 
-M.next_file_helpers = {
-  -- <Link>
-  s("nlink", fmt([[<Link href="{}" className="{}">{}</Link>]], { i(1, "/"), i(2), i(3) })),
+    -- <Link>
+    s("nlink", fmt([[<Link href="{1}" className="{2}">{3}</Link>]], { i(1, "/"), i(2), i(3) })),
 
-  -- <Image> optimizada
-  s("nimg", fmt([[
+    -- <Image> optimizada
+    s("nimg", fmt([[
 <Image
-  src="{{{}}}"
-  alt="{{{}}}"
-  width={{{3:800}}}
-  height={{{4:600}}}
-  className="{{{}}}"
-/>]], { i(1, "/imagen.png"), i(2, "alt"), i(5, "rounded-lg") })),
+  src="{{{1}}}"
+  alt="{{{2}}}"
+  width={{{3}}}
+  height={{{4}}}
+  className="{{{5}}}"
+/>]], { i(1, "/ruta.png"), i(2, "alt"), i(3, "800"), i(4, "600"), i(5, "rounded-lg") })),
 
-  -- Route Handler (app/api/*/route.ts)
-  s("nroute", fmt([[
+    -- Route Handler (app/api/*/route.ts)
+    s("nroute", fmt([[
 import {{ NextResponse }} from 'next/server'
 
 export async function GET() {{
   try {{
-    return NextResponse.json({{ {} }})
+    return NextResponse.json({{ {1} }})
   }} catch (error) {{
     console.error(error)
     return NextResponse.json(
@@ -70,42 +66,30 @@ export async function GET() {{
   }}
 }}]], { i(1, "ok: true") })),
 
-  -- useEffect + fetch
-  s("nfetch", fmt([[
-const [{} , set{}] = useState<{} | null>(null)
+    -- useEffect + fetch
+    s("nfetch", fmt([[
+const [{1}, set{1}] = useState<{2} | null>(null)
 
 useEffect(() => {{
-  fetch('{}')
+  fetch('{3}')
     .then((res) => res.json())
-    .then(set{})
+    .then(set{1})
     .catch(console.error)
-}}, [])]], {
-    i(1, "data"), l_rep(1, true), i(3, "Tipo"),
-    i(4, "/api/ruta"), l_rep(1, true),
-  })),
+}}, [])]], { i(1, "data"), i(2, "Tipo"), i(3, "/api/ruta") })),
 
-  -- Server Action
-  s("naction", fmt([[
+    -- Server Action
+    s("naction", fmt([[
 'use server'
 
-export async function {}(formData: FormData) {{
-  {}
+export async function {1}(formData: FormData) {{
+  {2}
 }}]], { i(1, "crearAlgo"), i(2, "// lógica") })),
-}
-
-M.all = {}
-for _, group in ipairs({ M.next_component, M.next_file_helpers }) do
-  for ft, _ in pairs(group) do end
+  })
 end
 
--- Aplicar a filetypes JS/TS y JSX/TSX
-ls.add_snippets(nil, vim.tbl_deep_extend("force", {}, unpack({
-  ls.parser and {} or {}, -- placeholder
-})))
+define("typescriptreact")
+define("javascriptreact")
 
-return {
-  next = function()
-    for _, snips in ipairs(M.next_component) do table.insert(M.all, snips) end
-    for _, snips in ipairs(M.next_file_helpers) do table.insert(M.all, snips) end
-  end,
-}
+-- que apliquen también en .tsx/.jsx
+ls.filetype_extend("tsx", { "typescriptreact" })
+ls.filetype_extend("jsx", { "javascriptreact" })
