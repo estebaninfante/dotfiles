@@ -15,10 +15,11 @@ case "$target" in
     light|dark) ;;  # explícito: apunta al nombre de archivo destino
     toggle|"")
         cur=$(current)
-        case "$cur" in
-            #fd*|#f9*|#f5*) target=dark ;;   # fondos claros → ir a oscuro
-            *) target=light ;;
-        esac
+        if [[ "$cur" == "#f"* ]]; then  # fondos claros (crema) → ir a oscuro
+            target=dark
+        else
+            target=light
+        fi
         ;;
     *)
         echo "uso: kitty-theme-toggle.sh [light|dark|toggle]" >&2

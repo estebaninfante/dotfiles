@@ -51,6 +51,7 @@ let
     "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh" "clipboard-sync"
     "voice" "voice-daemon" "handy-paste.sh" "middle-click.sh"
     "bedtime.sh" "bedtime-skip.sh" "notify-lid-suspend.sh" "notify-push-toggle.sh" "temperature-log.sh"
+    "kitty-theme-toggle.sh"
   ];
   # Solo laptop
   laptopScripts = [
