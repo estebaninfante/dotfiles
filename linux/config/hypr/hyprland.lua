@@ -233,8 +233,12 @@ end
 -- AUTO-START (optimized order)
 -- ========================
 hl.on("hyprland.start", function()
-    -- 1. Wallpaper immediately (via systemd user service: linux-wallpaperengine)
-    -- Wallpaper Engine starts automatically via graphical-session.target
+    -- 1. Wallpaper immediately
+    if machine == "laptop" then
+        hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-laptop.conf")
+    else
+        -- Desktop: linux-wallpaperengine via systemd user service
+    end
 
     -- 2. Bar and UI
     hl.exec_cmd("env QT_SCALE_FACTOR=1 quickshell --no-duplicate")
@@ -312,7 +316,6 @@ hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
 hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())
 hl.bind(mainMod .. " + D", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + P", hl.dsp.window.pin())
-hl.bind(mainMod .. " + B", hl.dsp.focus({ workspace = "special" }))
 
 hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
 hl.bind(mainMod .. " + SHIFT + X", hl.dsp.exit())
