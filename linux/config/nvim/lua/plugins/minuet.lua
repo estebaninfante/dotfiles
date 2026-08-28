@@ -24,17 +24,18 @@ return {
           api_key = "GROQ_API_KEY",
           name = "Groq",
           end_point = "https://api.groq.com/openai/v1/chat/completions",
-          model = "qwen/qwen3.8-27b", -- válido en esta cuenta Groq; si va lento: gpt-oss-20b
+          model = "openai/gpt-oss-20b", -- barato y rápido vs qwen3.8-27b (casi frontera); ultrabarato: llama-3.1-8b-instant
           stream = false, -- Groq no parsea streaming en minuet (llega vacío); non-stream funciona
           optional = {
             max_tokens = 128, -- sugerencias cortas, menos intrusivas
             top_p = 0.9,
+            context_window = 4096, -- recorta contexto del buffer: menos TPM por request
           },
         },
       },
       virtualtext = {
-        auto_trigger_ft = { "*" }, -- requerido: sin esto el auto-trigger nunca se activa
         show_on_completion_menu = false, -- oculto cuando abre menú nvim-cmp
+        auto_trigger_ft = { "*" }, -- ghost text automático; toggle con <leader>ia
         keymap = {
           accept = "<Tab>",
           accept_line = "<M-L>",
@@ -44,5 +45,8 @@ return {
         },
       },
     })
+    -- Toggle auto-trigger (persiste como var buffer-local hasta cambiar de buffer)
+    vim.keymap.set("n", "<leader>ia", require("minuet.virtualtext").action.toggle_auto_trigger,
+      { desc = "Toggle autocompletado IA" })
   end,
 }
