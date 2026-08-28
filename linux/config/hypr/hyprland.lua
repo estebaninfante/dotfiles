@@ -235,7 +235,7 @@ end
 hl.on("hyprland.start", function()
     -- 1. Wallpaper immediately
     if machine == "laptop" then
-        hl.exec_cmd("sleep 1 && swww init && swww img /home/eztvn/.config/hypr/wallpapers/porsche_wallpaper.jpg --transition-type grow --transition-duration 2")
+        hl.exec_cmd("sleep 1 && awww init && awww img /home/eztvn/.config/hypr/wallpapers/porsche_wallpaper.jpg --transition-type grow --transition-duration 2")
     else
         -- Desktop: linux-wallpaperengine via systemd user service
     end
