@@ -18,6 +18,7 @@ return {
 
     require("minuet").setup({
       throttle = 900, -- ms entre peticiones automáticas
+      n = 4096, -- recorta contexto del buffer (chars): menos TPM por request
       provider = "openai_compatible",
       provider_options = {
         openai_compatible = {
@@ -29,7 +30,6 @@ return {
           optional = {
             max_tokens = 128, -- sugerencias cortas, menos intrusivas
             top_p = 0.9,
-            context_window = 4096, -- recorta contexto del buffer: menos TPM por request
           },
         },
       },
