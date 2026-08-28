@@ -94,6 +94,7 @@ ac_off() {
     echo "$m" | sudo tee "$ACPI" >/dev/null 2>&1 || continue
     ret=$(sudo cat "$ACPI" 2>/dev/null | tr -d '\0' || true)
     if [ "${ret#*Error}" = "$ret" ]; then
+      rm -f "$OFFFLAG" 2>/dev/null || true
       echo "$m" > "$OFFFLAG" 2>/dev/null || true
       echo "ACPI _OFF aplicado: $m"
       return 0

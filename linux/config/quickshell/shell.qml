@@ -283,7 +283,7 @@ PanelWindow {
 
     Process {
         id: syncStatus
-        command: ["systemctl", "--user", "is-active", "syncthing.service"]
+        command: ["systemctl", "is-active", "syncthing.service"]
         running: true
         stdout: StdioCollector {
             onStreamFinished: root.syncActive = this.text.trim() === "active"
@@ -533,8 +533,8 @@ PanelWindow {
                         onClicked: {
                             const stop = root.syncActive;
                             syncToggle.command = ["bash", "-c",
-                                stop ? "touch /tmp/syncthing-manual-off; systemctl --user stop syncthing.service"
-                                     : "rm -f /tmp/syncthing-manual-off; systemctl --user start syncthing.service"];
+                                stop ? "touch /tmp/syncthing-manual-off; sudo systemctl stop syncthing.service"
+                                     : "rm -f /tmp/syncthing-manual-off; sudo systemctl start syncthing.service"];
                             syncToggle.running = false;
                             syncToggle.running = true;
                         }

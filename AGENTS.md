@@ -225,7 +225,7 @@ Automático (solo laptop):
 - `gpu-acpi-off.service` (multi-user.target) → corte ACPI al boot.
 - `powerManagement.powerUpCommands` → re-aplica corte tras cada resume
   (el firmware reenciende el rail en suspend).
-- `battery-power-guard.sh` (evento Mains via udev) → power-saver + corte.
+- `battery-power-guard.sh` (evento Mains via udev) → power-saver + corte + syncthing OFF (ON en AC; toggle manual en pill "SYNC" de quickshell, respeta `/tmp/syncthing-manual-off`).
 - `powerManagement.powertop.enable` → `powertop --auto-tune` al boot.
 
 Accesible desde `rofi-power-mode.sh` (menú "Modo Energia"). Requiere sudo NOPASSWD (definido en `nixos/modules/sudoers.nix`):
