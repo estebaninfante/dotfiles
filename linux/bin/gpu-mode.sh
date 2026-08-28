@@ -12,15 +12,15 @@ GPU_PCI="0000:01:00.0"
 CTRL="/sys/bus/pci/devices/$GPU_PCI/power/control"
 STATE="/sys/bus/pci/devices/$GPU_PCI/power/runtime_status"
 ACPI="/proc/acpi/call"
-OFFFLAG="/run/gpu-acpi-off"
+OFFFLAG="/tmp/gpu-acpi-off"
 
 # Métodos ACPI _OFF a probar (corte físico del rail de la dGPU).
-# En esta laptop (Legion Slim 5 82Y5) la dGPU vive en \_SB.PCI0.GPP0.PEGP.
+# En esta laptop (Legion Slim 5 82Y5) el PowerResource de la dGPU es
+# \_SB.PCI0.GPP0.PG00 (ver SSDT4: _PR0 de PEGP → PG00).
 ACPI_METHODS=(
-  '\_SB.PCI0.GPP0.PEGP._OFF'
-  '\_SB.PCI0.GPP0.PEGP.PG00._OFF'
+  '\_SB.PCI0.GPP0.PG00._OFF'
   '\_SB.PCI0.PEG0.PG00._OFF'
-  '\_SB.PCI0.PEGP.PG00._OFF'
+  '\_SB.PCI0.GPP0.PEGP._OFF'
 )
 
 find_gpu() {
@@ -91,7 +91,7 @@ ac_off() {
   local m ret
   for m in "${ACPI_METHODS[@]}"; do
     echo "$m" | sudo tee "$ACPI" >/dev/null 2>&1 || continue
-    ret=$(sudo cat "$ACPI" 2>/dev/null || true)
+    ret=$(sudo cat "$ACPI" 2>/dev/null | tr -d '\0' || true)
     if [ "${ret#*Error}" = "$ret" ]; then
       echo "$m" > "$OFFFLAG" 2>/dev/null || true
       echo "ACPI _OFF aplicado: $m"

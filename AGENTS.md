@@ -207,16 +207,26 @@ hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-" .. machine .. ".conf"
 - `waybar-battery-top`
 - `trackpad-dwt-daemon`
 - `reload-hyprpaper.sh`
-- `gpu-mode.sh` → toggle manual NVIDIA (ahorro batería vs gaming)
+- `gpu-mode.sh` → perfiles NVIDIA + corte físico ACPI (100% OFF) de la dGPU
 
 ### GPU NVIDIA (laptop híbrida)
 
 **Caso:** iGPU AMD (amdgpu) maneja el display; dGPU NVIDIA (RTX 4060) solo para juegos.
 
-**`gpu-mode.sh`** controla la NVIDIA via Runtime PM:
-- `gpu-mode.sh battery` → `power/control=auto`: GPU en D3cold cuando inactiva → máximo ahorro de batería
-- `gpu-mode.sh gaming` → `power/control=on` + `nvidia-smi -pm 1`: GPU activa y lista
-- `gpu-mode.sh toggle` / `status`
+**`gpu-mode.sh`** — perfiles + corte físico ACPI de la dGPU:
+- `gpu-mode.sh off` → **corte físico 100%**: llama `\_SB.PCI0.GPP0.PG00._OFF`
+  via `acpi_call` (PowerResource real de la dGPU, ver SSDT). El rail de la
+  GPU se corta (no solo D3cold: el firmware Legion mantiene el rail vivo).
+- `gpu-mode.sh battery` → runtime PM auto + intenta corte ACPI
+- `gpu-mode.sh enable` / `disable` → especialización NVIDIA (reboot) para jugar
+- `gpu-mode.sh toggle` / `status` (status incluye `ACPI: on|off`)
+
+Automático (solo laptop):
+- `gpu-acpi-off.service` (multi-user.target) → corte ACPI al boot.
+- `powerManagement.powerUpCommands` → re-aplica corte tras cada resume
+  (el firmware reenciende el rail en suspend).
+- `battery-power-guard.sh` (evento Mains via udev) → power-saver + corte.
+- `powerManagement.powertop.enable` → `powertop --auto-tune` al boot.
 
 Accesible desde `rofi-power-mode.sh` (menú "Modo Energia"). Requiere sudo NOPASSWD (definido en `nixos/modules/sudoers.nix`):
 - `tee /sys/bus/pci/devices/*/power/control`
