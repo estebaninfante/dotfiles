@@ -422,7 +422,14 @@ hl.bind(mainMod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative = 
 -- Key-to-workspace mapping (DVORAK-PROG layout)
 local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
 for i = 1, 10 do
-    hl.bind(mainMod .. " + " .. ws_keys[i], hl.dsp.focus({ workspace = tostring(i) }))
+    hl.bind(mainMod .. " + " .. ws_keys[i], function()
+        local ws = hl.get_active_workspace()
+        if ws and ws.id == i then
+            hl.dispatch(hl.dsp.focus({ workspace = "previous" }))
+        else
+            hl.dispatch(hl.dsp.focus({ workspace = tostring(i) }))
+        end
+    end)
     hl.bind(mainMod .. " + SHIFT + " .. ws_keys[i], hl.dsp.window.move({ workspace = tostring(i) }))
 end
 
