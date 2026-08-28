@@ -24,9 +24,15 @@
     "nvidia" "nvidia_drm" "nvidia_modeset" "nvidia_uvm" "nvidia_peermem"
   ];
 
+  # acpi_call: corte FÍSICO de energía de la dGPU (_OFF del power resource
+  # ACPI). D3cold no basta en esta máquina: el firmware mantiene el rail
+  # energizado (~1-2W extra). gpu-mode.sh off lo ejecuta.
+  boot.extraModulePackages = [ config.boot.kernelPackages.acpi_call ];
+
   # `gpu-mode.sh enable` selecciona este perfil y reinicia para jugar.
   specialisation.nvidia.configuration = {
     boot.blacklistedKernelModules = lib.mkForce [];
+    boot.extraModulePackages = lib.mkForce [];
   };
 
   # ── NVIDIA hybrid ────────────────────────────────────────────

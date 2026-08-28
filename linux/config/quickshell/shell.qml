@@ -1582,17 +1582,18 @@ PanelWindow {
 
                         Card {
                             id: gpuCard
-                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.modo === "disabled" ? "\uf011" : "\uf06c"
-                            cAccent: gpuCard.modo === "gaming" ? "#98c379" : gpuCard.modo === "disabled" ? "#e06c75" : "#cba6f7"
+                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.acpi === "off" ? "\uf011" : "\uf06c"
+                            cAccent: gpuCard.modo === "gaming" ? "#98c379" : gpuCard.acpi === "off" ? "#98c379" : gpuCard.modo === "disabled" ? "#e5c07b" : "#cba6f7"
                             cTitle: "GPU NVIDIA"
-                            cBig: gpuCard.modo === "gaming" ? "Juegos" : gpuCard.modo === "disabled" ? "Desactivada" : "Bater\u00eda"
-                            cSub: gpuCard.fuente ? (gpuCard.modo === "gaming" ? "Click: modo bater\u00eda" : gpuCard.modo === "disabled" ? "Click: activar y reiniciar" : "Click: modo juegos") : "---"
+                            cBig: gpuCard.modo === "gaming" ? "Juegos" : gpuCard.acpi === "off" ? "100% OFF" : gpuCard.modo === "disabled" ? "D3cold" : "Bater\u00eda"
+                            cSub: gpuCard.fuente ? (gpuCard.modo === "gaming" ? "Click: modo bater\u00eda" : gpuCard.acpi === "off" ? "Click: activar y reiniciar" : gpuCard.modo === "disabled" ? "Click: apagar 100%" : "Click: modo juegos") : "---"
                             dDel: 120
                             cardOn: widgetMenu.opened
                              visible: root.hasBattery && widgetMenu.activeSection === "monitoreo"
 
                             property string modo: ""
                             property string fuente: ""
+                            property string acpi: ""
 
                             MouseArea {
                                 anchors.fill: parent
@@ -1619,6 +1620,9 @@ PanelWindow {
                                         m = line.match(/Fuente:\s*(\w+)/);
                                         if (m)
                                             gpuCard.fuente = m[1];
+                                        m = line.match(/ACPI:\s*(\w+)/);
+                                        if (m)
+                                            gpuCard.acpi = m[1];
                                     }
                                 }
                             }

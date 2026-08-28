@@ -348,6 +348,27 @@
     };
   };
 
+  # Corte FÍSICO (ACPI _OFF) de la dGPU al boot. Tras resume lo re-aplica
+  # powerManagement.powerUpCommands (el firmware reenciende el rail en
+  # suspend/resume; esto lo vuelve a apagar).
+  systemd.services.gpu-acpi-off = lib.mkIf (machineType == "laptop") {
+    description = "Laptop: apagar dGPU por ACPI (corte físico)";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      Environment = "PATH=/run/current-system/sw/bin:/run/wrappers/bin";
+      ExecStart = "${pkgs.bash}/bin/bash -c 'sleep 5 && /home/eztvn/dotfiles/linux/bin/gpu-mode.sh off'";
+    };
+  };
+
+  # Re-aplicar corte ACPI de la dGPU después de cada resume.
+  powerManagement.powerUpCommands = lib.mkIf (machineType == "laptop") ''
+    ${pkgs.bash}/bin/bash -c 'sleep 5; /home/eztvn/dotfiles/linux/bin/gpu-mode.sh off' &
+  '';
+
+  # powertop --auto-tune al boot: runtime PM agresivo (PCI, SATA, audio).
+  powerManagement.powertop.enable = lib.mkIf (machineType == "laptop") true;
+
   services.udev.extraRules = lib.mkIf (machineType == "laptop") ''
     # Flujo de energía Mains (AC) → dispara la guarda de la GPU.
     # Solo existe un device type=Mains en laptops; en desktop no → no dispara.

@@ -11,6 +11,17 @@ set -euo pipefail
 GPU_PCI="0000:01:00.0"
 CTRL="/sys/bus/pci/devices/$GPU_PCI/power/control"
 STATE="/sys/bus/pci/devices/$GPU_PCI/power/runtime_status"
+ACPI="/proc/acpi/call"
+OFFFLAG="/run/gpu-acpi-off"
+
+# Métodos ACPI _OFF a probar (corte físico del rail de la dGPU).
+# En esta laptop (Legion Slim 5 82Y5) la dGPU vive en \_SB.PCI0.GPP0.PEGP.
+ACPI_METHODS=(
+  '\_SB.PCI0.GPP0.PEGP._OFF'
+  '\_SB.PCI0.GPP0.PEGP.PG00._OFF'
+  '\_SB.PCI0.PEG0.PG00._OFF'
+  '\_SB.PCI0.PEGP.PG00._OFF'
+)
 
 find_gpu() {
   local dev
@@ -72,6 +83,25 @@ set_mode() { # $1 = on|auto, $2 = persistence 0|1
   fi
 }
 
+ac_off() {
+  if [ ! -e "$ACPI" ]; then
+    echo "acpi_call no disponible (rebuild requerido)" >&2
+    return 1
+  fi
+  local m ret
+  for m in "${ACPI_METHODS[@]}"; do
+    echo "$m" | sudo tee "$ACPI" >/dev/null 2>&1 || continue
+    ret=$(cat "$ACPI" 2>/dev/null)
+    if [ "${ret#*Error}" = "$ret" ]; then
+      echo "$m" > "$OFFFLAG" 2>/dev/null || true
+      echo "ACPI _OFF aplicado: $m"
+      return 0
+    fi
+  done
+  echo "Ningún método ACPI _OFF funcionó" >&2
+  return 1
+}
+
 if ! find_gpu; then
   echo "GPU NVIDIA no encontrada"
   exit 1
@@ -91,10 +121,18 @@ case "${1:-status}" in
     ;;
   battery)
     if [ "$mode" = "disabled" ]; then
-      echo "NVIDIA ya está desactivada"
+      ac_off || true
       exit 0
     fi
     set_mode auto 0
+    ac_off || true
+    ;;
+  off)
+    if [ "$mode" != "disabled" ]; then
+      echo "Driver NVIDIA activo; no se puede apagar por ACPI" >&2
+      exit 1
+    fi
+    ac_off
     ;;
   gaming)
     if [ "$mode" = "disabled" ]; then
@@ -122,7 +160,9 @@ case "${1:-status}" in
   status)
     state="desactivada"
     driver_active && state=$(cat "$STATE")
-    echo "GPU: $state  Modo: $mode  Fuente: $(ac_status)"
+    acpi="on"
+    [ -f "$OFFFLAG" ] && acpi="off"
+    echo "GPU: $state  ACPI: $acpi  Modo: $mode  Fuente: $(ac_status)"
     exit 0
     ;;
   *)

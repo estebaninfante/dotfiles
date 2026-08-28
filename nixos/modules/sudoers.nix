@@ -17,6 +17,11 @@
         command = "/run/current-system/sw/bin/nvidia-smi";
         options = [ "NOPASSWD" ];
       }
+      # gpu-mode.sh off: escribir método ACPI en /proc/acpi/call
+      {
+        command = "/run/current-system/sw/bin/tee /proc/acpi/call";
+        options = [ "NOPASSWD" ];
+      }
       # keyd reload (linux/system/keyd/default.conf)
       {
         command = "/run/current-system/sw/bin/keyd";
