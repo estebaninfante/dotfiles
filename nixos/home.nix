@@ -363,7 +363,9 @@ in
   # reinicia el servicio → persistente entre sesiones.
 
   # Inyectar variables de entorno Wayland que systemd user no hereda de Hyprland
-  systemd.user.services.linux-wallpaperengine = {
+  # linux-wallpaperengine: SOLO desktop (laptop: drena batería — wallpaper
+  # animado mantiene iGPU/CPU activas). En laptop se usa hyprpaper.
+  systemd.user.services.linux-wallpaperengine = lib.mkIf (machineType == "desktop") {
     Unit = {
       Description = "Implementation of Wallpaper Engine on Linux";
       After = [ "graphical-session.target" ];

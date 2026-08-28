@@ -23,6 +23,7 @@ PanelWindow {
     property double brightnessPct: 0
     property int kbIndex: 0
     property string powerProfile: ""
+    property bool syncActive: false
     readonly property var kbLabels: ["DV", "ES", "US"]
     property var audioSinks: ListModel {}
     property var audioSources: ListModel {}
@@ -280,12 +281,29 @@ PanelWindow {
         }
     }
 
+    Process {
+        id: syncStatus
+        command: ["systemctl", "--user", "is-active", "syncthing.service"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.syncActive = this.text.trim() === "active"
+        }
+    }
+
+    Process {
+        id: syncToggle
+        command: ["true"]
+        running: false
+        onExited: syncStatus.running = true
+    }
+
     Timer {
         interval: 3000
         running: true
         repeat: true
         onTriggered: {
             volumeStatus.running = true;
+            syncStatus.running = true;
             if (root.hasBattery) brightnessStatus.running = true;
         }
     }
@@ -486,6 +504,40 @@ PanelWindow {
                         onExited: hov = false
                         onClicked: volumeMenu.opened = !volumeMenu.opened
                         onWheel: wheel => { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", wheel.angleDelta.y > 0 ? "5%+" : "5%-"]; volumeAdjust.running = true; }
+                    }
+                }
+
+                Rectangle {
+                    id: syncBtn
+                    width: 52
+                    height: 22
+                    radius: 8
+                    color: syncArea.hov ? "#5D3FD3" : root.syncActive ? "#17301f" : "#141414"
+                    border.color: root.syncActive ? "#98c379" : "#30303b"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.syncActive ? "\uf0c1 SYNC" : "\uf127 SYNC"
+                        color: root.syncActive ? "#98c379" : "#6c7086"
+                        font.family: root.fontFamily
+                        font.pixelSize: 10
+                    }
+
+                    MouseArea {
+                        id: syncArea
+                        property bool hov: false
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: hov = true
+                        onExited: hov = false
+                        onClicked: {
+                            const stop = root.syncActive;
+                            syncToggle.command = ["bash", "-c",
+                                stop ? "touch /tmp/syncthing-manual-off; systemctl --user stop syncthing.service"
+                                     : "rm -f /tmp/syncthing-manual-off; systemctl --user start syncthing.service"];
+                            syncToggle.running = false;
+                            syncToggle.running = true;
+                        }
                     }
                 }
 
