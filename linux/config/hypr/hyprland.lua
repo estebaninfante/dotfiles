@@ -233,9 +233,9 @@ end
 -- AUTO-START (optimized order)
 -- ========================
 hl.on("hyprland.start", function()
-    -- 1. Wallpaper immediately
+    -- 1. Wallpaper immediately (via hyprpaper)
     if machine == "laptop" then
-        hl.exec_cmd("sleep 1 && awww init && awww img /home/eztvn/.config/hypr/wallpapers/porsche_wallpaper.jpg --transition-type grow --transition-duration 2")
+        hl.exec_cmd("sleep 1 && hyprpaper --config /home/eztvn/.config/hypr/hyprpaper-laptop.conf")
     else
         -- Desktop: linux-wallpaperengine via systemd user service
     end

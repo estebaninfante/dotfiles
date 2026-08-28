@@ -42,7 +42,6 @@ with pkgs; [  # ── Shell & terminal ──
   kanata
   hyprpolkitagent
   hyprpaper
-  awww
   brightnessctl
   libnotify
   playerctl
