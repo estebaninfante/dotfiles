@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Controla la GPU NVIDIA via Runtime PM (laptop híbrida AMD + RTX).
-#   battery : GPU en D3cold cuando está inactiva
+# Controla la GPU NVIDIA (laptop híbrida AMD + RTX).
+#   battery : runtime PM auto + intento de corte ACPI (_OFF)
+#   off     : corte FÍSICO de energía de la dGPU via acpi_call (\_SB.PCI0.GPP0.PG00._OFF)
 #   gaming  : GPU forzada activa + persistence mode → lista para jugar
 #   enable  : arranca especialización NVIDIA y reinicia
 #   disable : vuelve al perfil AMD y reinicia
 #   guard   : automático por fuente de energía (batería → battery, AC → sin cambios)
-# Uso: gpu-mode.sh [battery|gaming|toggle|guard|status]
+# Uso: gpu-mode.sh [battery|off|gaming|toggle|guard|status]
 set -euo pipefail
 
 GPU_PCI="0000:01:00.0"
