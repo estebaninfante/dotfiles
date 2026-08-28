@@ -17,8 +17,8 @@ return {
     end
 
     require("minuet").setup({
-      throttle = 900, -- ms entre peticiones automáticas
-      n = 4096, -- recorta contexto del buffer (chars): menos TPM por request
+      throttle = 12000, -- 12s entre auto-request: tasa libre Groq es 8000 TPM (~5 req x 1400 tok)
+      n = 2048, -- recorta contexto del buffer (chars): cada request usa ~700 tokens en vez de 1400
       provider = "openai_compatible",
       provider_options = {
         openai_compatible = {
@@ -30,6 +30,7 @@ return {
           optional = {
             max_tokens = 128, -- sugerencias cortas, menos intrusivas
             top_p = 0.9,
+            reasoning_effort = "low", -- gpt-oss es reasoning: sin esto todo el presupuesto se va a razonar y content llega vacío
           },
         },
       },
