@@ -16,7 +16,9 @@ return {
           if not pcall(vim.treesitter.language.add, ft) then
             return
           end
-          vim.treesitter.start()
+          if not pcall(vim.treesitter.start) then
+            return
+          end
           if vim.treesitter.query.get(ft, "indents", { warn = false }) then
             vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
             vim.bo.indentkeys = vim.bo.indentkeys .. ",=end"
