@@ -91,7 +91,7 @@ ac_off() {
   local m ret
   for m in "${ACPI_METHODS[@]}"; do
     echo "$m" | sudo tee "$ACPI" >/dev/null 2>&1 || continue
-    ret=$(cat "$ACPI" 2>/dev/null)
+    ret=$(sudo cat "$ACPI" 2>/dev/null || true)
     if [ "${ret#*Error}" = "$ret" ]; then
       echo "$m" > "$OFFFLAG" 2>/dev/null || true
       echo "ACPI _OFF aplicado: $m"

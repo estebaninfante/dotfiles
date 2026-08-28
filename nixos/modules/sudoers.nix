@@ -22,6 +22,11 @@
         command = "/run/current-system/sw/bin/tee /proc/acpi/call";
         options = [ "NOPASSWD" ];
       }
+      # gpu-mode.sh off: leer resultado de la llamada ACPI
+      {
+        command = "/run/current-system/sw/bin/cat /proc/acpi/call";
+        options = [ "NOPASSWD" ];
+      }
       # keyd reload (linux/system/keyd/default.conf)
       {
         command = "/run/current-system/sw/bin/keyd";

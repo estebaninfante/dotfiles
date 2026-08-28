@@ -24,6 +24,9 @@
     "nvidia" "nvidia_drm" "nvidia_modeset" "nvidia_uvm" "nvidia_peermem"
   ];
 
+  # Carga explícita del módulo acpi_call (extraModulePackages no auto-carga).
+  boot.kernelModules = [ "acpi_call" ];
+
   # acpi_call: corte FÍSICO de energía de la dGPU (_OFF del power resource
   # ACPI). D3cold no basta en esta máquina: el firmware mantiene el rail
   # energizado (~1-2W extra). gpu-mode.sh off lo ejecuta.
