@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
-# Auto-sync dotfiles: pull (ff-only) + commit + push + rebuild + gc.
-# Seguro: no pushea secrets, ff-only pull, skip si conflicto.
+# Auto-sync dotfiles: pull (rebase)+ commit + push SIEMPRE (auto-publish) + rebuild seguro.
+# Seguro: no pushea secrets, pull --rebase tolera commits locales, aborta en conflicto.
+# Rebuild usa SIEMPRE scripts/rebuild.sh (detecta maquina por hardware + valida root UUID).
+# Paralelismo controlado: builds CUDA (sunshine NVENC) con max-jobs default OOM/congelan.
+# Marker ~/.local/state/dotfiles/skip-auto-rebuild → publish-only, sin rebuild.
 set -euo pipefail
 
 DOTFILES="$HOME/dotfiles"
 cd "$DOTFILES"
 
 GENERATIONS_TO_KEEP=5
+SKIP_REBUILD="$HOME/.local/state/dotfiles/skip-auto-rebuild"
 
-# ── Detectar machine type ──────────────────────────────────────
-MACHINE=$(cat ~/.config/machine-type 2>/dev/null || hostname -s)
-
-# ── Rebuild + cleanup ──────────────────────────────────────────
 do_rebuild() {
+  if [ -f "$SKIP_REBUILD" ]; then
+    echo "[REBUILD SKIP] marker $SKIP_REBUILD presente. Solo publish."
+    return 0
+  fi
   echo "[REBUILD] Aplicando..."
-  if sudo nixos-rebuild switch --flake "$DOTFILES#$MACHINE" 2>&1 | tail -5; then
-    echo "[GC] Manteniendo últimas $GENERATIONS_TO_KEEP generaciones..."
+  # max-jobs/cores controlados: build CUDA con paralelismo default congela la maquina.
+  export NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8"
+  if bash "$DOTFILES/scripts/rebuild.sh" switch 2>&1 | tail -5; then
+    echo "[GC] Manteniendo ultimas $GENERATIONS_TO_KEEP generaciones..."
     sudo nix-env --profile /nix/var/nix/profiles/system --delete-generations +$GENERATIONS_TO_KEEP 2>/dev/null || true
     sudo nix-collect-garbage -d 2>&1 | tail -2
     echo "[REBUILD OK] Aplicado y limpio."
@@ -24,63 +30,59 @@ do_rebuild() {
   fi
 }
 
-# ── 1. Pull (fast-forward only) ────────────────────────────────
+# ── 1. Pull con rebase (integra commits locales, no fast-forward estricto) ──
 PULL_OUTPUT=""
-if git remote -v | grep -q .; then
-  PULL_OUTPUT=$(git pull --ff-only 2>&1) || {
-    echo "[SKIP] Pull fallo (conflicto?). Resuelve manual."
-    exit 0
-  }
-fi
-
-# ── 2. Detectar si hubo cambios ────────────────────────────────
 HUBO_CAMBIOS=false
-if echo "$PULL_OUTPUT" | grep -qv "^Already up to date"; then
-  HUBO_CAMBIOS=true
-fi
-
-# ── 3. Check si hay cambios locales ────────────────────────────
-if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-  if [ "$HUBO_CAMBIOS" = true ]; then
-    echo "[PULL OK] Cambios recibidos."
-    do_rebuild
-  fi
-  exit 0
-fi
-
-# ── 4. Stage cambios ───────────────────────────────────────────
-git add -A
-
-# ── 5. Safety: detectar archivos sensibles en el stage ─────────
-SENSITIVE_PATTERNS=(
-  "*.pem" "*.key" "*.env" ".env"
-  "*password*" "*token*" "*secret*"
-  "*.p12" "*.pfx" "*.jks"
-)
-
-for pattern in "${SENSITIVE_PATTERNS[@]}"; do
-  # shellcheck disable=SC2086
-  if git diff --cached --name-only | grep -qi $pattern; then
-    echo "[SKIP] Archivo sensible detectado en stage: $pattern"
-    git reset HEAD -- . 2>/dev/null
+if git remote -v | grep -q .; then
+  if PULL_OUTPUT=$(git pull --rebase --autostash 2>&1); then
+    if ! echo "$PULL_OUTPUT" | grep -qi "actualizado\|up to date"; then
+      HUBO_CAMBIOS=true
+    fi
+  else
+    echo "[PULL CONFLICT] Rebase fallo; abortando para dejar el repo intacto." >&2
+    git rebase --abort 2>/dev/null || true
+    git status --short >&2
+    echo "[SKIP] Resuelve el conflicto manualmente." >&2
     exit 1
   fi
-done
+fi
 
-# ── 6. Commit ─────────────────────────────────────────────────
-CHANGED=$(git diff --cached --stat | tail -1)
-TIMESTAMP=$(date "+%Y-%m-%d %H:%M")
-git commit -m "auto: $TIMESTAMP | $CHANGED" --no-verify
+# ── 2. Commit local SIEMPRE (auto-publish) ──
+CHANGED=""
+if ! git diff --quiet || ! git diff --cached --quiet \
+   || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+  git add -A
 
-# ── 7. Push ────────────────────────────────────────────────────
-if git remote -v | grep -q .; then
-  if ! git push 2>/dev/null; then
-    echo "[WARN] Push fallo. Commit local hecho; resuelve manual."
+  SENSITIVE_PATTERNS=(
+    "*.pem" "*.key" "*.env" ".env"
+    "*password*" "*token*" "*secret*"
+    "*.p12" "*.pfx" "*.jks"
+  )
+  for pattern in "${SENSITIVE_PATTERNS[@]}"; do
+    # shellcheck disable=SC2086
+    if git diff --cached --name-only | grep -qi $pattern; then
+      echo "[SKIP] Archivo sensible detectado en stage: $pattern" >&2
+      git reset HEAD -- . 2>/dev/null
+      exit 1
+    fi
+  done
+
+  CHANGED=$(git diff --cached --stat | tail -1)
+  TIMESTAMP=$(date "+%Y-%m-%d %H:%M")
+  git commit -m "auto: $TIMESTAMP | $CHANGED" --no-verify
+fi
+
+# ── 3. Push SIEMPRE los commits nuevos ──
+if git remote -v | grep -q . && [ "$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)" -gt 0 ]; then
+  if git push 2>/dev/null; then
+    echo "[PUSH OK]"
+  else
+    echo "[WARN] Push fallo. Commit local hecho; resuelve manual." >&2
     exit 0
   fi
 fi
 
-# ── 8. Rebuild + GC ───────────────────────────────────────────
+# ── 4. Rebuild + GC cuando hubo cambios ──
 if [ "$HUBO_CAMBIOS" = true ] || [ -n "$CHANGED" ]; then
   do_rebuild
 fi
