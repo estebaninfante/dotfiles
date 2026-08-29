@@ -450,6 +450,15 @@
   # ── Nix ───────────────────────────────────────────────────────
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   nix.settings.auto-optimise-store = true;
+
+  # Tope GLOBAL de paralelismo (default de nix = auto = 24 cores) →
+  # un rebuild sin NIX_CONFIG (ej. rebuild manual olvidado) ya no
+  # satura la maquina ni la congela (OOM) durante builds CUDA/torch.
+  # El cliente puede pedir mas via NIX_CONFIG (honrado aun via daemon,
+  # verificado: max-jobs=2 => max 2 builds concurrentes).
+  nix.settings.max-jobs = 4;
+  nix.settings.cores = 8;
+
   nix.gc.automatic = true;
   nix.gc.options = "--delete-older-than 14d";
 

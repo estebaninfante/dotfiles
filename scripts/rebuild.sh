@@ -61,4 +61,12 @@ if [ -f "$HOME/.config/machine-type" ] && \
 fi
 
 echo "→ sudo nixos-rebuild $ACTION --flake $REPO#$machine"
-exec sudo nixos-rebuild "$ACTION" --flake "$REPO#$machine" "$@"
+if [ -n "${NIX_CONFIG:-}" ]; then
+  # sudo borra el entorno por defecto (env_reset): NIX_CONFIG NO llega al
+  # nixos-rebuild → el daemon usa max-jobs=auto=24 y congela la maquina.
+  # Propagar explicitamente para respetar el paralelismo controlado
+  # (auto-sync.sh lo setea; rebuild manual puede pasarlo como env).
+  exec sudo env NIX_CONFIG="$NIX_CONFIG" nixos-rebuild "$ACTION" --flake "$REPO#$machine" "$@"
+else
+  exec sudo nixos-rebuild "$ACTION" --flake "$REPO#$machine" "$@"
+fi
