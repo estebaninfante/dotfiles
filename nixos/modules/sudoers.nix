@@ -42,6 +42,11 @@
         command = "/run/current-system/sw/bin/nixos-rebuild";
         options = [ "NOPASSWD" ];
       }
+      # nix-collect-garbage (auto-GC del runner de builds /tmp/night-build.sh)
+      {
+        command = "/run/current-system/sw/bin/nix-collect-garbage";
+        options = [ "NOPASSWD" ];
+      }
     ];
   }
 ]

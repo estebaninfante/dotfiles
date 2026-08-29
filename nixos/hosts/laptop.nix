@@ -79,6 +79,11 @@
   #     $(nix-store -qR .#nixosConfigurations.laptop.config.system.build.toplevel...)
   # entonces en laptop rebuild baja binarios sin compilar otra vez.
   nixpkgs.config.cudaSupport = true;
+  # IDENTICO a desktop: limitar archs a sm_86+sm_89. RTX 4060 (laptop) = sm_89.
+  # Mismo valor en desktop.nix → mismo hash store → el build CUDA del desktop
+  # sirve para la laptop sin recompilar. Además evita el crash "BFD assertion
+  # fail elf.c:3571" del as de binutils 2.46 con archs compute_120.
+  nixpkgs.config.cudaCapabilities = [ "8.6" "8.9" ];
 
   # El driver amdgpu es el default para GPUs AMD; nada extra que configurar.
   # (El layout XKB dvk_prog ahora vive en nixos/modules/keyboard.nix —

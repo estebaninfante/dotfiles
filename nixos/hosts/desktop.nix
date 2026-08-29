@@ -40,6 +40,14 @@
   #    sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" nixos-rebuild switch
   #    (o bash ~/dotfiles/scripts/rebuild.sh con NIX_CONFIG seteado).
   nixpkgs.config.cudaSupport = true;
+  # cudaCapabilities limitado a las archs REALES de este host (RTX 3070 =
+  # sm_86) + laptop (RTX 4060 = sm_89). Default de nixpkgs compila ~10 archs
+  # (compute_75…121): magma/torch/opencv se disparan gigantes y el `as` de
+  # binutils 2.46 CRASHEA con "BFD assertion fail elf.c:3571" en el object
+  # gigante sgeqr2_batched_fused_reg_medium.cu (arch compute_120). Limitar a
+  # 2 archs reales ≈ 5-10x menos trabajo y evita el bug. Mismo valor en
+  # laptop.nix para que los store hashes coincidan y se copien con nix copy.
+  nixpkgs.config.cudaCapabilities = [ "8.6" "8.9" ];
 
   hardware.nvidia = {
     # Driver propietario.
