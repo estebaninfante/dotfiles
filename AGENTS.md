@@ -283,7 +283,7 @@ Para lan-mouse/syncthing ambas máquinas usan IP fija **fuera del pool DHCP**
   syncthing en `nixos/configuration.nix`, docs.
 - Dispatcher `90-lan-mouse` (instalado via `networking.networkmanager.dispatcherScripts`):
   reinicia lan-mouse al conectar a red de casa + watchdog que detecta conflicto
-  ARP/IP no configurable y avisa por ntfy (`opencode-laptop`).
+  ARP/IP no configurable y avisa por ntfy (tópico por hostname: `opencode-desktop`/`opencode-laptop`).
 
 ### SSH entre máquinas
 
@@ -405,6 +405,7 @@ ejecutar EN el desktop):
    - `session.idle` → "Sesion terminada — <resumen>" (prioridad 3)
    - `permission.updated` → "Pide permiso: <detalle>" (prioridad 4)
 
+<<<<<<< HEAD
 **Toggles** (estado local, escritos por la sección NOTIFICACIONES de
 quickshell; ausente = comportamiento indicado):
 
@@ -428,8 +429,13 @@ de plugins. Eventos: idle llega como `session.idle` derivado Y como
 Kill switch TTS global (daemon): `~/.local/state/voice/state.json` =
 `{"tts": {"enabled": false}}`.
 
-**Suscripción push:** abrir `https://ntfy.sh/opencode-laptop` o la app
-ntfy (Android/iOS) y agregar el tópico.
+Usa `fetch` nativo de Bun (sin curl). Tópico por máquina (lee `~/.config/machine-type`, patrón hyprland.lua): `opencode-desktop` en desktop, `opencode-laptop` en laptop.
+
+**Suscripción:** en la app ntfy (Android/iOS) agregar los tópicos que
+quieras recibir: `https://ntfy.sh/opencode-laptop` y/o
+`https://ntfy.sh/opencode-desktop` (o desde un explorador, abrir el enlace
+y pulsar "subscribe"). Notificaciones de la laptop van al canal laptop y de
+escritorio al canal desktop.
 
 ## Higiene de sueño (apagado 21:00)
 

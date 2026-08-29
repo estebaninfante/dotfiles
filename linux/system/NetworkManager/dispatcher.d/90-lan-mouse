@@ -16,11 +16,11 @@ USER="eztvn"
 
 WIFI_IF="wlo1"
 HOME_SSIDS=("Familia_Infante_PLUS" "Familia Villamil" "Familia Villamil 1")
-NTFY_TOPIC="opencode-laptop"
+NTFY_TOPIC=""
 
 case "$(hostname)" in
-    laptop) LAN_IP="192.168.1.240" ;;
-    desktop) LAN_IP="192.168.1.241" ;;
+    laptop) LAN_IP="192.168.1.240" ; NTFY_TOPIC="opencode-laptop" ;;
+    desktop) LAN_IP="192.168.1.241" ; NTFY_TOPIC="opencode-desktop" ;;
     *) exit 0 ;;
 esac
 

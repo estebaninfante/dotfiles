@@ -5,6 +5,10 @@
 {
   imports = [ ./hardware-configuration.desktop.nix ];
 
+  # Swapfile 16G en btrfs (chattr +C nodatacow, creado con truncate→fallocate).
+  # Protege de freezes/OOM durante builds pesados (torch CUDA etc.).
+  swapDevices = [ { device = "/swapfile"; } ];
+
   networking.hostName = "desktop";
 
   # ── Sunshine NVENC (RTX 3070) ────────────────────────────────

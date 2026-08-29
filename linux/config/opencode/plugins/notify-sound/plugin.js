@@ -40,8 +40,15 @@
 //
 // Suscripcion en el celular: abrir https://ntfy.sh/<TOPIC> o la app
 // ntfy (Android/iOS) y agregar el topico.
-
-const TOPIC = 'opencode-laptop';
+//
+// Topico por maquina (patron hyprland.lua): lee ~/.config/machine-type.
+// desktop → opencode-desktop ; laptop (o ausente) → opencode-laptop.
+const TOPIC = (() => {
+  try {
+    const m = readFileSync(`${process.env.HOME}/.config/machine-type`, 'utf8').trim();
+    return m === 'desktop' ? 'opencode-desktop' : 'opencode-laptop';
+  } catch { return 'opencode-laptop'; }
+})();
 
 const DEBUG_LOG = process.env.NOTIFY_SOUND_LOG || '/tmp/opencode/notify-sound.log';
 
