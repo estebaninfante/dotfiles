@@ -373,7 +373,19 @@ services.sunshine = {
 sunshine desde fuente. Compilar con paralelismo default (`max-jobs=24`, sin
 swap) OOM y congela el sistema. Usar SIEMPRE paralelismo controlado (solo
 ejecutar EN el desktop):
-`sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" nixos-rebuild switch --flake ~/dotfiles#desktop`.
+`NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" bash ~/dotfiles/scripts/rebuild.sh`.
+
+- `rebuild.sh` **propaga `NIX_CONFIG` a través de sudo** (`sudo env NIX_CONFIG=...`):
+  el default de sudo (env_reset) borra la variable → el daemon usa `max-jobs=auto`=24
+  y congela la máquina. Fue la causa del cuelgue del rebuild CUDA del 2026-08-29.
+- Tope global declarativo en `nix.settings.max-jobs = 4` / `cores = 8`
+  (`nixos/configuration.nix`): un `nixos-rebuild` manual SIN `NIX_CONFIG` ya no
+  satura. El cliente puede pedir más con `NIX_CONFIG` (honrado incluso vía daemon,
+  verificado empíricamente).
+- Auto-contexto (`scripts/auto-sync.sh`): paralelismo mínimo (`max-jobs=2`.
+  `cores=4`, override con `AUTO_SYNC_MAX_JOBS`/`AUTO_SYNC_CORES`) + watchdog ntfy
+  (avisa si el rebuild se demora >10min o se estanca >20min; log en
+  `~/.local/state/dotfiles/auto-build.log`; tópico `opencode-$machine`).
 
 **Web UI + credenciales:**
 - Web UI: `https://localhost:47990` (usuario `eztvn`, password en
