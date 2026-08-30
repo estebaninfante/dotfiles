@@ -291,6 +291,8 @@ hl.window_rule({ match = { class = "swayosd-server" }, float = 1 })
 hl.window_rule({ match = { class = "swayosd-server" }, move = "1% 40%" })
 hl.window_rule({ match = { class = "swayosd-server" }, size = "200 20" })
 hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
+-- File chooser portal (GTK): ventana de selección de archivos un poco menos alta
+hl.window_rule({ match = { class = "xdg-desktop-portal-gtk" }, max_size = "1260 560" })
 -- Handy fallback overlay is a normal window on desktop NVIDIA. Keep it
 -- visible without changing the target application's focus or blur state.
 if machine == "desktop" then
