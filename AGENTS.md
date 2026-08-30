@@ -387,6 +387,16 @@ ejecutar EN el desktop):
   `cores=4`, override con `AUTO_SYNC_MAX_JOBS`/`AUTO_SYNC_CORES`) + watchdog ntfy
   (avisa si el rebuild se demora >10min o se estanca >20min; log en
   `~/.local/state/dotfiles/auto-build.log`; tópico `opencode-$machine`).
+- Kill switch para builds CUDA/pesadas (sunshine NVENC, cudnn/libcublas):
+  marker `~/.local/state/dotfiles/skip-auto-rebuild` (local, NO en repo).
+  Si existe, `auto-sync.sh` hace SOLO publish (pull+commit+push), sin rebuild
+  ni GC. Default tras desactivar CUDA de forma manual: `touch` el marker.
+  Re-activar: `rm` el marker. El rebuild manual via `rebuild.sh` NO respeta el
+  marker — siempre compila. Tras matar un `nixos-rebuild` en curso, quedan
+  huérfanos `nix build` + `nixbld*` (downloads/compiles CUDA) colgados en
+  background → `sudo kill <pid>` del `nix build` y `sudo pkill -u nixbld*`
+  si necesario; el profile (`/nix/var/nix/profiles/system`) queda intacto
+  porque el build no activa hasta el final.
 
 **Web UI + credenciales:**
 - Web UI: `https://localhost:47990` (usuario `eztvn`, password en
