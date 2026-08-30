@@ -369,8 +369,24 @@ in
     };
     Service = {
       Type = "simple";
+      ExecStartPre = pkgs.writeShellScript "polkit-wait" ''
+        # Esperar socket Wayland: con Linger=yes graphical-session.target se
+        # activa al boot (antes del login), y el agente Qt aborta fatal
+        # ("no Qt platform plugin") sin compositor. Espero wayland-1.
+        for i in $(seq 1 60); do
+          [ -S "/run/user/%U/wayland-1" ] && exit 0
+          sleep 0.5
+        done
+        exit 0
+      '';
       ExecStart = "${pkgs.hyprpolkitagent}/libexec/hyprpolkitagent";
+      Environment = [
+        "WAYLAND_DISPLAY=wayland-1"
+        "XDG_RUNTIME_DIR=/run/user/%U"
+        "XDG_CURRENT_DESKTOP=Hyprland"
+      ];
       Restart = "on-failure";
+      RestartSec = "3";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
@@ -395,12 +411,16 @@ in
     Service = {
       Type = "simple";
       ExecStartPre = pkgs.writeShellScript "wallpaper-wait" ''
-        SOCKET="/run/user/%U/wayland-1"
-        for i in $(seq 1 30); do
-          [ -S "$SOCKET" ] && break
+        # Esperar no solo el socket Wayland sino el IPC de Hyprland (socket2):
+        # hyprctl (usado por wallpaper-daemon.sh) falla si el IPC no está listo,
+        # y con pipefail el daemon muere → RestartSec=2 → crash-loop.
+        for i in $(seq 1 60); do
+          if /run/current-system/sw/bin/hyprctl monitors -j >/dev/null 2>&1; then
+            exit 0
+          fi
           sleep 0.5
         done
-        sleep 0.5
+        exit 0
       '';
       ExecStart = "${config.home.homeDirectory}/.local/bin/wallpaper-daemon.sh";
       Environment = [
@@ -449,8 +469,11 @@ in
     Service = {
       Type = "simple";
       ExecStart = "${pkgs.dotool}/bin/dotoold";
-      Restart = "on-failure";
-      RestartSec = "3";
+      # Restart=no: si el pipe /tmp/dotool-pipe tiene un lector fantasma
+      # (zombie leftover), dotoold sale 1 al instante; on-failure lo
+      # reinicia cada 3s en loop indefinido. Daemon one-shot: si muere,
+      # se arregla limpiando el pipe y volviendo a start.
+      Restart = "no";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
