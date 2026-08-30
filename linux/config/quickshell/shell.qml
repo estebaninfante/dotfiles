@@ -1328,6 +1328,7 @@ PanelWindow {
               property string systemLoad: "--"
               property string systemUptime: "--"
               property bool gpuTelemetryAvailable: false
+              property string monitorDetail: ""
 
              onVisibleChanged: {
                  if (!visible)
@@ -1360,6 +1361,20 @@ PanelWindow {
                         telemetryStatus.running = true;
                 }
 
+                function openMonitorDetail(detail) {
+                    monitorDetail = detail;
+                    detailMenu.opened = true;
+                    refreshMonitoring();
+                    if (detail === "ram") {
+                        ramCard.processes.clear();
+                        ramProcessesStatus.running = true;
+                    }
+                    if (detail === "temperaturas") {
+                        thermalSensors.clear();
+                        thermalStatus.running = true;
+                    }
+                }
+
               onOpenedChanged: {
                    if (opened) {
                        initialRefresh.restart();
@@ -1380,7 +1395,7 @@ PanelWindow {
 
               Process {
                   id: telemetryStatus
-                  command: ["bash", "-c", "read -r _ u n s i w irq sirq st _ < /proc/stat; a=$((u+n+s+i+w+irq+sirq+st)); b=$i; sleep .15; read -r _ u n s i w irq sirq st _ < /proc/stat; c=$((u+n+s+i+w+irq+sirq+st)); d=$i; cpu=$(awk -v da=$((c-a)) -v di=$((d-b)) 'BEGIN { if (da > 0) printf \\\"%.1f\\\", 100 * (da-di) / da; else print 0 }'); temp=$(for z in /sys/class/thermal/thermal_zone*; do [ -r \\\"$z/temp\\\" ] || continue; awk '{printf \\\"%.0f\\\\n\\\", $1/1000}' \\\"$z/temp\\\"; done | sort -nr | head -n1); [ -n \\\"$temp\\\" ] || temp=0; load=$(awk '{print $1}' /proc/loadavg); up=$(awk '{printf \\\"%.0fh\\\", $1/3600}' /proc/uptime); disk=$(df -P / | awk 'NR==2 {gsub(/%/,\\\"\\\",$5); print $5}'); gpu=none; if command -v nvidia-smi >/dev/null 2>&1; then gpu=$(nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw,power.limit --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ' '); fi; printf '%s|%s|%s|%s|%s|%s\\\\n' \\\"$cpu\\\" \\\"$temp\\\" \\\"$load\\\" \\\"$up\\\" \\\"$disk\\\" \\\"$gpu\\\"" ]
+                  command: ["bash", "-c", "read -r _ u n s i w irq sirq st _ < /proc/stat; a=$((u+n+s+i+w+irq+sirq+st)); b=$i; sleep .15; read -r _ u n s i w irq sirq st _ < /proc/stat; c=$((u+n+s+i+w+irq+sirq+st)); d=$i; cpu=$(awk -v da=$((c-a)) -v di=$((d-b)) 'BEGIN { if (da > 0) print 100 * (da-di) / da; else print 0 }'); temp=$(for z in /sys/class/thermal/thermal_zone*; do [ -r $z/temp ] || continue; awk '{print int($1/1000)}' $z/temp; done | sort -nr | head -n1); [ -n $temp ] || temp=0; load=$(awk '{print $1}' /proc/loadavg); up=$(cut -d. -f1 /proc/uptime); disk=$(df -P / | awk 'NR==2 {sub("%","",$5); print $5}'); gpu=none; if command -v nvidia-smi >/dev/null 2>&1; then gpu=$(nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw,power.limit --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ' '); fi; printf '%s|%s|%s|%s|%s|%s\\n' $cpu $temp $load $up $disk $gpu"]
                   running: false
                   stdout: StdioCollector {
                       onStreamFinished: {
@@ -1409,6 +1424,155 @@ PanelWindow {
                   running: widgetMenu.opened && widgetMenu.activeSection === "monitoreo"
                   repeat: true
                   onTriggered: widgetMenu.refreshMonitoring()
+              }
+
+              PopupWindow {
+                  id: detailMenu
+                  implicitWidth: 430
+                  implicitHeight: 430
+                  visible: opened
+                  grabFocus: true
+                  color: "transparent"
+                  property bool opened: false
+                  property var metrics: []
+                  anchor { window: root; rect.x: root.width - detailMenu.implicitWidth - 12; rect.y: root.height + 8 }
+
+                  onOpenedChanged: {
+                      if (!opened)
+                          root.resetHover(menuBtnArea);
+                  }
+
+                  Rectangle {
+                      anchors.fill: parent
+                      anchors.margins: 1
+                      radius: 14
+                      color: "#ed0d0d12"
+                      border.color: "#383847"
+                      border.width: 1
+                  }
+
+                  Column {
+                      anchors.fill: parent
+                      anchors.margins: 16
+                      spacing: 10
+
+                      RowLayout {
+                          width: parent.width
+                          Text {
+                              text: "DETALLE  /  " + widgetMenu.monitorDetail.toUpperCase()
+                              color: "#cba6f7"
+                              font.family: root.fontFamily
+                              font.pixelSize: 11
+                              font.bold: true
+                              font.letterSpacing: 1.5
+                              Layout.fillWidth: true
+                          }
+                          Text {
+                              text: "\uf00d"
+                              color: detailCloseArea.containsMouse ? "#e06c75" : "#9a9aa7"
+                              font.family: root.fontFamily
+                              font.pixelSize: 13
+                              MouseArea { id: detailCloseArea; anchors.fill: parent; hoverEnabled: true; onClicked: detailMenu.opened = false }
+                          }
+                      }
+
+                      Text {
+                          width: parent.width
+                          text: widgetMenu.monitorDetail === "cpu" ? "Procesador y temperatura máxima detectada" : widgetMenu.monitorDetail === "gpu" ? "Uso, memoria, temperatura y consumo NVIDIA" : widgetMenu.monitorDetail === "ram" ? "Memoria disponible y procesos con mayor consumo" : widgetMenu.monitorDetail === "temperaturas" ? "Todos los sensores térmicos expuestos por kernel" : "Carga general, almacenamiento y sesión"
+                          color: "#9a9aa7"
+                          font.family: root.fontFamily
+                          font.pixelSize: 10
+                          wrapMode: Text.WordWrap
+                      }
+
+                      Repeater {
+                          model: widgetMenu.monitorDetail === "cpu" ? [["USO", Math.round(widgetMenu.cpuUsage) + "%"], ["TEMPERATURA MÁXIMA", Math.round(widgetMenu.cpuTemp) + " °C"], ["CARGA 1 MIN", widgetMenu.systemLoad], ["NÚCLEOS", "Detectados por kernel"]] : widgetMenu.monitorDetail === "gpu" ? [["USO GPU", Math.round(widgetMenu.gpuUsage) + "%"], ["TEMPERATURA", Math.round(widgetMenu.gpuTemp) + " °C"], ["MEMORIA", Math.round(widgetMenu.gpuMemory) + " / " + Math.round(widgetMenu.gpuMemoryTotal) + " MB"], ["CONSUMO", "Lectura NVIDIA disponible"]] : [["DISCO /", widgetMenu.rootDisk + "% usado"], ["CARGA", widgetMenu.systemLoad], ["TIEMPO ENCENDIDO", widgetMenu.systemUptime]]
+                          delegate: Rectangle {
+                              required property var modelData
+                              width: detailMenu.width - 32
+                              height: 34
+                              radius: 7
+                              color: "#1d1d26"
+                              visible: widgetMenu.monitorDetail !== "ram" && widgetMenu.monitorDetail !== "temperaturas"
+                              RowLayout {
+                                  anchors.fill: parent
+                                  anchors.leftMargin: 10
+                                  anchors.rightMargin: 10
+                                  Text { text: modelData[0]; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; Layout.fillWidth: true }
+                                  Text { text: modelData[1]; color: "white"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true }
+                              }
+                          }
+                      }
+
+                      Text {
+                          text: "PROCESOS RAM"
+                          color: "#9a9aa7"
+                          font.family: root.fontFamily
+                          font.pixelSize: 9
+                          font.bold: true
+                          visible: widgetMenu.monitorDetail === "ram"
+                      }
+                      Repeater {
+                          model: ramCard.processes
+                          delegate: RowLayout {
+                              width: detailMenu.width - 32
+                              visible: widgetMenu.monitorDetail === "ram"
+                              Text { text: processName; color: "white"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
+                              Text { text: memory + " MB"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 9 }
+                          }
+                      }
+
+                      Text {
+                          text: "SENSORES TÉRMICOS"
+                          color: "#9a9aa7"
+                          font.family: root.fontFamily
+                          font.pixelSize: 9
+                          font.bold: true
+                          visible: widgetMenu.monitorDetail === "temperaturas"
+                      }
+                      ListView {
+                          width: parent.width
+                          height: 220
+                          clip: true
+                          spacing: 4
+                          visible: widgetMenu.monitorDetail === "temperaturas"
+                          model: thermalSensors
+                          delegate: Rectangle {
+                              required property string sensorName
+                              required property string sensorTemp
+                              width: detailMenu.width - 32
+                              height: 28
+                              radius: 6
+                              color: "#1d1d26"
+                              RowLayout {
+                                  anchors.fill: parent
+                                  anchors.leftMargin: 9
+                                  anchors.rightMargin: 9
+                                  Text { text: sensorName; color: "white"; font.family: root.fontFamily; font.pixelSize: 9; Layout.fillWidth: true; elide: Text.ElideRight }
+                                  Text { text: sensorTemp + " °C"; color: "#e5c07b"; font.family: root.fontFamily; font.pixelSize: 9 }
+                              }
+                          }
+                      }
+
+                      Item { Layout.fillHeight: true }
+                      Text { text: "Actualización automática cada 2.5 s"; color: "#6c7086"; font.family: root.fontFamily; font.pixelSize: 9 }
+                  }
+              }
+
+              property var thermalSensors: ListModel {}
+
+              Process {
+                  id: thermalStatus
+                  command: ["bash", "-c", "for z in /sys/class/thermal/thermal_zone*; do [ -r $z/temp ] || continue; n=$(cat $z/type 2>/dev/null); t=$(awk '{print int($1/1000)}' $z/temp); printf '%s|%s\\n' ${n:-thermal} $t; done"]
+                  running: false
+                  stdout: SplitParser {
+                      splitMarker: "\n"
+                      onRead: line => {
+                          const p = line.trim().split("|");
+                          if (p.length === 2)
+                              thermalSensors.append({ sensorName: p[0], sensorTemp: p[1] });
+                      }
+                  }
               }
 
             anchor {
@@ -1576,7 +1740,7 @@ PanelWindow {
                                       }
                                   }
                               }
-                              MouseArea { anchors.fill: parent; z: 1; onClicked: { ramCard.ramProcessesOpen = !ramCard.ramProcessesOpen; if (ramCard.ramProcessesOpen) { ramCard.processes.clear(); ramProcessesStatus.running = true; } } }
+                               MouseArea { anchors.fill: parent; z: 1; onClicked: widgetMenu.openMonitorDetail("ram") }
 
                               Process {
                                   id: ramFree
@@ -1989,6 +2153,21 @@ PanelWindow {
                                dDel: 0
                                cardOn: widgetMenu.opened
                                visible: widgetMenu.activeSection === "monitoreo"
+                               MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("cpu") }
+                           }
+
+                           Card {
+                               id: temperaturesCard
+                               cIcon: "\uf2c9"
+                               cAccent: widgetMenu.cpuTemp >= 90 ? "#e06c75" : "#e5c07b"
+                               cTitle: "TEMPERATURAS"
+                               cBig: widgetMenu.cpuTemp > 0 ? Math.round(widgetMenu.cpuTemp) + " °C" : "SIN DATOS"
+                               cVal: Math.min(100, widgetMenu.cpuTemp)
+                               cSub: "Click: ver todos los sensores"
+                               dDel: 15
+                               cardOn: widgetMenu.opened
+                               visible: widgetMenu.activeSection === "monitoreo"
+                               MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("temperaturas") }
                            }
 
                            Card {
@@ -2002,6 +2181,7 @@ PanelWindow {
                                dDel: 30
                                cardOn: widgetMenu.opened
                                visible: widgetMenu.activeSection === "monitoreo"
+                               MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("gpu") }
                            }
 
                            Card {
@@ -2015,6 +2195,7 @@ PanelWindow {
                                dDel: 60
                                cardOn: widgetMenu.opened
                                visible: widgetMenu.activeSection === "monitoreo"
+                               MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("sistema") }
                            }
 
                            Rectangle {
