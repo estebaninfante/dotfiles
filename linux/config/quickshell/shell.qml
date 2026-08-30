@@ -1314,8 +1314,20 @@ PanelWindow {
             grabFocus: true
             color: "transparent"
 
-             property bool opened: false
-             property string activeSection: "conexiones"
+              property bool opened: false
+              property string activeSection: "conexiones"
+              property double cpuUsage: 0
+              property double cpuTemp: 0
+              property double gpuUsage: 0
+              property double gpuTemp: 0
+              property double gpuMemory: 0
+              property double gpuMemoryTotal: 0
+              property double gpuPower: 0
+              property double gpuPowerLimit: 0
+              property double rootDisk: 0
+              property string systemLoad: "--"
+              property string systemUptime: "--"
+              property bool gpuTelemetryAvailable: false
 
              onVisibleChanged: {
                  if (!visible)
@@ -1338,27 +1350,66 @@ PanelWindow {
                     audioCard.refreshCameras();
                 }
 
-               function refreshScreens() {
-                   if (activeSection === "pantallas" && !screenStatus.running)
-                       screenStatus.running = true;
-               }
+                function refreshScreens() {
+                    if (activeSection === "pantallas" && !screenStatus.running)
+                        screenStatus.running = true;
+                }
+
+                function refreshMonitoring() {
+                    if (activeSection === "monitoreo" && !telemetryStatus.running)
+                        telemetryStatus.running = true;
+                }
 
               onOpenedChanged: {
                    if (opened) {
                        initialRefresh.restart();
-                       refreshAudio();
-                       refreshScreens();
+                        refreshAudio();
+                        refreshScreens();
+                        refreshMonitoring();
                    } else {
                        root.resetHover(menuBtnArea);
                    }
               }
 
-             Timer {
-                 id: initialRefresh
+              Timer {
+                  id: initialRefresh
                  interval: 700
                  repeat: false
-                 onTriggered: widgetMenu.refreshConnections()
-             }
+                  onTriggered: widgetMenu.refreshConnections()
+              }
+
+              Process {
+                  id: telemetryStatus
+                  command: ["bash", "-c", "read -r _ u n s i w irq sirq st _ < /proc/stat; a=$((u+n+s+i+w+irq+sirq+st)); b=$i; sleep .15; read -r _ u n s i w irq sirq st _ < /proc/stat; c=$((u+n+s+i+w+irq+sirq+st)); d=$i; cpu=$(awk -v da=$((c-a)) -v di=$((d-b)) 'BEGIN { if (da > 0) printf \\\"%.1f\\\", 100 * (da-di) / da; else print 0 }'); temp=$(for z in /sys/class/thermal/thermal_zone*; do [ -r \\\"$z/temp\\\" ] || continue; awk '{printf \\\"%.0f\\\\n\\\", $1/1000}' \\\"$z/temp\\\"; done | sort -nr | head -n1); [ -n \\\"$temp\\\" ] || temp=0; load=$(awk '{print $1}' /proc/loadavg); up=$(awk '{printf \\\"%.0fh\\\", $1/3600}' /proc/uptime); disk=$(df -P / | awk 'NR==2 {gsub(/%/,\\\"\\\",$5); print $5}'); gpu=none; if command -v nvidia-smi >/dev/null 2>&1; then gpu=$(nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw,power.limit --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ' '); fi; printf '%s|%s|%s|%s|%s|%s\\\\n' \\\"$cpu\\\" \\\"$temp\\\" \\\"$load\\\" \\\"$up\\\" \\\"$disk\\\" \\\"$gpu\\\"" ]
+                  running: false
+                  stdout: StdioCollector {
+                      onStreamFinished: {
+                          const p = this.text.trim().split("|");
+                          if (p.length < 6)
+                              return;
+                          widgetMenu.cpuUsage = Math.max(0, Math.min(100, parseFloat(p[0]) || 0));
+                          widgetMenu.cpuTemp = parseFloat(p[1]) || 0;
+                          widgetMenu.systemLoad = p[2] || "--";
+                          widgetMenu.systemUptime = p[3] || "--";
+                          widgetMenu.rootDisk = parseFloat(p[4]) || 0;
+                          const g = p[5].split(",");
+                          widgetMenu.gpuTelemetryAvailable = g.length >= 6;
+                          widgetMenu.gpuUsage = parseFloat(g[0]) || 0;
+                          widgetMenu.gpuTemp = parseFloat(g[1]) || 0;
+                          widgetMenu.gpuMemory = parseFloat(g[2]) || 0;
+                          widgetMenu.gpuMemoryTotal = parseFloat(g[3]) || 0;
+                          widgetMenu.gpuPower = parseFloat(g[4]) || 0;
+                          widgetMenu.gpuPowerLimit = parseFloat(g[5]) || 0;
+                      }
+                  }
+              }
+
+              Timer {
+                  interval: 2500
+                  running: widgetMenu.opened && widgetMenu.activeSection === "monitoreo"
+                  repeat: true
+                  onTriggered: widgetMenu.refreshMonitoring()
+              }
 
             anchor {
                 window: root
@@ -1469,9 +1520,10 @@ PanelWindow {
                                              anchors.fill: parent
                                              hoverEnabled: true
                                               onClicked: {
-                                                  widgetMenu.activeSection = modelData.toLowerCase();
-                                                  widgetMenu.refreshAudio();
-                                                  widgetMenu.refreshScreens();
+                                                   widgetMenu.activeSection = modelData.toLowerCase();
+                                                   widgetMenu.refreshAudio();
+                                                   widgetMenu.refreshScreens();
+                                                   widgetMenu.refreshMonitoring();
                                               }
                                          }
                                      }
@@ -1925,6 +1977,45 @@ PanelWindow {
                                   }
                               }
                           }
+
+                           Card {
+                               id: cpuCard
+                               cIcon: "\uf2db"
+                               cAccent: widgetMenu.cpuTemp >= 90 ? "#e06c75" : widgetMenu.cpuTemp >= 75 ? "#e5c07b" : "#89b4fa"
+                               cTitle: "CPU"
+                               cBig: Math.round(widgetMenu.cpuUsage) + "%"
+                               cVal: widgetMenu.cpuUsage
+                               cSub: widgetMenu.cpuTemp > 0 ? Math.round(widgetMenu.cpuTemp) + "°C" : "Temperatura ---"
+                               dDel: 0
+                               cardOn: widgetMenu.opened
+                               visible: widgetMenu.activeSection === "monitoreo"
+                           }
+
+                           Card {
+                               id: gpuTelemetryCard
+                               cIcon: "\uf11b"
+                               cAccent: widgetMenu.gpuTemp >= 85 ? "#e06c75" : "#98c379"
+                               cTitle: "GPU NVIDIA"
+                               cBig: widgetMenu.gpuTelemetryAvailable ? Math.round(widgetMenu.gpuUsage) + "%" : "NO DETECTADA"
+                               cVal: widgetMenu.gpuUsage
+                               cSub: widgetMenu.gpuTelemetryAvailable ? Math.round(widgetMenu.gpuTemp) + "°C · " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB" : "nvidia-smi no disponible"
+                               dDel: 30
+                               cardOn: widgetMenu.opened
+                               visible: widgetMenu.activeSection === "monitoreo"
+                           }
+
+                           Card {
+                               id: systemCard
+                               cIcon: "\uf080"
+                               cAccent: widgetMenu.rootDisk >= 90 ? "#e06c75" : "#cba6f7"
+                               cTitle: "SISTEMA"
+                               cBig: widgetMenu.rootDisk + "% DISCO"
+                               cVal: widgetMenu.rootDisk
+                               cSub: "Carga " + widgetMenu.systemLoad + " · Up " + widgetMenu.systemUptime
+                               dDel: 60
+                               cardOn: widgetMenu.opened
+                               visible: widgetMenu.activeSection === "monitoreo"
+                           }
 
                            Rectangle {
                                id: screenCard

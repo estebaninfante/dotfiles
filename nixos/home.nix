@@ -52,6 +52,7 @@ let
     "voice" "voice-daemon" "handy-paste.sh" "middle-click.sh"
     "bedtime.sh" "bedtime-skip.sh" "notify-lid-suspend.sh" "notify-push-toggle.sh" "temperature-log.sh"
     "kitty-theme-toggle.sh" "obsidian-theme-toggle.sh"
+    "gamepad-watch.sh" "hypr-input-bridge.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -142,6 +143,24 @@ in
       "${cfg}/lan-mouse/lan-mouse.pem" "$lan_mouse_dir/lan-mouse.pem"
     ${pkgs.coreutils}/bin/install -m 0644 \
       "${cfg}/lan-mouse/config.${machineType}.toml" "$lan_mouse_dir/config.toml"
+  '';
+
+  # input-remapper muta config.json/presets cuando el usuario ajusta los
+  # mapeos desde la GUI → se copian (no symlink), igual patron lan-mouse.
+  # El repo queda como fuente de verdad de los mapeos default; la GUI puede
+  # sobrescribir en ~/.config y se pierde en el proximo rebuild (igual
+  # que config.toml de lan-mouse).
+  home.activation.inputRemapper = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    ir_dir="$HOME/.config/input-remapper-2"
+    if [ -L "$ir_dir" ]; then
+      rm "$ir_dir"
+    fi
+    mkdir -p "$ir_dir/presets/Nintendo Wii Remote Pro Controller"
+    ${pkgs.coreutils}/bin/install -m 0644 \
+      "${cfg}/input-remapper-2/config.json" "$ir_dir/config.json"
+    ${pkgs.coreutils}/bin/install -m 0644 \
+      "${cfg}/input-remapper-2/presets/Nintendo Wii Remote Pro Controller/desktop.json" \
+      "$ir_dir/presets/Nintendo Wii Remote Pro Controller/desktop.json"
   '';
 
   # Keep generated dependencies/builds local. Source, configs and lockfiles
@@ -432,6 +451,44 @@ in
       ExecStart = "${pkgs.dotool}/bin/dotoold";
       Restart = "on-failure";
       RestartSec = "3";
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # ── Modo consola: gamepad → modo juego + UI ───────────────────
+  # gamepad-watch.sh: detecta conexión/desconexión de pads (BT/USB) y
+  # dispara game-mode.sh / exit con debounce. No dispara en arranque.
+  systemd.user.services.gamepad-watch = {
+    Unit = {
+      Description = "Detect gamepad connect/disconnect -> game mode";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${bin}/gamepad-watch.sh";
+      Restart = "always";
+      RestartSec = "5";
+      Environment = [ "XDG_RUNTIME_DIR=/run/user/%U" ];
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # hypr-input-bridge.sh: escucha socket2 de Hyprland y activa/desactiva
+  # el preset del gamepad segun la ventana enfocada (UI → mapeo desktop,
+  # juego fullscreen → stop = pad nativo).
+  systemd.user.services.hypr-input-bridge = {
+    Unit = {
+      Description = "Hyprland activewindow -> input-remapper preset";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${bin}/hypr-input-bridge.sh";
+      Restart = "on-failure";
+      RestartSec = "2";
+      Environment = [ "XDG_RUNTIME_DIR=/run/user/%U" ];
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };

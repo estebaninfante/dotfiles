@@ -219,6 +219,14 @@
   boot.extraModulePackages = [ config.boot.kernelPackages."new-lg4ff" ];
   services.udev.packages = with pkgs; [ oversteer ];
 
+  # ── input-remapper: gamepad -> teclado/raton (modo consola) ──
+  # Daemon de sistema que "roba" el pad (grab evdev) y re-emite teclado
+  # virtual (uinput) -> funciona en Wayland nativo. Presets en
+  # ~/.config/input-remapper-2 (copiados por home-manager, ver home.nix).
+  # El switch UI/juego lo gestiona linux/bin/hypr-input-bridge.sh (user
+  # service). enableUdevRules=false: el autoload lo lanza gamepad-watch.sh.
+  services.input-remapper.enable = true;
+
   # ── Login manager: GDM ──
   services.xserver.enable = true;
   services.displayManager.gdm.enable = true;

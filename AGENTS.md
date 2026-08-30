@@ -75,6 +75,7 @@ Gestionados por `nixos/home.nix` (`configDirs`):
 | btop | `~/.config/btop/` |
 | gh | `~/.config/gh/` |
 | opencode | `~/.config/opencode/` |
+| input-remapper-2 | `~/.config/input-remapper-2/` (**copiado**, no symlink: la GUI muta presets; patrón lan-mouse) |
 
 ### Linux config — archivos sueltos
 
@@ -463,6 +464,33 @@ Ambas máquinas se apagan solas a las 21:00 (hora Colombia, `time.timeZone = "Am
   Muere al reboot (la noche siguiente vuelve el apagado).
 - Fuente de verdad del script: `linux/bin/bedtime.sh` (ambos scripts en
   `allScripts`, `nixos/home.nix`). Servicio corre como root con PATH de sistema.
+
+## Modo consola (gamepad → interfaz)
+
+Experiencia consola en PC: el gamepad controla el escritorio y la UI.
+
+- **`input-remapper`** (`services.input-remapper`, configuration.nix): daemon
+  de sistema que "roba" el pad (grab evdev) y re-emite teclado virtual →
+  funciona en Wayland nativo. Config en `~/.config/input-remapper-2/`
+  (**copiado** desde `linux/config/input-remapper-2/` por `home.activation`,
+  patrón lan-mouse: la GUI muta presets, se pierde en rebuild).
+- **Mapeos**: `presets/Nintendo Wii Remote Pro Controller/desktop.json` — dpad
+  → flechas, A/B → Enter/Esc, X → SUPER+SPACE (rofi), Y → SUPER+A, L = SUPER
+  (L+B = cerrar), R = SUPER+RETURN, Select → ws1, Start → ws10 (modo juego),
+  stick derecho → ratón, thumbl/r → click. Códigos evdev en el modalias del
+  pad (`k130`=BTN_A, ... `k220..223`=dpad, `ra0,1,3,4`=ejes).
+- **Auto modo juego**: `linux/bin/gamepad-watch.sh` (user service `gamepad-watch`,
+  gráfica-session) detecta conexión/desconexión de pads por modalias `k130`
+  (BTN_GAMEPAD, genérico) con debounce ~6s → `game-mode.sh` / `exit`. No
+  dispara en arranque. En conexión también lanza `input-remapper-control
+  --command autoload`.
+- **Evitar doble input en juegos**: `linux/bin/hypr-input-bridge.sh` (user
+  service `hypr-input-bridge`) escucha socket2 de Hyprland (`socat`) y, dentro
+  del modo juego, si el foco es window fullscreen no-UI → `input-remapper-control
+  --command stop` (pad 100% nativo); si vuelve a la UI (cartridges/shell/rofi)
+  → `start --preset desktop`. Lista de UI en `UI_ALLOW` del script.
+- Paquete `socat` en packages.nix. `enableUdevRules=false`: el autoload lo
+  dispara gamepad-watch.
 
 ## Lo que NO se gestiona
 

@@ -1,0 +1,91 @@
+[
+    {
+        "input_combination": [{ "type": 1, "code": 220 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Up"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 221 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Down"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 222 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Left"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 223 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Right"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 130 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Return"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 131 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Escape"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 133 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Super_L + space"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 134 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Super_L + a"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 136 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Super_L"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 136 }, { "type": 1, "code": 131 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Super_L + q"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 137 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Super_L + Return"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 310 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Super_L + m"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 311 }],
+        "target_uinput": "keyboard",
+        "output_symbol": "Super_L + s"
+    },
+    {
+        "input_combination": [{ "type": 3, "code": 3 }],
+        "target_uinput": "mouse",
+        "output_type": 2,
+        "output_code": 0,
+        "gain": 1.0
+    },
+    {
+        "input_combination": [{ "type": 3, "code": 4 }],
+        "target_uinput": "mouse",
+        "output_type": 2,
+        "output_code": 1,
+        "gain": 1.0
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 313 }],
+        "target_uinput": "mouse",
+        "output_symbol": "Left"
+    },
+    {
+        "input_combination": [{ "type": 1, "code": 314 }],
+        "target_uinput": "mouse",
+        "output_symbol": "Right"
+    }
+]

@@ -88,6 +88,7 @@ with pkgs; [  # ── Shell & terminal ──
   rsync
   ncdu
   duf
+  socat                 # hypr-input-bridge.sh: lee eventos socket2 de Hyprland
   htop
   glances
   openssh
