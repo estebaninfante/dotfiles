@@ -53,7 +53,7 @@ Rectangle {
                     text: cCard.cTitle
                     color: "#9a9aa7"
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 9
+                    font.pixelSize: 11
                     font.letterSpacing: 1.5
                 }
 
@@ -61,7 +61,7 @@ Rectangle {
                     text: cCard.cBig
                     color: "white"
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 21
+                    font.pixelSize: 26
                 }
             }
 
@@ -73,7 +73,7 @@ Rectangle {
                 text: cCard.cSub
                 color: "#8a8a99"
                 font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 10
+                 font.pixelSize: 11
                 horizontalAlignment: Text.AlignRight
                 Layout.fillWidth: true
                 Layout.maximumWidth: 140
