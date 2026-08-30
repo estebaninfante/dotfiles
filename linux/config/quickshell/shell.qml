@@ -1370,7 +1370,7 @@ PanelWindow {
                         ramProcessesStatus.running = true;
                     }
                     if (detail === "temperaturas") {
-                        thermalSensors.clear();
+                        widgetMenu.thermalSensors.clear();
                         thermalStatus.running = true;
                     }
                 }
@@ -1395,7 +1395,7 @@ PanelWindow {
 
               Process {
                   id: telemetryStatus
-                  command: ["bash", "-c", "read -r _ u n s i w irq sirq st _ < /proc/stat; a=$((u+n+s+i+w+irq+sirq+st)); b=$i; sleep .15; read -r _ u n s i w irq sirq st _ < /proc/stat; c=$((u+n+s+i+w+irq+sirq+st)); d=$i; cpu=$(awk -v da=$((c-a)) -v di=$((d-b)) 'BEGIN { if (da > 0) print 100 * (da-di) / da; else print 0 }'); temp=$(for z in /sys/class/thermal/thermal_zone*; do [ -r $z/temp ] || continue; awk '{print int($1/1000)}' $z/temp; done | sort -nr | head -n1); [ -n $temp ] || temp=0; load=$(awk '{print $1}' /proc/loadavg); up=$(cut -d. -f1 /proc/uptime); disk=$(df -P / | awk 'NR==2 {sub("%","",$5); print $5}'); gpu=none; if command -v nvidia-smi >/dev/null 2>&1; then gpu=$(nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw,power.limit --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ' '); fi; printf '%s|%s|%s|%s|%s|%s\\n' $cpu $temp $load $up $disk $gpu"]
+                  command: ["bash", "-c", "read -r _ u n s i w irq sirq st _ < /proc/stat; a=$((u+n+s+i+w+irq+sirq+st)); b=$i; sleep .15; read -r _ u n s i w irq sirq st _ < /proc/stat; c=$((u+n+s+i+w+irq+sirq+st)); d=$i; cpu=$(awk -v da=$((c-a)) -v di=$((d-b)) 'BEGIN { if (da > 0) print 100 * (da-di) / da; else print 0 }'); temp=$(for z in /sys/class/thermal/thermal_zone*; do [ -r $z/temp ] || continue; awk '{print int($1/1000)}' $z/temp; done | sort -nr | head -n1); [ -n $temp ] || temp=0; load=$(awk '{print $1}' /proc/loadavg); up=$(cut -d. -f1 /proc/uptime); disk=$(df -P / | awk 'NR==2 {print $5}'); gpu=none; if command -v nvidia-smi >/dev/null 2>&1; then gpu=$(nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw,power.limit --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ' '); fi; printf '%s|%s|%s|%s|%s|%s\\n' $cpu $temp $load $up $disk $gpu"]
                   running: false
                   stdout: StdioCollector {
                       onStreamFinished: {
@@ -1536,7 +1536,7 @@ PanelWindow {
                           clip: true
                           spacing: 4
                           visible: widgetMenu.monitorDetail === "temperaturas"
-                          model: thermalSensors
+                          model: widgetMenu.thermalSensors
                           delegate: Rectangle {
                               required property string sensorName
                               required property string sensorTemp
@@ -1570,7 +1570,7 @@ PanelWindow {
                       onRead: line => {
                           const p = line.trim().split("|");
                           if (p.length === 2)
-                              thermalSensors.append({ sensorName: p[0], sensorTemp: p[1] });
+                              widgetMenu.thermalSensors.append({ sensorName: p[0], sensorTemp: p[1] });
                       }
                   }
               }
@@ -2177,7 +2177,7 @@ PanelWindow {
                                cTitle: "GPU NVIDIA"
                                cBig: widgetMenu.gpuTelemetryAvailable ? Math.round(widgetMenu.gpuUsage) + "%" : "NO DETECTADA"
                                cVal: widgetMenu.gpuUsage
-                               cSub: widgetMenu.gpuTelemetryAvailable ? Math.round(widgetMenu.gpuTemp) + "°C · " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB" : "nvidia-smi no disponible"
+                               cSub: widgetMenu.gpuTelemetryAvailable ? Math.round(widgetMenu.gpuTemp) + "°C · " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB · " + Math.round(widgetMenu.gpuPower) + "/" + Math.round(widgetMenu.gpuPowerLimit) + " W" : "nvidia-smi no disponible"
                                dDel: 30
                                cardOn: widgetMenu.opened
                                visible: widgetMenu.activeSection === "monitoreo"
