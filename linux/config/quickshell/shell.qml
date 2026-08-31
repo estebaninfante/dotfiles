@@ -736,6 +736,7 @@ PanelWindow {
                     powerProfileStatus.running = true;
                 }
             }
+            onVisibleChanged: { if (!visible) opened = false; }
 
             anchor {
                 window: root
@@ -996,6 +997,7 @@ PanelWindow {
             property bool opened: false
             anchor { window: root; rect.x: (root.width - dateMenu.implicitWidth) / 2; rect.y: root.height + 8 }
             onOpenedChanged: if (!opened) root.resetHover(clockArea)
+            onVisibleChanged: { if (!visible) opened = false; }
 
             Rectangle {
                 anchors.fill: parent
@@ -1025,6 +1027,7 @@ PanelWindow {
             property bool opened: false
             property var processes: ListModel {}
             anchor { window: root; rect.x: root.width - ramMenu.implicitWidth - 190; rect.y: root.height + 8 }
+            onVisibleChanged: { if (!visible) opened = false; }
 
             Rectangle {
                 anchors.fill: parent
@@ -1108,6 +1111,7 @@ PanelWindow {
                     root.resetHover(volumeArea);
                 }
             }
+            onVisibleChanged: { if (!visible) opened = false; }
 
             Rectangle {
                 anchors.fill: parent
