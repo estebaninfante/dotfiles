@@ -338,7 +338,7 @@ PanelWindow {
         Rectangle {
             anchors.fill: ramRow
             radius: 8
-            color: ramArea.hov || ramMenu.opened ? "#5D3FD3" : "#141414"
+            color: ramMenu.opened ? "white" : ramArea.hov ? "#2a2a33" : "#141414"
         }
 
         Process {
@@ -382,7 +382,7 @@ PanelWindow {
                 Text {
                     id: ramIcon
                     text: "\uf2db"
-                    color: "white"
+                    color: ramMenu.opened ? "#11111b" : "white"
                     font.family: root.fontFamily
                     font.pixelSize: 12
                 }
@@ -393,7 +393,7 @@ PanelWindow {
                     text: "--%"
                     font.family: root.fontFamily
                     font.pixelSize: 12
-                    color: ramText.p > 90 ? "#e06c75" : "white"
+                    color: ramMenu.opened ? "#11111b" : ramText.p > 90 ? "#eba0ac" : "white"
                 }
             }
 
@@ -436,7 +436,7 @@ PanelWindow {
             width: batteryInner.implicitWidth + 16
             height: 22
             radius: 8
-            color: battArea.containsMouse || powerMenu.opened ? "#5D3FD3" : "#141414"
+            color: powerMenu.opened ? "white" : battArea.containsMouse ? "#2a2a33" : "#141414"
 
             function icon() {
                 const p = root.battPct;
@@ -471,7 +471,7 @@ PanelWindow {
                     text: Math.round(root.battPct) + "%"
                     font.family: root.fontFamily
                     font.pixelSize: 12
-                    color: root.battPct <= 20 ? "#e06c75" : root.batt.state === UPowerDeviceState.Charging ? "#98c379" : "white"
+                    color: powerMenu.opened ? "#11111b" : root.battPct <= 20 ? "#eba0ac" : "white"
                 }
             }
 
@@ -499,7 +499,7 @@ PanelWindow {
                     width: 60
                     height: 22
                     radius: 8
-                    color: brightnessArea.containsMouse ? "#5D3FD3" : "#141414"
+                    color: brightnessArea.containsMouse ? "#2a2a33" : "#141414"
                     Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: brightnessArea
@@ -514,8 +514,8 @@ PanelWindow {
                     width: 62
                     height: 22
                     radius: 8
-                    color: volumeArea.hov || volumeMenu.opened ? "#5D3FD3" : "#141414"
-                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 12 }
+                    color: volumeMenu.opened ? "white" : volumeArea.hov ? "#2a2a33" : "#141414"
+                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: volumeMenu.opened ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: volumeArea
                         property bool hov: false
@@ -533,12 +533,12 @@ PanelWindow {
                     width: 32
                     height: 22
                     radius: 8
-                    color: controlCenter.opened ? "#cba6f7" : ccArea.hov ? "#5D3FD3" : "#141414"
+                    color: controlCenter.opened ? "white" : ccArea.hov ? "#2a2a33" : "#141414"
 
                     Text {
                         anchors.centerIn: parent
                         text: "\uf137"
-                        color: "white"
+                        color: controlCenter.opened ? "#11111b" : "white"
                         font.family: root.fontFamily
                         font.pixelSize: 13
                     }
@@ -559,12 +559,12 @@ PanelWindow {
                     width: 32
                     height: 22
                     radius: 8
-                    color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.hov ? "#5D3FD3" : "#141414"
+                    color: widgetMenu.opened ? "white" : menuBtnArea.hov ? "#2a2a33" : "#141414"
 
                     Text {
                         anchors.centerIn: parent
                         text: "\uf009"
-                        color: "white"
+                        color: widgetMenu.opened ? "#11111b" : "white"
                         font.family: root.fontFamily
                         font.pixelSize: 14
                     }
@@ -593,7 +593,7 @@ PanelWindow {
                 delegate: Rectangle {
                     id: workspaceBox
                     width: mouseArea.containsMouse ? 40 : modelData.focused ? 35 : 30
-                    color: modelData.focused ? "#5D3FD3" : mouseArea.containsMouse ? "white" : "#141414"
+                    color: modelData.focused ? "white" : mouseArea.containsMouse ? "#2a2a33" : "#141414"
                     height: 19
                     radius: 8
 
@@ -602,7 +602,7 @@ PanelWindow {
                         text: modelData.id
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.horizontalCenter: parent.horizontalCenter
-                        color: modelData.focused ? "white" : mouseArea.containsMouse ? "black" : "white"
+                        color: modelData.focused ? "#11111b" : mouseArea.containsMouse ? "white" : "white"
                         font.family: root.fontFamily
                         font.pixelSize: 12
                     }
@@ -647,14 +647,14 @@ PanelWindow {
                     anchors.margins: 12
                     spacing: 4
 
-                    Text { text: "CONTROL"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+                    Text { text: "CONTROL"; color: "white"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
 
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
                         color: syncCcArea.containsMouse ? "#252532" : "#1d1d26"
                         Row { anchors.centerIn: parent; spacing: 8
-                            Text { text: root.syncActive ? "\uf0c1" : "\uf127"; color: root.syncActive ? "#98c379" : "#6c7086"; font.family: root.fontFamily; font.pixelSize: 13 }
-                            Text { text: "Syncthing"; color: root.syncActive ? "#98c379" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                            Text { text: root.syncActive ? "\uf0c1" : "\uf127"; color: root.syncActive ? "white" : "#6c7086"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: "Syncthing"; color: root.syncActive ? "white" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
                         MouseArea { id: syncCcArea; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
@@ -687,7 +687,7 @@ PanelWindow {
                         width: parent.width; height: 30; radius: 8
                         color: powerCcArea.containsMouse ? "#252532" : "#1d1d26"
                         Row { anchors.centerIn: parent; spacing: 8
-                            Text { text: "\uf011"; color: "#f38ba8"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: "\uf011"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13 }
                             Text { text: "Energia"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
                         MouseArea { id: powerCcArea; anchors.fill: parent; hoverEnabled: true
@@ -699,7 +699,7 @@ PanelWindow {
                         width: parent.width; height: 30; radius: 8
                         color: gameCcArea.containsMouse ? "#252532" : "#1d1d26"
                         Row { anchors.centerIn: parent; spacing: 8
-                            Text { text: "\uf11b"; color: root.gameArmed ? "#98c379" : root.gameModeActive ? "#cba6f7" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: "\uf11b"; color: root.gameArmed || root.gameModeActive ? "white" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
                             Text { text: root.gameArmed ? "Jugando" : root.gameModeActive ? "Modo juego" : "Modo juegos"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
                         MouseArea { id: gameCcArea; anchors.fill: parent; hoverEnabled: true
@@ -889,7 +889,7 @@ PanelWindow {
                         width: powerCol.width
                         height: 34
                         radius: 8
-                        color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#e06c75" : "#cba6f7") : "#262633"
+                        color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#eba0ac" : "white") : "#262633"
 
                         Text {
                             anchors.centerIn: parent
@@ -941,11 +941,11 @@ PanelWindow {
                         width: (parent.width - 6) / 2
                         height: 34
                         radius: 8
-                        color: confirmPowerArea.containsMouse ? "#e06c75" : "#55232a"
+                        color: confirmPowerArea.containsMouse ? "#eba0ac" : "#2a2a33"
                         Text {
                             anchors.centerIn: parent
                             text: "CONFIRMAR"
-                            color: "white"
+                            color: confirmPowerArea.containsMouse ? "#11111b" : "white"
                             font.family: root.fontFamily
                             font.pixelSize: 9
                             font.bold: true
@@ -1151,7 +1151,7 @@ PanelWindow {
                             radius: 8
                             color: "#0d0d12"
                             border.color: "#30303b"
-                            Rectangle { width: parent.width * Math.min(root.volumePct, 100) / 100; height: parent.height; radius: 8; color: "#89b4fa" }
+                            Rectangle { width: parent.width * Math.min(root.volumePct, 100) / 100; height: parent.height; radius: 8; color: "white" }
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: mouse => { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", Math.max(0, Math.min(100, mouse.x / width * 100)).toFixed(0) + "%" ]; volumeAdjust.running = true; }
@@ -1528,12 +1528,12 @@ PanelWindow {
                                 width: 20
                                 height: 20
                                 radius: 6
-                                color: closeArea.containsMouse ? "#e06c75" : "transparent"
+                                color: closeArea.containsMouse ? "white" : "transparent"
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: "\uf00d"
-                                    color: closeArea.containsMouse ? "white" : "#8a8a99"
+                                    color: closeArea.containsMouse ? "#11111b" : "#8a8a99"
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 11
                                 }
@@ -1566,7 +1566,7 @@ PanelWindow {
                                          width: Math.max(84, sectionLabel.implicitWidth + 24)
                                          height: 32
                                          radius: 9
-                                         color: widgetMenu.activeSection === modelData.toLowerCase() ? "#cba6f7" : sectionArea.containsMouse ? "#262633" : "#191922"
+                                         color: widgetMenu.activeSection === modelData.toLowerCase() ? "white" : sectionArea.containsMouse ? "#262633" : "#191922"
 
                                          Text {
                                              id: sectionLabel
@@ -1617,13 +1617,13 @@ PanelWindow {
                                   spacing: 8
 RowLayout {
                                        width: parent.width
-                                       Text { text: "\uf538"; color: "#cba6f7"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 23; Layout.preferredWidth: 28 }
-                                       Text { text: "RAM"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true }
+                                       Text { text: "\uf538"; color: "white"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 23; Layout.preferredWidth: 28 }
+                                       Text { text: "RAM"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true }
                                        Text { text: Math.round(ramCard.usedPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 20 }
                                        Item { Layout.fillWidth: true }
                                        Text { text: ramCard.usedGiB.toFixed(1) + "G / " + ramCard.totGiB.toFixed(1) + "G"; color: "#a6adc8"; font.family: root.fontFamily; font.pixelSize: 10 }
                                   }
-                                  Rectangle { width: parent.width; height: 5; radius: 3; color: "#29233b"; Rectangle { width: parent.width * ramCard.usedPct / 100; height: parent.height; radius: 3; color: "#cba6f7" } }
+                                   Rectangle { width: parent.width; height: 5; radius: 3; color: "#2a2a33"; Rectangle { width: parent.width * ramCard.usedPct / 100; height: parent.height; radius: 3; color: ramCard.usedPct > 90 ? "#eba0ac" : "white" } }
                                   Column {
                                       id: ramProcesses
                                       width: parent.width
@@ -1634,7 +1634,7 @@ RowLayout {
                                           delegate: RowLayout {
                                               width: ramProcesses.width
                                               Text { text: processName; color: "white"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
-                                              Text { text: memory + " MB"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 9 }
+                                               Text { text: memory + " MB"; color: "white"; font.family: root.fontFamily; font.pixelSize: 9 }
                                           }
                                       }
                                   }
@@ -1671,7 +1671,7 @@ RowLayout {
                         Card {
                             id: battCard
                             cIcon: battCard.icon()
-                            cAccent: root.batt && root.batt.state === UPowerDeviceState.Charging ? "#98c379" : "#e06c75"
+                            cAccent: root.batt && root.batt.state === UPowerDeviceState.Charging ? "white" : "#eba0ac"
                             cTitle: "BATER\u00cdA"
                             cBig: root.hasBattery ? Math.round(root.battPct) + "%" : "--%"
                             cVal: root.battPct
@@ -1755,7 +1755,7 @@ RowLayout {
                             property string acpi: ""
 
                             cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.acpi === "off" ? "\uf011" : gpuCard.modo === "disabled" ? "\uf2db" : "\uf06c"
-                            cAccent: gpuCard.modo === "gaming" ? "#98c379" : gpuCard.acpi === "off" ? "#98c379" : gpuCard.modo === "disabled" ? "#e5c07b" : widgetMenu.gpuTemp >= 85 ? "#e06c75" : "#98c379"
+                            cAccent: gpuCard.modo === "gaming" ? "white" : gpuCard.acpi === "off" ? "white" : gpuCard.modo === "disabled" ? "white" : widgetMenu.gpuTemp >= 85 ? "#eba0ac" : "white"
                             cTitle: "GPU NVIDIA"
                             cBig: root.hasBattery
                                 ? (gpuCard.modo === "gaming" ? "Juegos"
@@ -1872,7 +1872,7 @@ RowLayout {
 
                                   Text {
                                       text: "\uf028"
-                                      color: "#cba6f7"
+                                      color: "white"
                                       font.family: root.fontFamily
                                       font.pixelSize: 24
                                       Layout.preferredWidth: 28
@@ -2056,7 +2056,7 @@ RowLayout {
                            Card {
                                id: cpuCard
                                cIcon: "\uf2db"
-                               cAccent: widgetMenu.cpuTemp >= 90 ? "#e06c75" : widgetMenu.cpuTemp >= 75 ? "#e5c07b" : "#89b4fa"
+                                cAccent: widgetMenu.cpuTemp >= 90 ? "#eba0ac" : widgetMenu.cpuTemp >= 75 ? "white" : "white"
                                cTitle: "CPU"
                                cBig: Math.round(widgetMenu.cpuUsage) + "%"
                                cVal: widgetMenu.cpuUsage
@@ -2070,7 +2070,7 @@ RowLayout {
                             Card {
                                id: systemCard
                                cIcon: "\uf080"
-                               cAccent: widgetMenu.rootDisk >= 90 ? "#e06c75" : "#cba6f7"
+                               cAccent: widgetMenu.rootDisk >= 90 ? "#eba0ac" : "white"
                                cTitle: "SISTEMA"
                                cBig: widgetMenu.rootDisk + "%"
                                cVal: widgetMenu.rootDisk
