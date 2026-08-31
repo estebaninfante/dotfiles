@@ -96,7 +96,7 @@ PanelWindow {
         bottom: root.gameModeActive
     }
 
-    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened || ramMenu.opened || dateMenu.opened
+    readonly property bool expanded: hot.hovered || superHeld || widgetMenu.opened || powerMenu.opened || volumeMenu.opened || ramMenu.opened || dateMenu.opened || controlCenter.opened
 
     implicitHeight: expanded ? expandedHeight : hotEdge
     exclusiveZone: root.gameModeActive ? 2000 : implicitHeight
@@ -381,7 +381,7 @@ PanelWindow {
 
                 Text {
                     id: ramIcon
-                    text: "\uf538"
+                    text: "\uf2db"
                     color: "white"
                     font.family: root.fontFamily
                     font.pixelSize: 12
@@ -489,7 +489,7 @@ PanelWindow {
                     height: 22
                     radius: 8
                     color: brightnessArea.containsMouse ? "#5D3FD3" : "#141414"
-                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessArea.containsMouse ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
+                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: brightnessArea
                         anchors.fill: parent
@@ -3369,7 +3369,7 @@ RowLayout {
 
                                     Text {
                                         text: "\uf0f3"
-                                        color: notifCard.soundOn ? "#cba6f7" : "#6c7086"
+                                        color: notifCard.soundOn ? "#cba6f7" : "#a6adc8"
                                         font.family: root.fontFamily
                                         font.pixelSize: 22
                                         Layout.preferredWidth: 28
@@ -3380,7 +3380,7 @@ RowLayout {
                                         Layout.fillWidth: true
 
                                         Text {
-                                            text: "NOTIFICACIONES"
+                                            text: "SONIDO"
                                             color: "#9a9aa7"
                                             font.family: root.fontFamily
                                             font.pixelSize: 9
@@ -3389,7 +3389,7 @@ RowLayout {
 
                                         Text {
                                             text: notifCard.soundOn ? "Sonido activado" : "Sonido silenciado"
-                                            color: notifCard.soundOn ? "white" : "#6c7086"
+                                            color: notifCard.soundOn ? "white" : "#a6adc8"
                                             font.family: root.fontFamily
                                             font.pixelSize: 14
                                         }
@@ -3399,12 +3399,12 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: soundToggleArea.containsMouse ? "#cba6f7" : "#262633"
+                                        color: soundToggleArea.containsMouse ? "#cba6f7" : notifCard.soundOn ? "#29233b" : "#262633"
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: notifCard.soundOn ? "ON" : "OFF"
-                                            color: soundToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                            color: soundToggleArea.containsMouse ? "#11111b" : notifCard.soundOn ? "#cba6f7" : "#cdd6f4"
                                             font.family: root.fontFamily
                                             font.pixelSize: 10
                                             font.bold: true
@@ -3428,7 +3428,7 @@ RowLayout {
 
                                     Text {
                                         text: "\uf130"
-                                        color: notifCard.voiceOn ? "#89dceb" : "#6c7086"
+                                        color: notifCard.voiceOn ? "#89dceb" : "#a6adc8"
                                         font.family: root.fontFamily
                                         font.pixelSize: 20
                                         Layout.preferredWidth: 28
@@ -3447,10 +3447,10 @@ RowLayout {
                                         }
 
                                         Text {
-                                            text: notifCard.voiceOn ? "Habla el resumen al terminar" : "Solo notificación escrita"
-                                            color: notifCard.voiceOn ? "white" : "#6c7086"
+                                            text: notifCard.voiceOn ? "Habla el resumen al terminar" : "Resumen por escrito"
+                                            color: notifCard.voiceOn ? "white" : "#a6adc8"
                                             font.family: root.fontFamily
-                                            font.pixelSize: 13
+                                            font.pixelSize: 14
                                         }
                                     }
 
@@ -3458,12 +3458,12 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: voiceToggleArea.containsMouse ? "#89dceb" : "#262633"
+                                        color: voiceToggleArea.containsMouse ? "#89dceb" : notifCard.voiceOn ? "#29233b" : "#262633"
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: notifCard.voiceOn ? "ON" : "OFF"
-                                            color: voiceToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                            color: voiceToggleArea.containsMouse ? "#11111b" : notifCard.voiceOn ? "#89dceb" : "#cdd6f4"
                                             font.family: root.fontFamily
                                             font.pixelSize: 10
                                             font.bold: true
@@ -3494,7 +3494,7 @@ RowLayout {
 
                                         Text {
                                             anchors.centerIn: parent
-                                            text: "\uf028  PROBAR SONIDO"
+                                            text: "\uf0f3  PROBAR SONIDO"
                                             color: "white"
                                             font.family: root.fontFamily
                                             font.pixelSize: 9
