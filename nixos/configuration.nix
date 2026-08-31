@@ -92,6 +92,26 @@ in
       type = "basic";
     }
   ];
+  # kvm-ensure.sh: lógica de IP KVM flotante + ruta simétrica, fuente única
+  # compartida por el dispatcher y el timer de safety net.
+  environment.etc."NetworkManager/kvm-ensure.sh".source =
+    ../linux/system/NetworkManager/kvm-ensure.sh;
+  environment.etc."NetworkManager/kvm-ensure.sh".mode = "0555";
+  # Safety net: re-asegura IP KVM y ruta simétrica aunque un evento NM se
+  # pierda (ej. device que llega antes que la IP, dock USB re-enumerado).
+  systemd.services.kvm-ensure = {
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "/etc/NetworkManager/kvm-ensure.sh";
+    };
+  };
+  systemd.timers.kvm-ensure = {
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "2min";
+    };
+    wantedBy = [ "timers.target" ];
+  };
   hardware.bluetooth.enable = true;
   # Hostname por maquina (definido en hosts/*.nix)
   networking.hostName = lib.mkDefault "nixos";
