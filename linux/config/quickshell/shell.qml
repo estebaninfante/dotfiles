@@ -1353,8 +1353,8 @@ PanelWindow {
                 }
 
                 function refreshScreens() {
-                    if (activeSection === "pantallas" && !screenStatus.running)
-                        screenStatus.running = true;
+                    if (activeSection === "pantallas")
+                        screenCard.refresh();
                 }
 
                 function refreshMonitoring() {
@@ -1459,6 +1459,7 @@ PanelWindow {
                      color: "#e60d0d12"
                      border.color: "#383847"
                      border.width: 1
+                     visible: widgetMenu.monitorDetail === ""
                      opacity: widgetMenu.opened ? 1 : 0
                      scale: widgetMenu.opened ? 1 : 0.94
                      transformOrigin: Item.TopRight
@@ -3407,7 +3408,7 @@ PanelWindow {
                                     width: parent.width
 
                                     Text {
-                                        text: "\uf5a2"
+                                        text: "\uf130"
                                         color: notifCard.voiceOn ? "#89dceb" : "#6c7086"
                                         font.family: root.fontFamily
                                         font.pixelSize: 20
@@ -3541,13 +3542,7 @@ PanelWindow {
                                 font.bold: true
                                 font.letterSpacing: 1.5
                                 Layout.fillWidth: true
-                            }
-                            Text {
-                                text: "\uf00d"
-                                color: detailBackArea.containsMouse ? "#e06c75" : "#9a9aa7"
-                                font.family: root.fontFamily
-                                font.pixelSize: 13
-                                MouseArea { id: detailBackArea; anchors.fill: parent; hoverEnabled: true; onClicked: widgetMenu.monitorDetail = "" }
+                                MouseArea { id: detailBackArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: widgetMenu.monitorDetail = "" }
                             }
                         }
 
