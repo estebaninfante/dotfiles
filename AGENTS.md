@@ -276,6 +276,18 @@ Para lan-mouse/syncthing ambas máquinas usan IP fija **fuera del pool DHCP**
   stalls de KVM). Los perfiles NM
   viven en `/etc/NetworkManager/system-connections/` (local a cada máquina,
   NO gestionados por el repo).
+- **IP KVM flotante + ruta simétrica** (`linux/system/NetworkManager/kvm-ensure.sh`,
+  instalado en `/etc/NetworkManager/kvm-ensure.sh` via
+  `environment.etc`): mantiene la IP fija en UNA sola interfaz — ethernet de
+  casa si hay, si no WiFi (SSIDs en `HOME_SSIDS`) — y añade ruta simétrica
+  `PEER/32 dev iface src KVM_IP` para que las respuestas salgan con la IP que
+  el peer espera. Sin esto, con ethernet+WiFi activos en el mismo subnet la
+  laptop responde con la IP del otro medio → routing asimétrico +
+  `checkReversePath` estricto dropea → `Connection timed out`. Se dispara:
+  dispatcher `90-lan-mouse` (eventos NM `up|down|dhcp4-change`) + timer
+  `kvm-ensure` (cada 2 min, safety net si NM pierde eventos o se re-enumera
+  el dock USB ethernet). Reinicia lan-mouse async (el stop cuelga ~90s en
+  desktop con sesión KVM activa, por eso `timeout 20` en background).
 - ⚠️ Lag de lan-mouse en WiFi: el router usa canal 5GHz DFS (112/5560MHz) y hay
   un repetidor propio co-canal (`74:93:da:a1:0f:1a`, IP .48). Ráfagas de
   100-200ms incluso hacia el gateway. Fix real: fijar router a canal 5GHz
@@ -283,8 +295,12 @@ Para lan-mouse/syncthing ambas máquinas usan IP fija **fuera del pool DHCP**
 - Referencias hardcodeadas: `linux/config/lan-mouse/config.*.toml`,
   syncthing en `nixos/configuration.nix`, docs.
 - Dispatcher `90-lan-mouse` (instalado via `networking.networkmanager.dispatcherScripts`):
-  reinicia lan-mouse al conectar a red de casa + watchdog que detecta conflicto
+  medium_handoff (ethernet manda: up→disconnect wlo1, down→connect wlo1),
+  `ensure_kvm` + ruta simétrica, watchdog que detecta conflicto
   ARP/IP no configurable y avisa por ntfy (tópico por hostname: `opencode-desktop`/`opencode-laptop`).
+- `networking.firewall.checkReversePath = "loose"` (fue "strict" default): con
+  rutas asimétricas válidas (dual-interface) no hay que dropear el paquete en
+  la interfaz que no es la preferida.
 
 ### SSH entre máquinas
 
