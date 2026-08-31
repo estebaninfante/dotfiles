@@ -3,7 +3,7 @@ import Quickshell.Io
 import Quickshell.Services.UPower
 import QtQuick
 import QtQuick.Layouts
-import ".."
+import "../components"
 import "../config"
 import "../services"
 
