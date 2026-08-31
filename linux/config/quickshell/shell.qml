@@ -962,12 +962,12 @@ PanelWindow {
                     }
                 }
             }
+        }
 
-            Process {
-                id: powerAction
-                command: ["true"]
-                running: false
-            }
+        Process {
+            id: powerAction
+            command: ["true"]
+            running: false
         }
 
         PopupWindow {
