@@ -13,9 +13,14 @@
     # Flatpak declarativo: services.flatpak.packages (sincroniza apps
     # fuera de nixpkgs entre maquinas).
     nix-flatpak.url = "github:gmodena/nix-flatpak";
+    # Tema minimal para rEFInd (openFyde fork). No tiene flake.nix →
+    # flake = false, se usa como path raw. Se copia a /boot via
+    # boot.loader.refind.additionalFiles (paths themes/rEFInd-minimal/*).
+    fydeos-refind-theme.url = "github:openFyde/fydeos-refind-theme";
+    fydeos-refind-theme.flake = false;
   };
 
-  outputs = { self, nixpkgs, home-manager, handy, nix-flatpak, ... }:
+  outputs = { self, nixpkgs, home-manager, handy, nix-flatpak, fydeos-refind-theme, ... }:
     let
       system = "x86_64-linux";
       lib = nixpkgs.lib;
@@ -77,8 +82,8 @@
       mkHost = { machineType, extraModules }: lib.nixosSystem {
         inherit system;
         modules = baseModules ++ [
-          { home-manager.extraSpecialArgs = { inherit machineType piperVoices; }; }
-          { _module.args = { inherit handyPackage machineType piperVoices; }; }
+          { home-manager.extraSpecialArgs = { inherit machineType piperVoices fydeos-refind-theme; }; }
+          { _module.args = { inherit handyPackage machineType piperVoices fydeos-refind-theme; }; }
         ] ++ extraModules;
       };
     in

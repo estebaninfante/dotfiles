@@ -44,6 +44,22 @@
         "type": "github"
       }
     },
+    "fydeos-refind-theme": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1690268700,
+        "narHash": "sha256-oSQ7Wr5JokirsQuzR+f6xlz3jzDZozUoSBjkzsHNsuc=",
+        "owner": "openFyde",
+        "repo": "fydeos-refind-theme",
+        "rev": "51936c56686b7e03f6a7c261faf6e479eea7814e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "openFyde",
+        "repo": "fydeos-refind-theme",
+        "type": "github"
+      }
+    },
     "handy": {
       "inputs": {
         "bun2nix": "bun2nix",
@@ -163,6 +179,7 @@
     },
     "root": {
       "inputs": {
+        "fydeos-refind-theme": "fydeos-refind-theme",
         "handy": "handy",
         "home-manager": "home-manager",
         "nix-flatpak": "nix-flatpak",

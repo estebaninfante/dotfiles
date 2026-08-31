@@ -1,10 +1,32 @@
-# Configuracion base NixOS — comun a laptop y desktop.
+  # Configuracion base NixOS — comun a laptop y desktop.
 #
 # OJO: el archivo hardware-configuration.nix NO se gestiona aqui.
 # Se genera por maquina con `nixos-generate-config` durante la instalacion
 # (ver README.md). Cada host importa el suyo en hosts/<host>.nix.
 
-{ config, pkgs, lib, handyPackage, machineType, piperVoices, ... }:
+{ config, pkgs, lib, handyPackage, machineType, piperVoices, fydeos-refind-theme, ... }:
+
+let
+  # Tema minimal para rEFInd (openFyde). Se copia a /boot/EFI/refind/themes/
+  # inputs flake = source del store → leer FS ok. theme.conf se referencia
+  # con `include themes/rEFInd-minimal/theme.conf`. Los values (source paths)
+  # se pasan sin string context: builtins.toJSON de refind-install.json
+  # RECHAZA strings con context de store path.
+  flattenDir = dir:
+    let entries = builtins.readDir dir;
+    in lib.flatten (lib.mapAttrsToList
+      (name: type:
+        if type == "directory" then flattenDir "${dir}/${name}"
+        else [ "${dir}/${name}" ])
+      entries);
+  refindThemeFiles = flattenDir fydeos-refind-theme;
+  refindThemeAdditional = lib.listToAttrs (map
+    (file: {
+      name = "themes/rEFInd-minimal/${lib.removePrefix "${fydeos-refind-theme}/" file}";
+      value = builtins.unsafeDiscardStringContext file;
+    })
+    refindThemeFiles);
+in
 
 {
   imports = [
@@ -22,10 +44,14 @@
   boot.loader.grub.enable = false;
   boot.loader.refind.enable = true;
   boot.loader.refind.efiInstallAsRemovable = false;
+  # Tema minimal openFyde: copia every file del theme a
+  # /boot/EFI/refind/themes/rEFInd-minimal/ y lo activa via include.
+  boot.loader.refind.additionalFiles = refindThemeAdditional;
   boot.loader.refind.extraConfig = ''
     timeout 8
     use_graphics_for linux,windows
     dont_scan_dirs /efi/boot
+    include themes/rEFInd-minimal/theme.conf
   '';
   boot.loader.efi.canTouchEfiVariables = true;
 
