@@ -11,7 +11,7 @@ Rectangle {
     border.width: 1
 
     property string cIcon: ""
-    property color cAccent: "#cba6f7"
+    property color cAccent: "white"
     property string cTitle: ""
     property string cBig: "--"
     property string cSub: ""

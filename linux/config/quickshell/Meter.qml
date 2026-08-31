@@ -6,7 +6,7 @@ Rectangle {
     color: "#252530"
 
     property double mv: 0
-    property color mColor: "#cba6f7"
+    property color mColor: "white"
 
     Rectangle {
         height: parent.height
