@@ -427,13 +427,16 @@ PanelWindow {
             onExited: hov = false
             onClicked: ramMenu.opened = !ramMenu.opened
         }
-        Row {
+        Rectangle {
             id: batteryRow
-            anchors.right: menuRow.left
-            anchors.rightMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
             visible: root.hasBattery
+            anchors.right: menuRow.left
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            width: batteryInner.implicitWidth + 16
+            height: 22
+            radius: 8
+            color: battArea.containsMouse || powerMenu.opened ? "#5D3FD3" : "#141414"
 
             function icon() {
                 const p = root.battPct;
@@ -450,29 +453,37 @@ PanelWindow {
                 return "\uf244";
             }
 
-            Text {
-                id: batteryIcon
-                text: batteryRow.icon()
-                color: batteryText.color
-                font.family: root.fontFamily
-                font.pixelSize: 15
+            Row {
+                id: batteryInner
+                anchors.centerIn: parent
+                spacing: 4
+
+                Text {
+                    id: batteryIcon
+                    text: batteryRow.icon()
+                    color: batteryText.color
+                    font.family: root.fontFamily
+                    font.pixelSize: 12
+                }
+
+                Text {
+                    id: batteryText
+                    text: Math.round(root.battPct) + "%"
+                    font.family: root.fontFamily
+                    font.pixelSize: 12
+                    color: root.battPct <= 20 ? "#e06c75" : root.batt.state === UPowerDeviceState.Charging ? "#98c379" : "white"
+                }
             }
 
-            Text {
-                id: batteryText
-                text: Math.round(root.battPct) + "%"
-                font.family: root.fontFamily
-                font.pixelSize: 14
-                color: root.battPct <= 20 ? "#e06c75" : root.batt.state === UPowerDeviceState.Charging ? "#98c379" : "white"
-            }
-
-        }
-        MouseArea {
-            anchors.fill: batteryRow
-            z: 2
-            onClicked: {
-                powerMenu.pendingAction = "";
-                powerMenu.opened = !powerMenu.opened;
+            MouseArea {
+                id: battArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: {
+                    powerMenu.pendingAction = "";
+                    powerMenu.powerProfilesOpen = true;
+                    powerMenu.opened = !powerMenu.opened;
+                }
             }
         }
             Row {
@@ -3647,6 +3658,7 @@ RowLayout {
     Rectangle {
         id: gameModeFade
         anchors.fill: parent
+        visible: root.gameModeActive
         color: "transparent"
         opacity: (root.gameShown && !root.gameClosing) ? 1 : 0
         // Bloquear el input de lo que haya detrás mientras el overlay está arriba.
