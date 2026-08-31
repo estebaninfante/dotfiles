@@ -247,9 +247,10 @@ in
   # SSH server (solo tailnet), para administracion entre maquinas.
   services.openssh = {
     enable = true;
+    ports = [22];
     settings = {
-      PasswordAuthentication = false;
-      PermitRootLogin = "no";
+      PasswordAuthentication = true;
+      PermitRootLogin = "yes";
     };
   };
 
