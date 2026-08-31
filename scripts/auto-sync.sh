@@ -96,31 +96,26 @@ do_rebuild() {
   fi
 }
 
-# ── 1. Pull con rebase (integra commits locales, no fast-forward estricto) ──
+# ── 1. Pull: ff-only primero (sin rebase = sin DELETE/CREATE de archivos),
+#    fallback a rebase solo si hay commits locales ahead ──
 PULL_OUTPUT=""
 HUBO_CAMBIOS=false
 PRE_PULL_HEAD="$(git rev-parse HEAD 2>/dev/null || echo "")"
 if git remote -v | grep -q .; then
-  if PULL_OUTPUT=$(git pull --rebase --autostash 2>&1); then
-    if ! echo "$PULL_OUTPUT" | grep -qi "actualizado\|up to date"; then
-      HUBO_CAMBIOS=true
+  # --ff-only: no reborra/recrea archivos → Hyprland no ve el DELETE de inotify
+  if ! PULL_OUTPUT=$(git pull --ff-only --autostash 2>&1); then
+    # Fallback: hay commits locales, rebase necesario (error transitorio posible)
+    if ! PULL_OUTPUT=$(git pull --rebase --autostash 2>&1); then
+      echo "[PULL CONFLICT] Rebase fallo; abortando para dejar el repo intacto." >&2
+      git rebase --abort 2>/dev/null || true
+      git status --short >&2
+      echo "[SKIP] Resuelve el conflicto manualmente." >&2
+      exit 1
     fi
-  else
-    echo "[PULL CONFLICT] Rebase fallo; abortando para dejar el repo intacto." >&2
-    git rebase --abort 2>/dev/null || true
-    git status --short >&2
-    echo "[SKIP] Resuelve el conflicto manualmente." >&2
-    exit 1
   fi
-fi
 
-# ── 1b. Reload Hyprland si cambiaron configs (evita error transitorio de inotify) ──
-if [ "$HUBO_CAMBIOS" = true ] && [ -n "$PRE_PULL_HEAD" ]; then
-  POST_PULL_HEAD="$(git rev-parse HEAD 2>/dev/null || echo "")"
-  if [ -n "$POST_PULL_HEAD" ] && [ "$PRE_PULL_HEAD" != "$POST_PULL_HEAD" ]; then
-    if git diff --name-only "$PRE_PULL_HEAD" "$POST_PULL_HEAD" 2>/dev/null | grep -q '^linux/config/hypr/'; then
-      hyprctl reload 2>/dev/null || true
-    fi
+  if ! echo "$PULL_OUTPUT" | grep -qi "actualizado\|up to date"; then
+    HUBO_CAMBIOS=true
   fi
 fi
 
