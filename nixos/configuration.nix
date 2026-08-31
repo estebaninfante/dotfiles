@@ -52,11 +52,18 @@ in
   # theme.conf (evanpurkhiser) NO trae timeout/default_selection, asi que
   # no sobreescribe los nuestros. Solo showtools shutdown.
   boot.loader.refind.additionalFiles = refindThemeAdditional;
-  # Solo la última generacion NixOS: sin esto refind genera 1 menuentry
-  # por generacion (gen 93, 92...) y el menu se llena de entradas NixOS.
-  boot.loader.refind.maxGenerations = 1;
+  # Generaciones NixOS visibles en el menu rEFInd. El generador ordena
+  # descendente (la mas reciente primero) y default_selection la auto-bootea
+  # tras el timeout. Aun asi el timeout es una VENTANA: pulsar cualquier tecla
+  # durante la cuenta permite elegir una generacion anterior (rollback) — por
+  # eso NO ponemos 1. 3 = ultimas 3 generaciones accesibles sin llenar el menu.
+  boot.loader.refind.maxGenerations = 3;
+  # El generador refind-install.py escribe SIEMPRE `default_selection 2`
+  # tras extraConfig (NixOS default) + `timeout {boot.loader.timeout}`.
+  # Se setea boot.loader.timeout (no en extraConfig) para que no haya
+  # timeout duplicado/confuso (extraConfig va ANTES del que genera el script).
+  boot.loader.timeout = 8;
   boot.loader.refind.extraConfig = ''
-    timeout 8
     use_graphics_for linux,windows
     # systemd-boot remnants: /efi/systemd era del bootloader anterior.
     dont_scan_dirs /efi/systemd
