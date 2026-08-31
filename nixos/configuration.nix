@@ -14,7 +14,15 @@
   ];
 
   # ── Boot ──────────────────────────────────────────────────────
-  boot.loader.systemd-boot.enable = true;
+  # rEFInd: menú gráfico de arranque. Auto-detecta Windows (EFI/Microsoft/
+  # bootmgfw.efi) además del kernel NixOS. Se elige entre ambos al bootear.
+  boot.loader.refind.enable = true;
+  boot.loader.refind.efiInstallAsRemovable = false;
+  boot.loader.refind.extraConfig = ''
+    timeout 8
+    use_graphics_for linux,windows
+    dont_scan_dirs /efi/boot
+  '';
   boot.loader.efi.canTouchEfiVariables = true;
 
   # ── Kernel / hardware base ────────────────────────────────────
