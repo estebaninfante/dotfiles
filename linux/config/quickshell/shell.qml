@@ -27,6 +27,7 @@ PanelWindow {
     readonly property var kbLabels: ["DV", "ES", "US"]
     property var audioSinks: ListModel {}
     property var audioSources: ListModel {}
+    property string clockFull: ""
 
     // ── Modo juegos ──
     property bool gameModeActive: false   // expande root a fullscreen
@@ -340,7 +341,6 @@ PanelWindow {
             color: ramArea.hov || ramMenu.opened ? "#5D3FD3" : "#141414"
         }
 
-        property string clockFull: ""
         Process {
             id: runDate
             command: ["date", "+%d %b · %H:%M"]
@@ -1599,12 +1599,13 @@ PanelWindow {
                                   anchors.top: parent.top
                                   anchors.margins: 14
                                   spacing: 8
-                                  RowLayout {
-                                      width: parent.width
-                                      Text { text: "RAM"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true }
-                                      Text { text: Math.round(ramCard.usedPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 20 }
-                                      Item { Layout.fillWidth: true }
-                                      Text { text: ramCard.usedGiB.toFixed(1) + "G / " + ramCard.totGiB.toFixed(1) + "G"; color: "#8a8a99"; font.family: root.fontFamily; font.pixelSize: 10 }
+RowLayout {
+                                       width: parent.width
+                                       Text { text: "\uf538"; color: "#cba6f7"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 23; Layout.preferredWidth: 28 }
+                                       Text { text: "RAM"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true }
+                                       Text { text: Math.round(ramCard.usedPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 20 }
+                                       Item { Layout.fillWidth: true }
+                                       Text { text: ramCard.usedGiB.toFixed(1) + "G / " + ramCard.totGiB.toFixed(1) + "G"; color: "#a6adc8"; font.family: root.fontFamily; font.pixelSize: 10 }
                                   }
                                   Rectangle { width: parent.width; height: 5; radius: 3; color: "#29233b"; Rectangle { width: parent.width * ramCard.usedPct / 100; height: parent.height; radius: 3; color: "#cba6f7" } }
                                   Column {
@@ -1737,17 +1738,20 @@ PanelWindow {
                             property string fuente: ""
                             property string acpi: ""
 
-                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.acpi === "off" ? "\uf011" : "\uf06c"
+                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.acpi === "off" ? "\uf011" : gpuCard.modo === "disabled" ? "\uf2db" : "\uf06c"
                             cAccent: gpuCard.modo === "gaming" ? "#98c379" : gpuCard.acpi === "off" ? "#98c379" : gpuCard.modo === "disabled" ? "#e5c07b" : widgetMenu.gpuTemp >= 85 ? "#e06c75" : "#98c379"
                             cTitle: "GPU NVIDIA"
                             cBig: root.hasBattery
-                                ? (gpuCard.modo === "gaming" ? "Juegos" : gpuCard.acpi === "off" ? "100% OFF" : gpuCard.modo === "disabled" ? "D3cold" : "Bater\u00eda")
+                                ? (gpuCard.modo === "gaming" ? "Juegos"
+                                    : gpuCard.acpi === "off" ? "OFF"
+                                    : gpuCard.modo === "disabled" ? "D3cold"
+                                    : (gpuCard.hasTelemetry ? Math.round(widgetMenu.gpuUsage) + "%" : "Auto"))
                                 : (gpuCard.hasTelemetry ? Math.round(widgetMenu.gpuUsage) + "%" : "NO DETECTADA")
                             cVal: gpuCard.hasTelemetry ? widgetMenu.gpuUsage : (root.hasBattery ? 0 : 0)
                             cSub: root.hasBattery
                                 ? (gpuCard.hasTelemetry
                                     ? Math.round(widgetMenu.gpuTemp) + "\u00b0C \u00b7 " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB \u00b7 " + Math.round(widgetMenu.gpuPower) + "/" + Math.round(widgetMenu.gpuPowerLimit) + " W"
-                                    : (gpuCard.fuente ? "ACPI: " + gpuCard.acpi : "---"))
+                                    : (gpuCard.fuente ? "ACPI: " + gpuCard.acpi : "NVIDIA inactiva"))
                                 : (gpuCard.hasTelemetry ? Math.round(widgetMenu.gpuTemp) + "\u00b0C \u00b7 " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB \u00b7 " + Math.round(widgetMenu.gpuPower) + "/" + Math.round(widgetMenu.gpuPowerLimit) + " W" : "nvidia-smi no disponible")
                             dDel: root.hasBattery ? 120 : 30
                             cardOn: widgetMenu.opened
@@ -2041,7 +2045,7 @@ PanelWindow {
                                cBig: Math.round(widgetMenu.cpuUsage) + "%"
                                cVal: widgetMenu.cpuUsage
                                cSub: widgetMenu.cpuTemp > 0 ? Math.round(widgetMenu.cpuTemp) + "°C" : "Temperatura ---"
-                               dDel: 0
+                               dDel: 180
                                cardOn: widgetMenu.opened
                                visible: widgetMenu.activeSection === "monitoreo"
                                MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("cpu") }
@@ -2052,10 +2056,10 @@ PanelWindow {
                                cIcon: "\uf080"
                                cAccent: widgetMenu.rootDisk >= 90 ? "#e06c75" : "#cba6f7"
                                cTitle: "SISTEMA"
-                               cBig: widgetMenu.rootDisk + "% DISCO"
+                               cBig: widgetMenu.rootDisk + "%"
                                cVal: widgetMenu.rootDisk
                                cSub: "Carga " + widgetMenu.systemLoad + " · Up " + widgetMenu.systemUptime
-                               dDel: 60
+                               dDel: 240
                                cardOn: widgetMenu.opened
                                visible: widgetMenu.activeSection === "monitoreo"
                                MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("sistema") }

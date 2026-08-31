@@ -124,27 +124,27 @@ Rectangle {
     transitions: [
         Transition {
             from: "*"; to: "*"
-            ParallelAnimation {
-                NumberAnimation {
-                    target: cCard
-                    property: "opacity"
-                    duration: 200
-                    delay: cCard.dDel
-                    easing.type: Easing.InOutCubic
-                }
-                NumberAnimation {
-                    target: cCard
-                    property: "scale"
-                    duration: 250
-                    delay: cCard.dDel
-                    easing.type: Easing.OutCubic
-                }
-                NumberAnimation {
-                    target: cT
-                    property: "y"
-                    duration: 250
-                    delay: cCard.dDel
-                    easing.type: Easing.OutQuad
+            SequentialAnimation {
+                PauseAnimation { duration: cCard.dDel }
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: cCard
+                        property: "opacity"
+                        duration: 200
+                        easing.type: Easing.InOutCubic
+                    }
+                    NumberAnimation {
+                        target: cCard
+                        property: "scale"
+                        duration: 250
+                        easing.type: Easing.OutCubic
+                    }
+                    NumberAnimation {
+                        target: cT
+                        property: "y"
+                        duration: 250
+                        easing.type: Easing.OutQuad
+                    }
                 }
             }
         }
