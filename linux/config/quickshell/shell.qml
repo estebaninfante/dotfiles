@@ -1718,7 +1718,6 @@ PanelWindow {
                                       Text { text: ramCard.usedGiB.toFixed(1) + "G / " + ramCard.totGiB.toFixed(1) + "G"; color: "#8a8a99"; font.family: root.fontFamily; font.pixelSize: 10 }
                                   }
                                   Rectangle { width: parent.width; height: 5; radius: 3; color: "#29233b"; Rectangle { width: parent.width * ramCard.usedPct / 100; height: parent.height; radius: 3; color: "#cba6f7" } }
-                                  Text { text: ramCard.ramProcessesOpen ? "PROCESOS QUE MÁS RAM USAN" : "CLIC PARA VER PROCESOS"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
                                   Column {
                                       id: ramProcesses
                                       width: parent.width

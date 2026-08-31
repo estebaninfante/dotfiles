@@ -86,6 +86,8 @@ Rectangle {
             anchors.right: parent.right
             anchors.top: cTop.bottom
             anchors.topMargin: 12
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 6
             mv: cCard.cVal / 100
             mColor: cCard.cAccent
         }
