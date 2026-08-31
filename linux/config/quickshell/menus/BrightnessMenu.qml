@@ -3,6 +3,7 @@ import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import "../config"
+import "../services"
 
 PopupWindow {
     id: brightnessMenu
@@ -15,7 +16,7 @@ PopupWindow {
     required property PanelWindow root
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
     property bool opened: UIState.brightnessMenuOpen
-    property double brightnessPct: 0
+    property double brightnessPct: BrightnessService.brightnessPct
 
     anchor { window: root; rect.x: root.width - brightnessMenu.implicitWidth - 72; rect.y: root.height + 8 }
     onOpenedChanged: { if (!opened) UIState.hoversReset(); }
@@ -67,14 +68,10 @@ PopupWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         property bool dragging: false
-                        function set(pct) {
-                            brightnessAdjust.command = ["brightnessctl", "set", Math.max(0, Math.min(100, pct)).toFixed(0) + "%"];
-                            brightnessAdjust.running = true;
-                        }
-                        onPressed: { dragging = true; set(mouse.x / width * 100) }
-                        onPositionChanged: { if (dragging) set(mouse.x / width * 100) }
+                        onPressed: { dragging = true; BrightnessService.set(mouse.x / width * 100) }
+                        onPositionChanged: { if (dragging) BrightnessService.set(mouse.x / width * 100) }
                         onReleased: dragging = false
-                        onWheel: wheel => { brightnessAdjust.command = ["brightnessctl", "set", wheel.angleDelta.y > 0 ? "5%+" : "5%-"]; brightnessAdjust.running = true; }
+                        onWheel: wheel => BrightnessService.adjust(wheel.angleDelta.y > 0)
                     }
                 }
                 TextInput {
@@ -89,26 +86,10 @@ PopupWindow {
                     verticalAlignment: Text.AlignVCenter
                     selectByMouse: true
                     inputMethodHints: Qt.ImhDigitsOnly
-                    onAccepted: { brightnessAdjust.command = ["brightnessctl", "set", Math.max(0, Math.min(100, parseFloat(text) || 0)).toFixed(0) + "%" ]; brightnessAdjust.running = true; focus = false; }
+                    onAccepted: { BrightnessService.set(parseFloat(text) || 0); focus = false; }
                     Rectangle { anchors.fill: parent; z: -1; radius: 7; color: "#000000"; border.color: "#333" }
                 }
             }
         }
-    }
-
-    Process {
-        id: brightnessStatus
-        command: ["bash", "-c", "brightnessctl -m 2>/dev/null | awk -F, '{gsub(/%/,\"\",$4); print $4}'"]
-        running: root.hasBattery
-        stdout: StdioCollector {
-            onStreamFinished: brightnessPct = parseFloat(this.text.trim()) || 0
-        }
-    }
-
-    Process {
-        id: brightnessAdjust
-        command: ["brightnessctl", "set", "5%+"]
-        running: false
-        onExited: brightnessStatus.running = true
     }
 }

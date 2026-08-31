@@ -32,10 +32,8 @@ quickshell/
 │   ├── PowerProfileService.qml
 │   ├── SyncService.qml
 │   ├── MemoryService.qml
-│   ├── TelemetryService.qml
+│   ├── DashboardService.qml  # telemetría (cpu/gpu/disk) + procesos RAM
 │   ├── GpuModeService.qml
-│   ├── WifiService.qml
-│   ├── BluetoothService.qml
 │   ├── ThemeService.qml
 │   ├── NotifyService.qml
 │   ├── GameModeService.qml
@@ -43,7 +41,6 @@ quickshell/
 ├── components/            # widgets reutilizables
 │   ├── Card.qml / Meter.qml      # tarjetas del widget menu (migrados de la raíz)
 │   ├── IconButton.qml            # pill con icono, hover, wheel
-│   ├── ToggleButton.qml          # pill ON/OFF
 │   ├── SliderRow.qml             # slider + TextInput + rueda
 │   ├── DeviceRow.qml             # fila de dispositivo de audio (sink/source)
 │   ├── SectionLabel.qml          # etiqueta de sección
@@ -60,11 +57,20 @@ quickshell/
 │   ├── BrightnessMenu.qml VolumeMenu.qml WidgetMenu.qml
 ├── cards/                 # tarjetas del widget menu
 │   ├── ThemeCard  RamCard  BattCard  GpuCard  CpuCard  SystemCard
-│   ├── AudioCard  ScreenCard  WifiCard  WifiEnterpriseForm  WifiNetworkItem
+│   ├── AudioCard  ScreenCard  WifiCard       # WifiCard autocontenida (Process propios)
 │   ├── BluetoothCard  NotifCard  MonitorDetail
 └── overlay/
     └── GameOverlay.qml    # overlay "modo juegos"
 ```
+
+### Wifi / Bluetooth: lógica dentro de las cards
+
+A diferencia del resto, `cards/WifiCard.qml` y `cards/BluetoothCard.qml` son
+**autocontenidas**: definen sus propios `Process` y el `Timer` de 20 s de
+polling (`wifiStatus` / `bluetoothStatus`), con guard
+`UIState.activeSection === "conexiones"`. NO hay `WifiService`/`BluetoothService`.
+`WidgetMenu.refreshConnections()` solo dispara su `refreshNetworks()`/`refreshDevices()`
+(leyendo `wifiCard.wifiScanning` / `bluetoothCard.btScanning` para no pisar un scan).
 
 ## ¿Dónde va mi cambio?
 
@@ -72,8 +78,8 @@ quickshell/
 |-----------|----------|
 | Color, tipografía, duración de animación | `config/Theme.qml`, `config/Motion.qml` |
 | Abrir/cerrar un menú, sección activa, monitorDetail | `config/UIState.qml` |
-| Estado/procesos de batería, volumen, brillo, wifi, bluetooth, telemetría, etc. | `services/*Service.qml` (cada servicio posee sus Process + Timers) |
-| Un pill/botón reutilizable | `components/` (IconButton, ToggleButton, SliderRow...) |
+| Estado/procesos de batería, volumen, brillo, telemetría, etc. | `services/*Service.qml` (cada servicio posee sus Process + Timers). Wifi/bluetooth: en `cards/WifiCard.qml` / `BluetoothCard.qml` |
+| Un pill/botón reutilizable | `components/` (IconButton, SliderRow...) |
 | Contenido de la barra | `bar/` |
 | Popup nuevo | `menus/` + flag en `UIState` + instancia en `shell.qml` |
 | Tarjeta del widget menu | `cards/` + sección en `WidgetMenu.qml` |
@@ -129,12 +135,12 @@ Estas correcciones se repiten. NO vuelvas a cometerlas:
 | MemoryService | ramFree | cada 3000 ms |
 | KeyboardService | kbStatus | boot + tras cambiar layout |
 | PowerProfileService | powerProfileStatus | boot + tras set |
-| TelemetryService | telemetryStatus, cpuThreadsStatus | cada 2500 ms SOLO con widget menu abierto en sección "monitoreo" |
+| DashboardService | telemetryStatus, cpuThreadsStatus, ramProcessesStatus | cada 2500 ms SOLO con widget menu abierto en sección "monitoreo"; procesos RAM on-demand |
 | GpuModeService | gpuStatus | cada 5000 ms (solo laptop) |
-| WifiService | wifiStatus + scan + connect | status cada 20000 ms |
-| BluetoothService | bluetoothStatus + scan + action | status cada 20000 ms |
 | ThemeService | themeStateRead | al abrir/refrescar |
 | NotifyService | soundStateWrite | al escribir toggles |
+| WifiCard (card) | wifiStatus + scan + connect | status cada 20000 ms (guard sección "conexiones") |
+| BluetoothCard (card) | bluetoothStatus + scan + action | status cada 20000 ms (guard sección "conexiones") |
 
 ## Cómo verificar un cambio
 
