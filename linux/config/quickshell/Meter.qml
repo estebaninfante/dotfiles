@@ -3,7 +3,7 @@ import QtQuick
 Rectangle {
     height: 6
     radius: 3
-    color: "#252530"
+    color: "#333"
 
     property double mv: 0
     property color mColor: "white"

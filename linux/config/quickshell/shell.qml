@@ -338,7 +338,7 @@ PanelWindow {
         Rectangle {
             anchors.fill: ramRow
             radius: 8
-            color: ramMenu.opened ? "white" : ramArea.hov ? "#2a2a33" : "#141414"
+            color: ramMenu.opened ? "white" : ramArea.hov ? "#1d1d26" : "#141414"
         }
 
         Process {
@@ -382,7 +382,7 @@ PanelWindow {
                 Text {
                     id: ramIcon
                     text: "\uf2db"
-                    color: ramMenu.opened ? "#11111b" : "white"
+                    color: ramMenu.opened ? "#000000" : "white"
                     font.family: root.fontFamily
                     font.pixelSize: 12
                 }
@@ -393,7 +393,7 @@ PanelWindow {
                     text: "--%"
                     font.family: root.fontFamily
                     font.pixelSize: 12
-                    color: ramMenu.opened ? "#11111b" : ramText.p > 90 ? "#eba0ac" : "white"
+                    color: ramMenu.opened ? "#000000" : ramText.p > 90 ? "#eba0ac" : "white"
                 }
             }
 
@@ -436,7 +436,7 @@ PanelWindow {
             width: batteryInner.implicitWidth + 16
             height: 22
             radius: 8
-            color: powerMenu.opened ? "white" : battArea.containsMouse ? "#2a2a33" : "#141414"
+            color: powerMenu.opened ? "white" : battArea.containsMouse ? "#1d1d26" : "#141414"
 
             function icon() {
                 const p = root.battPct;
@@ -471,7 +471,7 @@ PanelWindow {
                     text: Math.round(root.battPct) + "%"
                     font.family: root.fontFamily
                     font.pixelSize: 12
-                    color: powerMenu.opened ? "#11111b" : root.battPct <= 20 ? "#eba0ac" : "white"
+                    color: powerMenu.opened ? "#000000" : root.battPct <= 20 ? "#eba0ac" : "white"
                 }
             }
 
@@ -499,8 +499,8 @@ PanelWindow {
                     width: 60
                     height: 22
                     radius: 8
-                    color: brightnessMenu.opened ? "white" : brightnessArea.containsMouse ? "#2a2a33" : "#141414"
-                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessMenu.opened ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
+                    color: brightnessMenu.opened ? "white" : brightnessArea.containsMouse ? "#1d1d26" : "#141414"
+                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessMenu.opened ? "#000000" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: brightnessArea
                         anchors.fill: parent
@@ -515,8 +515,8 @@ PanelWindow {
                     width: 62
                     height: 22
                     radius: 8
-                    color: volumeMenu.opened ? "white" : volumeArea.hov ? "#2a2a33" : "#141414"
-                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: volumeMenu.opened ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
+                    color: volumeMenu.opened ? "white" : volumeArea.hov ? "#1d1d26" : "#141414"
+                    Text { anchors.centerIn: parent; text: root.volumeMuted ? "\uf026" : "\uf028 " + Math.round(root.volumePct) + "%"; color: volumeMenu.opened ? "#000000" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: volumeArea
                         property bool hov: false
@@ -534,12 +534,12 @@ PanelWindow {
                     width: 32
                     height: 22
                     radius: 8
-                    color: controlCenter.opened ? "white" : ccArea.hov ? "#2a2a33" : "#141414"
+                    color: controlCenter.opened ? "white" : ccArea.hov ? "#1d1d26" : "#141414"
 
                     Text {
                         anchors.centerIn: parent
                         text: "\uf137"
-                        color: controlCenter.opened ? "#11111b" : "white"
+                        color: controlCenter.opened ? "#000000" : "white"
                         font.family: root.fontFamily
                         font.pixelSize: 13
                     }
@@ -560,12 +560,12 @@ PanelWindow {
                     width: 32
                     height: 22
                     radius: 8
-                    color: widgetMenu.opened ? "white" : menuBtnArea.hov ? "#2a2a33" : "#141414"
+                    color: widgetMenu.opened ? "white" : menuBtnArea.hov ? "#1d1d26" : "#141414"
 
                     Text {
                         anchors.centerIn: parent
                         text: "\uf009"
-                        color: widgetMenu.opened ? "#11111b" : "white"
+                        color: widgetMenu.opened ? "#000000" : "white"
                         font.family: root.fontFamily
                         font.pixelSize: 14
                     }
@@ -594,7 +594,7 @@ PanelWindow {
                 delegate: Rectangle {
                     id: workspaceBox
                     width: mouseArea.containsMouse ? 40 : modelData.focused ? 35 : 30
-                    color: modelData.focused ? "white" : mouseArea.containsMouse ? "#2a2a33" : "#141414"
+                    color: modelData.focused ? "white" : mouseArea.containsMouse ? "#1d1d26" : "#141414"
                     height: 19
                     radius: 8
 
@@ -603,7 +603,7 @@ PanelWindow {
                         text: modelData.id
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.horizontalCenter: parent.horizontalCenter
-                        color: modelData.focused ? "#11111b" : mouseArea.containsMouse ? "white" : "white"
+                        color: modelData.focused ? "#000000" : mouseArea.containsMouse ? "white" : "white"
                         font.family: root.fontFamily
                         font.pixelSize: 12
                     }
@@ -638,8 +638,8 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#0d0d12"
-                border.color: "#383847"
+                color: "#000000"
+                border.color: "#333"
                 border.width: 1
 
                 Column {
@@ -652,10 +652,10 @@ PanelWindow {
 
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
-                        color: syncCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        color: syncCcArea.containsMouse ? "#1d1d26" : "#141414"
                         Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
-                            Text { text: root.syncActive ? "\uf0c1" : "\uf127"; color: root.syncActive ? "white" : "#6c7086"; font.family: root.fontFamily; font.pixelSize: 13 }
-                            Text { text: "Syncthing"; color: root.syncActive ? "white" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                            Text { text: root.syncActive ? "\uf0c1" : "\uf127"; color: root.syncActive ? "white" : "#555"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: "Syncthing"; color: root.syncActive ? "white" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
                         MouseArea { id: syncCcArea; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
@@ -670,10 +670,10 @@ PanelWindow {
 
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
-                        color: kbdCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        color: kbdCcArea.containsMouse ? "#1d1d26" : "#141414"
                         Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
-                            Text { text: "\uf11c"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
-                            Text { text: root.kbLabels[root.kbIndex]; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11; font.bold: true }
+                            Text { text: "\uf11c"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: root.kbLabels[root.kbIndex]; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 11; font.bold: true }
                         }
                         MouseArea { id: kbdCcArea; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
@@ -686,10 +686,10 @@ PanelWindow {
 
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
-                        color: powerCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        color: powerCcArea.containsMouse ? "#1d1d26" : "#141414"
                         Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
                             Text { text: "\uf011"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13 }
-                            Text { text: "Energia"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                            Text { text: "Energia"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
                         MouseArea { id: powerCcArea; anchors.fill: parent; hoverEnabled: true
                             onClicked: { controlCenter.opened = false; powerMenu.pendingAction = ""; powerMenu.opened = true; }
@@ -698,10 +698,10 @@ PanelWindow {
 
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
-                        color: gameCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        color: gameCcArea.containsMouse ? "#1d1d26" : "#141414"
                         Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
-                            Text { text: "\uf11b"; color: root.gameArmed || root.gameModeActive ? "white" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
-                            Text { text: root.gameArmed ? "Jugando" : root.gameModeActive ? "Modo juego" : "Modo juegos"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                            Text { text: "\uf11b"; color: root.gameArmed || root.gameModeActive ? "white" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: root.gameArmed ? "Jugando" : root.gameModeActive ? "Modo juego" : "Modo juegos"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
                         MouseArea { id: gameCcArea; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
@@ -713,14 +713,14 @@ PanelWindow {
                         }
                     }
 
-                    Rectangle { width: parent.width; height: 1; color: "#383847" }
+                    Rectangle { width: parent.width; height: 1; color: "#333" }
 
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
-                        color: dashCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        color: dashCcArea.containsMouse ? "#1d1d26" : "#141414"
                         Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
                             Text { text: "\uf009"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13 }
-                            Text { text: "Dashboard"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                            Text { text: "Dashboard"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
                         MouseArea { id: dashCcArea; anchors.fill: parent; hoverEnabled: true
                             onClicked: { controlCenter.opened = false; widgetMenu.opened = true; }
@@ -760,8 +760,8 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#0d0d12"
-                border.color: "#383847"
+                color: "#000000"
+                border.color: "#333"
                 border.width: 1
             }
 
@@ -773,7 +773,7 @@ PanelWindow {
 
                 Text {
                     text: "ENERGÍA"
-                    color: "#9a9aa7"
+                    color: "#aaa"
                     font.family: root.fontFamily
                     font.pixelSize: 10
                     font.letterSpacing: 3
@@ -793,7 +793,7 @@ PanelWindow {
                     width: parent.width
                     height: 34
                     radius: 8
-                    color: profileHeaderArea.containsMouse || powerMenu.powerProfilesOpen ? "#2a2a33" : "#262633"
+                    color: profileHeaderArea.containsMouse || powerMenu.powerProfilesOpen ? "#000000" : "#000000"
 
                     RowLayout {
                         anchors.fill: parent
@@ -807,7 +807,7 @@ PanelWindow {
                         }
                         Text {
                             text: "PERFIL DE ENERGÍA"
-                            color: "#cdd6f4"
+                            color: "#aaa"
                             font.family: root.fontFamily
                             font.pixelSize: 9
                             font.bold: true
@@ -815,7 +815,7 @@ PanelWindow {
                         }
                         Text {
                             text: (root.powerProfile || "desconocido").toUpperCase() + "  \uf078"
-                            color: "#9a9aa7"
+                            color: "#aaa"
                             font.family: root.fontFamily
                             font.pixelSize: 8
                         }
@@ -841,7 +841,7 @@ PanelWindow {
                             width: parent.width
                             height: 30
                             radius: 7
-                            color: profileArea.containsMouse ? "#2a2a33" : root.powerProfile === modelData ? "#2a2a33" : "#1d1d26"
+                            color: profileArea.containsMouse ? "#000000" : root.powerProfile === modelData ? "#000000" : "#000000"
 
                             RowLayout {
                                 anchors.fill: parent
@@ -849,13 +849,13 @@ PanelWindow {
                                 anchors.rightMargin: 10
                                 Text {
                                     text: root.powerProfile === modelData ? "●" : "○"
-                                    color: root.powerProfile === modelData ? "white" : "#6c7086"
+                                    color: root.powerProfile === modelData ? "white" : "#555"
                                     font.family: root.fontFamily
                                     font.pixelSize: 10
                                 }
                                 Text {
                                     text: modelData === "power-saver" ? "AHORRO" : modelData === "balanced" ? "EQUILIBRADO" : "RENDIMIENTO"
-                                    color: "#cdd6f4"
+                                    color: "#aaa"
                                     font.family: root.fontFamily
                                     font.pixelSize: 9
                                     font.bold: true
@@ -863,7 +863,7 @@ PanelWindow {
                                 }
                                 Text {
                                     text: modelData
-                                    color: "#6c7086"
+                                    color: "#555"
                                     font.family: root.fontFamily
                                     font.pixelSize: 8
                                 }
@@ -890,12 +890,12 @@ PanelWindow {
                         width: powerCol.width
                         height: 34
                         radius: 8
-                        color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#eba0ac" : "white") : "#262633"
+                        color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#eba0ac" : "white") : "#000000"
 
                         Text {
                             anchors.centerIn: parent
                             text: modelData
-                            color: powerActionArea.containsMouse ? "#11111b" : "#cdd6f4"
+                            color: powerActionArea.containsMouse ? "#000000" : "#aaa"
                             font.family: root.fontFamily
                             font.pixelSize: 9
                             font.bold: true
@@ -921,11 +921,11 @@ PanelWindow {
                         width: (parent.width - 6) / 2
                         height: 34
                         radius: 8
-                        color: cancelPowerArea.containsMouse ? "#454554" : "#262633"
+                        color: cancelPowerArea.containsMouse ? "#222" : "#000000"
                         Text {
                             anchors.centerIn: parent
                             text: "CANCELAR"
-                            color: "#cdd6f4"
+                            color: "#aaa"
                             font.family: root.fontFamily
                             font.pixelSize: 9
                             font.bold: true
@@ -942,11 +942,11 @@ PanelWindow {
                         width: (parent.width - 6) / 2
                         height: 34
                         radius: 8
-                        color: confirmPowerArea.containsMouse ? "#eba0ac" : "#2a2a33"
+                        color: confirmPowerArea.containsMouse ? "#eba0ac" : "#000000"
                         Text {
                             anchors.centerIn: parent
                             text: "CONFIRMAR"
-                            color: confirmPowerArea.containsMouse ? "#11111b" : "white"
+                            color: confirmPowerArea.containsMouse ? "#000000" : "white"
                             font.family: root.fontFamily
                             font.pixelSize: 9
                             font.bold: true
@@ -968,18 +968,18 @@ PanelWindow {
                 Rectangle {
                     width: parent.width
                     height: 1
-                    color: "#30303b"
+                    color: "#333"
                 }
 
                 Rectangle {
                     width: parent.width
                     height: 26
                     radius: 7
-                    color: closePowerArea.containsMouse ? "#262633" : "transparent"
+                    color: closePowerArea.containsMouse ? "#000000" : "transparent"
                     Text {
                         anchors.centerIn: parent
                         text: "CERRAR MENÚ"
-                        color: "#8a8a99"
+                        color: "#888"
                         font.family: root.fontFamily
                         font.pixelSize: 9
                     }
@@ -1015,8 +1015,8 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#0d0d12"
-                border.color: "#383847"
+                color: "#000000"
+                border.color: "#333"
                 border.width: 1
                 Column {
                     anchors.fill: parent
@@ -1024,7 +1024,7 @@ PanelWindow {
                     spacing: 8
                     Text { text: "CENTRO DE TAREAS"; color: "white"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
                     Text { text: root.clockFull; color: "white"; font.family: root.fontFamily; font.pixelSize: 22; font.bold: true }
-                    Text { text: "Calendario, tareas y actividad aparecerán aquí"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 10; wrapMode: Text.WordWrap }
+                    Text { text: "Calendario, tareas y actividad aparecerán aquí"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 10; wrapMode: Text.WordWrap }
                 }
             }
         }
@@ -1045,8 +1045,8 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#0d0d12"
-                border.color: "#383847"
+                color: "#000000"
+                border.color: "#333"
                 border.width: 1
                 Column {
                     anchors.fill: parent
@@ -1058,7 +1058,7 @@ PanelWindow {
                         Item { Layout.fillWidth: true }
                         Text { text: ramText.text; color: "white"; font.family: root.fontFamily; font.pixelSize: 11 }
                     }
-                    Text { text: "10 PROCESOS CON MAYOR CONSUMO"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                    Text { text: "10 PROCESOS CON MAYOR CONSUMO"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
                     ListView {
                         width: parent.width
                         height: 220
@@ -1071,7 +1071,7 @@ PanelWindow {
                             width: parent ? parent.width : 0
                             height: 26
                             radius: 6
-                            color: "#1d1d26"
+                            color: "#000000"
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: 8
@@ -1081,7 +1081,7 @@ PanelWindow {
                             }
                         }
                     }
-                    Text { text: ramMenu.processes.count ? "Ordenados por RAM usada" : "Leyendo procesos..."; color: "#6c7086"; font.family: root.fontFamily; font.pixelSize: 9 }
+                    Text { text: ramMenu.processes.count ? "Ordenados por RAM usada" : "Leyendo procesos..."; color: "#555"; font.family: root.fontFamily; font.pixelSize: 9 }
                 }
             }
             Process {
@@ -1119,8 +1119,8 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 12
-                color: "#0d0d12"
-                border.color: "#383847"
+                color: "#000000"
+                border.color: "#333"
                 border.width: 1
                 Column {
                     id: briCol
@@ -1129,7 +1129,7 @@ PanelWindow {
                     spacing: 8
                     RowLayout {
                         width: parent.width
-                        Text { text: "BRILLO"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+                        Text { text: "BRILLO"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
                         Item { Layout.fillWidth: true }
                         Text { text: Math.round(root.brightnessPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 10 }
                     }
@@ -1140,8 +1140,8 @@ PanelWindow {
                             width: parent.width - 54
                             height: 26
                             radius: 8
-                            color: "#0d0d12"
-                            border.color: "#30303b"
+                            color: "#000000"
+                            border.color: "#333"
                             Rectangle {
                                 width: parent.width * Math.min(root.brightnessPct, 100) / 100
                                 height: parent.height
@@ -1184,7 +1184,7 @@ PanelWindow {
                             selectByMouse: true
                             inputMethodHints: Qt.ImhDigitsOnly
                             onAccepted: { brightnessAdjust.command = ["brightnessctl", "set", Math.max(0, Math.min(100, parseFloat(text) || 0)).toFixed(0) + "%" ]; brightnessAdjust.running = true; focus = false; }
-                            Rectangle { anchors.fill: parent; z: -1; radius: 7; color: "#0d0d12"; border.color: "#30303b" }
+                            Rectangle { anchors.fill: parent; z: -1; radius: 7; color: "#000000"; border.color: "#333" }
                         }
                     }
                 }
@@ -1217,8 +1217,8 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 12
-                color: "#0d0d12"
-                border.color: "#383847"
+                color: "#000000"
+                border.color: "#333"
                 border.width: 1
                 Column {
                     id: volCol
@@ -1227,7 +1227,7 @@ PanelWindow {
                     spacing: 8
                     RowLayout {
                         width: parent.width
-                        Text { text: "VOLUMEN"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+                        Text { text: "VOLUMEN"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
                         Item { Layout.fillWidth: true }
                         Text { text: root.volumeMuted ? "silenciado" : Math.round(root.volumePct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 10 }
                     }
@@ -1238,8 +1238,8 @@ PanelWindow {
                             width: parent.width - 54
                             height: 26
                             radius: 8
-                            color: "#0d0d12"
-                            border.color: "#30303b"
+                            color: "#000000"
+                            border.color: "#333"
                             Rectangle { width: parent.width * Math.min(root.volumePct, 100) / 100; height: parent.height; radius: 8; color: "white" }
                             MouseArea {
                                 anchors.fill: parent
@@ -1259,11 +1259,11 @@ PanelWindow {
                             selectByMouse: true
                             inputMethodHints: Qt.ImhDigitsOnly
                             onAccepted: { volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", Math.max(0, Math.min(100, parseFloat(text) || 0)).toFixed(0) + "%" ]; volumeAdjust.running = true; focus = false; }
-                            Rectangle { anchors.fill: parent; z: -1; radius: 7; color: "#0d0d12"; border.color: "#30303b" }
+                            Rectangle { anchors.fill: parent; z: -1; radius: 7; color: "#000000"; border.color: "#333" }
                         }
                     }
 
-                    Rectangle { width: parent.width; height: 1; color: "#30303b" }
+                    Rectangle { width: parent.width; height: 1; color: "#333" }
 
                     Row {
                         width: parent.width
@@ -1285,13 +1285,13 @@ PanelWindow {
                             width: 48
                             height: 26
                             radius: 7
-                            color: wallAudioToggleArea.containsMouse ? "white" : volumeMenu.wallpaperMuted ? "#262633" : "#2a2a33"
-                            border.color: "#30303b"
+                            color: wallAudioToggleArea.containsMouse ? "white" : volumeMenu.wallpaperMuted ? "#000000" : "#000000"
+                            border.color: "#333"
 
                             Text {
                                 anchors.centerIn: parent
                                 text: volumeMenu.wallpaperMuted ? "OFF" : "ON"
-                                color: wallAudioToggleArea.containsMouse ? "#11111b" : volumeMenu.wallpaperMuted ? "#cdd6f4" : "white"
+                                color: wallAudioToggleArea.containsMouse ? "#000000" : volumeMenu.wallpaperMuted ? "#aaa" : "white"
                                 font.family: root.fontFamily
                                 font.pixelSize: 10
                                 font.bold: true
@@ -1314,7 +1314,7 @@ PanelWindow {
 
                     Text {
                         text: "SALIDAS"
-                        color: "#9a9aa7"
+                        color: "#aaa"
                         font.family: root.fontFamily
                         font.pixelSize: 8
                         font.bold: true
@@ -1332,7 +1332,7 @@ PanelWindow {
                             width: parent.width
                             height: 22
                             radius: 6
-                            color: volSinkArea.containsMouse ? "#252532" : selected ? "#2a2a33" : "#14141b"
+                            color: volSinkArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
 
                             Text {
                                 anchors.left: parent.left
@@ -1358,7 +1358,7 @@ PanelWindow {
 
                     Text {
                         text: "ENTRADAS"
-                        color: "#9a9aa7"
+                        color: "#aaa"
                         font.family: root.fontFamily
                         font.pixelSize: 8
                         font.bold: true
@@ -1376,7 +1376,7 @@ PanelWindow {
                             width: parent.width
                             height: 22
                             radius: 6
-                            color: volSourceArea.containsMouse ? "#252532" : selected ? "#2a2a33" : "#14141b"
+                            color: volSourceArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
 
                             Text {
                                 anchors.left: parent.left
@@ -1576,8 +1576,8 @@ PanelWindow {
                     width: parent.width
                      height: cards.implicitHeight + 32
                      radius: 18
-                     color: "#0d0d12"
-                     border.color: "#383847"
+                     color: "#000000"
+                     border.color: "#333"
                      border.width: 1
                      visible: widgetMenu.monitorDetail === ""
                      opacity: widgetMenu.opened ? 1 : 0
@@ -1614,13 +1614,13 @@ PanelWindow {
                                          width: Math.max(84, sectionLabel.implicitWidth + 24)
                                          height: 32
                                          radius: 9
-                                         color: widgetMenu.activeSection === modelData.toLowerCase() ? "white" : sectionArea.containsMouse ? "#262633" : "#191922"
+                                         color: widgetMenu.activeSection === modelData.toLowerCase() ? "white" : sectionArea.containsMouse ? "#000000" : "#000000"
 
                                          Text {
                                              id: sectionLabel
                                              anchors.centerIn: parent
                                              text: modelData
-                                             color: widgetMenu.activeSection === modelData.toLowerCase() ? "#11111b" : "#a6adc8"
+                                             color: widgetMenu.activeSection === modelData.toLowerCase() ? "#000000" : "#aaa"
                                              font.family: root.fontFamily
                                              font.pixelSize: 9
                                              font.bold: true
@@ -1647,8 +1647,8 @@ PanelWindow {
                               width: parent.width
                               height: 64
                               radius: 14
-                              color: "#16161c"
-                              border.color: "#26262e"
+                              color: "#000000"
+                              border.color: "#333"
                               border.width: 1
                               visible: widgetMenu.activeSection === "monitoreo" || widgetMenu.activeSection === "pantallas"
                               property bool themeLight: false
@@ -1684,7 +1684,7 @@ PanelWindow {
 
                                           Text {
                                               text: "TEMA"
-                                              color: "#9a9aa7"
+                                              color: "#aaa"
                                               font.family: root.fontFamily
                                               font.pixelSize: 9
                                               font.letterSpacing: 1.5
@@ -1692,7 +1692,7 @@ PanelWindow {
 
                                           Text {
                                               text: themeCard.themeLight ? "Modo claro" : "Modo oscuro"
-                                              color: themeCard.themeLight ? "white" : "#a6adc8"
+                                              color: themeCard.themeLight ? "white" : "#aaa"
                                               font.family: root.fontFamily
                                               font.pixelSize: 14
                                           }
@@ -1702,14 +1702,14 @@ PanelWindow {
                                           width: 54
                                           height: 30
                                           radius: 9
-                                          color: themeToggleArea.containsMouse ? "white" : themeCard.themeLight ? "#2a2a33" : "#1e1e2e"
-                                          border.color: themeCard.themeLight ? "white" : "#313244"
+                                          color: themeToggleArea.containsMouse ? "white" : themeCard.themeLight ? "#000000" : "#000000"
+                                          border.color: themeCard.themeLight ? "white" : "#333"
                                           border.width: 1
 
                                           Text {
                                               anchors.centerIn: parent
                                               text: themeCard.themeLight ? "LIGHT" : "DARK"
-                                              color: themeToggleArea.containsMouse ? "#11111b" : themeCard.themeLight ? "white" : "#6c7086"
+                                              color: themeToggleArea.containsMouse ? "#000000" : themeCard.themeLight ? "white" : "#555"
                                               font.family: root.fontFamily
                                               font.pixelSize: 10
                                               font.bold: true
@@ -1753,8 +1753,8 @@ PanelWindow {
                               width: parent.width
                               height: ramProcessesOpen ? 96 + ramCard.processes.count * 16 : 84
                               radius: 14
-                              color: "#16161c"
-                              border.color: "#26262e"
+                              color: "#000000"
+                              border.color: "#333"
                               border.width: 1
                               visible: widgetMenu.activeSection === "monitoreo"
                               property double usedGiB: 0
@@ -1775,9 +1775,9 @@ RowLayout {
                                        Text { text: "RAM"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13; font.bold: true }
                                        Text { text: Math.round(ramCard.usedPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 20 }
                                        Item { Layout.fillWidth: true }
-                                       Text { text: ramCard.usedGiB.toFixed(1) + "G / " + ramCard.totGiB.toFixed(1) + "G"; color: "#a6adc8"; font.family: root.fontFamily; font.pixelSize: 10 }
+                                       Text { text: ramCard.usedGiB.toFixed(1) + "G / " + ramCard.totGiB.toFixed(1) + "G"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 10 }
                                   }
-                                   Rectangle { width: parent.width; height: 5; radius: 3; color: "#2a2a33"; Rectangle { width: parent.width * ramCard.usedPct / 100; height: parent.height; radius: 3; color: ramCard.usedPct > 90 ? "#eba0ac" : "white" } }
+                                   Rectangle { width: parent.width; height: 5; radius: 3; color: "#000000"; Rectangle { width: parent.width * ramCard.usedPct / 100; height: parent.height; radius: 3; color: ramCard.usedPct > 90 ? "#eba0ac" : "white" } }
                                   Column {
                                       id: ramProcesses
                                       width: parent.width
@@ -1987,8 +1987,8 @@ RowLayout {
                               width: parent.width
                               height: audioDetailsOpen ? audioDetails.y + audioDetails.implicitHeight + 12 : 70
                               radius: 12
-                              color: "#16161c"
-                              border.color: "#26262e"
+                              color: "#000000"
+                              border.color: "#333"
                               border.width: 1
                               visible: widgetMenu.activeSection === "dispositivos"
 
@@ -2037,7 +2037,7 @@ RowLayout {
                                       Layout.fillWidth: true
                                       Text {
                                           text: "DISPOSITIVOS"
-                                          color: "#9a9aa7"
+                                          color: "#aaa"
                                           font.family: root.fontFamily
                                           font.pixelSize: 9
                                           font.letterSpacing: 1.5
@@ -2052,7 +2052,7 @@ RowLayout {
 
                                   Text {
                                       text: "\uf078"
-                                      color: "#9a9aa7"
+                                      color: "#aaa"
                                       font.family: root.fontFamily
                                       font.pixelSize: 12
                                   }
@@ -2076,7 +2076,7 @@ RowLayout {
 
                                   Text {
                                       text: "CÁMARAS"
-                                      color: "#9a9aa7"
+                                      color: "#aaa"
                                       font.family: root.fontFamily
                                       font.pixelSize: 9
                                       font.bold: true
@@ -2091,7 +2091,7 @@ RowLayout {
                                           width: audioDetails.width
                                           height: 34
                                           radius: 8
-                                          color: "#1d1d26"
+                                          color: "#000000"
                                           Text {
                                               anchors.left: parent.left
                                               anchors.leftMargin: 10
@@ -2109,7 +2109,7 @@ RowLayout {
 
                                   Text {
                                       text: "SALIDAS"
-                                      color: "#9a9aa7"
+                                      color: "#aaa"
                                       font.family: root.fontFamily
                                       font.pixelSize: 9
                                       font.bold: true
@@ -2125,7 +2125,7 @@ RowLayout {
                                           width: audioDetails.width
                                           height: 34
                                           radius: 8
-                                          color: audioDeviceArea.containsMouse ? "#252532" : selected ? "#2a2a33" : "#1d1d26"
+                                          color: audioDeviceArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
                                           Text {
                                               anchors.left: parent.left
                                               anchors.leftMargin: 10
@@ -2149,7 +2149,7 @@ RowLayout {
 
                                   Text {
                                       text: "ENTRADAS"
-                                      color: "#9a9aa7"
+                                      color: "#aaa"
                                       font.family: root.fontFamily
                                       font.pixelSize: 9
                                       font.bold: true
@@ -2165,7 +2165,7 @@ RowLayout {
                                           width: audioDetails.width
                                           height: 34
                                           radius: 8
-                                          color: audioInputArea.containsMouse ? "#252532" : selected ? "#2a2a33" : "#1d1d26"
+                                          color: audioInputArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
                                           Text {
                                               anchors.left: parent.left
                                               anchors.leftMargin: 10
@@ -2189,7 +2189,7 @@ RowLayout {
 
                                   Text {
                                       text: audioCard.audioMessage || "Selecciona dispositivo predeterminado"
-                                      color: "#9a9aa7"
+                                      color: "#aaa"
                                       font.family: root.fontFamily
                                       font.pixelSize: 10
                                       elide: Text.ElideRight
@@ -2240,8 +2240,8 @@ RowLayout {
                                width: parent.width
                                height: 360
                                radius: 12
-                               color: "#16161c"
-                               border.color: "#26262e"
+                               color: "#000000"
+                               border.color: "#333"
                                border.width: 1
                                visible: widgetMenu.activeSection === "pantallas"
                                property var monitors: ListModel {}
@@ -2281,7 +2281,7 @@ RowLayout {
                                    anchors.fill: parent
                                    anchors.margins: 14
                                    spacing: 9
-                                   Text { text: "PANTALLAS"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+                                   Text { text: "PANTALLAS"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
                                    Text { text: "Configura cómo usar cada monitor conectado"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13 }
                                    ListView {
                                        width: parent.width
@@ -2298,11 +2298,11 @@ RowLayout {
                                            width: parent ? parent.width : 0
                                            height: 48
                                            radius: 8
-                                           color: "#1d1d26"
+                                           color: "#000000"
                                            Column {
                                                anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 2
                                                Text { text: name; color: "white"; font.family: root.fontFamily; font.pixelSize: 11 }
-                                               Text { text: description; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; width: 390 }
+                                               Text { text: description; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; width: 390 }
                                            }
                                        }
                                    }
@@ -2313,27 +2313,27 @@ RowLayout {
                                            delegate: Rectangle {
                                                required property string modelData
                                                Layout.fillWidth: true; height: 32; radius: 7
-                                                color: screenModeArea.containsMouse ? "white" : "#262633"
-                                                Text { anchors.centerIn: parent; text: modelData; color: screenModeArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                                color: screenModeArea.containsMouse ? "white" : "#000000"
+                                                Text { anchors.centerIn: parent; text: modelData; color: screenModeArea.containsMouse ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
                                                MouseArea { id: screenModeArea; anchors.fill: parent; hoverEnabled: true; onClicked: { if (screenCard.monitors.count) screenCard.apply(screenCard.monitors.get(screenCard.monitors.count - 1).name, modelData === "DUPLICAR" ? "duplicate" : modelData === "AMPLIAR" ? "extend" : modelData === "SOLO 2ª" ? "second" : "only"); } }
                                            }
                                        }
                                    }
                                    RowLayout {
                                        width: parent.width; spacing: 5
-                                       Text { text: "POSICIÓN"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                                       Text { text: "POSICIÓN"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
                                        Item { Layout.fillWidth: true }
                                        Repeater {
                                            model: [["←", "left"], ["→", "right"], ["↑", "up"], ["↓", "down"]]
                                            delegate: Rectangle {
                                                required property var modelData
-                                                width: 30; height: 28; radius: 7; color: positionArea.containsMouse ? "white" : "#262633"
-                                                Text { anchors.centerIn: parent; text: modelData[0]; color: positionArea.containsMouse ? "#11111b" : "#cdd6f4"; font.pixelSize: 14 }
+                                                width: 30; height: 28; radius: 7; color: positionArea.containsMouse ? "white" : "#000000"
+                                                Text { anchors.centerIn: parent; text: modelData[0]; color: positionArea.containsMouse ? "#000000" : "#aaa"; font.pixelSize: 14 }
                                                MouseArea { id: positionArea; anchors.fill: parent; hoverEnabled: true; onClicked: { if (screenCard.monitors.count) screenCard.apply(screenCard.monitors.get(screenCard.monitors.count - 1).name, modelData[1]); } }
                                            }
                                        }
                                    }
-                                   Text { text: screenCard.screenMessage || "Selecciona modo o mueve pantalla en pasos de 100 px"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
+                                   Text { text: screenCard.screenMessage || "Selecciona modo o mueve pantalla en pasos de 100 px"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
                                }
 
                                Process {
@@ -2359,8 +2359,8 @@ RowLayout {
                              width: parent.width
                              height: wifiDetailsOpen ? 70 + wifiDetails.implicitHeight + 12 : 70
                               radius: 12
-                              color: "#16161c"
-                               border.color: wifiCard.wifiState === "failed" ? "#eba0ac" : "#26262e"
+                              color: "#000000"
+                               border.color: wifiCard.wifiState === "failed" ? "#eba0ac" : "#333"
                               border.width: 1
                               visible: widgetMenu.activeSection === "conexiones"
 
@@ -2485,7 +2485,7 @@ RowLayout {
 
                                 Text {
                                     text: wifiCard.wifiOn ? "\uf1eb" : "\uf127"
-                                    color: wifiCard.wifiState === "connected" ? "white" : wifiCard.wifiState === "connecting" ? "white" : wifiCard.wifiState === "failed" ? "#eba0ac" : wifiCard.wifiOn ? "white" : "#6c7086"
+                                    color: wifiCard.wifiState === "connected" ? "white" : wifiCard.wifiState === "connecting" ? "white" : wifiCard.wifiState === "failed" ? "#eba0ac" : wifiCard.wifiOn ? "white" : "#555"
                                     font.family: root.fontFamily
                                      font.pixelSize: 24
                                     Layout.preferredWidth: 28
@@ -2496,7 +2496,7 @@ RowLayout {
 
                                     Text {
                                         text: "WI-FI"
-                                        color: "#9a9aa7"
+                                        color: "#aaa"
                                         font.family: root.fontFamily
                                         font.pixelSize: 9
                                         font.letterSpacing: 1.5
@@ -2549,12 +2549,12 @@ RowLayout {
                                     width: 48
                                      height: 30
                                      radius: 9
-                                    color: wifiToggleArea.containsMouse ? "white" : "#262633"
+                                    color: wifiToggleArea.containsMouse ? "white" : "#000000"
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: wifiCard.wifiOn ? "ON" : "OFF"
-                                        color: wifiToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        color: wifiToggleArea.containsMouse ? "#000000" : "#aaa"
                                         font.family: root.fontFamily
                                         font.pixelSize: 10
                                         font.bold: true
@@ -2614,15 +2614,15 @@ RowLayout {
                                             anchors.fill: parent
                                             z: -1
                                              radius: 8
-                                            color: "#0d0d12"
-                                            border.color: "#30303b"
+                                            color: "#000000"
+                                            border.color: "#333"
                                         }
                                         Text {
                                             anchors.left: parent.left
                                             anchors.leftMargin: 7
                                             anchors.verticalCenter: parent.verticalCenter
                                             text: "Contraseña"
-                                            color: "#6c7086"
+                                            color: "#555"
                                             font.family: root.fontFamily
                                             font.pixelSize: 11
                                             visible: !wifiPasswordInput.text
@@ -2633,11 +2633,11 @@ RowLayout {
                                          width: 96
                                          height: 34
                                          radius: 8
-                                        color: wifiRefreshArea.containsMouse ? "white" : "#262633"
+                                        color: wifiRefreshArea.containsMouse ? "white" : "#000000"
                                         Text {
                                             anchors.centerIn: parent
                                             text: "ESCANEAR"
-                                            color: wifiRefreshArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                            color: wifiRefreshArea.containsMouse ? "#000000" : "#aaa"
                                             font.family: root.fontFamily
                                             font.pixelSize: 9
                                             font.bold: true
@@ -2657,11 +2657,11 @@ RowLayout {
                                        width: parent.width
                                      height: 32
                                      radius: 8
-                                     color: wifiCard.wifiAdvancedOpen ? "white" : wifiAdvancedArea.containsMouse ? "#262633" : "#1d1d26"
+                                     color: wifiCard.wifiAdvancedOpen ? "white" : wifiAdvancedArea.containsMouse ? "#000000" : "#000000"
                                      Text {
                                          anchors.centerIn: parent
                                           text: wifiCard.wifiAdvancedOpen ? "OCULTAR CONFIGURACIÓN EMPRESARIAL" : "CONFIGURACIÓN EMPRESARIAL (802.1X)"
-                                         color: wifiCard.wifiAdvancedOpen ? "#11111b" : "#cdd6f4"
+                                         color: wifiCard.wifiAdvancedOpen ? "#000000" : "#aaa"
                                          font.family: root.fontFamily
                                          font.pixelSize: 9
                                          font.bold: true
@@ -2681,7 +2681,7 @@ RowLayout {
 
                                       Text {
                                           text: "RED UNIVERSITARIA O DE EMPRESA"
-                                          color: "#9a9aa7"
+                                          color: "#aaa"
                                           font.family: root.fontFamily
                                           font.pixelSize: 9
                                           font.bold: true
@@ -2690,7 +2690,7 @@ RowLayout {
                                       Text {
                                           width: parent.width
                                           text: "Usa esta opción solo si la red pide usuario además de contraseña."
-                                          color: "#6c7086"
+                                          color: "#555"
                                           font.family: root.fontFamily
                                           font.pixelSize: 9
                                           wrapMode: Text.WordWrap
@@ -2708,8 +2708,8 @@ RowLayout {
                                              font.pixelSize: 10
                                              padding: 7
                                              onTextChanged: wifiCard.wifiIdentity = text
-                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Usuario / identidad"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Usuario / identidad"; color: "#555"; font: parent.font; visible: !parent.text }
                                          }
                                          TextInput {
                                              Layout.fillWidth: true
@@ -2720,8 +2720,8 @@ RowLayout {
                                              font.pixelSize: 10
                                              padding: 7
                                              onTextChanged: wifiCard.wifiEap = text
-                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                             Text { anchors.fill: parent; anchors.margins: 7; text: "EAP: peap / tls"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "EAP: peap / tls"; color: "#555"; font: parent.font; visible: !parent.text }
                                          }
                                      }
 
@@ -2737,8 +2737,8 @@ RowLayout {
                                              font.pixelSize: 10
                                              padding: 7
                                              onTextChanged: wifiCard.wifiPhase2 = text
-                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Fase 2: mschapv2"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Fase 2: mschapv2"; color: "#555"; font: parent.font; visible: !parent.text }
                                          }
                                          TextInput {
                                              Layout.fillWidth: true
@@ -2749,8 +2749,8 @@ RowLayout {
                                              font.pixelSize: 10
                                              padding: 7
                                              onTextChanged: wifiCard.wifiAnonymousIdentity = text
-                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Identidad anónima (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Identidad anónima (opcional)"; color: "#555"; font: parent.font; visible: !parent.text }
                                          }
                                      }
 
@@ -2766,8 +2766,8 @@ RowLayout {
                                              font.pixelSize: 10
                                              padding: 7
                                              onTextChanged: wifiCard.wifiCaCert = text
-                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado CA (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                             Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado CA (opcional)"; color: "#555"; font: parent.font; visible: !parent.text }
                                          }
                                          TextInput {
                                              Layout.fillWidth: true
@@ -2778,8 +2778,8 @@ RowLayout {
                                              font.pixelSize: 10
                                              padding: 7
                                              onTextChanged: wifiCard.wifiDomain = text
-                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                             Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#555"; font: parent.font; visible: !parent.text }
                                           }
                                       }
 
@@ -2795,8 +2795,8 @@ RowLayout {
                                               font.pixelSize: 10
                                               padding: 7
                                               onTextChanged: wifiCard.wifiClientCert = text
-                                              Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado cliente (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                              Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado cliente (EAP-TLS)"; color: "#555"; font: parent.font; visible: !parent.text }
                                           }
                                           TextInput {
                                               Layout.fillWidth: true
@@ -2807,8 +2807,8 @@ RowLayout {
                                               font.pixelSize: 10
                                               padding: 7
                                               onTextChanged: wifiCard.wifiClientKey = text
-                                              Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Clave privada (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                              Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                              Text { anchors.fill: parent; anchors.margins: 7; text: "Clave privada (EAP-TLS)"; color: "#555"; font: parent.font; visible: !parent.text }
                                           }
                                        }
                                    }
@@ -2818,7 +2818,7 @@ RowLayout {
                                       spacing: 6
                                       Text {
                                           text: wifiCard.wifiNetworks.count ? "REDES DISPONIBLES" : wifiCard.wifiMessage
-                                          color: "#9a9aa7"
+                                          color: "#aaa"
                                           font.family: root.fontFamily
                                           font.pixelSize: 9
                                           font.bold: true
@@ -2829,8 +2829,8 @@ RowLayout {
                                           width: 86
                                           height: 28
                                           radius: 7
-                                          color: wifiScanArea.containsMouse ? "white" : "#262633"
-                                          Text { anchors.centerIn: parent; text: "ESCANEAR"; color: wifiScanArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                          color: wifiScanArea.containsMouse ? "white" : "#000000"
+                                          Text { anchors.centerIn: parent; text: "ESCANEAR"; color: wifiScanArea.containsMouse ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
                                           MouseArea { id: wifiScanArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.refreshNetworks() }
                                       }
                                   }
@@ -2850,7 +2850,7 @@ RowLayout {
                                          width: wifiDetails.width
                                           height: expanded ? 34 + networkDetails.implicitHeight + 10 : 34
                                           radius: 7
-                                         color: wifiNetworkArea.containsMouse ? "#252532" : "#1d1d26"
+                                         color: wifiNetworkArea.containsMouse ? "#000000" : "#000000"
                                          RowLayout {
                                              anchors.left: parent.left
                                              anchors.right: parent.right
@@ -2868,7 +2868,7 @@ RowLayout {
                                             }
                                             Text {
                                                 text: security
-                                                color: "#9a9aa7"
+                                                color: "#aaa"
                                                 font.family: root.fontFamily
                                                 font.pixelSize: 9
                                             }
@@ -2912,15 +2912,15 @@ RowLayout {
                                                      echoMode: TextInput.Password
                                                      padding: 7
                                                      onTextChanged: wifiCard.wifiPassword = text
-                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Contraseña"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Contraseña"; color: "#555"; font: parent.font; visible: !parent.text }
                                                  }
                                                  Rectangle {
                                                      width: 84
                                                      height: 32
                                                      radius: 8
-                                                     color: wifiCard.wifiAdvancedOpen ? "white" : networkAdvancedArea.containsMouse ? "#262633" : "#1d1d26"
-                                                     Text { anchors.centerIn: parent; text: "AVANZADO"; color: wifiCard.wifiAdvancedOpen ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                                     color: wifiCard.wifiAdvancedOpen ? "white" : networkAdvancedArea.containsMouse ? "#000000" : "#000000"
+                                                     Text { anchors.centerIn: parent; text: "AVANZADO"; color: wifiCard.wifiAdvancedOpen ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
                                                      MouseArea { id: networkAdvancedArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.wifiAdvancedOpen = !wifiCard.wifiAdvancedOpen }
                                                  }
                                              }
@@ -2929,58 +2929,58 @@ RowLayout {
                                                  width: parent.width
                                                  spacing: 6
                                                  visible: wifiCard.wifiAdvancedOpen
-                                                 Text { text: "RED EMPRESARIAL / 802.1X"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
+                                                 Text { text: "RED EMPRESARIAL / 802.1X"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
                                                  RowLayout {
                                                      width: parent.width
                                                      spacing: 6
                                                      TextInput {
                                                          Layout.fillWidth: true; height: 32; color: "white"; text: wifiCard.wifiIdentity; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                          onTextChanged: wifiCard.wifiIdentity = text
-                                                         Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                         Text { anchors.fill: parent; anchors.margins: 7; text: "Usuario / identidad"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                         Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                         Text { anchors.fill: parent; anchors.margins: 7; text: "Usuario / identidad"; color: "#555"; font: parent.font; visible: !parent.text }
                                                      }
                                                      TextInput {
                                                          Layout.fillWidth: true; height: 32; color: "white"; text: wifiCard.wifiEap; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                          onTextChanged: wifiCard.wifiEap = text
-                                                         Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                         Text { anchors.fill: parent; anchors.margins: 7; text: "EAP: peap / tls"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                         Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                         Text { anchors.fill: parent; anchors.margins: 7; text: "EAP: peap / tls"; color: "#555"; font: parent.font; visible: !parent.text }
                                                      }
                                                  }
                                                  TextInput {
                                                      width: parent.width; height: 32; color: "white"; text: wifiCard.wifiPhase2; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                      onTextChanged: wifiCard.wifiPhase2 = text
-                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Fase 2: mschapv2"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Fase 2: mschapv2"; color: "#555"; font: parent.font; visible: !parent.text }
                                                  }
                                                  TextInput {
                                                      width: parent.width; height: 32; color: "white"; text: wifiCard.wifiAnonymousIdentity; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                      onTextChanged: wifiCard.wifiAnonymousIdentity = text
-                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Identidad anónima (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Identidad anónima (opcional)"; color: "#555"; font: parent.font; visible: !parent.text }
                                                  }
                                                  TextInput {
                                                      width: parent.width; height: 32; color: "white"; text: wifiCard.wifiCaCert; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                      onTextChanged: wifiCard.wifiCaCert = text
-                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado CA (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado CA (opcional)"; color: "#555"; font: parent.font; visible: !parent.text }
                                                  }
                                                  TextInput {
                                                      width: parent.width; height: 32; color: "white"; text: wifiCard.wifiDomain; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                      onTextChanged: wifiCard.wifiDomain = text
-                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Dominio (opcional)"; color: "#555"; font: parent.font; visible: !parent.text }
                                                  }
                                                  TextInput {
                                                      width: parent.width; height: 32; color: "white"; text: wifiCard.wifiClientCert; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                      onTextChanged: wifiCard.wifiClientCert = text
-                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado cliente (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Certificado cliente (EAP-TLS)"; color: "#555"; font: parent.font; visible: !parent.text }
                                                  }
                                                  TextInput {
                                                      width: parent.width; height: 32; color: "white"; text: wifiCard.wifiClientKey; font.family: root.fontFamily; font.pixelSize: 10; padding: 7
                                                      onTextChanged: wifiCard.wifiClientKey = text
-                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#0d0d12"; border.color: "#30303b" }
-                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Clave privada (EAP-TLS)"; color: "#6c7086"; font: parent.font; visible: !parent.text }
+                                                     Rectangle { anchors.fill: parent; z: -1; radius: 8; color: "#000000"; border.color: "#333" }
+                                                     Text { anchors.fill: parent; anchors.margins: 7; text: "Clave privada (EAP-TLS)"; color: "#555"; font: parent.font; visible: !parent.text }
                                                  }
                                              }
 
@@ -2988,8 +2988,8 @@ RowLayout {
                                                  width: parent.width
                                                  height: 34
                                                  radius: 8
-                                                  color: wifiCard.wifiState === "connecting" ? "#1d1d26" : networkConnectArea.containsMouse ? "white" : "#262633"
-                                                 Text { anchors.centerIn: parent; text: wifiCard.wifiState === "connecting" ? "CONECTANDO…" : "CONECTAR"; color: wifiCard.wifiState === "connecting" ? "#6c7086" : networkConnectArea.containsMouse ? "#11111b" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
+                                                  color: wifiCard.wifiState === "connecting" ? "#000000" : networkConnectArea.containsMouse ? "white" : "#000000"
+                                                 Text { anchors.centerIn: parent; text: wifiCard.wifiState === "connecting" ? "CONECTANDO…" : "CONECTAR"; color: wifiCard.wifiState === "connecting" ? "#555" : networkConnectArea.containsMouse ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
                                                  MouseArea { id: networkConnectArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.connectNetwork(ssid) }
                                              }
                                          }
@@ -2999,7 +2999,7 @@ RowLayout {
                                 Text {
                                     width: parent.width
                                     text: wifiCard.wifiNetworks.count ? wifiCard.wifiMessage : (wifiCard.wifiMessage || "Buscando redes...")
-                                    color: wifiCard.wifiState === "failed" ? "#eba0ac" : wifiCard.wifiState === "connecting" ? "white" : "#9a9aa7"
+                                    color: wifiCard.wifiState === "failed" ? "#eba0ac" : wifiCard.wifiState === "connecting" ? "white" : "#aaa"
                                     font.family: root.fontFamily
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
@@ -3011,11 +3011,11 @@ RowLayout {
                                       width: parent.width
                                     height: 34
                                     radius: 8
-                                    color: wifiCard.wifiState === "connecting" ? "#1d1d26" : wifiConnectArea.containsMouse ? "white" : "#262633"
+                                    color: wifiCard.wifiState === "connecting" ? "#000000" : wifiConnectArea.containsMouse ? "white" : "#000000"
                                     Text {
                                         anchors.centerIn: parent
                                         text: wifiCard.wifiState === "connecting" ? "CONECTANDO…" : "CONECTAR" + (wifiCard.selectedSsid ? " · " + wifiCard.selectedSsid : "")
-                                        color: wifiCard.wifiState === "connecting" ? "#6c7086" : wifiConnectArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        color: wifiCard.wifiState === "connecting" ? "#555" : wifiConnectArea.containsMouse ? "#000000" : "#aaa"
                                         font.family: root.fontFamily
                                         font.pixelSize: 9
                                         font.bold: true
@@ -3149,8 +3149,8 @@ RowLayout {
                             width: parent.width
                             height: btDetailsOpen ? 70 + btDetails.implicitHeight + 12 : 70
                             radius: 12
-                            color: "#16161c"
-                            border.color: "#26262e"
+                            color: "#000000"
+                            border.color: "#333"
                              border.width: 1
                              visible: widgetMenu.activeSection === "conexiones"
 
@@ -3194,7 +3194,7 @@ RowLayout {
 
                                 Text {
                                     text: "\uf294"
-                                    color: bluetoothCard.btOn ? "white" : "#6c7086"
+                                    color: bluetoothCard.btOn ? "white" : "#555"
                                     font.family: root.fontFamily
                                      font.pixelSize: 24
                                     Layout.preferredWidth: 28
@@ -3205,7 +3205,7 @@ RowLayout {
 
                                     Text {
                                         text: "BLUETOOTH"
-                                        color: "#9a9aa7"
+                                        color: "#aaa"
                                         font.family: root.fontFamily
                                         font.pixelSize: 9
                                         font.letterSpacing: 1.5
@@ -3233,12 +3233,12 @@ RowLayout {
                                     width: 48
                                     height: 30
                                     radius: 9
-                                    color: btToggleArea.containsMouse ? "white" : "#262633"
+                                    color: btToggleArea.containsMouse ? "white" : "#000000"
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: bluetoothCard.btOn ? "ON" : "OFF"
-                                        color: btToggleArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        color: btToggleArea.containsMouse ? "#000000" : "#aaa"
                                         font.family: root.fontFamily
                                         font.pixelSize: 10
                                         font.bold: true
@@ -3280,11 +3280,11 @@ RowLayout {
                                     width: parent.width
                                      height: 34
                                      radius: 8
-                                    color: btRefreshArea.containsMouse ? "white" : "#262633"
+                                    color: btRefreshArea.containsMouse ? "white" : "#000000"
                                     Text {
                                         anchors.centerIn: parent
                                         text: "ESCANEAR BLUETOOTH"
-                                        color: btRefreshArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                        color: btRefreshArea.containsMouse ? "#000000" : "#aaa"
                                         font.family: root.fontFamily
                                         font.pixelSize: 9
                                         font.bold: true
@@ -3310,7 +3310,7 @@ RowLayout {
                                         width: btDetails.width
                                          height: 54
                                          radius: 7
-                                        color: btDeviceArea.containsMouse ? "#252532" : "#1d1d26"
+                                        color: btDeviceArea.containsMouse ? "#000000" : "#000000"
                                         Column {
                                             anchors.left: parent.left
                                             anchors.leftMargin: 8
@@ -3326,7 +3326,7 @@ RowLayout {
                                             }
                                             Text {
                                                 text: mac
-                                                color: "#9a9aa7"
+                                                color: "#aaa"
                                                 font.family: root.fontFamily
                                                 font.pixelSize: 9
                                             }
@@ -3353,11 +3353,11 @@ RowLayout {
                                             Layout.fillWidth: true
                                     height: 34
                                     radius: 8
-                                            color: btActionArea.containsMouse ? "white" : "#262633"
+                                            color: btActionArea.containsMouse ? "white" : "#000000"
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: modelData
-                                                color: btActionArea.containsMouse ? "#11111b" : "#cdd6f4"
+                                                color: btActionArea.containsMouse ? "#000000" : "#aaa"
                                                 font.family: root.fontFamily
                                                 font.pixelSize: 9
                                                 font.bold: true
@@ -3383,7 +3383,7 @@ RowLayout {
                                 Text {
                                     width: parent.width
                                     text: bluetoothCard.btDevices.count ? bluetoothCard.btMessage : (bluetoothCard.btMessage || "Buscando dispositivos...")
-                                    color: "#9a9aa7"
+                                    color: "#aaa"
                                     font.family: root.fontFamily
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
@@ -3483,8 +3483,8 @@ RowLayout {
                                 width: parent.width
                                 implicitHeight: columnContent.implicitHeight + 24
                                 radius: 12
-                            color: "#16161c"
-                            border.color: "#26262e"
+                            color: "#000000"
+                            border.color: "#333"
                             border.width: 1
                             visible: widgetMenu.activeSection === "notificaciones"
                             property bool soundOn: true
@@ -3540,7 +3540,7 @@ RowLayout {
 
                                     Text {
                                         text: "\uf0f3"
-                                        color: notifCard.soundOn ? "white" : "#a6adc8"
+                                        color: notifCard.soundOn ? "white" : "#aaa"
                                         font.family: root.fontFamily
                                         font.pixelSize: 22
                                         Layout.preferredWidth: 28
@@ -3552,7 +3552,7 @@ RowLayout {
 
                                         Text {
                                             text: "SONIDO"
-                                            color: "#9a9aa7"
+                                            color: "#aaa"
                                             font.family: root.fontFamily
                                             font.pixelSize: 9
                                             font.letterSpacing: 1.5
@@ -3560,7 +3560,7 @@ RowLayout {
 
                                         Text {
                                             text: notifCard.soundOn ? "Sonido activado" : "Sonido silenciado"
-                                            color: notifCard.soundOn ? "white" : "#a6adc8"
+                                            color: notifCard.soundOn ? "white" : "#aaa"
                                             font.family: root.fontFamily
                                             font.pixelSize: 14
                                         }
@@ -3570,14 +3570,14 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: soundToggleArea.containsMouse ? "white" : notifCard.soundOn ? "#2a2a33" : "#1e1e2e"
-                                        border.color: notifCard.soundOn ? "white" : "#313244"
+                                        color: soundToggleArea.containsMouse ? "white" : notifCard.soundOn ? "#000000" : "#000000"
+                                        border.color: notifCard.soundOn ? "white" : "#333"
                                         border.width: 1
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: notifCard.soundOn ? "ON" : "OFF"
-                                            color: soundToggleArea.containsMouse ? "#11111b" : notifCard.soundOn ? "white" : "#6c7086"
+                                            color: soundToggleArea.containsMouse ? "#000000" : notifCard.soundOn ? "white" : "#555"
                                             font.family: root.fontFamily
                                             font.pixelSize: 10
                                             font.bold: true
@@ -3601,7 +3601,7 @@ RowLayout {
 
                                     Text {
                                         text: "\uf130"
-                                        color: notifCard.voiceOn ? "white" : "#7f849c"
+                                        color: notifCard.voiceOn ? "white" : "#888"
                                         font.family: root.fontFamily
                                         font.pixelSize: 20
                                         Layout.preferredWidth: 28
@@ -3613,7 +3613,7 @@ RowLayout {
 
                                         Text {
                                             text: "VOZ DEL RESUMEN"
-                                            color: "#9a9aa7"
+                                            color: "#aaa"
                                             font.family: root.fontFamily
                                             font.pixelSize: 9
                                             font.letterSpacing: 1.5
@@ -3621,7 +3621,7 @@ RowLayout {
 
                                         Text {
                                             text: notifCard.voiceOn ? "Habla el resumen al terminar" : "Voz desactivada"
-                                            color: notifCard.voiceOn ? "white" : "#a6adc8"
+                                            color: notifCard.voiceOn ? "white" : "#aaa"
                                             font.family: root.fontFamily
                                             font.pixelSize: 14
                                         }
@@ -3631,14 +3631,14 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: voiceToggleArea.containsMouse ? "white" : notifCard.voiceOn ? "#2a2a33" : "#1e1e2e"
-                                        border.color: notifCard.voiceOn ? "white" : "#313244"
+                                        color: voiceToggleArea.containsMouse ? "white" : notifCard.voiceOn ? "#000000" : "#000000"
+                                        border.color: notifCard.voiceOn ? "white" : "#333"
                                         border.width: 1
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: notifCard.voiceOn ? "ON" : "OFF"
-                                            color: voiceToggleArea.containsMouse ? "#11111b" : notifCard.voiceOn ? "white" : "#6c7086"
+                                            color: voiceToggleArea.containsMouse ? "#000000" : notifCard.voiceOn ? "white" : "#555"
                                             font.family: root.fontFamily
                                             font.pixelSize: 10
                                             font.bold: true
@@ -3665,7 +3665,7 @@ RowLayout {
                                         Layout.fillWidth: true
                                         height: 34
                                         radius: 8
-                                        color: soundTestArea.containsMouse ? "#44475a" : "#262633"
+                                        color: soundTestArea.containsMouse ? "#222" : "#000000"
 
                                         Text {
                                             anchors.centerIn: parent
@@ -3708,7 +3708,7 @@ RowLayout {
                         Text {
                             anchors.centerIn: parent
                             text: "\uf00d"
-                            color: closeArea.containsMouse ? "#11111b" : "#8a8a99"
+                            color: closeArea.containsMouse ? "#000000" : "#888"
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
                         }
@@ -3726,8 +3726,8 @@ RowLayout {
                     width: parent.width
                     implicitHeight: detailCol.implicitHeight + 32
                     radius: 18
-                    color: "#0d0d12"
-                    border.color: "#383847"
+                    color: "#000000"
+                    border.color: "#333"
                     border.width: 1
                     visible: widgetMenu.monitorDetail !== ""
                     opacity: widgetMenu.monitorDetail !== "" ? 1 : 0
@@ -3761,7 +3761,7 @@ RowLayout {
                         Text {
                             width: parent.width
                             text: widgetMenu.monitorDetail === "cpu" ? "Procesador, temperatura y uso por hilo l\u00f3gico" : widgetMenu.monitorDetail === "gpu" ? "Uso, memoria, temperatura y consumo NVIDIA" : widgetMenu.monitorDetail === "ram" ? "Memoria disponible y procesos con mayor consumo" : "Carga general, almacenamiento y sesi\u00f3n"
-                            color: "#9a9aa7"
+                            color: "#aaa"
                             font.family: root.fontFamily
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -3774,13 +3774,13 @@ RowLayout {
                                 width: widgetMenu.implicitWidth - 32
                                 height: 42
                                 radius: 7
-                                color: "#1d1d26"
+                                color: "#000000"
                                 visible: widgetMenu.monitorDetail !== "ram" && widgetMenu.monitorDetail !== "cpu"
                                 RowLayout {
                                     anchors.fill: parent
                                     anchors.leftMargin: 10
                                     anchors.rightMargin: 10
-                                    Text { text: modelData[0]; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 11; Layout.fillWidth: true }
+                                    Text { text: modelData[0]; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 11; Layout.fillWidth: true }
                                     Text { text: modelData[1]; color: "white"; font.family: root.fontFamily; font.pixelSize: 12; font.bold: true }
                                 }
                             }
@@ -3788,7 +3788,7 @@ RowLayout {
 
                         Text {
                             text: "PROCESOS RAM"
-                            color: "#9a9aa7"
+                            color: "#aaa"
                             font.family: root.fontFamily
                             font.pixelSize: 9
                             font.bold: true
@@ -3804,7 +3804,7 @@ RowLayout {
                             }
                         }
 
-                        Text { text: "USO POR HILO L\u00d3GICO"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; visible: widgetMenu.monitorDetail === "cpu" }
+                        Text { text: "USO POR HILO L\u00d3GICO"; color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; visible: widgetMenu.monitorDetail === "cpu" }
                         Grid {
                             columns: 4
                             columnSpacing: 6
@@ -3819,17 +3819,17 @@ RowLayout {
                                     width: (widgetMenu.implicitWidth - 50) / 4
                                     height: 38
                                     radius: 6
-                                    color: "#1d1d26"
+                                    color: "#000000"
                                     Column {
                                         anchors.centerIn: parent
-                                        Text { text: threadName.toUpperCase(); color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; anchors.horizontalCenter: parent.horizontalCenter }
+                                        Text { text: threadName.toUpperCase(); color: "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; anchors.horizontalCenter: parent.horizontalCenter }
                                         Text { text: Math.round(parseFloat(threadUsage)) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 11; font.bold: true; anchors.horizontalCenter: parent.horizontalCenter }
                                     }
                                 }
                             }
                         }
 
-                        Text { text: "Actualizaci\u00f3n autom\u00e1tica cada 2.5 s"; color: "#6c7086"; font.family: root.fontFamily; font.pixelSize: 9 }
+                        Text { text: "Actualizaci\u00f3n autom\u00e1tica cada 2.5 s"; color: "#555"; font.family: root.fontFamily; font.pixelSize: 9 }
                     }
                 }
             }
@@ -3850,7 +3850,7 @@ RowLayout {
     
         Rectangle {
             anchors.fill: parent
-            color: "#ff0d0d12"
+            color: "#000000"
         }
     
         Text {
@@ -3873,8 +3873,8 @@ RowLayout {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 14
             radius: 16
-            color: "#0d0d12"
-            border.color: "#383847"
+            color: "#000000"
+            border.color: "#333"
             border.width: 1
     
             Column {
@@ -3885,7 +3885,7 @@ RowLayout {
     
                 Text {
                     text: "CERRAR APLICACIONES"
-                    color: "#9a9aa7"
+                    color: "#aaa"
                     font.family: root.fontFamily
                     font.pixelSize: 10
                     font.bold: true
@@ -3905,11 +3905,11 @@ RowLayout {
                     width: parent.width
                     height: 42
                     radius: 8
-                    color: gameSiArea.containsMouse ? "#eba0ac" : "#2a2a33"
+                    color: gameSiArea.containsMouse ? "#eba0ac" : "#000000"
                     Text {
                         anchors.centerIn: parent
                         text: "SÍ, CERRAR Y JUGAR"
-                        color: gameSiArea.containsMouse ? "#11111b" : "white"
+                        color: gameSiArea.containsMouse ? "#000000" : "white"
                         font.family: root.fontFamily
                         font.pixelSize: 11
                         font.bold: true
@@ -3926,11 +3926,11 @@ RowLayout {
                     width: parent.width
                     height: 42
                     radius: 8
-                    color: gameNoArea.containsMouse ? "white" : "#262633"
+                    color: gameNoArea.containsMouse ? "white" : "#000000"
                     Text {
                         anchors.centerIn: parent
                         text: "NO, SOLO ABRIR"
-                        color: gameNoArea.containsMouse ? "#11111b" : "#cdd6f4"
+                        color: gameNoArea.containsMouse ? "#000000" : "#aaa"
                         font.family: root.fontFamily
                         font.pixelSize: 11
                         font.bold: true
@@ -3947,11 +3947,11 @@ RowLayout {
                     width: parent.width
                     height: 42
                     radius: 8
-                    color: gameCancelArea.containsMouse ? "#454554" : "#262633"
+                    color: gameCancelArea.containsMouse ? "#222" : "#000000"
                     Text {
                         anchors.centerIn: parent
                         text: "CANCELAR"
-                        color: "#cdd6f4"
+                        color: "#aaa"
                         font.family: root.fontFamily
                         font.pixelSize: 11
                         font.bold: true
@@ -3990,7 +3990,7 @@ RowLayout {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "CARGANDO JUEGOS…"
-                    color: "#cdd6f4"
+                    color: "#aaa"
                     font.family: root.fontFamily
                     font.pixelSize: 20
                     font.bold: true
@@ -3999,7 +3999,7 @@ RowLayout {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "Steam y Cartridges están abriéndose"
-                    color: "#9a9aa7"
+                    color: "#aaa"
                     font.family: root.fontFamily
                     font.pixelSize: 13
                 }
@@ -4011,7 +4011,7 @@ RowLayout {
             anchors.bottomMargin: 44
             anchors.horizontalCenter: parent.horizontalCenter
             text: "El botón PS del volante también abre y cierra este modo"
-            color: "#6f6f7b"
+            color: "#888"
             font.family: root.fontFamily
             font.pixelSize: 11
         }

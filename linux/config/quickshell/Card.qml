@@ -6,8 +6,8 @@ Rectangle {
     width: parent.width
     height: 84
     radius: 14
-    color: "#16161c"
-    border.color: "#26262e"
+    color: "#000000"
+    border.color: "#333"
     border.width: 1
 
     property string cIcon: ""
@@ -51,7 +51,7 @@ Rectangle {
 
                 Text {
                     text: cCard.cTitle
-                    color: "#a6adc8"
+                    color: "#aaa"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 11
                     font.letterSpacing: 1.5
@@ -71,7 +71,7 @@ Rectangle {
 
             Text {
                 text: cCard.cSub
-                color: "#a6adc8"
+                color: "#aaa"
                 font.family: "JetBrainsMono Nerd Font"
                  font.pixelSize: 11
                 horizontalAlignment: Text.AlignRight
