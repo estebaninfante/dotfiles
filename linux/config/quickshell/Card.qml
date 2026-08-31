@@ -51,7 +51,7 @@ Rectangle {
 
                 Text {
                     text: cCard.cTitle
-                    color: "#9a9aa7"
+                    color: "#a6adc8"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 11
                     font.letterSpacing: 1.5
@@ -61,7 +61,7 @@ Rectangle {
                     text: cCard.cBig
                     color: "white"
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 26
+                    font.pixelSize: 22
                 }
             }
 
@@ -71,7 +71,7 @@ Rectangle {
 
             Text {
                 text: cCard.cSub
-                color: "#8a8a99"
+                color: "#a6adc8"
                 font.family: "JetBrainsMono Nerd Font"
                  font.pixelSize: 11
                 horizontalAlignment: Text.AlignRight
@@ -117,6 +117,35 @@ Rectangle {
             PropertyChanges {
                 target: cT
                 y: 14
+            }
+        }
+    ]
+
+    transitions: [
+        Transition {
+            from: "*"; to: "*"
+            ParallelAnimation {
+                NumberAnimation {
+                    target: cCard
+                    property: "opacity"
+                    duration: 200
+                    delay: cCard.dDel
+                    easing.type: Easing.InOutCubic
+                }
+                NumberAnimation {
+                    target: cCard
+                    property: "scale"
+                    duration: 250
+                    delay: cCard.dDel
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: cT
+                    property: "y"
+                    duration: 250
+                    delay: cCard.dDel
+                    easing.type: Easing.OutQuad
+                }
             }
         }
     ]

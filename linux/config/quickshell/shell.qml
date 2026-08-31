@@ -340,13 +340,24 @@ PanelWindow {
             color: ramArea.hov || ramMenu.opened ? "#5D3FD3" : "#141414"
         }
 
+        property string clockFull: ""
         Process {
             id: runDate
-            command: ["date"]
+            command: ["date", "+%d %b · %H:%M"]
             running: true
 
             stdout: StdioCollector {
-                onStreamFinished: clock.text = this.text
+                onStreamFinished: clock.text = this.text.trim()
+            }
+        }
+
+        Process {
+            id: runDateFull
+            command: ["date", "+%A %d de %B %Y %H:%M:%S %Z"]
+            running: true
+
+            stdout: StdioCollector {
+                onStreamFinished: root.clockFull = this.text.trim()
             }
         }
 
@@ -354,7 +365,7 @@ PanelWindow {
             interval: 1000
              running: true
              repeat: true
-            onTriggered: runDate.running = true
+            onTriggered: { runDate.running = true; runDateFull.running = true; }
         }
         Item {
             id: ramRow
@@ -370,11 +381,10 @@ PanelWindow {
 
                 Text {
                     id: ramIcon
-                    text: "RAM"
+                    text: "\uf538"
                     color: "white"
                     font.family: root.fontFamily
                     font.pixelSize: 12
-                    font.bold: true
                 }
 
                 Text {
@@ -508,158 +518,56 @@ PanelWindow {
                 }
 
                 Rectangle {
-                    id: syncBtn
-                    width: 52
+                    id: ccBtn
+                    width: 32
                     height: 22
                     radius: 8
-                    color: syncArea.hov ? "#5D3FD3" : root.syncActive ? "#17301f" : "#141414"
-                    border.color: root.syncActive ? "#98c379" : "#30303b"
+                    color: controlCenter.opened ? "#cba6f7" : ccArea.hov ? "#5D3FD3" : "#141414"
 
                     Text {
                         anchors.centerIn: parent
-                        text: root.syncActive ? "\uf0c1 SYNC" : "\uf127 SYNC"
-                        color: root.syncActive ? "#98c379" : "#6c7086"
+                        text: "\uf137"
+                        color: "white"
                         font.family: root.fontFamily
-                        font.pixelSize: 10
+                        font.pixelSize: 13
                     }
 
                     MouseArea {
-                        id: syncArea
+                        id: ccArea
                         property bool hov: false
                         anchors.fill: parent
                         hoverEnabled: true
                         onEntered: hov = true
                         onExited: hov = false
-                        onClicked: {
-                            const stop = root.syncActive;
-                            syncToggle.command = ["bash", "-c",
-                                stop ? "touch /tmp/syncthing-manual-off; sudo systemctl stop syncthing.service"
-                                     : "rm -f /tmp/syncthing-manual-off; sudo systemctl start syncthing.service"];
-                            syncToggle.running = false;
-                            syncToggle.running = true;
-                        }
+                        onClicked: controlCenter.opened = !controlCenter.opened
                     }
                 }
 
                 Rectangle {
-                    id: kbdBtn
-                    width: 44
+                    id: menuBtn
+                    width: 32
                     height: 22
                     radius: 8
-                    color: kbdArea.hov ? "#5D3FD3" : "#141414"
+                    color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.hov ? "#5D3FD3" : "#141414"
 
                     Text {
                         anchors.centerIn: parent
-                        text: root.kbLabels[root.kbIndex]
+                        text: "\uf009"
                         color: "white"
                         font.family: root.fontFamily
-                        font.pixelSize: 12
-                        font.bold: true
+                        font.pixelSize: 14
                     }
 
                     MouseArea {
-                        id: kbdArea
+                        id: menuBtnArea
                         property bool hov: false
-                        anchors.fill: parent
                         hoverEnabled: true
+                        anchors.fill: parent
                         onEntered: hov = true
                         onExited: hov = false
-                        onClicked: {
-                            const next = (root.kbIndex + 1) % root.kbLabels.length;
-                            kbSwitch.command = ["bash", "-c", "for k in $(hyprctl devices -j | jq -r '.keyboards[].name'); do hyprctl switchxkblayout \"$k\" " + next + " >/dev/null 2>&1; done"];
-                            kbSwitch.running = false;
-                            kbSwitch.running = true;
-                        }
+                        onClicked: widgetMenu.opened = !widgetMenu.opened
                     }
                 }
-
-            Rectangle {
-                id: menuBtn
-                width: 32
-                height: 22
-                radius: 8
-                 color: widgetMenu.opened ? "#cba6f7" : menuBtnArea.hov ? "#5D3FD3" : "#141414"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\uf009"
-                     color: "white"
-                    font.family: root.fontFamily
-                    font.pixelSize: 14
-                }
-
-                MouseArea {
-                    id: menuBtnArea
-                    property bool hov: false
-                    hoverEnabled: true
-                    anchors.fill: parent
-                    onEntered: hov = true
-                    onExited: hov = false
-                    onClicked: widgetMenu.opened = !widgetMenu.opened
-                }
-            }
-
-            Rectangle {
-                id: powerBtn
-                width: 32
-                height: 22
-                radius: 8
-                 color: powerMenu.opened ? "#e06c75" : powerBtnArea.hov ? "#5D3FD3" : "#141414"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\uf011"
-                     color: "white"
-                    font.family: root.fontFamily
-                    font.pixelSize: 14
-                }
-
-                MouseArea {
-                    id: powerBtnArea
-                    property bool hov: false
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: hov = true
-                    onExited: hov = false
-                    onClicked: {
-                        powerMenu.pendingAction = "";
-                        powerMenu.opened = !powerMenu.opened;
-                    }
-                }
-            }
-
-            Rectangle {
-                id: gameBtn
-                width: 32
-                height: 22
-                radius: 8
-                color: root.gameArmed ? "#98c379" : root.gameModeActive ? "#cba6f7" : gameBtnArea.hov ? "#5D3FD3" : "#141414"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\uf11b"
-                    color: "white"
-                    font.family: root.fontFamily
-                    font.pixelSize: 13
-                }
-
-                MouseArea {
-                    id: gameBtnArea
-                    property bool hov: false
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: hov = true
-                    onExited: hov = false
-                    onClicked: {
-                        if (root.gameArmed)
-                            root.gameExit();
-                        else if (root.gameModeActive)
-                            root.gameCancel();
-                        else
-                            root.gameEnter();
-                    }
-                }
-            }
         }
         Row {
             anchors.left: parent.left
@@ -703,6 +611,113 @@ PanelWindow {
         }
 
         PopupWindow {
+            id: controlCenter
+            implicitWidth: 200
+            implicitHeight: ccCol.implicitHeight + 32
+            visible: opened
+            grabFocus: true
+            color: "transparent"
+            property bool opened: false
+            anchor { window: root; rect.x: root.width - controlCenter.implicitWidth - 12; rect.y: root.height + 8 }
+            onOpenedChanged: if (!opened) root.resetHover(ccArea)
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: 14
+                color: "#e60d0d12"
+                border.color: "#383847"
+                border.width: 1
+
+                Column {
+                    id: ccCol
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 4
+
+                    Text { text: "CONTROL"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
+
+                    Rectangle {
+                        width: parent.width; height: 30; radius: 8
+                        color: syncCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        Row { anchors.centerIn: parent; spacing: 8
+                            Text { text: root.syncActive ? "\uf0c1" : "\uf127"; color: root.syncActive ? "#98c379" : "#6c7086"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: "Syncthing"; color: root.syncActive ? "#98c379" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                        }
+                        MouseArea { id: syncCcArea; anchors.fill: parent; hoverEnabled: true
+                            onClicked: {
+                                const stop = root.syncActive;
+                                syncToggle.command = ["bash", "-c",
+                                    stop ? "touch /tmp/syncthing-manual-off; sudo systemctl stop syncthing.service"
+                                         : "rm -f /tmp/syncthing-manual-off; sudo systemctl start syncthing.service"];
+                                syncToggle.running = false; syncToggle.running = true;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width; height: 30; radius: 8
+                        color: kbdCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        Row { anchors.centerIn: parent; spacing: 8
+                            Text { text: "\uf11c"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: root.kbLabels[root.kbIndex]; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11; font.bold: true }
+                        }
+                        MouseArea { id: kbdCcArea; anchors.fill: parent; hoverEnabled: true
+                            onClicked: {
+                                const next = (root.kbIndex + 1) % root.kbLabels.length;
+                                kbSwitch.command = ["bash", "-c", "for k in $(hyprctl devices -j | jq -r '.keyboards[].name'); do hyprctl switchxkblayout \"$k\" " + next + " >/dev/null 2>&1; done"];
+                                kbSwitch.running = false; kbSwitch.running = true;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width; height: 30; radius: 8
+                        color: powerCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        Row { anchors.centerIn: parent; spacing: 8
+                            Text { text: "\uf011"; color: "#f38ba8"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: "Energia"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                        }
+                        MouseArea { id: powerCcArea; anchors.fill: parent; hoverEnabled: true
+                            onClicked: { controlCenter.opened = false; powerMenu.pendingAction = ""; powerMenu.opened = true; }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width; height: 30; radius: 8
+                        color: gameCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        Row { anchors.centerIn: parent; spacing: 8
+                            Text { text: "\uf11b"; color: root.gameArmed ? "#98c379" : root.gameModeActive ? "#cba6f7" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: root.gameArmed ? "Jugando" : root.gameModeActive ? "Modo juego" : "Modo juegos"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                        }
+                        MouseArea { id: gameCcArea; anchors.fill: parent; hoverEnabled: true
+                            onClicked: {
+                                controlCenter.opened = false;
+                                if (root.gameArmed) root.gameExit();
+                                else if (root.gameModeActive) root.gameCancel();
+                                else root.gameEnter();
+                            }
+                        }
+                    }
+
+                    Rectangle { width: parent.width; height: 1; color: "#383847" }
+
+                    Rectangle {
+                        width: parent.width; height: 30; radius: 8
+                        color: dashCcArea.containsMouse ? "#252532" : "#1d1d26"
+                        Row { anchors.centerIn: parent; spacing: 8
+                            Text { text: "\uf009"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 13 }
+                            Text { text: "Dashboard"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
+                        }
+                        MouseArea { id: dashCcArea; anchors.fill: parent; hoverEnabled: true
+                            onClicked: { controlCenter.opened = false; widgetMenu.opened = true; }
+                        }
+                    }
+                }
+            }
+        }
+
+        PopupWindow {
             id: powerMenu
             implicitWidth: 280
             implicitHeight: powerCol.implicitHeight + 32
@@ -715,7 +730,7 @@ PanelWindow {
             onOpenedChanged: {
                 if (!opened) {
                     powerProfilesOpen = false;
-                    root.resetHover(powerBtnArea);
+                    root.resetHover(ccArea);
                 } else {
                     powerProfileStatus.running = true;
                 }
@@ -993,7 +1008,7 @@ PanelWindow {
                     anchors.margins: 16
                     spacing: 8
                     Text { text: "CENTRO DE TAREAS"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }
-                    Text { text: clock.text; color: "white"; font.family: root.fontFamily; font.pixelSize: 22; font.bold: true }
+                    Text { text: root.clockFull; color: "white"; font.family: root.fontFamily; font.pixelSize: 22; font.bold: true }
                     Text { text: "Calendario, tareas y actividad aparecerán aquí"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 10; wrapMode: Text.WordWrap }
                 }
             }
@@ -1481,7 +1496,7 @@ PanelWindow {
 
                             Text {
                                  text: "SISTEMA  /  " + widgetMenu.activeSection.toUpperCase()
-                                color: "#9a9aa7"
+                                color: "#a6adc8"
                                 font.family: "JetBrainsMono Nerd Font"
                                  font.pixelSize: 10
                                 font.letterSpacing: 3
