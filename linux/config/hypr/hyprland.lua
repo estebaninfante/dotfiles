@@ -170,7 +170,9 @@ hl.animation({
 hl.config({
     misc = {
         animate_manual_resizes = false,
-        animate_mouse_windowdragging = false
+        animate_mouse_windowdragging = false,
+        force_default_wallpaper = -1,
+        disable_hyprland_logo = true
     }
 })
 
