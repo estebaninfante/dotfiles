@@ -69,21 +69,14 @@
   };
 
   # ── CUDA para ML/TTS (torch/Kokoro) ─────────────────────────
-  # Igual que desktop: cudaSupport=true compila torch CON CUDA (RTX 4060).
-  # ⚠️ Usable SOLO dentro de specialisation.nvidia (la dGPU carga su driver
-  # ahí). En perfil normal (AMD, batería) la dGPU está fuera del kernel →
-  # torch.torch.cuda.is_available()=False y kokoro cae a CPU. Sin problema.
-  # Build = mismo torch que desktop (mismo nixpkgs+flags → mismo hash store):
-  # NO recompilar; tirar los paths ya compilados con:
-  #   nix copy --from <desktop-nixdaemon-ssh> \
-  #     $(nix-store -qR .#nixosConfigurations.laptop.config.system.build.toplevel...)
-  # entonces en laptop rebuild baja binarios sin compilar otra vez.
-  nixpkgs.config.cudaSupport = true;
-  # IDENTICO a desktop: limitar archs a sm_86+sm_89. RTX 4060 (laptop) = sm_89.
-  # Mismo valor en desktop.nix → mismo hash store → el build CUDA del desktop
-  # sirve para la laptop sin recompilar. Además evita el crash "BFD assertion
-  # fail elf.c:3571" del as de binutils 2.46 con archs compute_120.
-  nixpkgs.config.cudaCapabilities = [ "8.6" "8.9" ];
+  # NOP cudaSupport: laptop NO compila torch CUDA. CPU-only.
+  # Motivo (2026-08-30): cudaSupport=true hizo que un rebuild evaluara y
+  # compilara cudnn/libcublas/torch/triton (~350MB/job × 16 jobs) → OOM/crash.
+  # El path original asumia copiar binarios desde desktop (nix copy --from)
+  # pero nunca ocurria, dejando la laptop compilando CUDA en cada rebuild.
+  # Ahora kokoro/TTS corre en CPU (lento pero seguro, sin riesgo de OOM).
+  # Si se quiere CUDA en laptop: desactivar el marker skip-auto-rebuild,
+  # copiar los paths del desktop y re-ensenar rebuild. Solo desktop compila CUDA.
 
   # El driver amdgpu es el default para GPUs AMD; nada extra que configurar.
   # (El layout XKB dvk_prog ahora vive en nixos/modules/keyboard.nix —
