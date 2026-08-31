@@ -36,6 +36,9 @@ return {
           },
         })
         vim.cmd("colorscheme rose-pine-" .. (light and "dawn" or "main"))
+        -- Override Normal bg para coincidir con kitty exactamente
+        vim.api.nvim_set_hl(0, "Normal", { bg = light and "#fdf8f0" or "#161513" })
+        vim.o.background = light and "light" or "dark"
       end
 
       apply_theme()

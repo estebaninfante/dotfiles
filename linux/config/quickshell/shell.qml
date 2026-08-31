@@ -1650,6 +1650,7 @@ PanelWindow {
                               color: "#16161c"
                               border.color: "#26262e"
                               border.width: 1
+                              visible: widgetMenu.activeSection === "monitoreo" || widgetMenu.activeSection === "pantallas"
                               property bool themeLight: false
 
                               function refresh() {
