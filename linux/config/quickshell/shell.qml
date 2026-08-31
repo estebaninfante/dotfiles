@@ -499,8 +499,8 @@ PanelWindow {
                     width: 60
                     height: 22
                     radius: 8
-                    color: brightnessArea.containsMouse ? "#2a2a33" : "#141414"
-                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: "white"; font.family: root.fontFamily; font.pixelSize: 12 }
+                    color: brightnessMenu.opened ? "white" : brightnessArea.containsMouse ? "#2a2a33" : "#141414"
+                    Text { anchors.centerIn: parent; text: "\uf185 " + Math.round(root.brightnessPct) + "%"; color: brightnessMenu.opened ? "#11111b" : "white"; font.family: root.fontFamily; font.pixelSize: 12 }
                     MouseArea {
                         id: brightnessArea
                         anchors.fill: parent
@@ -1106,7 +1106,7 @@ PanelWindow {
         PopupWindow {
             id: brightnessMenu
             implicitWidth: 236
-            implicitHeight: Math.max(132, briCol.implicitHeight + 26)
+            implicitHeight: briCol.implicitHeight + 26
             visible: opened
             grabFocus: true
             color: "transparent"
@@ -1149,7 +1149,7 @@ PanelWindow {
                                 color: "white"
                             }
                             Rectangle {
-                                x: Math.max(0, Math.min(width - this.width, parent.width * root.brightnessPct / 100 - this.width / 2))
+                                x: Math.max(0, Math.min(parent.width - this.width, parent.width * root.brightnessPct / 100 - this.width / 2))
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 12
                                 height: 12
