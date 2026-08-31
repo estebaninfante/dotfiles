@@ -27,7 +27,7 @@ Rectangle {
         spacing: 8
         RowLayout {
             width: parent.width
-            Text { text: "\uf538"; color: "white"; font.family: Theme.fontFamily; font.pixelSize: 23; Layout.preferredWidth: 28 }
+            Text { text: "\uf538"; color: "white"; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 23; Layout.preferredWidth: 28 }
             Text { text: "RAM"; color: "white"; font.family: Theme.fontFamily; font.pixelSize: 13; font.bold: true }
             Text { text: Math.round(ramCard.usedPct) + "%"; color: "white"; font.family: Theme.fontFamily; font.pixelSize: 20 }
             Item { Layout.fillWidth: true }

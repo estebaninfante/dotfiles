@@ -30,7 +30,7 @@ Rectangle {
             Text {
                 text: ThemeService.themeLight ? "\uf185" : "\uf186"
                 color: "white"
-                font.family: Theme.fontFamily
+                font.family: "JetBrainsMono Nerd Font"
                 font.pixelSize: 20
                 Layout.preferredWidth: 28
             }
