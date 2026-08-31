@@ -54,10 +54,10 @@ in
   boot.loader.refind.additionalFiles = refindThemeAdditional;
   # Generaciones NixOS visibles en el menu rEFInd. El generador ordena
   # descendente (la mas reciente primero) y default_selection la auto-bootea
-  # tras el timeout. Aun asi el timeout es una VENTANA: pulsar cualquier tecla
-  # durante la cuenta permite elegir una generacion anterior (rollback) — por
-  # eso NO ponemos 1. 3 = ultimas 3 generaciones accesibles sin llenar el menu.
-  boot.loader.refind.maxGenerations = 3;
+  # tras el timeout. 1 = solo la ultima gen, un menu limpio (Windows + NixOS).
+  # Rollback a una gen anterior se hace por terminal (nixos-rebuild --rollback
+  # o boot manual del perfil), no desde el menu boot.
+  boot.loader.refind.maxGenerations = 1;
   # El generador refind-install.py escribe SIEMPRE `default_selection 2`
   # tras extraConfig (NixOS default) + `timeout {boot.loader.timeout}`.
   # Se setea boot.loader.timeout (no en extraConfig) para que no haya
