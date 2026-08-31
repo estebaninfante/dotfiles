@@ -5,7 +5,7 @@ import Quickshell.Services.UPower
 import QtQuick
 import "../config"
 
-QtObject {
+Item {
     id: gpuModeService
 
     readonly property var batt: UPower.displayDevice

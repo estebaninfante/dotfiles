@@ -1,7 +1,7 @@
 pragma Singleton
 import QtQuick
 
-QtObject {
+Item {
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
 
     readonly property color bg: "#000000"

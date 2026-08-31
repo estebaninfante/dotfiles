@@ -4,7 +4,7 @@ import Quickshell.Io
 import QtQuick
 import "../config"
 
-QtObject {
+Item {
     id: gameModeService
 
     property bool gameModeActive: false   // expande root a fullscreen

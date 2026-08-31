@@ -1,7 +1,7 @@
 pragma Singleton
 import QtQuick
 
-QtObject {
+Item {
     readonly property int durationFade: 240
     readonly property int durationHold: 250
     readonly property int durationCard: 200

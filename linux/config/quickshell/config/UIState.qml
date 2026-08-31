@@ -1,7 +1,7 @@
 pragma Singleton
 import QtQuick
 
-QtObject {
+Item {
     property bool widgetMenuOpen: false
     property bool powerMenuOpen: false
     property bool volumeMenuOpen: false

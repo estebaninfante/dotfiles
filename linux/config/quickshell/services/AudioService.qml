@@ -4,7 +4,7 @@ import Quickshell.Io
 import QtQuick
 import "../config"
 
-QtObject {
+Item {
     id: audioService
 
     property string message: ""

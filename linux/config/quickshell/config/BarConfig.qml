@@ -1,7 +1,7 @@
 pragma Singleton
 import QtQuick
 
-QtObject {
+Item {
     readonly property int expandedHeight: 40
     readonly property int hotEdge: 3
     readonly property int pillHeight: 22

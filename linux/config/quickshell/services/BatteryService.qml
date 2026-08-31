@@ -4,7 +4,7 @@ import Quickshell.Services.UPower
 import QtQuick
 import "../config"
 
-QtObject {
+Item {
     id: batteryService
 
     readonly property var batt: UPower.displayDevice

@@ -1,12 +1,15 @@
 pragma Singleton
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.UPower
 import QtQuick
 import "../config"
-import "BatteryService.qml" as B
 
-QtObject {
+Item {
     id: brightnessService
+
+    readonly property var batt: UPower.displayDevice
+    readonly property bool hasBattery: batt != null && batt.isPresent && batt.type === UPowerDeviceType.Battery
 
     property double brightnessPct: 0
 
@@ -23,7 +26,7 @@ QtObject {
     Process {
         id: brightnessStatus
         command: ["bash", "-c", "brightnessctl -m 2>/dev/null | awk -F, '{gsub(/%/,\"\",$4); print $4}'"]
-        running: B.BatteryService.hasBattery
+        running: brightnessService.hasBattery
         stdout: StdioCollector {
             onStreamFinished: brightnessService.brightnessPct = parseFloat(this.text.trim()) || 0
         }
@@ -38,7 +41,7 @@ QtObject {
 
     Timer {
         interval: 3000
-        running: B.BatteryService.hasBattery
+        running: brightnessService.hasBattery
         repeat: true
         onTriggered: brightnessStatus.running = true
     }
