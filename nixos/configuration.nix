@@ -16,6 +16,10 @@
   # ── Boot ──────────────────────────────────────────────────────
   # rEFInd: menú gráfico de arranque. Auto-detecta Windows (EFI/Microsoft/
   # bootmgfw.efi) además del kernel NixOS. Se elige entre ambos al bootear.
+  # systemd-boot silenciaba grub (mkDefault false). Sin el, grub vuelve a
+  # su default (!isContainer = true) y fuerza la assertion grub.devices.
+  # Lo desactivamos explicitamente: rEFInd es el unico bootloader.
+  boot.loader.grub.enable = false;
   boot.loader.refind.enable = true;
   boot.loader.refind.efiInstallAsRemovable = false;
   boot.loader.refind.extraConfig = ''
