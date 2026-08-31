@@ -1364,8 +1364,6 @@ PanelWindow {
 
                 function openMonitorDetail(detail) {
                     monitorDetail = detail;
-                    widgetMenu.opened = false;
-                    detailMenu.opened = true;
                     refreshMonitoring();
                     if (detail === "ram") {
                         ramCard.processes.clear();
@@ -1843,27 +1841,39 @@ PanelWindow {
 
                         Card {
                             id: gpuCard
-                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.acpi === "off" ? "\uf011" : "\uf06c"
-                            cAccent: gpuCard.modo === "gaming" ? "#98c379" : gpuCard.acpi === "off" ? "#98c379" : gpuCard.modo === "disabled" ? "#e5c07b" : "#cba6f7"
-                            cTitle: "GPU NVIDIA"
-                            cBig: gpuCard.modo === "gaming" ? "Juegos" : gpuCard.acpi === "off" ? "100% OFF" : gpuCard.modo === "disabled" ? "D3cold" : "Bater\u00eda"
-                            cSub: gpuCard.fuente ? (gpuCard.modo === "gaming" ? "Click: modo bater\u00eda" : gpuCard.acpi === "off" ? "Click: activar y reiniciar" : gpuCard.modo === "disabled" ? "Click: apagar 100%" : "Click: modo juegos") : "---"
-                            dDel: 120
-                            cardOn: widgetMenu.opened
-                             visible: root.hasBattery && widgetMenu.activeSection === "monitoreo"
-
+                            property bool hasTelemetry: widgetMenu.gpuTelemetryAvailable
                             property string modo: ""
                             property string fuente: ""
                             property string acpi: ""
+
+                            cIcon: gpuCard.modo === "gaming" ? "\uf11b" : gpuCard.acpi === "off" ? "\uf011" : "\uf06c"
+                            cAccent: gpuCard.modo === "gaming" ? "#98c379" : gpuCard.acpi === "off" ? "#98c379" : gpuCard.modo === "disabled" ? "#e5c07b" : widgetMenu.gpuTemp >= 85 ? "#e06c75" : "#98c379"
+                            cTitle: "GPU NVIDIA"
+                            cBig: root.hasBattery
+                                ? (gpuCard.modo === "gaming" ? "Juegos" : gpuCard.acpi === "off" ? "100% OFF" : gpuCard.modo === "disabled" ? "D3cold" : "Bater\u00eda")
+                                : (gpuCard.hasTelemetry ? Math.round(widgetMenu.gpuUsage) + "%" : "NO DETECTADA")
+                            cVal: gpuCard.hasTelemetry ? widgetMenu.gpuUsage : (root.hasBattery ? 0 : 0)
+                            cSub: root.hasBattery
+                                ? (gpuCard.hasTelemetry
+                                    ? Math.round(widgetMenu.gpuTemp) + "\u00b0C \u00b7 " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB \u00b7 " + Math.round(widgetMenu.gpuPower) + "/" + Math.round(widgetMenu.gpuPowerLimit) + " W"
+                                    : (gpuCard.fuente ? "ACPI: " + gpuCard.acpi : "---"))
+                                : (gpuCard.hasTelemetry ? Math.round(widgetMenu.gpuTemp) + "\u00b0C \u00b7 " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB \u00b7 " + Math.round(widgetMenu.gpuPower) + "/" + Math.round(widgetMenu.gpuPowerLimit) + " W" : "nvidia-smi no disponible")
+                            dDel: root.hasBattery ? 120 : 30
+                            cardOn: widgetMenu.opened
+                            visible: widgetMenu.activeSection === "monitoreo"
 
                             MouseArea {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    const p = gpuToggle;
-                                    p.running = false;
-                                    p.running = true;
+                                    if (root.hasBattery) {
+                                        const p = gpuToggle;
+                                        p.running = false;
+                                        p.running = true;
+                                    } else {
+                                        widgetMenu.openMonitorDetail("gpu");
+                                    }
                                 }
                             }
 
@@ -1876,14 +1886,11 @@ PanelWindow {
                                     splitMarker: "\n"
                                     onRead: line => {
                                         let m = line.match(/Modo:\s*(\w+)/);
-                                        if (m)
-                                            gpuCard.modo = m[1];
+                                        if (m) gpuCard.modo = m[1];
                                         m = line.match(/Fuente:\s*(\w+)/);
-                                        if (m)
-                                            gpuCard.fuente = m[1];
+                                        if (m) gpuCard.fuente = m[1];
                                         m = line.match(/ACPI:\s*(\w+)/);
-                                        if (m)
-                                            gpuCard.acpi = m[1];
+                                        if (m) gpuCard.acpi = m[1];
                                     }
                                 }
                             }
@@ -2149,21 +2156,7 @@ PanelWindow {
                                MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("cpu") }
                            }
 
-                           Card {
-                               id: gpuTelemetryCard
-                               cIcon: "\uf11b"
-                               cAccent: widgetMenu.gpuTemp >= 85 ? "#e06c75" : "#98c379"
-                               cTitle: "GPU NVIDIA"
-                               cBig: widgetMenu.gpuTelemetryAvailable ? Math.round(widgetMenu.gpuUsage) + "%" : "NO DETECTADA"
-                               cVal: widgetMenu.gpuUsage
-                               cSub: widgetMenu.gpuTelemetryAvailable ? Math.round(widgetMenu.gpuTemp) + "°C · " + Math.round(widgetMenu.gpuMemory) + "/" + Math.round(widgetMenu.gpuMemoryTotal) + " MB · " + Math.round(widgetMenu.gpuPower) + "/" + Math.round(widgetMenu.gpuPowerLimit) + " W" : "nvidia-smi no disponible"
-                               dDel: 30
-                               cardOn: widgetMenu.opened
-                               visible: widgetMenu.activeSection === "monitoreo"
-                               MouseArea { anchors.fill: parent; onClicked: widgetMenu.openMonitorDetail("gpu") }
-                           }
-
-                           Card {
+                            Card {
                                id: systemCard
                                cIcon: "\uf080"
                                cAccent: widgetMenu.rootDisk >= 90 ? "#e06c75" : "#cba6f7"
