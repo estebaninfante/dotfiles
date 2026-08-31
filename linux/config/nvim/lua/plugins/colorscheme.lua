@@ -44,12 +44,13 @@ return {
       local kitty_dir = vim.fn.expand("$HOME/dotfiles/linux/config/kitty")
       local watcher = vim.loop.new_fs_event()
       if watcher then
-        local function restart()
-          watcher:stop()
-          apply_theme()
-          watcher:start(kitty_dir, "active-theme.conf", {}, vim.schedule_wrap(restart))
+        local function on_theme_event(err, fname)
+          if not err and fname and fname == "active-theme.conf" then
+            apply_theme()
+          end
+          watcher:start(kitty_dir, {}, vim.schedule_wrap(on_theme_event))
         end
-        watcher:start(kitty_dir, "active-theme.conf", {}, vim.schedule_wrap(restart))
+        watcher:start(kitty_dir, {}, vim.schedule_wrap(on_theme_event))
         vim.api.nvim_create_autocmd("VimLeavePre", { callback = function()
           watcher:stop()
         end })
