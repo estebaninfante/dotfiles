@@ -392,7 +392,7 @@ hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice tts toggle"))
 
 -- OpenCode / TV toggle / Tema claro-oscuro
-hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles -e ~/.opencode/bin/opencode"))
+hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode ~/.opencode/bin/opencode"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
 hl.bind("F11", hl.dsp.exec_cmd("~/.local/bin/theme-toggle.sh toggle"))
 
