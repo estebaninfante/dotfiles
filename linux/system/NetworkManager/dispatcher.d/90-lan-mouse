@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # NetworkManager dispatcher para LAN-Mouse KVM y watchdog de IP.
 # - Mantiene la IP KVM estatica (laptop .240, desktop .241) sobre la interfaz
 #   que este activa: ethernet de casa si hay, si no WiFi de casa.
