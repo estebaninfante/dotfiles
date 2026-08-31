@@ -14,15 +14,16 @@ let
   # RECHAZA strings con context de store path.
   flattenDir = dir:
     let entries = builtins.readDir dir;
-    in lib.flatten (lib.mapAttrsToList
-      (name: type:
-        if type == "directory" then flattenDir "${dir}/${name}"
-        else [ "${dir}/${name}" ])
-      entries);
+    in builtins.concatMap
+      (name:
+        let type = entries.${name};
+        in if type == "directory" then flattenDir "${dir}/${name}" else [ "${dir}/${name}" ])
+      (builtins.attrNames entries);
   refindThemeFiles = flattenDir fydeos-refind-theme;
   refindThemeAdditional = lib.listToAttrs (map
     (file: {
-      name = "themes/rEFInd-minimal/${lib.removePrefix "${fydeos-refind-theme}/" file}";
+      name = builtins.unsafeDiscardStringContext
+        "themes/rEFInd-minimal/${lib.removePrefix "${fydeos-refind-theme}/" file}";
       value = builtins.unsafeDiscardStringContext file;
     })
     refindThemeFiles);
