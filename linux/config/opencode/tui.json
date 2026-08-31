@@ -1,4 +1,5 @@
 {
+  "theme": "system",
   "plugin": [
     "@tarquinen/opencode-dcp@latest"
   ],

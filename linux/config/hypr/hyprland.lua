@@ -13,6 +13,18 @@ local f = io.open(os.getenv("HOME") .. "/.config/machine-type", "r")
 local machine = f and f:read("*a"):match("^%s*(.-)%s*$") or "laptop"
 if f then f:close() end
 
+-- Tema global (canonico: active-theme.conf de kitty, symlink al repo).
+-- Devuelve "light"|"dark"; default dark si no se puede leer.
+local function theme_mode()
+    local t = io.open(os.getenv("HOME") .. "/dotfiles/linux/config/kitty/active-theme.conf", "r")
+    if t then
+        local link = t:read("*a"):match("theme%-([a-z]+)")
+        t:close()
+        if link then return link end
+    end
+    return "dark"
+end
+
 -- ========================
 -- XWAYLAND
 -- ========================
@@ -260,7 +272,7 @@ hl.on("hyprland.start", function()
     -- (antes: /usr/libexec/polkit-gnome-authentication-agent-1, path
     --  inexistente en NixOS → fprintd-enroll denegaba por falta de agente)
     hl.exec_cmd("hypridle")
-    hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'")
+    hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme 'prefer-" .. (theme_mode() == "light" and "light" or "dark") .. "'")
     hl.exec_cmd("urserver --daemon")
     hl.exec_cmd("swayosd-server --top-margin=0.4")
     hl.exec_cmd("sleep 5 && handy --start-hidden")
@@ -378,9 +390,10 @@ hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 -- Para cambiarla: bindear otra tecla a "~/.local/bin/voice tts toggle".
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice tts toggle"))
 
--- OpenCode / TV toggle
+-- OpenCode / TV toggle / Tema claro-oscuro
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles -e ~/.opencode/bin/opencode"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
+hl.bind("F11", hl.dsp.exec_cmd("~/.local/bin/theme-toggle.sh toggle"))
 
 if machine == "laptop" then
     hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-lid.sh"))

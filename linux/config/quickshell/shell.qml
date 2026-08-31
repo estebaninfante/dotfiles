@@ -653,7 +653,7 @@ PanelWindow {
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
                         color: syncCcArea.containsMouse ? "#252532" : "#1d1d26"
-                        Row { anchors.centerIn: parent; spacing: 8
+                        Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
                             Text { text: root.syncActive ? "\uf0c1" : "\uf127"; color: root.syncActive ? "white" : "#6c7086"; font.family: root.fontFamily; font.pixelSize: 13 }
                             Text { text: "Syncthing"; color: root.syncActive ? "white" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
@@ -671,7 +671,7 @@ PanelWindow {
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
                         color: kbdCcArea.containsMouse ? "#252532" : "#1d1d26"
-                        Row { anchors.centerIn: parent; spacing: 8
+                        Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
                             Text { text: "\uf11c"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
                             Text { text: root.kbLabels[root.kbIndex]; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11; font.bold: true }
                         }
@@ -687,7 +687,7 @@ PanelWindow {
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
                         color: powerCcArea.containsMouse ? "#252532" : "#1d1d26"
-                        Row { anchors.centerIn: parent; spacing: 8
+                        Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
                             Text { text: "\uf011"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13 }
                             Text { text: "Energia"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
@@ -699,7 +699,7 @@ PanelWindow {
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
                         color: gameCcArea.containsMouse ? "#252532" : "#1d1d26"
-                        Row { anchors.centerIn: parent; spacing: 8
+                        Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
                             Text { text: "\uf11b"; color: root.gameArmed || root.gameModeActive ? "white" : "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 13 }
                             Text { text: root.gameArmed ? "Jugando" : root.gameModeActive ? "Modo juego" : "Modo juegos"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
@@ -718,7 +718,7 @@ PanelWindow {
                     Rectangle {
                         width: parent.width; height: 30; radius: 8
                         color: dashCcArea.containsMouse ? "#252532" : "#1d1d26"
-                        Row { anchors.centerIn: parent; spacing: 8
+                        Row { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 8
                             Text { text: "\uf009"; color: "white"; font.family: root.fontFamily; font.pixelSize: 13 }
                             Text { text: "Dashboard"; color: "#cdd6f4"; font.family: root.fontFamily; font.pixelSize: 11 }
                         }
@@ -1641,6 +1641,111 @@ PanelWindow {
                                  }
                              }
                          }
+
+                          Rectangle {
+                              id: themeCard
+                              width: parent.width
+                              height: 64
+                              radius: 14
+                              color: "#16161c"
+                              border.color: "#26262e"
+                              border.width: 1
+                              property bool themeLight: false
+
+                              function refresh() {
+                                  themeStateRead.running = false;
+                                  themeStateRead.running = true;
+                              }
+
+                              Column {
+                                  anchors.left: parent.left
+                                  anchors.right: parent.right
+                                  anchors.top: parent.top
+                                  anchors.leftMargin: 14
+                                  anchors.rightMargin: 14
+                                  anchors.topMargin: 12
+                                  spacing: 10
+
+                                  RowLayout {
+                                      width: parent.width
+
+                                      Text {
+                                          text: themeCard.themeLight ? "\uf185" : "\uf186"
+                                          color: "white"
+                                          font.family: "JetBrainsMono Nerd Font"
+                                          font.pixelSize: 20
+                                          Layout.preferredWidth: 28
+                                      }
+
+                                      Column {
+                                          spacing: 2
+                                          Layout.fillWidth: true
+
+                                          Text {
+                                              text: "TEMA"
+                                              color: "#9a9aa7"
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 9
+                                              font.letterSpacing: 1.5
+                                          }
+
+                                          Text {
+                                              text: themeCard.themeLight ? "Modo claro" : "Modo oscuro"
+                                              color: themeCard.themeLight ? "white" : "#a6adc8"
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 14
+                                          }
+                                      }
+
+                                      Rectangle {
+                                          width: 54
+                                          height: 30
+                                          radius: 9
+                                          color: themeToggleArea.containsMouse ? "white" : themeCard.themeLight ? "#2a2a33" : "#1e1e2e"
+                                          border.color: themeCard.themeLight ? "white" : "#313244"
+                                          border.width: 1
+
+                                          Text {
+                                              anchors.centerIn: parent
+                                              text: themeCard.themeLight ? "LIGHT" : "DARK"
+                                              color: themeToggleArea.containsMouse ? "#11111b" : themeCard.themeLight ? "white" : "#6c7086"
+                                              font.family: root.fontFamily
+                                              font.pixelSize: 10
+                                              font.bold: true
+                                          }
+
+                                          MouseArea {
+                                              id: themeToggleArea
+                                              anchors.fill: parent
+                                              hoverEnabled: true
+                                              onClicked: {
+                                                  themeToggleScript.command = ["bash", "-c", "~/.local/bin/theme-toggle.sh toggle"];
+                                                  themeToggleScript.running = false;
+                                                  themeToggleScript.running = true;
+                                              }
+                                          }
+                                      }
+                                  }
+                              }
+
+                              Process {
+                                  id: themeStateRead
+                                  command: ["bash", "-c", "readlink \"$HOME/dotfiles/linux/config/kitty/active-theme.conf\" | grep -o 'theme-[a-z]*'"]
+                                  running: false
+                                  stdout: StdioCollector {
+                                      onStreamFinished: themeCard.themeLight = this.text.trim().indexOf("light") !== -1
+                                  }
+                              }
+
+                              Process {
+                                  id: themeToggleScript
+                                  command: ["true"]
+                                  running: false
+                                  onExited: themeCard.refresh()
+                              }
+
+                              onVisibleChanged: if (visible) refresh()
+                          }
 
                           Rectangle {
                               id: ramCard
