@@ -620,6 +620,7 @@ PanelWindow {
             property bool opened: false
             anchor { window: root; rect.x: root.width - controlCenter.implicitWidth - 12; rect.y: root.height + 8 }
             onOpenedChanged: if (!opened) root.resetHover(ccArea)
+            onVisibleChanged: { if (!visible) opened = false; }
 
             Rectangle {
                 anchors.fill: parent
@@ -3308,11 +3309,11 @@ RowLayout {
                             }
                         }
 
-                        Rectangle {
-                            id: notifCard
-                            width: parent.width
-                            height: 208
-                            radius: 12
+                            Rectangle {
+                                id: notifCard
+                                width: parent.width
+                                implicitHeight: columnContent.implicitHeight + 24
+                                radius: 12
                             color: "#16161c"
                             border.color: "#26262e"
                             border.width: 1
@@ -3356,6 +3357,7 @@ RowLayout {
                             Process { id: soundStateWrite; command: ["true"]; running: false }
 
                             Column {
+                                id: columnContent
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.top: parent.top
@@ -3399,12 +3401,14 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: soundToggleArea.containsMouse ? "#cba6f7" : notifCard.soundOn ? "#29233b" : "#262633"
+                                        color: soundToggleArea.containsMouse ? "#cba6f7" : notifCard.soundOn ? "#29233b" : "#1e1e2e"
+                                        border.color: notifCard.soundOn ? "#cba6f7" : "#313244"
+                                        border.width: 1
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: notifCard.soundOn ? "ON" : "OFF"
-                                            color: soundToggleArea.containsMouse ? "#11111b" : notifCard.soundOn ? "#cba6f7" : "#cdd6f4"
+                                            color: soundToggleArea.containsMouse ? "#11111b" : notifCard.soundOn ? "#cba6f7" : "#6c7086"
                                             font.family: root.fontFamily
                                             font.pixelSize: 10
                                             font.bold: true
@@ -3428,7 +3432,7 @@ RowLayout {
 
                                     Text {
                                         text: "\uf130"
-                                        color: notifCard.voiceOn ? "#89dceb" : "#a6adc8"
+                                        color: notifCard.voiceOn ? "#89dceb" : "#7f849c"
                                         font.family: root.fontFamily
                                         font.pixelSize: 20
                                         Layout.preferredWidth: 28
@@ -3447,7 +3451,7 @@ RowLayout {
                                         }
 
                                         Text {
-                                            text: notifCard.voiceOn ? "Habla el resumen al terminar" : "Resumen por escrito"
+                                            text: notifCard.voiceOn ? "Habla el resumen al terminar" : "Voz desactivada"
                                             color: notifCard.voiceOn ? "white" : "#a6adc8"
                                             font.family: root.fontFamily
                                             font.pixelSize: 14
@@ -3458,12 +3462,14 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: voiceToggleArea.containsMouse ? "#89dceb" : notifCard.voiceOn ? "#29233b" : "#262633"
+                                        color: voiceToggleArea.containsMouse ? "#89dceb" : notifCard.voiceOn ? "#29233b" : "#1e1e2e"
+                                        border.color: notifCard.voiceOn ? "#89dceb" : "#313244"
+                                        border.width: 1
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: notifCard.voiceOn ? "ON" : "OFF"
-                                            color: voiceToggleArea.containsMouse ? "#11111b" : notifCard.voiceOn ? "#89dceb" : "#cdd6f4"
+                                            color: voiceToggleArea.containsMouse ? "#11111b" : notifCard.voiceOn ? "#89dceb" : "#6c7086"
                                             font.family: root.fontFamily
                                             font.pixelSize: 10
                                             font.bold: true
@@ -3490,11 +3496,11 @@ RowLayout {
                                         Layout.fillWidth: true
                                         height: 34
                                         radius: 8
-                                        color: soundTestArea.containsMouse ? "#5D3FD3" : "#29233b"
+                                        color: soundTestArea.containsMouse ? "#44475a" : "#262633"
 
                                         Text {
                                             anchors.centerIn: parent
-                                            text: "\uf0f3  PROBAR SONIDO"
+                                            text: "\uf028  Probar sonido"
                                             color: "white"
                                             font.family: root.fontFamily
                                             font.pixelSize: 9
@@ -3512,15 +3518,6 @@ RowLayout {
                                             }
                                         }
                                     }
-                                }
-
-                                Text {
-                                    text: "Campana + resumen (Groq) al terminar cada sesión"
-                                    color: "#6c7086"
-                                    font.family: root.fontFamily
-                                    font.pixelSize: 9
-                                    elide: Text.ElideRight
-                                    width: parent.width
                                 }
                             }
 
