@@ -4,14 +4,16 @@
 # Se genera por maquina con `nixos-generate-config` durante la instalacion
 # (ver README.md). Cada host importa el suyo en hosts/<host>.nix.
 
-{ config, pkgs, lib, handyPackage, machineType, piperVoices, fydeos-refind-theme, ... }:
+{ config, pkgs, lib, handyPackage, machineType, piperVoices, refind-minimal-theme, ... }:
 
 let
-  # Tema minimal para rEFInd (openFyde). Se copia a /boot/EFI/refind/themes/
-  # inputs flake = source del store → leer FS ok. theme.conf se referencia
-  # con `include themes/rEFInd-minimal/theme.conf`. Los values (source paths)
-  # se pasan sin string context: builtins.toJSON de refind-install.json
-  # RECHAZA strings con context de store path.
+  # Tema minimal para rEFInd (evanpurkhiser/rEFInd-minimal). Se copia a
+  # /boot/EFI/refind/themes/rEFInd-minimal/ via
+  # boot.loader.refind.additionalFiles (dest = themes/rEFInd-minimal/*,
+  # relativo a refind_dir). inputs flake = source del store → leer FS ok.
+  # theme.conf se referencia con `include themes/rEFInd-minimal/theme.conf`.
+  # Los values (source paths) se pasan sin string context: builtins.toJSON
+  # de refind-install.json RECHAZA strings con context de store path.
   flattenDir = dir:
     let entries = builtins.readDir dir;
     in builtins.concatMap
@@ -19,11 +21,11 @@ let
         let type = entries.${name};
         in if type == "directory" then flattenDir "${dir}/${name}" else [ "${dir}/${name}" ])
       (builtins.attrNames entries);
-  refindThemeFiles = flattenDir fydeos-refind-theme;
+  refindThemeFiles = flattenDir refind-minimal-theme;
   refindThemeAdditional = lib.listToAttrs (map
     (file: {
       name = builtins.unsafeDiscardStringContext
-        "themes/rEFInd-minimal/${lib.removePrefix "${fydeos-refind-theme}/" file}";
+        "themes/rEFInd-minimal/${lib.removePrefix "${refind-minimal-theme}/" file}";
       value = builtins.unsafeDiscardStringContext file;
     })
     refindThemeFiles);
@@ -45,13 +47,19 @@ in
   boot.loader.grub.enable = false;
   boot.loader.refind.enable = true;
   boot.loader.refind.efiInstallAsRemovable = false;
-  # Tema minimal openFyde: copia every file del theme a
+  # Tema minimal para rEFInd (evanpurkhiser/rEFInd-minimal). Se copia a
   # /boot/EFI/refind/themes/rEFInd-minimal/ y lo activa via include.
+  # theme.conf (evanpurkhiser) NO trae timeout/default_selection, asi que
+  # no sobreescribe los nuestros. Solo showtools shutdown.
   boot.loader.refind.additionalFiles = refindThemeAdditional;
+  # Solo la última generacion NixOS: sin esto refind genera 1 menuentry
+  # por generacion (gen 93, 92...) y el menu se llena de entradas NixOS.
+  boot.loader.refind.maxGenerations = 1;
   boot.loader.refind.extraConfig = ''
     timeout 8
     use_graphics_for linux,windows
-    dont_scan_dirs /efi/boot
+    # systemd-boot remnants: /efi/systemd era del bootloader anterior.
+    dont_scan_dirs /efi/systemd
     include themes/rEFInd-minimal/theme.conf
   '';
   boot.loader.efi.canTouchEfiVariables = true;

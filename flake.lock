@@ -44,22 +44,6 @@
         "type": "github"
       }
     },
-    "fydeos-refind-theme": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1690268700,
-        "narHash": "sha256-oSQ7Wr5JokirsQuzR+f6xlz3jzDZozUoSBjkzsHNsuc=",
-        "owner": "openFyde",
-        "repo": "fydeos-refind-theme",
-        "rev": "51936c56686b7e03f6a7c261faf6e479eea7814e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "openFyde",
-        "repo": "fydeos-refind-theme",
-        "type": "github"
-      }
-    },
     "handy": {
       "inputs": {
         "bun2nix": "bun2nix",
@@ -177,13 +161,29 @@
         "type": "github"
       }
     },
+    "refind-minimal-theme": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1782920216,
+        "narHash": "sha256-ALDa8bhgiHyIRmyGh8/1P56TvEG/gqC0qOqAWbtURyg=",
+        "owner": "evanpurkhiser",
+        "repo": "rEFInd-minimal",
+        "rev": "56a06a4bd9ed76c05523a22017056dbecca4145d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "evanpurkhiser",
+        "repo": "rEFInd-minimal",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
-        "fydeos-refind-theme": "fydeos-refind-theme",
         "handy": "handy",
         "home-manager": "home-manager",
         "nix-flatpak": "nix-flatpak",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs_2",
+        "refind-minimal-theme": "refind-minimal-theme"
       }
     },
     "systems": {
