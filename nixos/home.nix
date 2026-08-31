@@ -384,6 +384,10 @@ in
         "WAYLAND_DISPLAY=wayland-1"
         "XDG_RUNTIME_DIR=/run/user/%U"
         "XDG_CURRENT_DESKTOP=Hyprland"
+        # Fix QQuickStyle: sin esto el diálogo se dibuja roto y el botón
+        # "Authenticate" no responde (QQuickStyle::setStyle() debe llamarse
+        # antes de importar QtQuick.Controls 2, bug hyprpolkitagent 0.1.3).
+        "QT_QUICK_CONTROLS_STYLE=default"
       ];
       Restart = "on-failure";
       RestartSec = "3";
