@@ -1,12 +1,17 @@
 #!/bin/bash
 # NetworkManager dispatcher para LAN-Mouse KVM y watchdog de IP.
-# - Handoff cable/WiFi: la IP estática KVM vive en UNA sola interfaz.
-#   Ethernet tiene prioridad; si se cae, el WiFi toma el relevo.
+# - Mantiene la IP KVM estatica (laptop .240, desktop .241) sobre la interfaz
+#   que este activa: ethernet de casa si hay, si no WiFi de casa.
+# - Instala una ruta simetrica al peer KVM (src = IP KVM) para que las
+#   respuestas salgan con la IP que el peer espera. Sin esto, con dos
+#   interfaces en el mismo subnet, las respuestas salen por la otra
+#   interfaz con otra source IP → "Connection timed out" (routing asimetrico
+#   + rp_filter estricto dropea el paquete entrante).
 # - Reinicia lan-mouse ante cambios de red en casa.
-# - Detecta conflicto de la IP estática LAN (otro host responde ARP,
-#   o la dirección no se pudo configurar) y avisa por ntfy.
+# - Detecta conflicto de la IP estatica LAN (otro host responde ARP,
+#   o la direccion no se pudo configurar) y avisa por ntfy.
 #
-# IPs estáticas (fuera del pool DHCP del router):
+# IPs estaticas (fuera del pool DHCP del router):
 #   laptop  = 192.168.1.240
 #   desktop = 192.168.1.241
 
@@ -19,8 +24,8 @@ HOME_SSIDS=("Familia_Infante_PLUS" "Familia Villamil" "Familia Villamil 1")
 NTFY_TOPIC=""
 
 case "$(hostname)" in
-    laptop) LAN_IP="192.168.1.240" ; NTFY_TOPIC="opencode-laptop" ;;
-    desktop) LAN_IP="192.168.1.241" ; NTFY_TOPIC="opencode-desktop" ;;
+    laptop) LAN_IP="192.168.1.240" ; KVM_IP="192.168.1.240" ; PEER_IP="192.168.1.241" ; NTFY_TOPIC="opencode-laptop" ;;
+    desktop) LAN_IP="192.168.1.241" ; KVM_IP="192.168.1.241" ; PEER_IP="192.168.1.240" ; NTFY_TOPIC="opencode-desktop" ;;
     *) exit 0 ;;
 esac
 
@@ -40,8 +45,76 @@ is_ethernet() {
     [ "$(nmcli -t -f TYPE device show "$IFACE" 2>/dev/null)" = "ethernet" ]
 }
 
+# Interfaz ethernet conectada a la red de casa (IP dentro del subnet KVM 192.168.1.0/24).
+home_ethernet_iface() {
+    local iface ip
+    for iface in /sys/class/net/*; do
+        iface="${iface##*/}"
+        [ "$iface" = "$WIFI_IF" ] && continue
+        nmcli -t -f TYPE device show "$iface" 2>/dev/null | grep -q '^ethernet$' || continue
+        ip=$(ip -4 addr show dev "$iface" 2>/dev/null | awk '/ inet /{print $2}')
+        if [ -n "$ip" ] && ipaddr_in_home_subnet "$ip"; then
+            echo "$iface"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# ¿la IP a.b.c.d está dentro de 192.168.1.0/24?
+ipaddr_in_home_subnet() {
+    local ip="${1%%/*}"
+    [ "$(echo "$ip" | cut -d. -f1)" = "192" ] && \
+    [ "$(echo "$ip" | cut -d. -f2)" = "168" ] && \
+    [ "$(echo "$ip" | cut -d. -f3)" = "1" ]
+}
+
+# WiFi conectado a red de casa (sustituto cuando no hay ethernet).
+home_wifi_up() {
+    [ -d "/sys/class/net/$WIFI_IF" ] || return 1
+    local conn
+    conn=$(nmcli -t -f NAME,DEVICE connection show --active \
+        | awk -F: -v d="$WIFI_IF" '$2 == d {print $1}')
+    for home in "${HOME_SSIDS[@]}"; do
+        if [ "$conn" = "$home" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Elige la interfaz KVM (ethernet de casa > WiFi de casa) y asegura que la
+# IP estática y la ruta simétrica al peer vivan en ella. Idempotente.
+ensure_kvm() {
+    local iface
+    iface=$(home_ethernet_iface)
+    [ -z "$iface" ] && home_wifi_up && iface="$WIFI_IF"
+    [ -z "$iface" ] && return 0
+
+    # 1. IP KVM en la interfaz elegida (si falta).
+    if ! ip -4 addr show dev "$iface" | grep -q " $KVM_IP/"; then
+        ip addr add "$KVM_IP/24" dev "$iface" 2>/dev/null
+    fi
+
+    # 2. Quitar la IP KVM de las demás interfaces (evita doble dirección
+    #    en el mismo subnet → routing asimétrico).
+    for other in /sys/class/net/*; do
+        other="${other##*/}"
+        [ "$other" = "$iface" ] && continue
+        [ -d "/sys/class/net/$other" ] || continue
+        if ip -4 addr show dev "$other" | grep -q " $KVM_IP/"; then
+            ip addr del "$KVM_IP/24" dev "$other" 2>/dev/null
+        fi
+    done
+
+    # 3. Ruta simétrica: al peer se llega por la interfaz KVM y con src KVM_IP.
+    ip route replace "$PEER_IP/32" dev "$iface" src "$KVM_IP" 2>/dev/null
+
+    restart_lan_mouse
+}
+
 restart_lan_mouse() {
-    local uid uid=$(id -u "$USER" 2>/dev/null) || return 1
+    local uid uid=$(id -u "$USER" 2>/dev/null); [ -z "$uid" ] && return 1
     su "$USER" -c "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user restart lan-mouse.service" 2>/dev/null
 }
 
@@ -75,7 +148,7 @@ check_ip_conflict() {
     fi
 }
 
-# Handoff cable <-> WiFi: la IP estática debe vivir en una sola interfaz.
+# Handoff cable <-> WiFi: la IP estática KVM debe vivir en una sola interfaz.
 medium_handoff() {
     if is_ethernet; then
         if [ "$ACTION" = "up" ]; then
@@ -95,8 +168,14 @@ medium_handoff() {
 case "$ACTION" in
     up|down)
         if medium_handoff || is_home_network; then
-            restart_lan_mouse
+            ensure_kvm
             check_ip_conflict &
+        fi
+        ;;
+    dhcp4-change)
+        # Tras renovar DHCP se puede perder la IP KVM manual → re-aplicar.
+        if is_ethernet || [ "$IFACE" = "$WIFI_IF" ]; then
+            ensure_kvm
         fi
         ;;
 esac
