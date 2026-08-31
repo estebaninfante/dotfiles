@@ -1595,33 +1595,7 @@ PanelWindow {
                          spacing: 12
                         visible: widgetMenu.monitorDetail === ""
 
-                          Rectangle {
-                                id: closeBtn
-                                width: 20
-                                height: 20
-                                radius: 6
-                                color: closeArea.containsMouse ? "white" : "transparent"
-                                anchors.top: parent.top
-                                anchors.right: parent.right
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "\uf00d"
-                                    color: closeArea.containsMouse ? "#11111b" : "#8a8a99"
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                }
-
-                                MouseArea {
-                                    id: closeArea
-                                    hoverEnabled: true
-                                    anchors.fill: parent
-                                    onClicked: widgetMenu.opened = false
-                                }
-                            }
-                         }
-
-                         Flickable {
+                          Flickable {
                              width: parent.width
                               height: 36
                              clip: true
@@ -3611,6 +3585,33 @@ RowLayout {
                             }
 
                             Process { id: soundTest; command: ["true"]; running: false }
+                        }
+                    }
+
+                    Rectangle {
+                        id: closeBtn
+                        width: 20
+                        height: 20
+                        radius: 6
+                        color: closeArea.containsMouse ? "white" : "transparent"
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: 10
+                        anchors.rightMargin: 14
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "\uf00d"
+                            color: closeArea.containsMouse ? "#11111b" : "#8a8a99"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                        }
+
+                        MouseArea {
+                            id: closeArea
+                            hoverEnabled: true
+                            anchors.fill: parent
+                            onClicked: widgetMenu.opened = false
                         }
                     }
                 }
