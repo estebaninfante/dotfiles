@@ -34,7 +34,7 @@ PopupWindow {
 
     anchor { window: root; rect.x: root.width - controlCenter.implicitWidth - 12; rect.y: root.height + 8 }
     onOpenedChanged: if (!opened) UIState.hoversReset()
-    onVisibleChanged: { if (!visible) opened = false; }
+    onVisibleChanged: { if (!visible && UIState.controlCenterOpen) UIState.controlCenterOpen = false; }
 
     Rectangle {
         anchors.fill: parent

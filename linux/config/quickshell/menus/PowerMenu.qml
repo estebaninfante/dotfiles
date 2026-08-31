@@ -29,7 +29,7 @@ PopupWindow {
             powerProfileStatus.running = true;
         }
     }
-    onVisibleChanged: { if (!visible) opened = false; }
+    onVisibleChanged: { if (!visible && UIState.powerMenuOpen) UIState.powerMenuOpen = false; }
 
     anchor {
         window: root

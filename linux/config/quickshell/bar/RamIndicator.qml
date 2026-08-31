@@ -44,4 +44,9 @@ Item {
         onExited: hov = false
         onClicked: UIState.ramMenuOpen = !UIState.ramMenuOpen
     }
+
+    Connections {
+        target: UIState
+        function onHoversReset() { ramArea.hov = false }
+    }
 }

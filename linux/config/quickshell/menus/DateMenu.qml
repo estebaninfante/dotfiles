@@ -19,7 +19,7 @@ PopupWindow {
 
     anchor { window: root; rect.x: (root.width - dateMenu.implicitWidth) / 2; rect.y: root.height + 8 }
     onOpenedChanged: if (!opened) UIState.hoversReset()
-    onVisibleChanged: { if (!visible) opened = false; }
+    onVisibleChanged: { if (!visible && UIState.dateMenuOpen) UIState.dateMenuOpen = false; }
 
     Rectangle {
         anchors.fill: parent

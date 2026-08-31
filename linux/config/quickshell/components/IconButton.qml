@@ -1,4 +1,5 @@
 import QtQuick
+import "../config"
 
 Rectangle {
     id: iconButton
@@ -15,6 +16,11 @@ Rectangle {
     property int iconPixelSize: 13
     signal clicked()
     signal wheeled(int delta)
+
+    Connections {
+        target: UIState
+        function onHoversReset() { area.hov = false }
+    }
 
     Text {
         anchors.centerIn: parent

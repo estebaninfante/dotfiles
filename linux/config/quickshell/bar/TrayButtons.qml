@@ -59,6 +59,11 @@ Row {
         }
     }
 
+    Connections {
+        target: UIState
+        function onHoversReset() { volumeArea.hov = false }
+    }
+
     IconButton {
         id: ccBtn
         icon: "\uf137"

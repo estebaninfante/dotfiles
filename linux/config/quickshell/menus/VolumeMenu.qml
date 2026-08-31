@@ -32,7 +32,7 @@ PopupWindow {
             UIState.hoversReset();
         }
     }
-    onVisibleChanged: { if (!visible) opened = false; }
+    onVisibleChanged: { if (!visible && UIState.volumeMenuOpen) UIState.volumeMenuOpen = false; }
 
     Rectangle {
         anchors.fill: parent

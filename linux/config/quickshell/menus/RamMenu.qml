@@ -20,7 +20,7 @@ PopupWindow {
     property string ramBarText: "--%"
 
     anchor { window: root; rect.x: root.width - ramMenu.implicitWidth - 190; rect.y: root.height + 8 }
-    onVisibleChanged: { if (!visible) opened = false; }
+    onVisibleChanged: { if (!visible && UIState.ramMenuOpen) UIState.ramMenuOpen = false; }
 
     Rectangle {
         anchors.fill: parent

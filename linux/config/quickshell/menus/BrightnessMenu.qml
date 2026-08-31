@@ -21,7 +21,7 @@ PopupWindow {
 
     anchor { window: root; rect.x: root.width - brightnessMenu.implicitWidth - 72; rect.y: root.height + 8 }
     onOpenedChanged: { if (!opened) UIState.hoversReset(); }
-    onVisibleChanged: { if (!visible) opened = false; }
+    onVisibleChanged: { if (!visible && UIState.brightnessMenuOpen) UIState.brightnessMenuOpen = false; }
 
     Rectangle {
         anchors.fill: parent
