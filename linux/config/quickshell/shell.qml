@@ -1150,7 +1150,7 @@ PanelWindow {
                             }
                             Rectangle {
                                 x: Math.max(0, Math.min(parent.width - this.width, parent.width * root.brightnessPct / 100 - this.width / 2))
-                                anchors.verticalCenter: parent.verticalCenter
+                                y: (parent.height - height) / 2
                                 width: 12
                                 height: 12
                                 radius: 6
@@ -1595,29 +1595,14 @@ PanelWindow {
                          spacing: 12
                         visible: widgetMenu.monitorDetail === ""
 
-                         RowLayout {
-                             width: parent.width
-                             height: 24
-
-                            Text {
-                                 text: "SISTEMA  /  " + widgetMenu.activeSection.toUpperCase()
-                                color: "#a6adc8"
-                                font.family: "JetBrainsMono Nerd Font"
-                                 font.pixelSize: 10
-                                font.letterSpacing: 3
-                                font.bold: true
-                            }
-
-                            Item {
-                                Layout.fillWidth: true
-                            }
-
-                            Rectangle {
+                          Rectangle {
                                 id: closeBtn
                                 width: 20
                                 height: 20
                                 radius: 6
                                 color: closeArea.containsMouse ? "white" : "transparent"
+                                anchors.top: parent.top
+                                anchors.right: parent.right
 
                                 Text {
                                     anchors.centerIn: parent
@@ -1632,8 +1617,8 @@ PanelWindow {
                                     hoverEnabled: true
                                     anchors.fill: parent
                                     onClicked: widgetMenu.opened = false
-                             }
-                         }
+                                }
+                            }
                          }
 
                          Flickable {
