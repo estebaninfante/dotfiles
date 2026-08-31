@@ -53,7 +53,7 @@ apply_wallpaper() {
         echo "wallpaper: no existe $img (omitido)" >&2
         return 0
     fi
-    # Si desktop esta usando Wallpaper Engine, pararlo para hyprpaper
+    # Desktop con Wallpaper Engine activo → pararlo y usar hyprpaper (jpg estatico)
     if systemctl --user is-active --quiet linux-wallpaperengine.service 2>/dev/null; then
         systemctl --user stop linux-wallpaperengine.service 2>/dev/null || true
     fi
@@ -64,9 +64,8 @@ apply_wallpaper() {
     local mon
     mon="$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // empty' 2>/dev/null)"
     [ -z "$mon" ] && mon="eDP-1"
-    hyprctl hyprpaper reload unload all >/dev/null 2>&1 || true
-    hyprctl hyprpaper preload "$img" >/dev/null 2>&1 || true
-    sleep 0.15
+    # hyprpaper v0.8+: IPC string solo soporta `wallpaper <mon>,<path>`
+    # (reload/preload/unload eliminados). fit_mode default = cover (igual al config).
     hyprctl hyprpaper wallpaper "$mon,$img" >/dev/null 2>&1 || true
 }
 apply_wallpaper

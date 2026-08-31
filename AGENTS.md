@@ -316,6 +316,41 @@ ssh eztvn@laptop
 5. **NUNCA ejecutar `sudo nixos-rebuild` con host hardcodeado** (`#laptop`/`#desktop`). SIEMPRE `bash ~/dotfiles/scripts/rebuild.sh`, que detecta la máquina por hardware y valida el root UUID. Un rebuild con host equivocado rompe el boot (ya ocurrió: gen 72 inservible en desktop).
 6. **NUNCA disparar compilación CUDA.** En el **desktop**, cualquier rebuild evalúa `nixpkgs.config.cudaSupport = true` + `services.sunshine.package = ...override { cudaSupport = true; }` (`desktop.nix`), y el closure system puede incluir `kokoroEnv`/`voice-kokoro` (torch) de `packages.nix`. Eso implica **horas** de build CUDA (cudnn ~2GB + libcublas ~1GB descargados de NVIDIA) + OOM por paralelismo. Regla**: SIEMPRE antes de cualquier `rebuild.sh` en desktop, hacer `nixos-rebuild dry-build` (o `nix build .#nixosConfigurations.desktop.config.system.build.toplevel --dry-run`) y revisar el output: si aparece `cudnn|libcublas|torch|sunshine` → **ABORTAR** y avisar al usuario; el CUDA queda PENDIENTE hasta que el usuario lo apruebe explícitamente y con `NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8"`. Los agentes NO deciden compilar CUDA (el usuario tiene marker `~/.local/state/dotfiles/skip-auto-rebuild` como kill switch del auto-sync; rebuild manual NO lo respeta). Cambios que no afecten closure system (configs symlinkeadas, scripts, home.nix de units) NO requieren rebuild — se aplican via symlink directo.
 
+## Modo claro/oscuro (tema global)
+
+**Modo canónico** = symlink `linux/config/kitty/active-theme.conf` (apunta a
+`theme-light.conf` / `theme-dark.conf`, trackeado por git → sync automático
+entre máquinas vía auto-sync). Los demás componentes DERIVAN el modo de ahí
+con `readlink`; no hay archivo de estado separado.
+
+- `linux/bin/theme-toggle.sh [light|dark|toggle]` — **orquestador**: llama
+  `kitty-theme-toggle.sh` (hot-reload), setea `gsettings color-scheme`
+  (prefer-dark/prefer-light), y cambia el **wallpaper** vía IPC de hyprpaper
+  (`hyprctl hyprpaper preload + wallpaper`). En desktop pausa
+  `linux-wallpaperengine.service` si está activo. Notifica por `notify-send`.
+  Registrado en `allScripts` (`nixos/home.nix`). Keybind `F11` (hyprland.lua)
+  y botón **TEMA** en el widgetMenu de quickshell (card con estado leído de
+  `readlink active-theme.conf`).
+- **Kitty**: `kitty.conf:6 include active-theme.conf`. Paletas por máquina:
+  `theme-light.conf` (crema `#fdf8f0`, texto `#1a1a18`) y `theme-dark.conf`
+  (gris `#161513`, texto `#d4d2cb`) — diseñadas para miopía+astigmatismo.
+  Keybind propio `ctrl+shift+f9`. No requiere rebuild (symlink directo).
+- **Nvim**: `lua/plugins/colorscheme.lua` lee el modo vía `readlink` →
+  `rose-pine` variante `dawn` (claro) / `main` (oscuro). Incluye watcher
+  (`vim.loop.fs_event` sobre `active-theme.conf`) → recarga en vivo sin
+  reiniciar nvim. Según `lualine` sigue colorscheme automáticamente.
+- **Opencode**: `tui.json` → `"theme": "system"` (sigue el fondo del terminal,
+  así que al togglear kitty cambia con él). Cambios aplican al arrancar
+  opencode; en sesión viva usar `/theme`.
+- **Wallpaper**: `linux/config/hypr/wallpapers/porsche_wallpaper.jpg`
+  (oscuro) + `porsche_white.jpg` (claro). Laptop → hyprpaper IPC (eDP-1);
+  desktop → pausa Wallpaper Engine y usa hyprpaper (fallback: híbrido).
+- **GTK/apps**: `hyprland.lua` autostart setea `color-scheme` según el modo
+  al boot (antes hardcodeado a `prefer-dark`); el toggle lo cambia en vivo.
+
+No tocar paletas kitty sin revisar la guía de legibilidad (miopía +
+astigmatismo: nada de blanco/negro puros, crema/gris cálido).
+
 ## Handy (Speech-to-Text)
 
 Handy es una app de speech-to-text. En NixOS se instala desde el flake

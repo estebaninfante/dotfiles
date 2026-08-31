@@ -316,7 +316,7 @@ PanelWindow {
         height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
 
-        color: "#95000000"
+        color: "#000000"
         clip: true
         opacity: expanded ? 1 : 0
         Text {
@@ -638,7 +638,7 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#e60d0d12"
+                color: "#0d0d12"
                 border.color: "#383847"
                 border.width: 1
 
@@ -760,7 +760,7 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#e60d0d12"
+                color: "#0d0d12"
                 border.color: "#383847"
                 border.width: 1
             }
@@ -1015,7 +1015,7 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#e60d0d12"
+                color: "#0d0d12"
                 border.color: "#383847"
                 border.width: 1
                 Column {
@@ -1045,7 +1045,7 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 14
-                color: "#e60d0d12"
+                color: "#0d0d12"
                 border.color: "#383847"
                 border.width: 1
                 Column {
@@ -1119,7 +1119,7 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 12
-                color: "#e60d0d12"
+                color: "#0d0d12"
                 border.color: "#383847"
                 border.width: 1
                 Column {
@@ -1217,7 +1217,7 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: 12
-                color: "#e60d0d12"
+                color: "#0d0d12"
                 border.color: "#383847"
                 border.width: 1
                 Column {
@@ -1576,7 +1576,7 @@ PanelWindow {
                     width: parent.width
                      height: cards.implicitHeight + 32
                      radius: 18
-                     color: "#e60d0d12"
+                     color: "#0d0d12"
                      border.color: "#383847"
                      border.width: 1
                      visible: widgetMenu.monitorDetail === ""
@@ -3725,7 +3725,7 @@ RowLayout {
                     width: parent.width
                     implicitHeight: detailCol.implicitHeight + 32
                     radius: 18
-                    color: "#e60d0d12"
+                    color: "#0d0d12"
                     border.color: "#383847"
                     border.width: 1
                     visible: widgetMenu.monitorDetail !== ""
@@ -3872,7 +3872,7 @@ RowLayout {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 14
             radius: 16
-            color: "#e60d0d12"
+            color: "#0d0d12"
             border.color: "#383847"
             border.width: 1
     

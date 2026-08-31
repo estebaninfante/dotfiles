@@ -52,6 +52,7 @@ let
     "voice" "voice-daemon" "handy-paste.sh" "middle-click.sh"
     "bedtime.sh" "bedtime-skip.sh" "notify-lid-suspend.sh" "notify-push-toggle.sh" "temperature-log.sh"
     "kitty-theme-toggle.sh" "obsidian-theme-toggle.sh"
+    "theme-toggle.sh"
     "gamepad-watch.sh" "hypr-input-bridge.sh"
   ];
   # Solo laptop
