@@ -793,7 +793,7 @@ PanelWindow {
                     width: parent.width
                     height: 34
                     radius: 8
-                    color: profileHeaderArea.containsMouse || powerMenu.powerProfilesOpen ? "#000000" : "#000000"
+                    color: profileHeaderArea.containsMouse || powerMenu.powerProfilesOpen ? "#1d1d26" : "#141414"
 
                     RowLayout {
                         anchors.fill: parent
@@ -841,7 +841,7 @@ PanelWindow {
                             width: parent.width
                             height: 30
                             radius: 7
-                            color: profileArea.containsMouse ? "#000000" : root.powerProfile === modelData ? "#000000" : "#000000"
+                            color: profileArea.containsMouse ? "#1d1d26" : root.powerProfile === modelData ? "#1d1d26" : "#141414"
 
                             RowLayout {
                                 anchors.fill: parent
@@ -890,7 +890,7 @@ PanelWindow {
                         width: powerCol.width
                         height: 34
                         radius: 8
-                        color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#eba0ac" : "white") : "#000000"
+                        color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#eba0ac" : "white") : "#141414"
 
                         Text {
                             anchors.centerIn: parent
@@ -921,7 +921,7 @@ PanelWindow {
                         width: (parent.width - 6) / 2
                         height: 34
                         radius: 8
-                        color: cancelPowerArea.containsMouse ? "#222" : "#000000"
+                        color: cancelPowerArea.containsMouse ? "#222" : "#141414"
                         Text {
                             anchors.centerIn: parent
                             text: "CANCELAR"
@@ -942,7 +942,7 @@ PanelWindow {
                         width: (parent.width - 6) / 2
                         height: 34
                         radius: 8
-                        color: confirmPowerArea.containsMouse ? "#eba0ac" : "#000000"
+                        color: confirmPowerArea.containsMouse ? "#eba0ac" : "#141414"
                         Text {
                             anchors.centerIn: parent
                             text: "CONFIRMAR"
@@ -1285,7 +1285,7 @@ PanelWindow {
                             width: 48
                             height: 26
                             radius: 7
-                            color: wallAudioToggleArea.containsMouse ? "white" : volumeMenu.wallpaperMuted ? "#000000" : "#000000"
+                            color: wallAudioToggleArea.containsMouse ? "white" : volumeMenu.wallpaperMuted ? "#141414" : "#141414"
                             border.color: "#333"
 
                             Text {
@@ -1332,7 +1332,7 @@ PanelWindow {
                             width: parent.width
                             height: 22
                             radius: 6
-                            color: volSinkArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
+                            color: volSinkArea.containsMouse ? "#1d1d26" : selected ? "#1d1d26" : "#141414"
 
                             Text {
                                 anchors.left: parent.left
@@ -1376,7 +1376,7 @@ PanelWindow {
                             width: parent.width
                             height: 22
                             radius: 6
-                            color: volSourceArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
+                            color: volSourceArea.containsMouse ? "#1d1d26" : selected ? "#1d1d26" : "#141414"
 
                             Text {
                                 anchors.left: parent.left
@@ -1614,7 +1614,7 @@ PanelWindow {
                                          width: Math.max(84, sectionLabel.implicitWidth + 24)
                                          height: 32
                                          radius: 9
-                                         color: widgetMenu.activeSection === modelData.toLowerCase() ? "white" : sectionArea.containsMouse ? "#000000" : "#000000"
+                                         color: widgetMenu.activeSection === modelData.toLowerCase() ? "white" : sectionArea.containsMouse ? "#1d1d26" : "#141414"
 
                                          Text {
                                              id: sectionLabel
@@ -1702,7 +1702,7 @@ PanelWindow {
                                           width: 54
                                           height: 30
                                           radius: 9
-                                          color: themeToggleArea.containsMouse ? "white" : themeCard.themeLight ? "#000000" : "#000000"
+                                          color: themeToggleArea.containsMouse ? "white" : themeCard.themeLight ? "#141414" : "#141414"
                                           border.color: themeCard.themeLight ? "white" : "#333"
                                           border.width: 1
 
@@ -2125,7 +2125,7 @@ RowLayout {
                                           width: audioDetails.width
                                           height: 34
                                           radius: 8
-                                          color: audioDeviceArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
+                                          color: audioDeviceArea.containsMouse ? "#1d1d26" : selected ? "#1d1d26" : "#141414"
                                           Text {
                                               anchors.left: parent.left
                                               anchors.leftMargin: 10
@@ -2165,7 +2165,7 @@ RowLayout {
                                           width: audioDetails.width
                                           height: 34
                                           radius: 8
-                                          color: audioInputArea.containsMouse ? "#000000" : selected ? "#000000" : "#000000"
+                                          color: audioInputArea.containsMouse ? "#1d1d26" : selected ? "#1d1d26" : "#141414"
                                           Text {
                                               anchors.left: parent.left
                                               anchors.leftMargin: 10
@@ -2313,7 +2313,7 @@ RowLayout {
                                            delegate: Rectangle {
                                                required property string modelData
                                                Layout.fillWidth: true; height: 32; radius: 7
-                                                color: screenModeArea.containsMouse ? "white" : "#000000"
+                                                color: screenModeArea.containsMouse ? "white" : "#141414"
                                                 Text { anchors.centerIn: parent; text: modelData; color: screenModeArea.containsMouse ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
                                                MouseArea { id: screenModeArea; anchors.fill: parent; hoverEnabled: true; onClicked: { if (screenCard.monitors.count) screenCard.apply(screenCard.monitors.get(screenCard.monitors.count - 1).name, modelData === "DUPLICAR" ? "duplicate" : modelData === "AMPLIAR" ? "extend" : modelData === "SOLO 2ª" ? "second" : "only"); } }
                                            }
@@ -2327,7 +2327,7 @@ RowLayout {
                                            model: [["←", "left"], ["→", "right"], ["↑", "up"], ["↓", "down"]]
                                            delegate: Rectangle {
                                                required property var modelData
-                                                width: 30; height: 28; radius: 7; color: positionArea.containsMouse ? "white" : "#000000"
+                                                width: 30; height: 28; radius: 7; color: positionArea.containsMouse ? "white" : "#141414"
                                                 Text { anchors.centerIn: parent; text: modelData[0]; color: positionArea.containsMouse ? "#000000" : "#aaa"; font.pixelSize: 14 }
                                                MouseArea { id: positionArea; anchors.fill: parent; hoverEnabled: true; onClicked: { if (screenCard.monitors.count) screenCard.apply(screenCard.monitors.get(screenCard.monitors.count - 1).name, modelData[1]); } }
                                            }
@@ -2549,7 +2549,7 @@ RowLayout {
                                     width: 48
                                      height: 30
                                      radius: 9
-                                    color: wifiToggleArea.containsMouse ? "white" : "#000000"
+                                    color: wifiToggleArea.containsMouse ? "white" : "#141414"
 
                                     Text {
                                         anchors.centerIn: parent
@@ -2633,7 +2633,7 @@ RowLayout {
                                          width: 96
                                          height: 34
                                          radius: 8
-                                        color: wifiRefreshArea.containsMouse ? "white" : "#000000"
+                                        color: wifiRefreshArea.containsMouse ? "white" : "#141414"
                                         Text {
                                             anchors.centerIn: parent
                                             text: "ESCANEAR"
@@ -2657,7 +2657,7 @@ RowLayout {
                                        width: parent.width
                                      height: 32
                                      radius: 8
-                                     color: wifiCard.wifiAdvancedOpen ? "white" : wifiAdvancedArea.containsMouse ? "#000000" : "#000000"
+                                     color: wifiCard.wifiAdvancedOpen ? "white" : wifiAdvancedArea.containsMouse ? "#1d1d26" : "#141414"
                                      Text {
                                          anchors.centerIn: parent
                                           text: wifiCard.wifiAdvancedOpen ? "OCULTAR CONFIGURACIÓN EMPRESARIAL" : "CONFIGURACIÓN EMPRESARIAL (802.1X)"
@@ -2829,7 +2829,7 @@ RowLayout {
                                           width: 86
                                           height: 28
                                           radius: 7
-                                          color: wifiScanArea.containsMouse ? "white" : "#000000"
+                                          color: wifiScanArea.containsMouse ? "white" : "#141414"
                                           Text { anchors.centerIn: parent; text: "ESCANEAR"; color: wifiScanArea.containsMouse ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
                                           MouseArea { id: wifiScanArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.refreshNetworks() }
                                       }
@@ -2850,7 +2850,7 @@ RowLayout {
                                          width: wifiDetails.width
                                           height: expanded ? 34 + networkDetails.implicitHeight + 10 : 34
                                           radius: 7
-                                         color: wifiNetworkArea.containsMouse ? "#000000" : "#000000"
+                                         color: wifiNetworkArea.containsMouse ? "#1d1d26" : "#141414"
                                          RowLayout {
                                              anchors.left: parent.left
                                              anchors.right: parent.right
@@ -2919,7 +2919,7 @@ RowLayout {
                                                      width: 84
                                                      height: 32
                                                      radius: 8
-                                                     color: wifiCard.wifiAdvancedOpen ? "white" : networkAdvancedArea.containsMouse ? "#000000" : "#000000"
+                                                     color: wifiCard.wifiAdvancedOpen ? "white" : networkAdvancedArea.containsMouse ? "#1d1d26" : "#141414"
                                                      Text { anchors.centerIn: parent; text: "AVANZADO"; color: wifiCard.wifiAdvancedOpen ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 8; font.bold: true }
                                                      MouseArea { id: networkAdvancedArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.wifiAdvancedOpen = !wifiCard.wifiAdvancedOpen }
                                                  }
@@ -2988,7 +2988,7 @@ RowLayout {
                                                  width: parent.width
                                                  height: 34
                                                  radius: 8
-                                                  color: wifiCard.wifiState === "connecting" ? "#000000" : networkConnectArea.containsMouse ? "white" : "#000000"
+                                                  color: wifiCard.wifiState === "connecting" ? "#141414" : networkConnectArea.containsMouse ? "white" : "#141414"
                                                  Text { anchors.centerIn: parent; text: wifiCard.wifiState === "connecting" ? "CONECTANDO…" : "CONECTAR"; color: wifiCard.wifiState === "connecting" ? "#555" : networkConnectArea.containsMouse ? "#000000" : "#aaa"; font.family: root.fontFamily; font.pixelSize: 9; font.bold: true }
                                                  MouseArea { id: networkConnectArea; anchors.fill: parent; hoverEnabled: true; onClicked: wifiCard.connectNetwork(ssid) }
                                              }
@@ -3011,7 +3011,7 @@ RowLayout {
                                       width: parent.width
                                     height: 34
                                     radius: 8
-                                    color: wifiCard.wifiState === "connecting" ? "#000000" : wifiConnectArea.containsMouse ? "white" : "#000000"
+                                    color: wifiCard.wifiState === "connecting" ? "#141414" : wifiConnectArea.containsMouse ? "white" : "#141414"
                                     Text {
                                         anchors.centerIn: parent
                                         text: wifiCard.wifiState === "connecting" ? "CONECTANDO…" : "CONECTAR" + (wifiCard.selectedSsid ? " · " + wifiCard.selectedSsid : "")
@@ -3233,7 +3233,7 @@ RowLayout {
                                     width: 48
                                     height: 30
                                     radius: 9
-                                    color: btToggleArea.containsMouse ? "white" : "#000000"
+                                    color: btToggleArea.containsMouse ? "white" : "#141414"
 
                                     Text {
                                         anchors.centerIn: parent
@@ -3280,7 +3280,7 @@ RowLayout {
                                     width: parent.width
                                      height: 34
                                      radius: 8
-                                    color: btRefreshArea.containsMouse ? "white" : "#000000"
+                                    color: btRefreshArea.containsMouse ? "white" : "#141414"
                                     Text {
                                         anchors.centerIn: parent
                                         text: "ESCANEAR BLUETOOTH"
@@ -3310,7 +3310,7 @@ RowLayout {
                                         width: btDetails.width
                                          height: 54
                                          radius: 7
-                                        color: btDeviceArea.containsMouse ? "#000000" : "#000000"
+                                        color: btDeviceArea.containsMouse ? "#1d1d26" : "#141414"
                                         Column {
                                             anchors.left: parent.left
                                             anchors.leftMargin: 8
@@ -3353,7 +3353,7 @@ RowLayout {
                                             Layout.fillWidth: true
                                     height: 34
                                     radius: 8
-                                            color: btActionArea.containsMouse ? "white" : "#000000"
+                                            color: btActionArea.containsMouse ? "white" : "#141414"
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: modelData
@@ -3570,7 +3570,7 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: soundToggleArea.containsMouse ? "white" : notifCard.soundOn ? "#000000" : "#000000"
+                                        color: soundToggleArea.containsMouse ? "white" : notifCard.soundOn ? "#141414" : "#141414"
                                         border.color: notifCard.soundOn ? "white" : "#333"
                                         border.width: 1
 
@@ -3631,7 +3631,7 @@ RowLayout {
                                         width: 48
                                         height: 30
                                         radius: 9
-                                        color: voiceToggleArea.containsMouse ? "white" : notifCard.voiceOn ? "#000000" : "#000000"
+                                        color: voiceToggleArea.containsMouse ? "white" : notifCard.voiceOn ? "#141414" : "#141414"
                                         border.color: notifCard.voiceOn ? "white" : "#333"
                                         border.width: 1
 
@@ -3926,7 +3926,7 @@ RowLayout {
                     width: parent.width
                     height: 42
                     radius: 8
-                    color: gameNoArea.containsMouse ? "white" : "#000000"
+                    color: gameNoArea.containsMouse ? "white" : "#141414"
                     Text {
                         anchors.centerIn: parent
                         text: "NO, SOLO ABRIR"
