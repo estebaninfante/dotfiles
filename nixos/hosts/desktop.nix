@@ -17,7 +17,8 @@
   # color por GPU. La laptop usa el paquete plain (software), suficiente
   # para solo ver. ⚠️ Compilar con paralelismo limitado (max-jobs/cores)
   # o la build C++ con 24 jobs OOM y congela (sin swap).
-  services.sunshine.package = (pkgs.sunshine.override { cudaSupport = true; });
+  # [inactivo CUDA hasta nuevo aviso — user decidió NO compilar CUDA]
+  # services.sunshine.package = (pkgs.sunshine.override { cudaSupport = true; });
 
   # ── DaVinci Resolve (solo desktop) ──────────────────────────
   # Edicion de video con aceleracion CUDA (RTX 3070). Unfree pero
@@ -43,7 +44,8 @@
   #    paralelismo controlado y seguir el log en otra terminal:
   #    sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" nixos-rebuild switch
   #    (o bash ~/dotfiles/scripts/rebuild.sh con NIX_CONFIG seteado).
-  nixpkgs.config.cudaSupport = true;
+  # [inactivo CUDA hasta nuevo aviso — user decidió NO compilar CUDA]
+  # nixpkgs.config.cudaSupport = true;
   # cudaCapabilities limitado a las archs REALES de este host (RTX 3070 =
   # sm_86) + laptop (RTX 4060 = sm_89). Default de nixpkgs compila ~10 archs
   # (compute_75…121): magma/torch/opencv se disparan gigantes y el `as` de
@@ -51,7 +53,7 @@
   # gigante sgeqr2_batched_fused_reg_medium.cu (arch compute_120). Limitar a
   # 2 archs reales ≈ 5-10x menos trabajo y evita el bug. Mismo valor en
   # laptop.nix para que los store hashes coincidan y se copien con nix copy.
-  nixpkgs.config.cudaCapabilities = [ "8.6" "8.9" ];
+  # nixpkgs.config.cudaCapabilities = [ "8.6" "8.9" ];
 
   hardware.nvidia = {
     # Driver propietario.
