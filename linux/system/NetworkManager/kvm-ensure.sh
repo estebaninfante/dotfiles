@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Ensure de la IP KVM flotante y de la ruta simetrica al peer.
 # Fuente de verdad de la logica KVM; la usa el dispatcher NM (source) y
 # un timer systemd (ejecucion directa, safety net ante eventos perdidos).

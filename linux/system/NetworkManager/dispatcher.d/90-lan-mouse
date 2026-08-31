@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # NetworkManager dispatcher para LAN-Mouse KVM.
 # - Handoff cable <-> WiFi: al conectar ethernet de casa baja el WiFi;
 #   al caer, lo re-conecta (la IP flotante KVM sigue al medio).
