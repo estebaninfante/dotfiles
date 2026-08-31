@@ -98,8 +98,10 @@ in
 
   # Firewall
   networking.firewall.enable = true;
-  # Si usas tailscale descomenta para no cortar la red mesh:
-  # networking.firewall.checkReversePath = "loose";
+  # Reverse path "loose": con dos interfaces en el mismo subnet (dock
+  # ethernet + WiFi en laptop), las respuestas del peer KVM pueden entrar
+  # por la interfaz no-preferida; estricto las dropea.
+  networking.firewall.checkReversePath = "loose";
   # SSH solo via tailscale0.
   networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 22 ];
   # LAN-Mouse: TCP (handshake) + UDP (input data)
