@@ -1440,132 +1440,6 @@ PanelWindow {
                   onTriggered: widgetMenu.refreshMonitoring()
               }
 
-              PopupWindow {
-                  id: detailMenu
-                   implicitWidth: 560
-                   implicitHeight: 620
-                  visible: opened
-                  grabFocus: true
-                  color: "transparent"
-                  property bool opened: false
-                  property var metrics: []
-                  anchor { window: root; rect.x: root.width - detailMenu.implicitWidth - 12; rect.y: root.height + 8 }
-
-                  onOpenedChanged: {
-                      if (!opened)
-                          root.resetHover(menuBtnArea);
-                  }
-
-                  Rectangle {
-                      anchors.fill: parent
-                      anchors.margins: 1
-                      radius: 14
-                      color: "#ed0d0d12"
-                      border.color: "#383847"
-                      border.width: 1
-                  }
-
-                  Column {
-                      anchors.fill: parent
-                      anchors.margins: 16
-                      spacing: 10
-
-                      RowLayout {
-                          width: parent.width
-                          Text {
-                              text: "DETALLE  /  " + widgetMenu.monitorDetail.toUpperCase()
-                              color: "#cba6f7"
-                              font.family: root.fontFamily
-                          font.pixelSize: 15
-                              font.bold: true
-                              font.letterSpacing: 1.5
-                              Layout.fillWidth: true
-                          }
-                          Text {
-                              text: "\uf00d"
-                              color: detailCloseArea.containsMouse ? "#e06c75" : "#9a9aa7"
-                              font.family: root.fontFamily
-                              font.pixelSize: 13
-                              MouseArea { id: detailCloseArea; anchors.fill: parent; hoverEnabled: true; onClicked: detailMenu.opened = false }
-                          }
-                      }
-
-                      Text {
-                          width: parent.width
-                          text: widgetMenu.monitorDetail === "cpu" ? "Procesador, temperatura y uso por hilo lógico" : widgetMenu.monitorDetail === "gpu" ? "Uso, memoria, temperatura y consumo NVIDIA" : widgetMenu.monitorDetail === "ram" ? "Memoria disponible y procesos con mayor consumo" : "Carga general, almacenamiento y sesión"
-                          color: "#9a9aa7"
-                          font.family: root.fontFamily
-                          font.pixelSize: 12
-                          wrapMode: Text.WordWrap
-                      }
-
-                      Repeater {
-                          model: widgetMenu.monitorDetail === "cpu" ? [["USO", Math.round(widgetMenu.cpuUsage) + "%"], ["TEMPERATURA MÁXIMA", Math.round(widgetMenu.cpuTemp) + " °C"], ["CARGA 1 MIN", widgetMenu.systemLoad], ["NÚCLEOS", "Detectados por kernel"]] : widgetMenu.monitorDetail === "gpu" ? [["USO GPU", Math.round(widgetMenu.gpuUsage) + "%"], ["TEMPERATURA", Math.round(widgetMenu.gpuTemp) + " °C"], ["MEMORIA", Math.round(widgetMenu.gpuMemory) + " / " + Math.round(widgetMenu.gpuMemoryTotal) + " MB"], ["CONSUMO", "Lectura NVIDIA disponible"]] : [["DISCO /", widgetMenu.rootDisk + "% usado"], ["CARGA", widgetMenu.systemLoad], ["TIEMPO ENCENDIDO", widgetMenu.systemUptime]]
-                          delegate: Rectangle {
-                              required property var modelData
-                              width: detailMenu.width - 32
-                              height: 42
-                              radius: 7
-                              color: "#1d1d26"
-                              visible: widgetMenu.monitorDetail !== "ram" && widgetMenu.monitorDetail !== "cpu"
-                              RowLayout {
-                                  anchors.fill: parent
-                                  anchors.leftMargin: 10
-                                  anchors.rightMargin: 10
-                                  Text { text: modelData[0]; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 11; Layout.fillWidth: true }
-                                  Text { text: modelData[1]; color: "white"; font.family: root.fontFamily; font.pixelSize: 12; font.bold: true }
-                              }
-                          }
-                      }
-
-                      Text {
-                          text: "PROCESOS RAM"
-                          color: "#9a9aa7"
-                          font.family: root.fontFamily
-                          font.pixelSize: 9
-                          font.bold: true
-                          visible: widgetMenu.monitorDetail === "ram"
-                      }
-                      Repeater {
-                          model: ramCard.processes
-                          delegate: RowLayout {
-                              width: detailMenu.width - 32
-                              visible: widgetMenu.monitorDetail === "ram"
-                              Text { text: processName; color: "white"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
-                              Text { text: memory + " MB"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 9 }
-                          }
-                      }
-
-                      Text { text: "USO POR HILO LÓGICO"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; visible: widgetMenu.monitorDetail === "cpu" }
-                      Grid {
-                          columns: 4
-                          columnSpacing: 6
-                          rowSpacing: 6
-                          width: parent.width
-                          visible: widgetMenu.monitorDetail === "cpu"
-                          Repeater {
-                              model: widgetMenu.cpuThreads
-                              delegate: Rectangle {
-                                  required property string threadName
-                                  required property string threadUsage
-                                  width: (detailMenu.width - 50) / 4
-                                  height: 38
-                                  radius: 6
-                                  color: "#1d1d26"
-                                  Column {
-                                      anchors.centerIn: parent
-                                      Text { text: threadName.toUpperCase(); color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; anchors.horizontalCenter: parent.horizontalCenter }
-                                      Text { text: Math.round(parseFloat(threadUsage)) + "%"; color: "#89b4fa"; font.family: root.fontFamily; font.pixelSize: 11; font.bold: true; anchors.horizontalCenter: parent.horizontalCenter }
-                                  }
-                              }
-                          }
-                      }
-
-                      Item { Layout.fillHeight: true }
-                      Text { text: "Actualización automática cada 2.5 s"; color: "#6c7086"; font.family: root.fontFamily; font.pixelSize: 9 }
-                  }
-              }
-
 
             anchor {
                 window: root
@@ -1589,8 +1463,8 @@ PanelWindow {
                      scale: widgetMenu.opened ? 1 : 0.94
                      transformOrigin: Item.TopRight
 
-             Column {
-                 id: cards
+              Column {
+                  id: cards
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -1598,6 +1472,7 @@ PanelWindow {
                          anchors.leftMargin: 16
                          anchors.rightMargin: 16
                          spacing: 12
+                        visible: widgetMenu.monitorDetail === ""
 
                          RowLayout {
                              width: parent.width
@@ -3631,6 +3506,123 @@ PanelWindow {
 
                             Process { id: soundTest; command: ["true"]; running: false }
                         }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    implicitHeight: detailCol.implicitHeight + 32
+                    radius: 18
+                    color: "#e60d0d12"
+                    border.color: "#383847"
+                    border.width: 1
+                    visible: widgetMenu.monitorDetail !== ""
+                    opacity: widgetMenu.monitorDetail !== "" ? 1 : 0
+                    scale: widgetMenu.monitorDetail !== "" ? 1 : 0.94
+                    transformOrigin: Item.TopRight
+
+                    Column {
+                        id: detailCol
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.topMargin: 16
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 10
+
+                        RowLayout {
+                            width: parent.width
+                            Text {
+                                text: "\uf060  DETALLE  /  " + widgetMenu.monitorDetail.toUpperCase()
+                                color: "#cba6f7"
+                                font.family: root.fontFamily
+                                font.pixelSize: 15
+                                font.bold: true
+                                font.letterSpacing: 1.5
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                text: "\uf00d"
+                                color: detailBackArea.containsMouse ? "#e06c75" : "#9a9aa7"
+                                font.family: root.fontFamily
+                                font.pixelSize: 13
+                                MouseArea { id: detailBackArea; anchors.fill: parent; hoverEnabled: true; onClicked: widgetMenu.monitorDetail = "" }
+                            }
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: widgetMenu.monitorDetail === "cpu" ? "Procesador, temperatura y uso por hilo l\u00f3gico" : widgetMenu.monitorDetail === "gpu" ? "Uso, memoria, temperatura y consumo NVIDIA" : widgetMenu.monitorDetail === "ram" ? "Memoria disponible y procesos con mayor consumo" : "Carga general, almacenamiento y sesi\u00f3n"
+                            color: "#9a9aa7"
+                            font.family: root.fontFamily
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Repeater {
+                            model: widgetMenu.monitorDetail === "cpu" ? [["USO", Math.round(widgetMenu.cpuUsage) + "%"], ["TEMPERATURA M\u00c1XIMA", Math.round(widgetMenu.cpuTemp) + " \u00b0C"], ["CARGA 1 MIN", widgetMenu.systemLoad], ["N\u00daCLEOS", "Detectados por kernel"]] : widgetMenu.monitorDetail === "gpu" ? [["USO GPU", Math.round(widgetMenu.gpuUsage) + "%"], ["TEMPERATURA", Math.round(widgetMenu.gpuTemp) + " \u00b0C"], ["MEMORIA", Math.round(widgetMenu.gpuMemory) + " / " + Math.round(widgetMenu.gpuMemoryTotal) + " MB"], ["CONSUMO", Math.round(widgetMenu.gpuPower) + " / " + Math.round(widgetMenu.gpuPowerLimit) + " W"]] : [["DISCO /", widgetMenu.rootDisk + "% usado"], ["CARGA", widgetMenu.systemLoad], ["TIEMPO ENCENDIDO", widgetMenu.systemUptime]]
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: widgetMenu.implicitWidth - 32
+                                height: 42
+                                radius: 7
+                                color: "#1d1d26"
+                                visible: widgetMenu.monitorDetail !== "ram" && widgetMenu.monitorDetail !== "cpu"
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    Text { text: modelData[0]; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 11; Layout.fillWidth: true }
+                                    Text { text: modelData[1]; color: "white"; font.family: root.fontFamily; font.pixelSize: 12; font.bold: true }
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "PROCESOS RAM"
+                            color: "#9a9aa7"
+                            font.family: root.fontFamily
+                            font.pixelSize: 9
+                            font.bold: true
+                            visible: widgetMenu.monitorDetail === "ram"
+                        }
+                        Repeater {
+                            model: ramCard.processes
+                            delegate: RowLayout {
+                                width: widgetMenu.implicitWidth - 32
+                                visible: widgetMenu.monitorDetail === "ram"
+                                Text { text: processName; color: "white"; font.family: root.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: memory + " MB"; color: "#cba6f7"; font.family: root.fontFamily; font.pixelSize: 9 }
+                            }
+                        }
+
+                        Text { text: "USO POR HILO L\u00d3GICO"; color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 10; font.bold: true; visible: widgetMenu.monitorDetail === "cpu" }
+                        Grid {
+                            columns: 4
+                            columnSpacing: 6
+                            rowSpacing: 6
+                            width: parent.width
+                            visible: widgetMenu.monitorDetail === "cpu"
+                            Repeater {
+                                model: widgetMenu.cpuThreads
+                                delegate: Rectangle {
+                                    required property string threadName
+                                    required property string threadUsage
+                                    width: (widgetMenu.implicitWidth - 50) / 4
+                                    height: 38
+                                    radius: 6
+                                    color: "#1d1d26"
+                                    Column {
+                                        anchors.centerIn: parent
+                                        Text { text: threadName.toUpperCase(); color: "#9a9aa7"; font.family: root.fontFamily; font.pixelSize: 9; anchors.horizontalCenter: parent.horizontalCenter }
+                                        Text { text: Math.round(parseFloat(threadUsage)) + "%"; color: "#89b4fa"; font.family: root.fontFamily; font.pixelSize: 11; font.bold: true; anchors.horizontalCenter: parent.horizontalCenter }
+                                    }
+                                }
+                            }
+                        }
+
+                        Text { text: "Actualizaci\u00f3n autom\u00e1tica cada 2.5 s"; color: "#6c7086"; font.family: root.fontFamily; font.pixelSize: 9 }
                     }
                 }
             }
