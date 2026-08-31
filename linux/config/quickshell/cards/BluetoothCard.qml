@@ -15,6 +15,8 @@ Rectangle {
     border.width: 1
     visible: UIState.activeSection === "conexiones"
 
+    readonly property bool btScanning: btScan.running
+
     property bool btOn: false
     property string stateText: "No disponible"
     property bool btDetailsOpen: false

@@ -13,7 +13,7 @@ Rectangle {
 
     function icon() {
         const p = BatteryService.battPct;
-        if (BatteryService.batt.state === UPowerDeviceState.Charging)
+        if (BatteryService.isCharging)
             return "\uf0e7";
         if (p >= 90)
             return "\uf240";

@@ -7,12 +7,13 @@ Column {
     spacing: 8
 
     property real value: 0
+    property color accent: "white"
     property string label: ""
-    signal userChange(real pct)
+    signal commit(real pct)
 
     function setValue(pct) {
         sliderRow.value = Math.max(0, Math.min(100, pct));
-        sliderRow.userChange(sliderRow.value);
+        sliderRow.commit(sliderRow.value);
     }
 
     RowLayout {
@@ -38,7 +39,7 @@ Column {
                 width: parent.width * Math.min(sliderRow.value, 100) / 100
                 height: parent.height
                 radius: 8
-                color: "white"
+                color: sliderRow.accent
             }
 
             Rectangle {
@@ -47,7 +48,7 @@ Column {
                 width: 12
                 height: 12
                 radius: 6
-                color: "white"
+                color: sliderRow.accent
                 Behavior on x { SmoothedAnimation { velocity: 600 } }
             }
 

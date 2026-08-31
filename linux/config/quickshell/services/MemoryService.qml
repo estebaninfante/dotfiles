@@ -8,6 +8,7 @@ QtObject {
     id: memoryService
 
     property double pct: NaN
+    property string label: "--%"
 
     Process {
         id: runMem
@@ -15,7 +16,10 @@ QtObject {
         running: true
 
         stdout: StdioCollector {
-            onStreamFinished: memoryService.pct = parseFloat(this.text)
+            onStreamFinished: {
+                memoryService.pct = parseFloat(this.text);
+                memoryService.label = memoryService.pct + "%";
+            }
         }
     }
 

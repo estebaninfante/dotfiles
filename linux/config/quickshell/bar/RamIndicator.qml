@@ -27,7 +27,7 @@ Item {
 
         Text {
             id: ramText
-            text: MemoryService.pct >= 0 ? MemoryService.pct + "%" : "--%"
+            text: MemoryService.label
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 12
             color: UIState.ramMenuOpen ? "#000000" : MemoryService.pct > 90 ? "#eba0ac" : "white"

@@ -15,6 +15,8 @@ Rectangle {
     border.width: 1
     visible: UIState.activeSection === "conexiones"
 
+    readonly property bool wifiScanning: wifiScan.running
+
     property bool wifiOn: false
     property string network: "Sin conexión"
     property bool wifiDetailsOpen: false

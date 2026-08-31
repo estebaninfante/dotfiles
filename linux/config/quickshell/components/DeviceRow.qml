@@ -3,12 +3,13 @@ import QtQuick
 Rectangle {
     id: deviceRow
     width: parent.width
-    height: 22
+    height: rowHeight
     radius: 6
     color: area.containsMouse ? "#1d1d26" : selected ? "#1d1d26" : "#141414"
 
     property string name: ""
     property bool selected: false
+    property real rowHeight: 22
     signal clicked()
 
     Text {

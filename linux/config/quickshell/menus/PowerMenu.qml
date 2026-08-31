@@ -16,12 +16,12 @@ PopupWindow {
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
     property bool opened: UIState.powerMenuOpen
     property string pendingAction: ""
-    property bool powerProfilesOpen: false
+    readonly property bool powerProfilesOpen: UIState.powerMenuProfilesOpen
     property string powerProfile: ""
 
     onOpenedChanged: {
         if (!opened) {
-            powerProfilesOpen = false;
+            UIState.powerMenuProfilesOpen = false;
             UIState.hoversReset();
         } else {
             pendingAction = "";
@@ -105,7 +105,7 @@ PopupWindow {
                 id: profileHeaderArea
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked: powerProfilesOpen = !powerProfilesOpen
+                onClicked: UIState.powerMenuProfilesOpen = !UIState.powerMenuProfilesOpen
             }
         }
 
@@ -156,7 +156,7 @@ PopupWindow {
                         onClicked: {
                             powerProfileSet.command = ["powerprofilesctl", "set", modelData];
                             powerProfileSet.running = true;
-                            powerProfilesOpen = false;
+                            UIState.powerMenuProfilesOpen = false;
                         }
                     }
                 }

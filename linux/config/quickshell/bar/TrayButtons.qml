@@ -62,7 +62,7 @@ Row {
     IconButton {
         id: ccBtn
         icon: "\uf137"
-        size: 13
+        iconPixelSize: 13
         opened: UIState.controlCenterOpen
         onClicked: UIState.controlCenterOpen = !UIState.controlCenterOpen
     }
@@ -70,7 +70,7 @@ Row {
     IconButton {
         id: menuBtn
         icon: "\uf009"
-        size: 14
+        iconPixelSize: 14
         opened: UIState.widgetMenuOpen
         onClicked: UIState.widgetMenuOpen = !UIState.widgetMenuOpen
     }
