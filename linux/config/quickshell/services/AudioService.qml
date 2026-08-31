@@ -8,8 +8,15 @@ QtObject {
     id: audioService
 
     property string message: ""
+    property double volumePct: 0
+    property bool volumeMuted: false
     property var audioSinks: ListModel {}
     property var audioSources: ListModel {}
+
+    function adjustVolume(up) {
+        volumeAdjust.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", up ? "5%+" : "5%-"];
+        volumeAdjust.running = true;
+    }
 
     function scanAudioDevices() {
         audioSinks.clear();
@@ -46,6 +53,21 @@ QtObject {
     }
 
     Process {
+        id: volumeStatus
+        command: ["bash", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf \"%s %s\", $2 * 100, ($3 == \"[MUTED]\" ? \"yes\" : \"no\")}'"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const p = this.text.trim().split(/\s+/);
+                audioService.volumePct = parseFloat(p[0]) || 0;
+                audioService.volumeMuted = p[1] === "yes";
+            }
+        }
+    }
+
+    Process { id: volumeAdjust; command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]; running: false; onExited: volumeStatus.running = true }
+
+    Process {
         id: audioSetDefault
         command: ["wpctl", "set-default", "0"]
         running: false
@@ -53,5 +75,12 @@ QtObject {
             audioService.message = exitCode === 0 ? "Dispositivo predeterminado actualizado" : "No se pudo seleccionar dispositivo";
             audioService.scanAudioDevices();
         }
+    }
+
+    Timer {
+        interval: 3000
+        running: true
+        repeat: true
+        onTriggered: volumeStatus.running = true
     }
 }

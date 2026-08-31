@@ -9,6 +9,8 @@ QtObject {
     property bool ramMenuOpen: false
     property bool dateMenuOpen: false
     property bool controlCenterOpen: false
+    property string powerMenuPendingAction: ""
+    property bool powerMenuProfilesOpen: false
 
     readonly property bool anyMenuOpen: widgetMenuOpen || powerMenuOpen || volumeMenuOpen || brightnessMenuOpen || ramMenuOpen || dateMenuOpen || controlCenterOpen
 
