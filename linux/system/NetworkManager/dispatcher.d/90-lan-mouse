@@ -42,7 +42,7 @@ is_home_network() {
 }
 
 is_ethernet() {
-    [ "$(nmcli -t -f TYPE device show "$IFACE" 2>/dev/null)" = "ethernet" ]
+    [ "$(nmcli -g GENERAL.TYPE device show "$IFACE" 2>/dev/null)" = "ethernet" ]
 }
 
 # Interfaz ethernet conectada a la red de casa (IP dentro del subnet KVM 192.168.1.0/24).
@@ -51,7 +51,7 @@ home_ethernet_iface() {
     for iface in /sys/class/net/*; do
         iface="${iface##*/}"
         [ "$iface" = "$WIFI_IF" ] && continue
-        nmcli -t -f TYPE device show "$iface" 2>/dev/null | grep -q '^ethernet$' || continue
+        nmcli -g GENERAL.TYPE device show "$iface" 2>/dev/null | grep -q '^ethernet$' || continue
         ip=$(ip -4 addr show dev "$iface" 2>/dev/null | awk '/ inet /{print $2}')
         if [ -n "$ip" ] && ipaddr_in_home_subnet "$ip"; then
             echo "$iface"
