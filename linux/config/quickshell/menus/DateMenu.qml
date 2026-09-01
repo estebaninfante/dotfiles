@@ -9,7 +9,7 @@ import "../components"
 // configurable. Se abre al clicar el reloj de la barra.
 PopupWindow {
     id: dateMenu
-    implicitWidth: 560
+    implicitWidth: 620
     implicitHeight: 462
     visible: opened
     grabFocus: true
@@ -49,7 +49,7 @@ PopupWindow {
                 spacing: 8
 
                 Rectangle {
-                    width: (dateMenu.implicitWidth - 48) / 2
+                    width: (dateMenu.implicitWidth - 64) / 3
                     height: 28
                     radius: 9
                     color: dateMenu.section === "tareas" ? Theme.bgHover : Theme.bgItem
@@ -76,7 +76,7 @@ PopupWindow {
                 }
 
                 Rectangle {
-                    width: (dateMenu.implicitWidth - 48) / 2
+                    width: (dateMenu.implicitWidth - 64) / 3
                     height: 28
                     radius: 9
                     color: dateMenu.section === "pomodoro" ? Theme.bgHover : Theme.bgItem
@@ -101,10 +101,40 @@ PopupWindow {
                         onClicked: UIState.dateMenuSection = "pomodoro"
                     }
                 }
+
+                Rectangle {
+                    width: (dateMenu.implicitWidth - 64) / 3
+                    height: 28
+                    radius: 9
+                    color: dateMenu.section === "ojos" ? Theme.bgHover : Theme.bgItem
+                    border.color: dateMenu.section === "ojos" ? Theme.fgFaint : Theme.border
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                    Behavior on border.color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\uf06e  OJOS"
+                        color: dateMenu.section === "ojos" ? "white" : Theme.fgDim
+                        font.family: dateMenu.fontFamily
+                        font.pixelSize: 11
+                        font.bold: true
+                        Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: UIState.dateMenuSection = "ojos"
+                    }
+                }
             }
+
+            Rectangle { width: parent.width; height: 1; color: Theme.border }
 
             TasksTab { visible: dateMenu.section === "tareas" }
             PomodoroTab { visible: dateMenu.section === "pomodoro" }
+            EyeCareTab { visible: dateMenu.section === "ojos" }
         }
     }
 
