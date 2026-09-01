@@ -9,8 +9,8 @@ import "../components"
 // configurable. Se abre al clicar el reloj de la barra.
 PopupWindow {
     id: dateMenu
-    implicitWidth: 320
-    implicitHeight: 468
+    implicitWidth: 420
+    implicitHeight: 478
     visible: opened
     grabFocus: true
     color: "transparent"
@@ -32,6 +32,11 @@ PopupWindow {
         color: "#000000"
         border.color: "#333"
         border.width: 1
+        transformOrigin: Item.Top
+        scale: dateMenu.opened ? 1 : 0.96
+        opacity: dateMenu.opened ? 1 : 0
+        Behavior on scale { NumberAnimation { duration: Motion.durationCardScale; easing.type: Motion.easingOutBack } }
+        Behavior on opacity { NumberAnimation { duration: Motion.durationFade; easing.type: Motion.easingOutCubic } }
 
         Column {
             anchors.fill: parent
@@ -46,19 +51,22 @@ PopupWindow {
 
                 Rectangle {
                     width: (dateMenu.implicitWidth - 48) / 2
-                    height: 26
-                    radius: 8
+                    height: 28
+                    radius: 9
                     color: dateMenu.section === "tareas" ? Theme.bgHover : Theme.bgItem
                     border.color: dateMenu.section === "tareas" ? Theme.fgFaint : Theme.border
                     border.width: 1
+                    Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                    Behavior on border.color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
 
                     Text {
                         anchors.centerIn: parent
                         text: "\uf02c  TAREAS"
                         color: dateMenu.section === "tareas" ? "white" : Theme.fgDim
                         font.family: dateMenu.fontFamily
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.bold: true
+                        Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
                     }
 
                     MouseArea {
@@ -70,19 +78,22 @@ PopupWindow {
 
                 Rectangle {
                     width: (dateMenu.implicitWidth - 48) / 2
-                    height: 26
-                    radius: 8
+                    height: 28
+                    radius: 9
                     color: dateMenu.section === "pomodoro" ? Theme.bgHover : Theme.bgItem
                     border.color: dateMenu.section === "pomodoro" ? Theme.fgFaint : Theme.border
                     border.width: 1
+                    Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                    Behavior on border.color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
 
                     Text {
                         anchors.centerIn: parent
                         text: "\uf017  POMODORO"
                         color: dateMenu.section === "pomodoro" ? "white" : Theme.fgDim
                         font.family: dateMenu.fontFamily
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.bold: true
+                        Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
                     }
 
                     MouseArea {

@@ -12,18 +12,23 @@ PanelWindow {
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
-    implicitWidth: 92
-    implicitHeight: 26
+    implicitWidth: 100
+    implicitHeight: 28
 
     anchors { top: true; right: true }
     margins { top: 48; right: 12 }
 
     Rectangle {
         anchors.fill: parent
-        radius: 13
+        radius: 14
         color: "#000000"
         border.color: "#333"
         border.width: 1
+        transformOrigin: Item.Right
+        scale: pomodoroPill.visible ? 1 : 0.85
+        opacity: pomodoroPill.visible ? 1 : 0
+        Behavior on scale { NumberAnimation { duration: Motion.durationCardScale; easing.type: Motion.easingOutBack } }
+        Behavior on opacity { NumberAnimation { duration: Motion.durationFade; easing.type: Motion.easingOutCubic } }
 
         Row {
             anchors.centerIn: parent

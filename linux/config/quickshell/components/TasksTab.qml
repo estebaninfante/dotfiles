@@ -7,9 +7,11 @@ import "../services"
 Rectangle {
     id: tasksTab
     width: parent.width
-    height: 340
-    radius: 10
+    height: 350
+    radius: 12
     color: Theme.bgItem
+    opacity: visible ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: Motion.durationFade; easing.type: Motion.easingOutCubic } }
 
     Text {
         anchors.centerIn: parent
@@ -23,39 +25,40 @@ Rectangle {
 
     Column {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 8
+        anchors.margins: 12
+        spacing: 10
         visible: TasksService.vaultOk
 
         Rectangle {
             width: parent.width
-            height: 30
-            radius: 8
+            height: 34
+            radius: 10
             color: "#000000"
             border.color: taskInput.activeFocus ? Theme.fgFaint : Theme.border
             border.width: 1
+            Behavior on border.color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
 
             Text {
                 anchors.left: parent.left
-                anchors.leftMargin: 10
+                anchors.leftMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
                 visible: taskInput.text.length === 0 && !taskInput.activeFocus
                 text: "Añadir tarea…"
                 color: Theme.fgDimmer
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
+                font.pixelSize: Theme.pixelLarge
                 font.italic: true
             }
 
             TextInput {
                 id: taskInput
                 anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 34
+                anchors.leftMargin: 12
+                anchors.rightMargin: 40
                 verticalAlignment: TextInput.AlignVCenter
                 color: Theme.fg
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
+                font.pixelSize: Theme.pixelLarge
                 clip: true
                 focus: true
                 Keys.onReturnPressed: { TasksService.add(taskInput.text); taskInput.text = ""; }
@@ -64,12 +67,13 @@ Rectangle {
 
             Text {
                 anchors.right: parent.right
-                anchors.rightMargin: 10
+                anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
                 text: "\uf067"
                 color: addArea.containsMouse ? Theme.fg : Theme.fgFaint
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelLarge
+                font.pixelSize: 15
+                Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
             }
 
             MouseArea {
@@ -88,16 +92,17 @@ Rectangle {
         ListView {
             id: taskList
             width: parent.width
-            height: parent.height - 38
+            height: parent.height - 44
             clip: true
-            spacing: 4
+            spacing: 5
             model: TasksService.tasks
 
             delegate: Rectangle {
                 width: taskList.width
-                height: 26
-                radius: 6
+                height: 30
+                radius: 8
                 color: rowArea.containsMouse ? Theme.bgHover : "#000000"
+                Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
 
                 MouseArea {
                     id: rowArea
@@ -107,18 +112,20 @@ Rectangle {
 
                 Row {
                     anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 8
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    spacing: 10
 
                     Rectangle {
-                        width: 14
-                        height: 14
-                        radius: 3
+                        width: 16
+                        height: 16
+                        radius: 4
                         anchors.verticalCenter: parent.verticalCenter
                         color: modelData.done ? Theme.fg : "transparent"
-                        border.color: modelData.done ? Theme.fg : Theme.border
+                        border.color: modelData.done ? Theme.fg : (rowArea.containsMouse ? Theme.fgFaint : Theme.border)
                         border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
+                        Behavior on border.color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
 
                         Text {
                             anchors.centerIn: parent
@@ -126,41 +133,44 @@ Rectangle {
                             text: "\uf00c"
                             color: Theme.bg
                             font.family: Theme.fontFamily
-                            font.pixelSize: 9
+                            font.pixelSize: 10
                             font.bold: true
                         }
 
                         MouseArea {
                             anchors.fill: parent
-                            anchors.margins: -6
+                            anchors.margins: -7
                             cursorShape: Qt.PointingHandCursor
                             onClicked: TasksService.toggle(modelData.idx)
                         }
                     }
 
                     Text {
-                        width: parent.width - 14 - 8 - 20 - 8
+                        width: parent.width - 16 - 10 - 22 - 10
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.text
                         color: modelData.done ? Theme.fgFaint : (modelData.prio !== "" ? Theme.fg : Theme.fgDim)
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.pixelNormal
+                        font.pixelSize: Theme.pixelLarge
                         font.strikeout: modelData.done
                         elide: Text.ElideRight
+                        Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
                     }
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: rowArea.containsMouse
+                        opacity: rowArea.containsMouse ? 1 : 0
                         text: "\uf00d"
                         color: delArea.containsMouse ? Theme.danger : Theme.fgDimmer
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.pixelNormal
+                        font.pixelSize: Theme.pixelLarge
+                        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
+                        Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
 
                         MouseArea {
                             id: delArea
                             anchors.fill: parent
-                            anchors.margins: -6
+                            anchors.margins: -7
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: TasksService.del(modelData.idx)
