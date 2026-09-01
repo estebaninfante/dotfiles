@@ -337,6 +337,37 @@ in
   # y la capa compuesta [control+numpad] garantizan Ctrl+Alt+F<N> (cambio de TTY).
   # No hay user service para evitar duplicar el daemon (crash-loop por doble grab).
 
+  # ── quickshell: barra/panel QML ──────────────────────────────
+  # Reemplaza el exec_cmd de hyprland.lua. Config: ~/.config/quickshell/
+  # (symlink al repo). --no-duplicate evita instancias multiples.
+  systemd.user.services.quickshell = {
+    Unit = {
+      Description = "Quickshell panel (QML bar)";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStartPre = pkgs.writeShellScript "quickshell-wait" ''
+        for i in $(seq 1 30); do
+          [ -S "/run/user/%U/wayland-1" ] && exit 0
+          sleep 0.5
+        done
+        exit 0
+      '';
+      ExecStart = "${pkgs.quickshell}/bin/quickshell --no-duplicate";
+      Environment = [
+        "WAYLAND_DISPLAY=wayland-1"
+        "XDG_RUNTIME_DIR=/run/user/%U"
+        "XDG_CURRENT_DESKTOP=Hyprland"
+        "QT_SCALE_FACTOR=1"
+      ];
+      Restart = "on-failure";
+      RestartSec = "3";
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
   # ── holder de graphical-session.target (portales xdg) ─────────
   # La sesion de Hyprland no arranca graphical-session.target (eso lo
   # hace el session manager en DEs tipo GNOME). Las units de

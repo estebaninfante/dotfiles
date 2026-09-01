@@ -254,8 +254,7 @@ hl.on("hyprland.start", function()
         -- Desktop: linux-wallpaperengine via systemd user service
     end
 
-    -- 2. Bar and UI
-    hl.exec_cmd("env QT_SCALE_FACTOR=1 quickshell --no-duplicate")
+    -- 2. Bar and UI (quickshell via systemd user service)
     hl.exec_cmd("swaync")
 
     -- 3. D-Bus environment and portals
