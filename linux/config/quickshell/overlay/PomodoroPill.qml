@@ -4,31 +4,36 @@ import QtQuick
 import "../config"
 import "../services"
 
-// Pill flotante del pomodoro: visible solo con el timer activo (fase
-// trabajo/descanso, incluso pausado). Clic → abre el centro en POMODORO.
 PanelWindow {
     id: pomodoroPill
     visible: PomodoroService.active
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
-    implicitWidth: 100
-    implicitHeight: 28
 
-    anchors { top: true; right: true }
-    margins { top: 48; right: 12 }
+    // Posición y tamaño dinámicos (persistencia en pomodoro.conf)
+    property int posX: PomodoroService.pillX !== undefined ? PomodoroService.pillX : 100
+    property int posY: PomodoroService.pillY !== undefined ? PomodoroService.pillY : 48
+
+    implicitWidth: PomodoroService.pillWidth !== undefined ? PomodoroService.pillWidth : 120
+    implicitHeight: PomodoroService.pillHeight !== undefined ? PomodoroService.pillHeight : 32
+
+    anchors {
+        top: true
+        left: true
+    }
+    margins {
+        top: posY
+        left: posX
+    }
 
     Rectangle {
+        id: body
         anchors.fill: parent
-        radius: 14
+        radius: Math.min(parent.width, parent.height) / 2
         color: "#000000"
-        border.color: "#333"
+        border.color: "#333333"
         border.width: 1
-        transformOrigin: Item.Right
-        scale: pomodoroPill.visible ? 1 : 0.85
-        opacity: pomodoroPill.visible ? 1 : 0
-        Behavior on scale { NumberAnimation { duration: Motion.durationCardScale; easing.type: Motion.easingOutBack } }
-        Behavior on opacity { NumberAnimation { duration: Motion.durationFade; easing.type: Motion.easingOutCubic } }
 
         Row {
             anchors.centerIn: parent
@@ -39,7 +44,7 @@ PanelWindow {
                 text: PomodoroService.paused ? "\uf04c" : ((PomodoroService.state === "break" || PomodoroService.state === "paused_break") ? "\uf0f4" : "\uf252")
                 color: (PomodoroService.state === "break" || PomodoroService.state === "paused_break") ? "#eba0ac" : (PomodoroService.paused ? "#aaaaaa" : "white")
                 font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 11
+                font.pixelSize: Math.max(10, Math.min(16, pomodoroPill.height * 0.4))
             }
 
             Text {
@@ -47,17 +52,67 @@ PanelWindow {
                 text: PomodoroService.fmt(PomodoroService.remaining)
                 color: (PomodoroService.state === "break" || PomodoroService.state === "paused_break") ? "#eba0ac" : (PomodoroService.paused ? "#aaaaaa" : "white")
                 font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 12
+                font.pixelSize: Math.max(11, Math.min(18, pomodoroPill.height * 0.45))
                 font.bold: true
             }
         }
 
+        // Mover
         MouseArea {
+            id: dragArea
             anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: Qt.SizeAllCursor
+            property point pressPos: "0,0"
+
+            onPressed: mouse => {
+                pressPos = Qt.point(mouse.x, mouse.y);
+            }
+            onPositionChanged: mouse => {
+                if (pressed) {
+                    const newX = Math.max(0, pomodoroPill.posX + (mouse.x - pressPos.x));
+                    const newY = Math.max(0, pomodoroPill.posY + (mouse.y - pressPos.y));
+                    pomodoroPill.posX = newX;
+                    pomodoroPill.posY = newY;
+                }
+            }
+            onReleased: {
+                PomodoroService.setConfig("pill_x", pomodoroPill.posX);
+                PomodoroService.setConfig("pill_y", pomodoroPill.posY);
+            }
             onClicked: {
                 UIState.dateMenuSection = "pomodoro";
                 UIState.dateMenuOpen = true;
+            }
+        }
+
+        // Redimensionar (Esquina inferior derecha)
+        Rectangle {
+            width: 10
+            height: 10
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            color: "transparent"
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.SizeFDiagCursor
+                property point pressPos: "0,0"
+
+                onPressed: mouse => {
+                    pressPos = Qt.point(mouse.x, mouse.y);
+                }
+                onPositionChanged: mouse => {
+                    if (pressed) {
+                        const newW = Math.max(80, pomodoroPill.implicitWidth + (mouse.x - pressPos.x));
+                        const newH = Math.max(24, pomodoroPill.implicitHeight + (mouse.y - pressPos.y));
+                        pomodoroPill.implicitWidth = newW;
+                        pomodoroPill.implicitHeight = newH;
+                    }
+                }
+                onReleased: {
+                    PomodoroService.setConfig("pill_width", pomodoroPill.implicitWidth);
+                    PomodoroService.setConfig("pill_height", pomodoroPill.implicitHeight);
+                }
             }
         }
     }
