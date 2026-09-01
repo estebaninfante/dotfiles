@@ -301,6 +301,10 @@ hl.window_rule({ match = { class = "swayosd-server" }, float = 1 })
 hl.window_rule({ match = { class = "swayosd-server" }, move = "1% 40%" })
 hl.window_rule({ match = { class = "swayosd-server" }, size = "200 20" })
 hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
+-- Launcher quickshell: toplevel flotante tipo rofi, sin decoracion del
+-- compositor (la card pinta su propio borde/radio). Los floats nuevos abren
+-- centrados por defecto en el monitor activo.
+hl.window_rule({ match = { title = "quickshell-launcher" }, float = 1, border_size = 0, norounding = 1, noshadow = 1 })
 -- File chooser portal (GTK): ventana de selección de archivos un poco menos alta
 hl.window_rule({ match = { class = "xdg-desktop-portal-gtk" }, max_size = "1260 560" })
 -- Handy fallback overlay is a normal window on desktop NVIDIA. Keep it

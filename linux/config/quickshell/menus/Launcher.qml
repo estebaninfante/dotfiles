@@ -1,5 +1,4 @@
 import Quickshell
-import Quickshell.Wayland
 import Quickshell.Widgets
 import QtQuick
 import QtQuick.Layouts
@@ -9,15 +8,17 @@ import "../services"
 // Launcher (reemplazo de rofi). Fuente de datos + arranque en LaunchService.
 // Tabs de modo, búsqueda, lista de resultados y menú contextual
 // (Shift+Enter, paridad con rofi-context-menu).
-// PanelWindow a pantalla completa: evita el grab de PopupWindow (launcher se
-// abre por keybind/IPC sin input previo del panel).
-PanelWindow {
+// FloatingWindow (toplevel wayland normal, tipo rofi): sin layer-shell ni grab
+// de teclado fullscreen (el grab al cerrar dejaba el teclado en estado raro).
+// Se abre por keybind/IPC sin input previo del panel; la flotación/centrado
+// viene de la windowrule en hyprland.lua (title: quickshell-launcher).
+FloatingWindow {
     id: launcher
-    anchors { left: true; top: true; right: true; bottom: true }
-    exclusionMode: ExclusionMode.Ignore
-    focusable: UIState.launcherOpen
+    title: "quickshell-launcher"
     visible: UIState.launcherOpen
     color: "transparent"
+    implicitWidth: cardW
+    implicitHeight: launcherCol.implicitHeight + 2
 
     property bool contextActive: false
     property var contextTarget: null
@@ -135,21 +136,7 @@ PanelWindow {
     }
 
     Rectangle {
-        id: backdrop
         anchors.fill: parent
-        color: "#000000"
-        opacity: 0.2
-        MouseArea {
-            anchors.fill: parent
-            onClicked: UIState.launcherOpen = false
-        }
-    }
-
-    Rectangle {
-        width: launcher.cardW
-        height: launcherCol.implicitHeight + 2
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.verticalCenter: parent.verticalCenter
         radius: 16
         color: Theme.bg
         border.color: Theme.border
