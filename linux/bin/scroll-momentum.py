@@ -236,12 +236,10 @@ def main():
                     raise EOFError("dispositivo perdido")
                 for off in range(0, len(data) - 23, 24):
                     _, _, typ, code, val = IE.unpack_from(data, off)
-                    if typ == EV_REL and val != 0 and (
-                        (hires_by_fd.get(fd) and code == REL_WHEEL_HI_RES)
-                        or (not hires_by_fd.get(fd) and code == REL_WHEEL)):
+                    if typ == EV_REL and val != 0 and code in (
+                            REL_WHEEL, REL_WHEEL_HI_RES, REL_HWHEEL, 7):
                         if DEBUG:
-                            log("wheel %s %+d" % (
-                                "HI_RES" if code == REL_WHEEL_HI_RES else "notch", val))
+                            log("wheel code=%d val=%+d" % (code, val))
                         else:
                             wheel(code, val)
                     if not DEBUG:
