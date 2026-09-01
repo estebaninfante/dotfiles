@@ -26,7 +26,6 @@ PanelWindow {
     property int ctxIndex: 0
 
     readonly property int cardW: 560
-    readonly property int cardY: 120
     readonly property int headerH: 44
     readonly property int inputH: 44
     readonly property int footerH: 26
@@ -42,6 +41,7 @@ PanelWindow {
             if (UIState.launcherOpen) {
                 currentIndex = 0;
                 ctxIndex = 0;
+                input.text = "";
                 input.forceActiveFocus();
             } else {
                 contextActive = false;
@@ -49,11 +49,15 @@ PanelWindow {
                 UIState.hoversReset();
             }
         }
+        function onLauncherModeChanged() {
+            if (UIState.launcherOpen) input.text = "";
+        }
     }
 
     function navigate(delta) {
         if (contextActive) {
-            ctxIndex = (ctxIndex + delta + contextActions.length) % contextActions.length;
+            var total = contextActions.length + 1;
+            ctxIndex = (ctxIndex + delta + total) % total;
         } else {
             var n = LaunchService.results.length;
             if (n > 0) currentIndex = (currentIndex + delta + n) % n;
@@ -61,7 +65,10 @@ PanelWindow {
     }
 
     function activate() {
-        if (contextActive) return contextExec(ctxIndex);
+        if (contextActive) {
+            if (ctxIndex === 0) return closeContext();
+            return contextExec(ctxIndex - 1);
+        }
         var item = LaunchService.results[currentIndex];
         if (item !== undefined) LaunchService.launch(item);
     }
@@ -72,7 +79,7 @@ PanelWindow {
         if (item === undefined || item.kind === "app") return;
         contextTarget = item;
         contextActions = buildContext(item);
-        ctxIndex = 0;
+        ctxIndex = 1;
         contextActive = true;
     }
 
@@ -124,7 +131,7 @@ PanelWindow {
         id: backdrop
         anchors.fill: parent
         color: "#000000"
-        opacity: 0.55
+        opacity: 0.35
         MouseArea {
             anchors.fill: parent
             onClicked: UIState.launcherOpen = false
@@ -135,8 +142,7 @@ PanelWindow {
         width: launcher.cardW
         height: launcherCol.implicitHeight + 2
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: launcher.cardY
+        anchors.verticalCenter: parent.verticalCenter
         radius: 16
         color: Theme.bg
         border.color: Theme.border
@@ -243,13 +249,15 @@ PanelWindow {
                         id: input
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - 40
-                        text: LaunchService.query
                         color: Theme.fg
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.pixelLarge
                         selectByMouse: true
                         clip: true
-                        onTextChanged: LaunchService.updateSearch()
+                        onTextChanged: {
+                            LaunchService.query = text;
+                            LaunchService.updateSearch();
+                        }
 
                         Text {
                             anchors.left: parent.left

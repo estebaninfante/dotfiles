@@ -27,7 +27,7 @@ function clean_exec(s) {
     gsub(/ +$/, "", s)
     return s
 }
-FNR == 1 { inEntry = 0; name = ""; exec = ""; icon = ""; skip = 0; next }
+FNR == 1 { inEntry = 0; name = ""; exec = ""; icon = ""; skip = 0 }
 /^\[/ {
     if (inEntry && !skip && name != "" && exec != "")
         printf "%s\t%s\t%s\n", name, clean_exec(exec), icon
