@@ -67,17 +67,22 @@ rows=$(( (n + cols - 1) / cols ))
 
 # ── Construir layout string ──
 # Formato: <base>,WxH,0,0{leaf,leaf,...}  (1 fila)
-#       o  <base>,WxH,0,0[rowWxH,rowWxH]  (varias filas, [] = stack vertical,
-#                                          {} = split horizontal, leaf =
-#                                          WxH,X,Y,paneIndex)
+#       o  <base>,WxH,0,0[fila,fila]  (varias filas; [] = stack vertical,
+#                                      {} = split horizontal; leaf =
+#                                      WxH,X,Y,paneId — id sin '%')
 wl="$(tmux display-message -p -t "$TARGET" '#{window_layout}')"
 base="${wl%%,*}"
 
+# ids de pane sin '%'
+for ((i = 0; i < n; i++)); do
+    panes[$i]="${panes[$i]#%}"
+done
+
 layout="$base,${W}x${H},0,0"
-(( rows > 1 )) && layout+="["
 
 idx=0
 y=0
+filas=()
 for ((r = 0; r < rows; r++)); do
     # alto de la fila: H menos separadores, repartido (resto a las primeras)
     th=$(( H - (rows - 1) ))
@@ -99,14 +104,15 @@ for ((r = 0; r < rows; r++)); do
         idx=$(( idx + 1 ))
     done
 
-    if (( rows > 1 )); then
-        layout+="${r:+,}${h}x${W},0,${y}{${row}}"
-    else
-        layout+="{${row}}"
-    fi
+    filas+=("${W}x${h},0,${y}{${row}}")
     y=$(( y + h + 1 ))
 done
-(( rows > 1 )) && layout+="]"
+
+if (( rows > 1 )); then
+    layout+="[$(IFS=,; echo "${filas[*]}")]"
+else
+    layout+="{${row}}"
+fi
 
 # Aplicar; si el string no es valido, tiled como red de seguridad
 if ! tmux select-layout -t "$TARGET" "$layout" 2>/dev/null; then
