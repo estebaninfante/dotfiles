@@ -363,7 +363,7 @@ in
         "XDG_CURRENT_DESKTOP=Hyprland"
         "QT_SCALE_FACTOR=1"
       ];
-      Restart = "on-failure";
+      Restart = "always";
       RestartSec = "3";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };

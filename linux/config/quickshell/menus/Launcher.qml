@@ -8,7 +8,7 @@ import "../services"
 
 // Launcher (reemplazo de rofi). Fuente de datos + arranque en LaunchService.
 // Tabs de modo, búsqueda, lista de resultados y menú contextual
-// (Alt+Enter / Shift+Enter, paridad con rofi-context-menu).
+// (Shift+Enter, paridad con rofi-context-menu).
 // PanelWindow a pantalla completa: evita el grab de PopupWindow (launcher se
 // abre por keybind/IPC sin input previo del panel).
 PanelWindow {
@@ -288,7 +288,7 @@ PanelWindow {
                                 event.accepted = true;
                             }
                             else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                if (event.modifiers & Qt.AltModifier || event.modifiers & Qt.ShiftModifier)
+                                if (event.modifiers & Qt.ShiftModifier)
                                     launcher.openContext();
                                 else
                                     launcher.activate();
@@ -458,7 +458,7 @@ PanelWindow {
                 color: Theme.bg
                 Text {
                     anchors.centerIn: parent
-                    text: launcher.contextActive ? "↑↓ mover · Enter ejecutar · Esc volver" : "↑↓ mover · Enter abrir · Alt+Enter opciones · Esc cerrar"
+                    text: launcher.contextActive ? "↑↓ mover · Enter ejecutar · Esc volver" : "↑↓ mover · Enter abrir · Shift+Enter opciones · Esc cerrar"
                     color: Theme.fgDimmer
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.pixelSmall

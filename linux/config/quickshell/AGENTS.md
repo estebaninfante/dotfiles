@@ -139,7 +139,7 @@ hyprland.lua (wrapper `~/.local/bin/qs-launcher.sh`):
   `open <mode>` / `close`). `LaunchService` expone el `IpcHandler` target
   `launcher`; no usan sockets ni DBus.
 - Los producers son scripts puros (`linux/bin/*-list.sh`): emiten TSV
-  `nombre<TAB>camino<TAB>...`; el contexto (Alt+Enter) y el lanzado se resuelven
+  `nombre<TAB>camino<TAB>...`; el contexto (Shift+Enter) y el lanzado se resuelven
   en QML (LaunchService.launch/openFile/runScript + Launcher.buildContext).
 - Filtrar reasigna `LaunchService.results` (property var) para notificar a la
   lista; cap 200 resultados.
