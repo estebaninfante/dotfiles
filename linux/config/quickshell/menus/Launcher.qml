@@ -131,7 +131,7 @@ PanelWindow {
         id: backdrop
         anchors.fill: parent
         color: "#000000"
-        opacity: 0.35
+        opacity: 0.2
         MouseArea {
             anchors.fill: parent
             onClicked: UIState.launcherOpen = false

@@ -113,8 +113,8 @@ hl.config({
         rounding = 10,
         blur = {
             enabled = true,
-            size   = 10,
-            passes = 2
+            size   = 6,
+            passes = 1
         }
     }
 })

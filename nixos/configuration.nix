@@ -382,6 +382,20 @@ in
         f10=C-A-f10
         f11=C-A-f11
         f12=C-A-f12
+        # Workspaces tmux: ctrl+alt + letra (posicion dvorak de las letras de
+        # workspace de hyprland: M W V H T N G C R S -> 1-10) re-emite ctrl+N.
+        # La capa numpad traga los modificadores (mismo motivo que los
+        # F-keys). tmux los bindea como C-1..C-0 (tmux.conf).
+        m=C-1
+        comma=C-2
+        dot=C-3
+        j=C-4
+        k=C-5
+        l=C-6
+        u=C-7
+        i=C-8
+        o=C-9
+        semicolon=C-0
       '';
     };
   };

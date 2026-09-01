@@ -6,6 +6,8 @@
 #   name<TAB>exec<TAB>icon
 # - Omitidos: NoDisplay=true, Hidden=true, sin Name o sin Exec.
 # - Exec sin field codes (%f %F %u %U ...) — el launcher los correría tal cual.
+# - Se procesa un .desktop por invocación awk (evita interferencias entre
+#   archivos cuando se pasan como argumentos en lote).
 
 apps_dirs=(
     "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
@@ -21,18 +23,28 @@ done
         [ -d "$dir" ] || continue
         find "$dir" -maxdepth 1 -name "*.desktop" 2>/dev/null || true
     done
-} | awk -F/ '!seen[$NF]++' | LC_ALL=C sort -f -u | xargs -d '\n' awk -F= '
+} | awk -F/ '!seen[$NF]++' | LC_ALL=C sort -f -u | while IFS= read -r f; do
+    awk -F= '
 function clean_exec(s) {
     gsub(/%[fFuUdDnNickvm]/, "", s)
     gsub(/ +$/, "", s)
     return s
 }
-FNR == 1 { inEntry = 0; name = ""; exec = ""; icon = ""; skip = 0 }
+BEGIN {
+    inEntry = 0
+    name = ""
+    exec = ""
+    icon = ""
+    skip = 0
+}
 /^\[/ {
     if (inEntry && !skip && name != "" && exec != "")
         printf "%s\t%s\t%s\n", name, clean_exec(exec), icon
     inEntry = ($0 ~ /^\[Desktop Entry\]/)
-    name = ""; exec = ""; icon = ""; skip = 0
+    name = ""
+    exec = ""
+    icon = ""
+    skip = 0
     next
 }
 inEntry && !skip {
@@ -45,4 +57,5 @@ inEntry && !skip {
 END {
     if (inEntry && !skip && name != "" && exec != "")
         printf "%s\t%s\t%s\n", name, clean_exec(exec), icon
-}' | LC_ALL=C sort -f
+}' "$f"
+done | LC_ALL=C sort -f
