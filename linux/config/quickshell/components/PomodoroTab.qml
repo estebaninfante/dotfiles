@@ -2,16 +2,19 @@ import QtQuick
 import "../config"
 import "../services"
 
-// Pestaña POMODORO del centro: timer + control de fases + configuración
-// de duraciones y recordatorio de ojos (persistido en pomodoro.conf).
 Rectangle {
     id: pomodoroTab
     width: parent.width
-    height: 380
+    height: 364
     radius: 12
     color: Theme.bgItem
     opacity: visible ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: Motion.durationFade; easing.type: Motion.easingOutCubic } }
+    Behavior on opacity {
+        NumberAnimation {
+            duration: Motion.durationFade
+            easing.type: Motion.easingOutCubic
+        }
+    }
 
     component StepperRow: Row {
         id: stepRow
@@ -21,10 +24,12 @@ Rectangle {
         property int min: 1
         property int max: 90
         property string key: ""
+        property bool showLabel: true
         spacing: 10
 
         Text {
             width: 80
+            visible: stepRow.showLabel
             anchors.verticalCenter: parent.verticalCenter
             text: stepRow.label
             color: Theme.fgDim
@@ -40,8 +45,19 @@ Rectangle {
             color: minusArea.containsMouse ? Theme.bgHoverSoft : "#000000"
             border.color: Theme.border
             border.width: 1
-            Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
-            Text { anchors.centerIn: parent; text: "\uf068"; color: Theme.fgDim; font.family: Theme.fontFamily; font.pixelSize: 10 }
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                    easing.type: Motion.easingOutCubic
+                }
+            }
+            Text {
+                anchors.centerIn: parent
+                text: "\uf068"
+                color: Theme.fg
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+            }
             MouseArea {
                 id: minusArea
                 anchors.fill: parent
@@ -49,7 +65,8 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     const v = Math.max(stepRow.min, stepRow.value - stepRow.step);
-                    if (v !== stepRow.value) PomodoroService.setConfig(stepRow.key, v);
+                    if (v !== stepRow.value)
+                        PomodoroService.setConfig(stepRow.key, v);
                 }
             }
         }
@@ -73,8 +90,19 @@ Rectangle {
             color: plusArea.containsMouse ? Theme.bgHoverSoft : "#000000"
             border.color: Theme.border
             border.width: 1
-            Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
-            Text { anchors.centerIn: parent; text: "\uf067"; color: Theme.fgDim; font.family: Theme.fontFamily; font.pixelSize: 10 }
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                    easing.type: Motion.easingOutCubic
+                }
+            }
+            Text {
+                anchors.centerIn: parent
+                text: "\uf067"
+                color: Theme.fg
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+            }
             MouseArea {
                 id: plusArea
                 anchors.fill: parent
@@ -82,7 +110,8 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     const v = Math.min(stepRow.max, stepRow.value + stepRow.step);
-                    if (v !== stepRow.value) PomodoroService.setConfig(stepRow.key, v);
+                    if (v !== stepRow.value)
+                        PomodoroService.setConfig(stepRow.key, v);
                 }
             }
         }
@@ -90,15 +119,15 @@ Rectangle {
 
     Column {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 9
+        anchors.margins: 16
+        spacing: 12
 
         Text {
             width: parent.width
             text: PomodoroService.fmt(PomodoroService.remaining)
             color: Theme.fg
             font.family: Theme.fontFamily
-            font.pixelSize: 46
+            font.pixelSize: 40
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
         }
@@ -107,16 +136,24 @@ Rectangle {
             width: parent.width
             text: {
                 const s = PomodoroService.state;
-                if (s === "work") return "Trabajo — ciclo " + (PomodoroService.cycle + 1);
-                if (s === "break") return "Descanso";
-                if (s === "paused_work" || s === "paused_break") return "Pausado";
+                if (s === "work")
+                    return "Trabajo — ciclo " + (PomodoroService.cycle + 1);
+                if (s === "break")
+                    return "Descanso";
+                if (s === "paused_work" || s === "paused_break")
+                    return "Pausado";
                 return "Inactivo";
             }
-            color: Theme.fgDim
+            color: Theme.fg
             font.family: Theme.fontFamily
             font.pixelSize: Theme.pixelTitle
             horizontalAlignment: Text.AlignHCenter
-            Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+            Behavior on color {
+                ColorAnimation {
+                    duration: 150
+                    easing.type: Motion.easingOutCubic
+                }
+            }
         }
 
         Text {
@@ -133,7 +170,7 @@ Rectangle {
             width: parent.width
             visible: PomodoroService.eyesOn && PomodoroService.active && PomodoroService.eyesIn >= 0
             text: "\uf06e  Ojos: mira lejos en " + PomodoroService.fmt(PomodoroService.eyesIn)
-            color: Theme.fgFaint
+            color: Theme.fgDim
             font.family: Theme.fontFamily
             font.pixelSize: Theme.pixelLarge
             horizontalAlignment: Text.AlignHCenter
@@ -148,7 +185,12 @@ Rectangle {
                 height: 34
                 radius: 10
                 color: mainArea.containsMouse ? Theme.fgFaint : Theme.fg
-                Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 120
+                        easing.type: Motion.easingOutCubic
+                    }
+                }
                 Text {
                     anchors.centerIn: parent
                     text: PomodoroService.paused ? "\uf04c  Pausar" : (PomodoroService.active ? "\uf04c  Pausar" : "\uf04b  Iniciar")
@@ -163,9 +205,12 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        if (PomodoroService.paused) PomodoroService.resume();
-                        else if (PomodoroService.active) PomodoroService.pause();
-                        else PomodoroService.start();
+                        if (PomodoroService.paused)
+                            PomodoroService.resume();
+                        else if (PomodoroService.active)
+                            PomodoroService.pause();
+                        else
+                            PomodoroService.start();
                     }
                 }
             }
@@ -177,13 +222,23 @@ Rectangle {
                 color: skipArea.containsMouse ? Theme.bgHoverSoft : "#000000"
                 border.color: Theme.border
                 border.width: 1
-                opacity: PomodoroService.active ? 1 : 0.4
-                Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
-                Behavior on opacity { NumberAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                opacity: PomodoroService.active ? 1 : 0.6
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 120
+                        easing.type: Motion.easingOutCubic
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Motion.easingOutCubic
+                    }
+                }
                 Text {
                     anchors.centerIn: parent
                     text: "\uf051  Saltar"
-                    color: Theme.fgDim
+                    color: Theme.fg
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.pixelLarge
                 }
@@ -204,16 +259,31 @@ Rectangle {
                 color: stopArea.containsMouse ? Theme.danger : "#000000"
                 border.color: Theme.border
                 border.width: 1
-                opacity: PomodoroService.active ? 1 : 0.4
-                Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
-                Behavior on opacity { NumberAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                opacity: PomodoroService.active ? 1 : 0.6
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 120
+                        easing.type: Motion.easingOutCubic
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Motion.easingOutCubic
+                    }
+                }
                 Text {
                     anchors.centerIn: parent
                     text: "\uf04d  Detener"
-                    color: stopArea.containsMouse ? Theme.bg : Theme.fgDim
+                    color: stopArea.containsMouse ? Theme.bg : Theme.fg
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.pixelLarge
-                    Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 120
+                            easing.type: Motion.easingOutCubic
+                        }
+                    }
                 }
                 MouseArea {
                     id: stopArea
@@ -226,7 +296,11 @@ Rectangle {
             }
         }
 
-        Rectangle { width: parent.width; height: 1; color: Theme.border }
+        Rectangle {
+            width: parent.width
+            height: 1
+            color: Theme.border
+        }
 
         StepperRow {
             width: parent.width
@@ -266,19 +340,28 @@ Rectangle {
                 height: 26
                 radius: 8
                 anchors.verticalCenter: parent.verticalCenter
-                color: PomodoroService.eyesOn ? Theme.bgHoverSoft : "#000000"
-                border.color: PomodoroService.eyesOn ? Theme.fg : Theme.border
+                color: PomodoroService.eyesOn ? Theme.fg : "#000000"
+                border.color: Theme.border
                 border.width: 1
-                Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
-                Behavior on border.color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 150
+                        easing.type: Motion.easingOutCubic
+                    }
+                }
                 Text {
                     anchors.centerIn: parent
                     text: PomodoroService.eyesOn ? "ON" : "OFF"
-                    color: PomodoroService.eyesOn ? Theme.fg : Theme.fgDim
+                    color: PomodoroService.eyesOn ? Theme.fgOnWhite : Theme.fgDim
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.pixelNormal
                     font.bold: true
-                    Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 150
+                            easing.type: Motion.easingOutCubic
+                        }
+                    }
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -294,7 +377,7 @@ Rectangle {
                 min: 5
                 max: 60
                 key: "eyes_min"
-                label: ""
+                showLabel: false
             }
         }
     }

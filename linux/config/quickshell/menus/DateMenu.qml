@@ -10,7 +10,7 @@ import "../components"
 PopupWindow {
     id: dateMenu
     implicitWidth: 560
-    implicitHeight: 446
+    implicitHeight: 462
     visible: opened
     grabFocus: true
     color: "transparent"
