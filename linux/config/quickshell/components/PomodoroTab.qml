@@ -7,7 +7,7 @@ import "../services"
 Rectangle {
     id: pomodoroTab
     width: parent.width
-    height: 350
+    height: 380
     radius: 12
     color: Theme.bgItem
     opacity: visible ? 1 : 0
@@ -263,19 +263,20 @@ Rectangle {
 
             Rectangle {
                 width: 44
-                height: 24
+                height: 26
                 radius: 8
                 anchors.verticalCenter: parent.verticalCenter
-                color: "#000000"
+                color: PomodoroService.eyesOn ? Theme.bgHoverSoft : "#000000"
                 border.color: PomodoroService.eyesOn ? Theme.fg : Theme.border
                 border.width: 1
+                Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
                 Behavior on border.color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
                 Text {
                     anchors.centerIn: parent
                     text: PomodoroService.eyesOn ? "ON" : "OFF"
-                    color: PomodoroService.eyesOn ? Theme.fg : Theme.fgDimmer
+                    color: PomodoroService.eyesOn ? Theme.fg : Theme.fgDim
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.pixelSmall
+                    font.pixelSize: Theme.pixelNormal
                     font.bold: true
                     Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
                 }
