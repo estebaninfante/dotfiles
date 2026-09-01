@@ -64,6 +64,13 @@ PanelWindow {
         }
     }
 
+    function cycleMode(delta) {
+        var order = ["apps", "files", "scripts"];
+        var i = order.indexOf(UIState.launcherMode);
+        UIState.launcherMode = order[(i + delta + order.length) % order.length];
+        currentIndex = 0;
+    }
+
     function activate() {
         if (contextActive) {
             if (ctxIndex === 0) return closeContext();
@@ -272,6 +279,14 @@ PanelWindow {
                         Keys.onPressed: event => {
                             if (event.key === Qt.Key_Down) { launcher.navigate(1); event.accepted = true; }
                             else if (event.key === Qt.Key_Up) { launcher.navigate(-1); event.accepted = true; }
+                            else if (event.key === Qt.Key_Left) {
+                                if (!launcher.contextActive) launcher.cycleMode(-1);
+                                event.accepted = true;
+                            }
+                            else if (event.key === Qt.Key_Right) {
+                                if (!launcher.contextActive) launcher.cycleMode(1);
+                                event.accepted = true;
+                            }
                             else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                 if (event.modifiers & Qt.AltModifier || event.modifiers & Qt.ShiftModifier)
                                     launcher.openContext();
