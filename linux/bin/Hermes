@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Hermes — habilita el backend (dashboard web) y abre el navegador en la WebUI.
-# Parte de los dotfiles: se enlaza a ~/.local/bin/Hermes y rofi lo lista
-# via rofi-scripts-launcher.sh (que escanea ~/.local/bin).
+# Parte de los dotfiles: se enlaza a ~/.local/bin/Hermes y el launcher de
+# quickshell lo lista (scripts escanea ~/.local/bin).
 
 set -euo pipefail
 

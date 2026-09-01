@@ -66,19 +66,26 @@ fi
 rows=$(( (n + cols - 1) / cols ))
 
 # ── Construir layout string ──
-# Formato: <base>,WxH,0,0{leaf,leaf,...}  (1 fila)
-#       o  <base>,WxH,0,0[fila,fila]  (varias filas; [] = stack vertical,
-#                                      {} = split horizontal; leaf =
-#                                      WxH,X,Y,paneId — id sin '%')
-wl="$(tmux display-message -p -t "$TARGET" '#{window_layout}')"
-base="${wl%%,*}"
+# Formato: <checksum>,WxH,0,0<arbol>
+#   checksum = CRC-16 rotatorio del RESTO del string (ver layout-custom.c
+#   de tmux); sin checksum correcto tmux rechaza el layout ("invalid layout").
+#   Arbol: {} = split horizontal (hijos izq|der), [] = stack vertical;
+#   leaf = WxH,X,Y,paneId (id sin '%'); fila única usa {} directo.
+tmux_checksum() {
+    local s="$1" csum=0 byte i
+    for ((i = 0; i < ${#s}; i++)); do
+        printf -v byte '%d' "'${s:$i:1}"
+        csum=$(( ((csum >> 1) | ((csum & 1) << 15)) + byte & 0xFFFF ))
+    done
+    printf '%04x' "$csum"
+}
 
 # ids de pane sin '%'
 for ((i = 0; i < n; i++)); do
     panes[$i]="${panes[$i]#%}"
 done
 
-layout="$base,${W}x${H},0,0"
+body="${W}x${H},0,0"
 
 idx=0
 y=0
@@ -109,10 +116,12 @@ for ((r = 0; r < rows; r++)); do
 done
 
 if (( rows > 1 )); then
-    layout+="[$(IFS=,; echo "${filas[*]}")]"
+    body+="[$(IFS=,; echo "${filas[*]}")]"
 else
-    layout+="{${row}}"
+    body+="{${row}}"
 fi
+
+layout="$(tmux_checksum "$body"),$body"
 
 # Aplicar; si el string no es valido, tiled como red de seguridad
 if ! tmux select-layout -t "$TARGET" "$layout" 2>/dev/null; then

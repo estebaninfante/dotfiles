@@ -47,7 +47,7 @@ else
 end
 -- PREPEND ~/.local/bin al PATH existente (NO reemplazarlo).
 -- En NixOS los binarios estan en /run/current-system/sw/bin — si
--- reemplazamos el PATH, Hyprland no encuentra kitty/waybar/rofi.
+-- reemplazamos el PATH, Hyprland no encuentra kitty/waybar/quickshell.
 hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. os.getenv("PATH"))
 hl.env("XDG_DATA_HOME", os.getenv("HOME") .. "/.local/share")
 if machine == "desktop" then
@@ -132,12 +132,8 @@ hl.layer_rule({
     blur = true
 })
 
--- Blur detrás del launcher (rofi, layer Wayland nativo): el fondo del
--- window en theme.rasi es rgba translúcido → se ve el escritorio difuminado.
-hl.layer_rule({
-    match = { namespace = "rofi" },
-    blur = true
-})
+-- Blur detrás del launcher: es un PopupWindow de quickshell, cubierto por el
+-- layer_rule de namespace "quickshell" de arriba.
 
 -- ========================
 -- CURSOR
@@ -216,7 +212,7 @@ hl.animation({
     style = "popin 10%"
 })
 
--- Layers (rofi en modo Wayland nativo, waybar, swaync): apertura con popin
+-- Layers (waybar, swaync, quickshell): apertura con popin
 -- rápido. Rofi es un layer → sin esto abre instantáneo sin animación.
 hl.animation({
     leaf = "layers",
@@ -321,9 +317,9 @@ hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
 -- KEYBINDS: SYSTEM & APPS
 -- ========================
 hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
-hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("rofi -show combi -no-sort -modi \"combi,drun,Archivos:~/.local/bin/rofi-file-search.sh,Scripts:~/.local/bin/rofi-scripts-launcher.sh\" -combi-modes \"drun,Archivos,Scripts\""))
-hl.bind(mainMod .. " + SHIFT + SPACE", hl.dsp.exec_cmd("rofi -show Archivos -no-sort -modi \"Archivos:~/.local/bin/rofi-file-search.sh\""))
-hl.bind(mainMod .. " + ALT + SPACE",   hl.dsp.exec_cmd("rofi -show Scripts -modi \"Scripts:~/.local/bin/rofi-scripts-launcher.sh\""))
+hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("~/.local/bin/qs-launcher.sh apps"))
+hl.bind(mainMod .. " + SHIFT + SPACE", hl.dsp.exec_cmd("~/.local/bin/qs-launcher.sh files"))
+hl.bind(mainMod .. " + ALT + SPACE",   hl.dsp.exec_cmd("~/.local/bin/qs-launcher.sh scripts"))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.local/bin/antigravity-ui.sh"))
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("firefox"))
 

@@ -51,7 +51,7 @@ echo ""
 
 # ── Config dirs ──────────────────────────────────────────────
 info "Importando directorios de config..."
-for dir in hypr waybar kitty rofi nvim kanata fastfetch mako swayosd avizo btop gh; do
+for dir in hypr waybar kitty nvim kanata fastfetch mako swayosd avizo btop gh; do
   import_dir "$HOME/.config/$dir" "$DOTFILES/linux/config/$dir" "~/.config/$dir"
 done
 

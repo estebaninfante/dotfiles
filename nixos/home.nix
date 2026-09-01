@@ -30,7 +30,7 @@ let
 
   # ── Inventarios ─────────────────────────────────────────────
   configDirs = [
-    "hypr" "waybar" "kitty" "rofi" "nvim" "kanata" "fastfetch"
+    "hypr" "waybar" "kitty" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
     "quickshell" "tmux" "voice"
   ];
@@ -39,13 +39,13 @@ let
   ];
   homeFiles = [ ".bashrc" ".gitconfig" ];
 
-  allScripts = [
-    "rofi-power-mode.sh" "gpu-mode.sh" "toggle_moonlight.sh"
+allScripts = [
+    "gpu-mode.sh" "toggle_moonlight.sh"
     "wifi-reconnect.sh" "shot" "waybar-battery-top"
     "clean-temp.sh" "pomodoro-waybar.sh" "lid-inhibit-waybar.sh"
-    "waybar-ram-top" "keyboard-layout-waybar.sh" "tts-send" "tts-server" "tts" "rofi-scripts-launcher.sh"
+    "waybar-ram-top" "keyboard-layout-waybar.sh" "tts-send" "tts-server" "tts"
     "power-mode.sh" "battery-power-guard.sh" "toggle-lid.sh" "agent.sh" "send-with-taildrop" "tv-toggle.sh"
-    "tv-mode.sh" "game-mode.sh" "wheel-mode-monitor.sh" "rofi-file-search.sh" "rofi-context-menu.sh" "reiniciar.sh"
+    "tv-mode.sh" "game-mode.sh" "wheel-mode-monitor.sh" "reiniciar.sh"
     "fix-hyprland.sh" "cerrar-sesion.sh" "apagar.sh" "antigravity-ui.sh"
     "super-hold-monitor.sh" "wallpaper-switch.sh" "wallpaper-daemon.sh"
     "grid-move" "Hermes" "speak" "leia.sh" "lan-mouse-escape.sh" "clipboard-sync"
@@ -54,6 +54,7 @@ let
     "kitty-theme-toggle.sh" "obsidian-theme-toggle.sh"
     "theme-toggle.sh"
     "gamepad-watch.sh" "hypr-input-bridge.sh"
+    "qs-launcher.sh" "apps-list.sh" "file-list.sh" "script-list.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -84,7 +85,7 @@ in
     {
       ".config/machine-type".text = machineType;
     }
-    # ── Tmux: .desktop para lanzarlo desde rofi (drun) ─────────
+    # ── Tmux: .desktop para lanzarlo desde el launcher (apps) ─
     {
       ".local/share/applications/tmux.desktop" = { source = link (cfg + "/applications/tmux.desktop"); force = true; };
     }

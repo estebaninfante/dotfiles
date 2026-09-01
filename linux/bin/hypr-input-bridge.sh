@@ -18,7 +18,7 @@ PRESET_DESKTOP="desktop"
 FLAG=/tmp/gamemode.flag
 
 # Clases donde la navegacion por mando debe seguir activa (UI del sistema).
-UI_ALLOW='cartridges|quickshell|waybar|rofi|swaync|swayosd|hypr|kitty|firefox|discord|whatsapp|whatsie|spotify|sunshine|org\.kde\.dolphin|libreoffice|soffice|opencode|tmux|ulauncher'
+UI_ALLOW='cartridges|quickshell|waybar|swaync|swayosd|hypr|kitty|firefox|discord|whatsapp|whatsie|spotify|sunshine|org\.kde\.dolphin|libreoffice|soffice|opencode|tmux|ulauncher'
 
 state=unknown   # unknown | desktop | stop
 

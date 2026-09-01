@@ -34,8 +34,6 @@ with pkgs; [  # ── Shell & terminal ──
         --set QS_DISABLE_DMABUF 1
     '';
   })
-  rofi                  # en nixpkgs reciente rofi-wayland ya se fusiono en rofi
-  rofi-emoji
   swaynotificationcenter  # swaync
   swayosd
   avizo

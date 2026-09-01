@@ -23,7 +23,7 @@ dotfiles/
 │   ├── modules/              # packages.nix, keyboard.nix, sudoers.nix
 │   └── hosts/                # laptop.nix, desktop.nix + hardware-config
 ├── linux/
-│   ├── config/               # ~/.config/ (hypr, waybar, kitty, rofi, nvim, etc.)
+│   ├── config/               # ~/.config/ (hypr, waybar, kitty, quickshell, nvim, etc.)
 │   ├── home/                 # ~/.bashrc, ~/.gitconfig
 │   ├── bin/                  # ~/.local/bin/ (scripts propios)
 │   ├── xkb/                  # layout de teclado custom (dvk_prog)

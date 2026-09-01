@@ -1,11 +1,11 @@
 ---
 name: ux
-description: Use when editing UI/UX across the entire machine — quickshell panels, rofi menus, waybar, hyprland window rules, notifications, gamepad mode. Covers interaction patterns, visual consistency, sizing standards, and what NOT to do. Auto-triggers on UI-related changes to any config.
+description: Use when editing UI/UX across the entire machine — quickshell panels, launcher, waybar, hyprland window rules, notifications, gamepad mode. Covers interaction patterns, visual consistency, sizing standards, and what NOT to do. Auto-triggers on UI-related changes to any config.
 ---
 
 # Machine UX Skill
 
-Reglas de UX para TODA la interfaz de esta máquina. Aplican a quickshell, rofi, waybar, hyprland, notificaciones, y cualquier UI que se agregue.
+Reglas de UX para TODA la interfaz de esta máquina. Aplican a quickshell, waybar, hyprland, notificaciones, y cualquier UI que se agregue.
 
 ## Principio central
 
@@ -133,7 +133,7 @@ Malos empty states:
 ## Hyprland window rules
 
 - Popup menus: layer quickshell con exclusiveZone apropiado
-- Floating: para menus de rofi, notificaciones
+- Floating: para launcher de quickshell, notificaciones
 - Dim behind: para popups de quickshell (blur gaussiano)
 
 ## Rofi

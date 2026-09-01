@@ -165,13 +165,13 @@ PopupWindow {
         }
 
         Repeater {
-            model: ["SUSPENDER", "CERRAR SESIÓN", "REINICIAR", "APAGAR"]
+            model: ["SUSPENDER", "CERRAR SESIÓN", "REINICIAR", "APAGAR", "APAGAR AMBAS"]
             delegate: Rectangle {
                 required property string modelData
                 width: powerCol.width
                 height: 34
                 radius: 8
-                color: powerActionArea.containsMouse ? (modelData === "APAGAR" ? "#eba0ac" : "white") : "#141414"
+                color: powerActionArea.containsMouse ? (modelData.indexOf("APAGAR") >= 0 ? "#eba0ac" : "white") : "#141414"
 
                 Text {
                     anchors.centerIn: parent
@@ -237,11 +237,13 @@ PopupWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        powerAction.command = pendingAction === "SUSPENDER" ? ["systemctl", "suspend"] : pendingAction === "CERRAR SESIÓN" ? ["hyprctl", "dispatch", "exit"] : pendingAction === "REINICIAR" ? ["systemctl", "reboot"] : ["systemctl", "poweroff"];
-                        UIState.powerMenuOpen = false;
-                        pendingAction = "";
-                        powerAction.running = true;
-                    }
+                            powerAction.command = pendingAction === "SUSPENDER" ? ["systemctl", "suspend"] : pendingAction === "CERRAR SESIÓN" ? ["hyprctl", "dispatch", "exit"] : pendingAction === "REINICIAR" ? ["systemctl", "reboot"] : pendingAction === "APAGAR AMBAS" ?
+                                ["bash", "-c", "M=$(cat ~/.config/machine-type 2>/dev/null || hostname -s); if [ \"$M\" = laptop ]; then O=desktop; else O=laptop; fi; notify-send -u critical Apagando \"Enviando shutdown a $O...\"; ssh eztvn@$O sudo /run/current-system/sw/bin/systemctl poweroff 2>/dev/null || true; sleep 2; systemctl poweroff"] :
+                                ["systemctl", "poweroff"];
+                            UIState.powerMenuOpen = false;
+                            pendingAction = "";
+                            powerAction.running = true;
+                        }
                 }
             }
         }

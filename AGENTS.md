@@ -64,7 +64,6 @@ Gestionados por `nixos/home.nix` (`configDirs`):
 | hypr | `~/.config/hypr/` |
 | waybar | `~/.config/waybar/` |
 | kitty | `~/.config/kitty/` |
-| rofi | `~/.config/rofi/` |
 | nvim | `~/.config/nvim/` |
 | kanata | `~/.config/kanata/` |
 | fastfetch | `~/.config/fastfetch/` |
@@ -75,6 +74,7 @@ Gestionados por `nixos/home.nix` (`configDirs`):
 | btop | `~/.config/btop/` |
 | gh | `~/.config/gh/` |
 | opencode | `~/.config/opencode/` |
+| quickshell | `~/.config/quickshell/` (bar + menús + **launcher**) |
 | input-remapper-2 | `~/.config/input-remapper-2/` (**copiado**, no symlink: la GUI muta presets; patrón lan-mouse) |
 
 ### Linux config — archivos sueltos
@@ -229,7 +229,7 @@ Automático (solo laptop):
 - `battery-power-guard.sh` (evento Mains via udev) → power-saver + corte + syncthing OFF (ON en AC; toggle manual en pill "SYNC" de quickshell, respeta `/tmp/syncthing-manual-off`).
 - `powerManagement.powertop.enable` → `powertop --auto-tune` al boot.
 
-Accesible desde `rofi-power-mode.sh` (menú "Modo Energia"). Requiere sudo NOPASSWD (definido en `nixos/modules/sudoers.nix`):
+Accesible desde el **PowerMenu** de quickshell (menú "Modo Energia"). Requiere sudo NOPASSWD (definido en `nixos/modules/sudoers.nix`):
 - `tee /sys/bus/pci/devices/*/power/control`
 - `nvidia-smi`
 
@@ -537,7 +537,7 @@ Experiencia consola en PC: el gamepad controla el escritorio y la UI.
   (**copiado** desde `linux/config/input-remapper-2/` por `home.activation`,
   patrón lan-mouse: la GUI muta presets, se pierde en rebuild).
 - **Mapeos**: `presets/Nintendo Wii Remote Pro Controller/desktop.json` — dpad
-  → flechas, A/B → Enter/Esc, X → SUPER+SPACE (rofi), Y → SUPER+A, L = SUPER
+  → flechas, A/B → Enter/Esc, X → SUPER+SPACE (launcher quickshell), Y → SUPER+A, L = SUPER
   (L+B = cerrar), R = SUPER+RETURN, Select → ws1, Start → ws10 (modo juego),
   stick derecho → ratón, thumbl/r → click. Códigos evdev en el modalias del
   pad (`k130`=BTN_A, ... `k220..223`=dpad, `ra0,1,3,4`=ejes).
@@ -549,7 +549,7 @@ Experiencia consola en PC: el gamepad controla el escritorio y la UI.
 - **Evitar doble input en juegos**: `linux/bin/hypr-input-bridge.sh` (user
   service `hypr-input-bridge`) escucha socket2 de Hyprland (`socat`) y, dentro
   del modo juego, si el foco es window fullscreen no-UI → `input-remapper-control
-  --command stop` (pad 100% nativo); si vuelve a la UI (cartridges/shell/rofi)
+  --command stop` (pad 100% nativo); si vuelve a la UI (cartridges/shell)
   → `start --preset desktop`. Lista de UI en `UI_ALLOW` del script.
 - Paquete `socat` en packages.nix. `enableUdevRules=false`: el autoload lo
   dispara gamepad-watch.

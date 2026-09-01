@@ -37,7 +37,8 @@ quickshell/
 │   ├── ThemeService.qml
 │   ├── NotifyService.qml
 │   ├── GameModeService.qml
-│   └── SuperKeyService.qml
+│   ├── SuperKeyService.qml
+│   └── LaunchService.qml   # launcher: busca apps/archivos/scripts + IPC "launcher"
 ├── components/            # widgets reutilizables
 │   ├── Card.qml / Meter.qml      # tarjetas del widget menu (migrados de la raíz)
 │   ├── IconButton.qml            # pill con icono, hover, wheel
@@ -55,6 +56,7 @@ quickshell/
 ├── menus/                 # PopupWindows (hijos de root en shell.qml)
 │   ├── ControlCenter.qml  PowerMenu.qml  DateMenu.qml  RamMenu.qml
 │   ├── BrightnessMenu.qml VolumeMenu.qml WidgetMenu.qml
+│   └── Launcher.qml               # busca apps/archivos/scripts (sustituyó a rofi)
 ├── cards/                 # tarjetas del widget menu
 │   ├── ThemeCard  RamCard  BattCard  GpuCard  CpuCard  SystemCard
 │   ├── AudioCard  ScreenCard  WifiCard       # WifiCard autocontenida (Process propios)
@@ -82,6 +84,7 @@ polling (`wifiStatus` / `bluetoothStatus`), con guard
 | Un pill/botón reutilizable | `components/` (IconButton, SliderRow...) |
 | Contenido de la barra | `bar/` |
 | Popup nuevo | `menus/` + flag en `UIState` + instancia en `shell.qml` |
+| Launcher (busca apps/archivos/scripts) | `menus/Launcher.qml` (UI) + `services/LaunchService.qml` (datos + IPC). NO duplicar: las listas vienen de `linux/bin/apps-list.sh`, `file-list.sh`, `script-list.sh` |
 | Tarjeta del widget menu | `cards/` + sección en `WidgetMenu.qml` |
 | Modo juegos | `overlay/GameOverlay.qml` + `services/GameModeService.qml` |
 
@@ -121,6 +124,29 @@ Estas correcciones se repiten. NO vuelvas a cometerlas:
    la tarjeta del widget menu usa 90/60/30. Son distintos a propósito.
 4. No tocar bloques `if machine == "X"` sin preguntar (machine-specific).
 
+## Launcher (sustituyó a rofi)
+
+`services/LaunchService.qml` + `menus/Launcher.qml`. Tres modos, keybinds en
+hyprland.lua (wrapper `~/.local/bin/qs-launcher.sh`):
+
+| Modo | Keybind | Fuente | Acción Enter |
+|------|---------|--------|--------------|
+| `apps` | SUPER+SPACE | `apps-list.sh` (drun) | exec |
+| `files` | SUPER+SHIFT+SPACE | `file-list.sh` | xdg-open / kitty-nvim (code) |
+| `scripts` | SUPER+ALT+SPACE | `script-list.sh` | kitty si está en scripts/linux, si no exec |
+
+- Abrir/cerrar por IPC: `qs ipc call launcher toggle <mode>` (válido también
+  `open <mode>` / `close`). `LaunchService` expone el `IpcHandler` target
+  `launcher`; no usan sockets ni DBus.
+- Los producers son scripts puros (`linux/bin/*-list.sh`): emiten TSV
+  `nombre<TAB>camino<TAB>...`; el contexto (Alt+Enter) y el lanzado se resuelven
+  en QML (LaunchService.launch/openFile/runScript + Launcher.buildContext).
+- Filtrar reasigna `LaunchService.results` (property var) para notificar a la
+  lista; cap 200 resultados.
+- Añadir script nuevo: los producers escanean `~/.local/bin` +
+  `dotfiles/{scripts,linux,linux/bin,bin}` — sin tocar QML salvo que cambie la
+  semántica de lanzado.
+
 ## Services — cuándo corren sus procesos
 
 | Service | Proceso(s) | Cuándo corre |
@@ -139,6 +165,7 @@ Estas correcciones se repiten. NO vuelvas a cometerlas:
 | GpuModeService | gpuStatus | cada 5000 ms (solo laptop) |
 | ThemeService | themeStateRead | al abrir/refrescar |
 | NotifyService | soundStateWrite | al escribir toggles |
+| LaunchService | apps-list.sh / file-list.sh / script-list.sh | on-demand al abrir el launcher |
 | WifiCard (card) | wifiStatus + scan + connect | status cada 20000 ms (guard sección "conexiones") |
 | BluetoothCard (card) | bluetoothStatus + scan + action | status cada 20000 ms (guard sección "conexiones") |
 
