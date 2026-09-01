@@ -8,6 +8,7 @@ Item {
     property bool brightnessMenuOpen: false
     property bool ramMenuOpen: false
     property bool dateMenuOpen: false
+    property string dateMenuSection: "tareas"   // "tareas" | "pomodoro"
     property bool controlCenterOpen: false
     property bool launcherOpen: false
     property string launcherMode: "apps"

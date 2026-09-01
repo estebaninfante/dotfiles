@@ -70,9 +70,12 @@ in
     # que escanea particiones (btrfs/ext4) y arma entradas sin init= que bootean
     # a la raíz (el "ícono NixOS → Root"). Sin external el menú queda limpio:
     # Windows + NixOS (única, manual) + UEFI.
-    scanfor internal,manual,firmware
-    # systemd-boot remnants: /efi/systemd era del bootloader anterior.
-    dont_scan_dirs /efi/systemd
+    scanfor internal,manual
+    # Solo dejar pasar Windows (EFI/Microsoft). Ocultar del escaneo el resto
+    # del ESP: systemd (bootloader anterior), EFI/Boot (fallback) y EFI/nixos
+    # (loader + stubs EFI que duplican la entrada manual de NixOS). Sin esto
+    # el menu muestra ~10 entradas (una por dir con .efi en el ESP).
+    dont_scan_dirs /EFI/systemd,/EFI/Boot,/EFI/nixos
     include themes/rEFInd-minimal/theme.conf
   '';
   boot.loader.efi.canTouchEfiVariables = true;
