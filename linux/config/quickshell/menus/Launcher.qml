@@ -9,23 +9,24 @@ import "../services"
 // Launcher (reemplazo de rofi). Fuente de datos + arranque en LaunchService.
 // Tabs de modo, búsqueda, lista de resultados y menú contextual
 // (Alt+Enter / Shift+Enter, paridad con rofi-context-menu).
-PopupWindow {
+// PanelWindow a pantalla completa: evita el grab de PopupWindow (launcher se
+// abre por keybind/IPC sin input previo del panel).
+PanelWindow {
     id: launcher
-    implicitWidth: 560
-    implicitHeight: headerH + inputH + 1 + Math.max(contextActive ? ctxH : listH, 60) + footerH
-    visible: opened
-    grabFocus: true
+    anchors { left: true; top: true; right: true; bottom: true }
+    exclusionMode: ExclusionMode.Ignore
+    focusable: UIState.launcherOpen
+    visible: UIState.launcherOpen
     color: "transparent"
 
-    required property PanelWindow root
-
-    property bool opened: UIState.launcherOpen
     property bool contextActive: false
     property var contextTarget: null
     property var contextActions: []
     property int currentIndex: 0
     property int ctxIndex: 0
 
+    readonly property int cardW: 560
+    readonly property int cardY: 120
     readonly property int headerH: 44
     readonly property int inputH: 44
     readonly property int footerH: 26
@@ -34,27 +35,20 @@ PopupWindow {
 
     readonly property var modeTabs: [["apps", "APLICACIONES"], ["files", "ARCHIVOS"], ["scripts", "SCRIPTS"]]
 
-    anchor {
-        window: root
-        rect.x: Math.round((root.width - launcher.implicitWidth) / 2)
-        rect.y: 120
-    }
-
     onVisibleChanged: { if (!visible && UIState.launcherOpen) UIState.launcherOpen = false; }
-    onOpenedChanged: {
-        if (opened) {
-            currentIndex = 0;
-            ctxIndex = 0;
-            input.forceActiveFocus();
-        } else {
-            contextActive = false;
-            contextTarget = null;
-            UIState.hoversReset();
-        }
-    }
     Connections {
         target: UIState
-        function onLauncherOpenChanged() { if (launcher.opened) input.forceActiveFocus(); }
+        function onLauncherOpenChanged() {
+            if (UIState.launcherOpen) {
+                currentIndex = 0;
+                ctxIndex = 0;
+                input.forceActiveFocus();
+            } else {
+                contextActive = false;
+                contextTarget = null;
+                UIState.hoversReset();
+            }
+        }
     }
 
     function navigate(delta) {
@@ -122,18 +116,34 @@ PopupWindow {
     function iconFor(item) {
         if (item.kind === "file") return item.isDir ? "\uf07b" : "\uf15b";
         if (item.kind === "script") return "\uf120";
+        if (item.kind === "app") return "\uf108";
         return "";
     }
 
     Rectangle {
+        id: backdrop
         anchors.fill: parent
-        anchors.margins: 1
+        color: "#000000"
+        opacity: 0.55
+        MouseArea {
+            anchors.fill: parent
+            onClicked: UIState.launcherOpen = false
+        }
+    }
+
+    Rectangle {
+        width: launcher.cardW
+        height: launcherCol.implicitHeight + 2
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: launcher.cardY
         radius: 16
         color: Theme.bg
         border.color: Theme.border
         border.width: 1
 
         Column {
+            id: launcherCol
             anchors.fill: parent
 
             // ── Tabs de modo ────────────────────────────────────
@@ -304,18 +314,8 @@ PopupWindow {
                         Item {
                             width: 20
                             height: parent.height
-                            IconImage {
-                                anchors.centerIn: parent
-                                width: 20
-                                height: 20
-                                visible: modelData.kind === "app"
-                                source: modelData.icon !== "" ? modelData.icon : "application-x-executable"
-                                sourceSize: Qt.size(20, 20)
-                                color: index === launcher.currentIndex ? Theme.fgOnWhite : Theme.fgFaint
-                            }
                             Text {
                                 anchors.centerIn: parent
-                                visible: modelData.kind !== "app"
                                 text: launcher.iconFor(modelData)
                                 color: index === launcher.currentIndex ? Theme.fgOnWhite : Theme.fgFaint
                                 font.family: Theme.fontFamily

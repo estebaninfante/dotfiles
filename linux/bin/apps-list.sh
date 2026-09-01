@@ -19,15 +19,15 @@ done
 {
     for dir in "${apps_dirs[@]}"; do
         [ -d "$dir" ] || continue
-        find "$dir" -maxdepth 1 -name "*.desktop" -type f 2>/dev/null
+        find "$dir" -maxdepth 1 -name "*.desktop" 2>/dev/null || true
     done
-} | LC_ALL=C sort -u | awk -F= '
+} | awk -F/ '!seen[$NF]++' | LC_ALL=C sort -f -u | xargs -d '\n' awk -F= '
 function clean_exec(s) {
     gsub(/%[fFuUdDnNickvm]/, "", s)
     gsub(/ +$/, "", s)
     return s
 }
-BEGIN { inEntry = 0; name = ""; exec = ""; icon = ""; skip = 0 }
+FNR == 1 { inEntry = 0; name = ""; exec = ""; icon = ""; skip = 0; next }
 /^\[/ {
     if (inEntry && !skip && name != "" && exec != "")
         printf "%s\t%s\t%s\n", name, clean_exec(exec), icon

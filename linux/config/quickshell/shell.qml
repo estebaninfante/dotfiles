@@ -45,7 +45,7 @@ PanelWindow {
     BrightnessMenu { root: root }
     VolumeMenu { root: root }
     WidgetMenu { root: root }
-    Launcher { root: root }
+    Launcher {}
 
     GameOverlay { }
 }

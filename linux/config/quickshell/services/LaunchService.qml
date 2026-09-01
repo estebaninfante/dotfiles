@@ -14,9 +14,9 @@ Item {
     property string query: ""
     property bool loading: false
 
-    var allApps = []
-    var allFiles = []
-    var allScripts = []
+    property var allApps: []
+    property var allFiles: []
+    property var allScripts: []
 
     readonly property string codeExts: "py|sh|lua|qml|json|conf|md|txt|js|ts|tsx|jsx|html|css|rasi|yaml|toml|zsh|bash|env|ini|sql|lock|csv|xml|nix"
 
@@ -146,7 +146,7 @@ Item {
 
     Process {
         id: appsProcess
-        command: ["apps-list.sh"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/apps-list.sh"']
         running: false
         stdout: SplitParser {
             splitMarker: "\n"
@@ -167,7 +167,7 @@ Item {
 
     Process {
         id: filesProcess
-        command: ["file-list.sh"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/file-list.sh"']
         running: false
         stdout: SplitParser {
             splitMarker: "\n"
@@ -187,7 +187,7 @@ Item {
 
     Process {
         id: scriptsProcess
-        command: ["script-list.sh"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/script-list.sh"']
         running: false
         stdout: SplitParser {
             splitMarker: "\n"
