@@ -338,6 +338,8 @@ in
           enter = "overload(nav, enter)";
           # Chording: space+AltGr (rightalt) = escape, sin sacrificar space.
           "space+rightalt" = "escape";
+          # Apostrophe (´): tap = dead_acute (tilde), hold = Control.
+          apostrophe = "overload(control, apostrophe)";
           middlemouse = "f7";
         };
         nav = {
