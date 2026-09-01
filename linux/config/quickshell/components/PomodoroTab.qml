@@ -29,7 +29,7 @@ Rectangle {
             text: stepRow.label
             color: Theme.fgDim
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.pixelNormal
+            font.pixelSize: Theme.pixelLarge
         }
 
         Rectangle {
@@ -60,7 +60,7 @@ Rectangle {
             text: stepRow.value + " min"
             color: Theme.fg
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.pixelNormal
+            font.pixelSize: Theme.pixelLarge
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
         }
@@ -114,9 +114,19 @@ Rectangle {
             }
             color: Theme.fgDim
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.pixelLarge
+            font.pixelSize: Theme.pixelTitle
             horizontalAlignment: Text.AlignHCenter
             Behavior on color { ColorAnimation { duration: 150; easing.type: Motion.easingOutCubic } }
+        }
+
+        Text {
+            width: parent.width
+            visible: PomodoroService.active || PomodoroService.cycle > 0
+            text: "Bloques completados: " + PomodoroService.cycle
+            color: Theme.fgDim
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.pixelLarge
+            horizontalAlignment: Text.AlignHCenter
         }
 
         Text {
@@ -125,7 +135,7 @@ Rectangle {
             text: "\uf06e  Ojos: mira lejos en " + PomodoroService.fmt(PomodoroService.eyesIn)
             color: Theme.fgFaint
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.pixelNormal
+            font.pixelSize: Theme.pixelLarge
             horizontalAlignment: Text.AlignHCenter
         }
 
@@ -144,7 +154,7 @@ Rectangle {
                     text: PomodoroService.paused ? "\uf04c  Pausar" : (PomodoroService.active ? "\uf04c  Pausar" : "\uf04b  Iniciar")
                     color: Theme.fgOnWhite
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.pixelNormal
+                    font.pixelSize: Theme.pixelLarge
                     font.bold: true
                 }
                 MouseArea {
@@ -175,7 +185,7 @@ Rectangle {
                     text: "\uf051  Saltar"
                     color: Theme.fgDim
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.pixelNormal
+                    font.pixelSize: Theme.pixelLarge
                 }
                 MouseArea {
                     id: skipArea
@@ -202,7 +212,7 @@ Rectangle {
                     text: "\uf04d  Detener"
                     color: stopArea.containsMouse ? Theme.bg : Theme.fgDim
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.pixelNormal
+                    font.pixelSize: Theme.pixelLarge
                     Behavior on color { ColorAnimation { duration: 120; easing.type: Motion.easingOutCubic } }
                 }
                 MouseArea {
@@ -248,7 +258,7 @@ Rectangle {
                 text: "Ojos"
                 color: Theme.fgDim
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
+                font.pixelSize: Theme.pixelLarge
             }
 
             Rectangle {
