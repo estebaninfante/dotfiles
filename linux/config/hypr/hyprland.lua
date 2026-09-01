@@ -283,7 +283,7 @@ hl.on("hyprland.start", function()
     end
 
     -- Arrancar siempre en el workspace 5
-    hl.exec_cmd("hyprctl dispatch workspace 5")
+    hl.exec_cmd("sleep 0.5 && hyprctl dispatch workspace 5")
 end)
 
 -- ========================
