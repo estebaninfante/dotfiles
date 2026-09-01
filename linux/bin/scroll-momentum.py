@@ -55,7 +55,7 @@ BTN_MOUSE_FIRST = 0x110
 _EVIOCGNAME = (2 << 30) | (256 << 16) | (0x45 << 8) | 0x06
 def EVIOCGBIT(ev, ln):
     return (2 << 30) | (ln << 16) | (0x45 << 8) | (0x20 + ev)
-EVIOCGRAB = 0x40004590
+EVIOCGRAB = 0x40044590
 UI_SET_EVBIT = 0x40045564
 UI_SET_KEYBIT = 0x40045565
 UI_SET_RELBIT = 0x40045566
@@ -131,7 +131,7 @@ def setup_uinput():
         ioctl(ui, UI_SET_LEDBIT, l)
     for sn in range(SND_MAX + 1):
         ioctl(ui, UI_SET_SNDBIT, sn)
-    ident = struct.pack("=80sHHHi256I", b"scroll-momentum-virt",
+    ident = struct.pack("=80sHHHHi256I", b"scroll-momentum-virt",
                         0x03, 0x1234, 0x5678, 1, 0, *([0] * 256))
     os.write(ui, ident)
     ioctl(ui, UI_DEV_CREATE)
@@ -217,9 +217,11 @@ def main():
     try:
         while running:
             now = time.monotonic()
-            timeout = None
+            # cap 0.25s: garantiza re-chequear running/pendientes (y
+            # desbloquea tras SIGTERM pese al retry EINTR de PEP 475)
+            timeout = 0.25
             if pending and not DEBUG:
-                timeout = max(0.0, pending[0][0] - now)
+                timeout = min(0.25, max(0.0, pending[0][0] - now))
             r, _, _ = select.select([fd for fd, _, _ in sources], [], [], timeout)
             now = time.monotonic()
             while pending and pending[0][0] <= now:

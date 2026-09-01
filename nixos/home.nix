@@ -55,6 +55,7 @@ allScripts = [
     "theme-toggle.sh"
     "gamepad-watch.sh" "hypr-input-bridge.sh"
     "qs-launcher.sh" "apps-list.sh" "file-list.sh" "script-list.sh"
+    "scroll-momentum.py"
   ];
   # Solo laptop
   laptopScripts = [
@@ -511,6 +512,27 @@ in
       # reinicia cada 3s en loop indefinido. Daemon one-shot: si muere,
       # se arregla limpiando el pipe y volviendo a start.
       Restart = "no";
+    };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # ── Momentum de rueda estilo MX Master (glide) ─────────────────────
+  # scroll-momentum.py: agarra los mouses reales (EVIOCGRAB), reenvía
+  # todo sin cambios y tras un flick rápido de rueda inyecta notches con
+  # decaimiento via uinput (virtual "scroll-momentum-virt"). El script
+  # espera sesión Hyprland antes de agarrar (no roba el mouse en GDM).
+  # Notch lento = passthrough puro; opuesto = cancela el glide.
+  systemd.user.services.scroll-momentum = {
+    Unit = {
+      Description = "Mouse wheel momentum glide (MX-style, evdev->uinput)";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${bin}/scroll-momentum.py";
+      Restart = "on-failure";
+      RestartSec = "3";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
