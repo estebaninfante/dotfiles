@@ -99,6 +99,12 @@ Rectangle {
                 radius: 6
                 color: rowArea.containsMouse ? Theme.bgHover : "#000000"
 
+                MouseArea {
+                    id: rowArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                }
+
                 Row {
                     anchors.fill: parent
                     anchors.leftMargin: 8
@@ -160,12 +166,6 @@ Rectangle {
                             onClicked: TasksService.del(modelData.idx)
                         }
                     }
-                }
-
-                MouseArea {
-                    id: rowArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                 }
             }
 

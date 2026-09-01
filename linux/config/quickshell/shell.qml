@@ -48,4 +48,5 @@ PanelWindow {
     Launcher {}
 
     GameOverlay { }
+    PomodoroPill { }
 }

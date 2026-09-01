@@ -42,7 +42,7 @@ let
 allScripts = [
     "gpu-mode.sh" "toggle_moonlight.sh"
     "wifi-reconnect.sh" "shot" "waybar-battery-top"
-    "clean-temp.sh" "pomodoro-waybar.sh" "lid-inhibit-waybar.sh"
+    "clean-temp.sh" "pomodoro.sh" "tasks-ctl.sh" "lid-inhibit-waybar.sh"
     "waybar-ram-top" "keyboard-layout-waybar.sh" "tts-send" "tts-server" "tts"
     "power-mode.sh" "battery-power-guard.sh" "toggle-lid.sh" "agent.sh" "send-with-taildrop" "tv-toggle.sh"
     "tv-mode.sh" "game-mode.sh" "wheel-mode-monitor.sh" "reiniciar.sh"

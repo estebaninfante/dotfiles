@@ -38,6 +38,8 @@ quickshell/
 │   ├── NotifyService.qml
 │   ├── GameModeService.qml
 │   ├── SuperKeyService.qml
+│   ├── TasksService.qml      # centro: tareas de la nota diaria de Obsidian (tasks-ctl.sh)
+│   ├── PomodoroService.qml   # centro: pomodoro + ojos (poll 1s a pomodoro.sh)
 │   └── LaunchService.qml   # launcher: busca apps/archivos/scripts + IPC "launcher"
 ├── components/            # widgets reutilizables
 │   ├── Card.qml / Meter.qml      # tarjetas del widget menu (migrados de la raíz)
@@ -45,6 +47,8 @@ quickshell/
 │   ├── SliderRow.qml             # slider + TextInput + rueda
 │   ├── DeviceRow.qml             # fila de dispositivo de audio (sink/source)
 │   ├── SectionLabel.qml          # etiqueta de sección
+│   ├── TasksTab.qml              # pestaña TAREAS del centro (lista + añadir)
+│   ├── PomodoroTab.qml           # pestaña POMODORO del centro (timer + config)
 │   └── MenuShell.qml             # caja visual de los popups (borde, radio)
 ├── bar/                   # contenido de la barra (se instancia desde shell.qml)
 │   ├── Bar.qml            #   rect negro 0.985 + composición de widgets
@@ -54,16 +58,38 @@ quickshell/
 │   ├── BatteryIndicator.qml
 │   └── TrayButtons.qml
 ├── menus/                 # PopupWindows (hijos de root en shell.qml)
-│   ├── ControlCenter.qml  PowerMenu.qml  DateMenu.qml  RamMenu.qml
+│   ├── ControlCenter.qml  PowerMenu.qml  RamMenu.qml
+│   ├── DateMenu.qml               # centro personal: tareas (Obsidian) + pomodoro
 │   ├── BrightnessMenu.qml VolumeMenu.qml WidgetMenu.qml
-│   └── Launcher.qml               # busca apps/archivos/scripts (sustituyó a rofi)
-├── cards/                 # tarjetas del widget menu
+│   └── Launcher.qml               # busca apps/archivos/scripts (sustituyó a rofi)├── cards/                 # tarjetas del widget menu
 │   ├── ThemeCard  RamCard  BattCard  GpuCard  CpuCard  SystemCard
 │   ├── AudioCard  ScreenCard  WifiCard       # WifiCard autocontenida (Process propios)
 │   ├── BluetoothCard  NotifCard  MonitorDetail
 └── overlay/
-    └── GameOverlay.qml    # overlay "modo juegos"
+    ├── GameOverlay.qml    # overlay "modo juegos"
+    └── PomodoroPill.qml   # pill flotante del pomodoro (visible solo activo)
 ```
+
+### Centro de tareas/pomodoro (DateMenu)
+
+`menus/DateMenu.qml` (clic en el reloj) = centro personal con dos pestañas
+(`UIState.dateMenuSection`: `"tareas"` | `"pomodoro"`):
+
+- **Tareas** (`components/TasksTab.qml` + `services/TasksService.qml`): la fuente
+  de verdad es la **nota diaria de Obsidian** `~/alicia/Dia/YYYY-MM-DD.md`
+  (checkboxes `- [ ]`/`- [x]`). CRUD vía `~/.local/bin/tasks-ctl.sh`
+  (`list|add|toggle|del|ensure`; `ensure` crea la nota desde la plantilla
+  `Mental/Plantillas/nota-dia.md`). Se refresca al abrir el menú y tras cada op.
+- **Pomodoro** (`components/PomodoroTab.qml` + `services/PomodoroService.qml`):
+  estado y notificaciones viven en `~/.local/bin/pomodoro.sh` (archivos en
+  `$XDG_RUNTIME_DIR/pomodoro/`, notify-send) → sobrevive reinicios de
+  quickshell. El servicio solo hace poll (1 s) y dispara subcomandos
+  (`start|pause|resume|stop|skip|config`). Config persistente en
+  `~/.local/state/quickshell/pomodoro.conf` (`work_min`, `break_min`,
+  `eyes_min`, `eyes_on`) editable desde la pestaña.
+- **Pill flotante** (`overlay/PomodoroPill.qml`): PanelWindow propia
+  (WlrLayer.Overlay, `exclusionMode: Ignore`) visible solo con el timer activo;
+  clic → abre el centro en pestaña POMODORO.
 
 ### Wifi / Bluetooth: lógica dentro de las cards
 
@@ -165,6 +191,8 @@ hyprland.lua (wrapper `~/.local/bin/qs-launcher.sh`):
 | GpuModeService | gpuStatus | cada 5000 ms (solo laptop) |
 | ThemeService | themeStateRead | al abrir/refrescar |
 | NotifyService | soundStateWrite | al escribir toggles |
+| TasksService | tasks-ctl.sh list/add/toggle/del | al abrir el centro + tras cada op |
+| PomodoroService | pomodoro.sh status | cada 1000 ms (siempre) + tras cada subcomando |
 | LaunchService | apps-list.sh / file-list.sh / script-list.sh | on-demand al abrir el launcher |
 | WifiCard (card) | wifiStatus + scan + connect | status cada 20000 ms (guard sección "conexiones") |
 | BluetoothCard (card) | bluetoothStatus + scan + action | status cada 20000 ms (guard sección "conexiones") |
