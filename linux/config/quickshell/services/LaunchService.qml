@@ -91,7 +91,9 @@ Item {
 
     function run(args) {
         runnerProcess.running = false;
-        runnerProcess.command = args;
+        // systemd-run --scope saca la app del cgroup de quickshell.service:
+        // sobrevive restarts de quickshell (y no la mata un segundo launch).
+        runnerProcess.command = ["systemd-run", "--user", "--scope", "--collect", "--quiet"].concat(args);
         runnerProcess.running = true;
     }
 
