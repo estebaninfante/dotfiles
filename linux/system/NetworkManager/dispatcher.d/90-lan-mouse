@@ -73,18 +73,24 @@ check_ip_conflict() {
 }
 
 # Handoff cable <-> WiFi: la IP estática KVM debe vivir en una sola interfaz.
+# Estado-based: si el ethernet de casa está activo, el WiFi sobra, SIN importar
+# qué interfaz disparó el evento. (Tras suspend/resume el ethernet no re-firea
+# "up", solo wlo1 — detectar por estado evita la doble interfaz.)
 medium_handoff() {
     if is_ethernet; then
-        if [ "$ACTION" = "up" ]; then
-            # El cable manda: baja el WiFi
-            nmcli device disconnect "$WIFI_IF" >/dev/null 2>&1
-        else
+        if [ "$ACTION" = "down" ]; then
             # Cable caído: el WiFi toma el relevo (reaplica la IP de casa)
             if ! ip -4 addr show dev "$WIFI_IF" 2>/dev/null | grep -q inet; then
                 nmcli device connect "$WIFI_IF" >/dev/null 2>&1
             fi
         fi
         return 0
+    fi
+
+    # Evento de WiFi (o cualquiera): si el ethernet de casa responde, al WiFi
+    # sobra. Desconectarlo elimina el conflicto de IP estática en 2 interfaces.
+    if [ "$ACTION" = "up" ] && [ -n "$(home_ethernet_iface)" ]; then
+        nmcli device disconnect "$WIFI_IF" >/dev/null 2>&1
     fi
     return 1
 }
