@@ -96,8 +96,8 @@ Rectangle {
 
     Column {
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 8
+        anchors.margins: 16
+        spacing: 10
 
         Text {
             width: parent.width
@@ -240,101 +240,120 @@ Rectangle {
         Grid {
             columns: 2
             width: parent.width
-            rowSpacing: 8
+            rowSpacing: 10
             columnSpacing: 10
 
-            Text {
-                width: 70
-                height: 26
-                verticalAlignment: Text.AlignVCenter
-                text: "Trabajo"
-                color: Theme.fgDim
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
-            }
-            StepperControl {
-                value: PomodoroService.workMin
-                step: 5
-                min: 5
-                max: 90
-                key: "work_min"
-            }
-
-            Text {
-                width: 70
-                height: 26
-                verticalAlignment: Text.AlignVCenter
-                text: "Descanso"
-                color: Theme.fgDim
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
-            }
-            StepperControl {
-                value: PomodoroService.breakMin
-                step: 1
-                min: 1
-                max: 30
-                key: "break_min"
-            }
-
-            Text {
-                width: 70
-                height: 26
-                verticalAlignment: Text.AlignVCenter
-                text: "Sesiones"
-                color: Theme.fgDim
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
-            }
-            StepperControl {
-                value: PomodoroService.targetSessions || 4
-                step: 1
-                min: 1
-                max: 12
-                key: "target_sessions"
-                suffix: ""
-            }
-
-            Text {
-                width: 70
-                height: 26
-                verticalAlignment: Text.AlignVCenter
-                text: "Ojos"
-                color: Theme.fgDim
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
-            }
+            // Columna 1
             Row {
+                width: (parent.width - 10) / 2
                 spacing: 8
-                Rectangle {
-                    width: 44
-                    height: 26
-                    radius: 8
+                Text {
+                    width: 70
                     anchors.verticalCenter: parent.verticalCenter
-                    color: PomodoroService.eyesOn ? Theme.fg : "#000000"
-                    border.color: Theme.border
-                    border.width: 1
-                    Text {
-                        anchors.centerIn: parent
-                        text: PomodoroService.eyesOn ? "ON" : "OFF"
-                        color: PomodoroService.eyesOn ? Theme.fgOnWhite : Theme.fgDim
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.pixelNormal
-                        font.bold: true
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: PomodoroService.setConfig("eyes_on", PomodoroService.eyesOn ? "0" : "1")
-                    }
+                    text: "Trabajo"
+                    color: Theme.fgDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.pixelNormal
                 }
                 StepperControl {
-                    visible: PomodoroService.eyesOn
-                    value: PomodoroService.eyesMin
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: PomodoroService.workMin
                     step: 5
                     min: 5
-                    max: 60
-                    key: "eyes_min"
+                    max: 90
+                    key: "work_min"
+                }
+            }
+
+            // Columna 2
+            Row {
+                width: (parent.width - 10) / 2
+                spacing: 8
+                Text {
+                    width: 70
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Descanso"
+                    color: Theme.fgDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.pixelNormal
+                }
+                StepperControl {
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: PomodoroService.breakMin
+                    step: 1
+                    min: 1
+                    max: 30
+                    key: "break_min"
+                }
+            }
+
+            // Columna 1
+            Row {
+                width: (parent.width - 10) / 2
+                spacing: 8
+                Text {
+                    width: 70
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Sesiones"
+                    color: Theme.fgDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.pixelNormal
+                }
+                StepperControl {
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: PomodoroService.targetSessions || 4
+                    step: 1
+                    min: 1
+                    max: 12
+                    key: "target_sessions"
+                    suffix: ""
+                }
+            }
+
+            // Columna 2
+            Row {
+                width: (parent.width - 10) / 2
+                spacing: 8
+                Text {
+                    width: 70
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Ojos"
+                    color: Theme.fgDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.pixelNormal
+                }
+                Row {
+                    spacing: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    Rectangle {
+                        width: 40
+                        height: 26
+                        radius: 8
+                        color: PomodoroService.eyesOn ? Theme.fg : "#000000"
+                        border.color: Theme.border
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: PomodoroService.eyesOn ? "ON" : "OFF"
+                            color: PomodoroService.eyesOn ? Theme.fgOnWhite : Theme.fgDim
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.pixelNormal
+                            font.bold: true
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: PomodoroService.setConfig("eyes_on", PomodoroService.eyesOn ? "0" : "1")
+                        }
+                    }
+                    StepperControl {
+                        visible: PomodoroService.eyesOn
+                        value: PomodoroService.eyesMin
+                        step: 5
+                        min: 5
+                        max: 60
+                        key: "eyes_min"
+                    }
                 }
             }
         }
