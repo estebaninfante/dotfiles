@@ -1,5 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp?project_ref=ldxqjrlafnfiraunwbvc&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching",
+      "enabled": true
+    }
+  },
   "plugin": [
     "file:///home/eztvn/.config/opencode/plugins/notify-sound/plugin.js",
     "file:///home/eztvn/.config/opencode/plugins/caveman/plugin.js"
