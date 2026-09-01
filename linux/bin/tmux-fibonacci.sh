@@ -42,13 +42,15 @@ for ((i = 0; i < n; i++)); do
 done
 total=$(IFS=+; echo "$(( ${weights[*]} ))")
 
-# Orientacion: columnas (x) si mas ancha que alta, filas (y) si no
+# Orientacion: columnas (x) si mas ancha que alta, filas (y) si no.
+# Se descuentan los bordes entre panes (1 col/fila cada uno).
 axis="x"
 main="$W"
 if (( H > W )); then
     axis="y"
     main="$H"
 fi
+main=$(( main - (n - 1) ))
 
 # Reparto: proporcional a Fibonacci; cada pane respeta el minimo;
 # el ultimo absorbe el resto (redondeos).
