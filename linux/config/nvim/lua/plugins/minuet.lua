@@ -16,6 +16,11 @@ return {
       end
     end
 
+    if not vim.env.GROQ_API_KEY then
+      vim.notify("minuet: GROQ_API_KEY not found, AI completion disabled", vim.log.levels.WARN)
+      return
+    end
+
     require("minuet").setup({
       throttle = 12000, -- 12s entre auto-request: tasa libre Groq es 8000 TPM (~5 req x 1400 tok)
       n = 2048, -- recorta contexto del buffer (chars): cada request usa ~700 tokens en vez de 1400
