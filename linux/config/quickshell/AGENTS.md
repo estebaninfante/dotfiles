@@ -155,6 +155,12 @@ Estas correcciones se repiten. NO vuelvas a cometerlas:
 `services/LaunchService.qml` + `menus/Launcher.qml`. Tres modos, keybinds en
 hyprland.lua (wrapper `~/.local/bin/qs-launcher.sh`):
 
+- **Ventana flotante, NO fullscreen**: `FloatingWindow` (toplevel wayland
+  normal, tipo rofi). Un PanelWindow fullscreen con `focusable` causaba estado
+  raro de teclado (mayúsculas/caps pegadas al cerrar el grab layer-shell).
+  Flotación/centrado via windowrule en `hyprland.lua`
+  (`title = "quickshell-launcher"`: float, border_size 0, rounding 0).
+
 | Modo | Keybind | Fuente | Acción Enter |
 |------|---------|--------|--------------|
 | `apps` | SUPER+SPACE | `apps-list.sh` (drun) | exec |
