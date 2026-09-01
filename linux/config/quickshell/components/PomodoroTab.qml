@@ -325,6 +325,14 @@ Rectangle {
                 Row {
                     spacing: 6
                     anchors.verticalCenter: parent.verticalCenter
+                    StepperControl {
+                        visible: PomodoroService.eyesOn
+                        value: PomodoroService.eyesMin
+                        step: 5
+                        min: 5
+                        max: 60
+                        key: "eyes_min"
+                    }
                     Rectangle {
                         width: 40
                         height: 26
@@ -345,14 +353,6 @@ Rectangle {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: PomodoroService.setConfig("eyes_on", PomodoroService.eyesOn ? "0" : "1")
                         }
-                    }
-                    StepperControl {
-                        visible: PomodoroService.eyesOn
-                        value: PomodoroService.eyesMin
-                        step: 5
-                        min: 5
-                        max: 60
-                        key: "eyes_min"
                     }
                 }
             }
