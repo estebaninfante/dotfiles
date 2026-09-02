@@ -176,6 +176,16 @@ in
     fi
   '';
 
+  # ── dconf: settings que persisten entre rebuilds ────────────────
+  dconf.settings = {
+    "org/gnome/nautilus/preferences" = {
+      show-hidden-files = true;
+    };
+    "org/gtk/settings/file-chooser" = {
+      show-hidden = true;
+    };
+  };
+
   # ── Git credential helper ─────────────────────────────────────
   # El .gitconfig del repo apunta a /usr/bin/gh (ruta no-store).
   # En NixOS gh vive en el store: override solo del helper, el resto
