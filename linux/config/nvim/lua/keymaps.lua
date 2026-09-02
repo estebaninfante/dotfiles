@@ -56,3 +56,6 @@ vim.keymap.set("n", "<leader>lx", "<cmd>LiveServerStop<cr>", { desc = "Live serv
 
 -- Auto-guardado
 vim.keymap.set("n", "<leader>ua", "<cmd>ASToggle<cr>", { desc = "Toggle auto-guardado" })
+
+-- Surround: envolver cada línea seleccionada con <li>
+vim.keymap.set("v", "<leader>sl", ":normal! yssli><CR>", { desc = "Surround lines con <li>" })
