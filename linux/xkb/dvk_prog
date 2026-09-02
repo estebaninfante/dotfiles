@@ -20,7 +20,11 @@ xkb_symbols "basic" {
     key <AC04> { [ u, U, parenright ] }; key <AC05> { [ i, I, bracketleft ] };
     key <AC06> { [ d, D, bracketright ] }; key <AC07> { [ h, H, questiondown ] };
     key <AC08> { [ t, T, exclamdown ] }; key <AC09> { [ n, N, exclam ] };
-    key <AC10> { [ s, S, question ] }; key <AC11> { [ dead_acute, dead_diaeresis ] };
+    key <AC10> { [ s, S, question ] }; key <AC11> {
+        type[Group1] = "FOUR_LEVEL",
+        symbols[Group1] = [ dead_acute, dead_diaeresis, Control_L, NoSymbol ],
+        actions[Group1] = [ NoAction(), NoAction(), SetMods(modifiers=Control, clearmods=Mod5), NoAction() ]
+    };
     key <BKSL> { [ ccedilla, Ccedilla ] }; key <LSGT> { [ less, greater, asciitilde ] };
     key <AB01> { [ minus, underscore, U2192 ] }; key <AB02> { [ q, Q, exclam ] };
     key <AB03> { [ j, J, bar ] }; key <AB04> { [ k, K, ampersand ] };
