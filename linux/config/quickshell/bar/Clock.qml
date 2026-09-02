@@ -15,7 +15,7 @@ Item {
             id: clockText
             color: "white"
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 12
+            font.pixelSize: 13
             text: ClockService.clockText
         }
 
@@ -23,7 +23,7 @@ Item {
             id: countdownText
             color: "#cba6f7"
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 10
+            font.pixelSize: 13
             text: "→ " + ClockService.countdownText
             visible: ClockService.countdownText !== "🎉"
         }
