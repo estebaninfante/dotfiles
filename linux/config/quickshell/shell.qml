@@ -49,5 +49,6 @@ PanelWindow {
 
     GameOverlay { }
     PomodoroPill { }
+    PomodoroBreakOverlay { }
     EyeCareOverlay { }
 }

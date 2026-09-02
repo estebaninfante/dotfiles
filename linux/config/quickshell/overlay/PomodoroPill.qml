@@ -6,7 +6,7 @@ import "../services"
 
 PanelWindow {
     id: pomodoroPill
-    visible: PomodoroService.active
+    visible: PomodoroService.active && PomodoroService.state !== "break" && PomodoroService.state !== "paused_break"
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
