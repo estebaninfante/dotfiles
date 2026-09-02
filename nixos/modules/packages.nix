@@ -263,6 +263,9 @@ with pkgs; [  # ── Shell & terminal ──
   # stremio / gearlever / protonplus: no estan en nixpkgs →
   # se instalan via flatpak (services.flatpak.enable ya activo).
 
+  # ── Accesibilidad ──
+  orca                     # navegador de pantalla (screen reader)
+
   # ── GTK theming (GDM login screen) ──
   gnome-themes-extra
   adwaita-icon-theme
