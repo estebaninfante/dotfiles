@@ -91,9 +91,13 @@ Item {
 
     function run(args) {
         runnerProcess.running = false;
-        // systemd-run --scope saca la app del cgroup de quickshell.service:
-        // sobrevive restarts de quickshell (y no la mata un segundo launch).
-        runnerProcess.command = ["systemd-run", "--user", "--scope", "--collect", "--quiet"].concat(args);
+        // Fork (sh hijo) + scope: la app queda como nieto de quickshell
+        // y en cgroup propio → sobrevive hot-reload Y restart.
+        var cmd = args.map(function(a) { return "'" + a.replace(/'/g, "'\\''") + "'"; }).join(" ");
+        runnerProcess.command = [
+            "systemd-run", "--user", "--scope", "--collect", "--quiet",
+            "sh", "-c", "sh -c " + cmd + " &"
+        ];
         runnerProcess.running = true;
     }
 
