@@ -24,6 +24,7 @@ PopupWindow {
     property double battPct: 0
     property double battWatts: 0
     property string battEta: ""
+    property string uptime: ""
 
     onOpenedChanged: {
         if (!opened) {
@@ -34,6 +35,8 @@ PopupWindow {
             powerProfileStatus.running = true;
             battStatus.running = false;
             battStatus.running = true;
+            uptimeProc.running = false;
+            uptimeProc.running = true;
         }
     }
     onVisibleChanged: { if (!visible && UIState.powerMenuOpen) UIState.powerMenuOpen = false; }
@@ -85,7 +88,7 @@ PopupWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2
                     Text {
-                        text: Math.round(battPct) + "%"
+                        text: uptime || "--:--"
                         color: "white"
                         font.family: fontFamily
                         font.pixelSize: 18
@@ -402,7 +405,16 @@ PopupWindow {
         interval: 3000
         running: powerMenu.opened && BatteryService.hasBattery
         repeat: true
-        onTriggered: { battStatus.running = false; battStatus.running = true }
+        onTriggered: { battStatus.running = false; battStatus.running = true; uptimeProc.running = false; uptimeProc.running = true }
+    }
+
+    Process {
+        id: uptimeProc
+        command: ["bash", "-c", "awk '{d=int($1/86400); h=int(($1%86400)/3600); m=int(($1%3600)/60); printf \"%dd %02dh %02dm\", d, h, m}' /proc/uptime"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: uptime = this.text.trim()
+        }
     }
 
     Process {
