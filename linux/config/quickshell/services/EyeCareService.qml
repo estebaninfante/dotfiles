@@ -14,7 +14,7 @@ Item {
     property int breakSec: 20
     property int remaining: 0
 
-    readonly property string confPath: StandardPaths.writableLocation(StandardPaths.GenericStateLocation) + "/quickshell/eyecare.conf"
+    readonly property string confPath: "/home/eztvn/.local/state/quickshell/eyecare.conf"
 
     function fmt(secs) {
         if (secs < 0) secs = 0;
