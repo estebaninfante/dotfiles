@@ -26,11 +26,11 @@ FloatingWindow {
     property int currentIndex: 0
     property int ctxIndex: 0
 
-    readonly property int cardW: 760
+    readonly property int cardW: 560
     readonly property int headerH: 44
     readonly property int inputH: 44
     readonly property int footerH: 26
-    readonly property int listH: Math.min(Math.max(LaunchService.results.length, 1) * 48, 460)
+    readonly property int listH: Math.min(Math.max(LaunchService.results.length, 1) * 42, 328)
     readonly property int ctxH: Math.min(Math.max(contextActions.length, 1) * 38, 260)
 
     readonly property var modeTabs: [["apps", "APLICACIONES"], ["files", "ARCHIVOS"], ["scripts", "SCRIPTS"]]
