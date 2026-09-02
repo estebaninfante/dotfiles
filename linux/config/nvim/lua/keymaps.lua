@@ -57,5 +57,10 @@ vim.keymap.set("n", "<leader>lx", "<cmd>LiveServerStop<cr>", { desc = "Live serv
 -- Auto-guardado
 vim.keymap.set("n", "<leader>ua", "<cmd>ASToggle<cr>", { desc = "Toggle auto-guardado" })
 
--- Surround: envolver cada línea seleccionada con <li>
-vim.keymap.set("v", "<leader>sl", ":normal! yssli><CR>", { desc = "Surround lines con <li>" })
+-- Repetir último . en N líneas hacia abajo (ej: 5<leader>. repite 5 veces)
+vim.keymap.set("n", "<leader>.", function()
+  local count = vim.v.count1
+  for _ = 1, count do
+    vim.cmd("normal! .j")
+  end
+end, { desc = "Repetir último . en N líneas" })
