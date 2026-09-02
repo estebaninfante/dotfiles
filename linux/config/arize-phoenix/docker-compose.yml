@@ -1,0 +1,25 @@
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix
+    restart: unless-stopped
+    ports:
+      - "6006:6006"   # Web UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      - PHOENIX_PORT=6006
+      - PHOENIX_HOST=0.0.0.0
+      # Persistent storage
+      - PHOENIX_SQL_DATABASE_URL=sqlite:////data/phoenix.db
+    volumes:
+      - phoenix-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  phoenix-data:
