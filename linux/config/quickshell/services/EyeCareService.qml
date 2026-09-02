@@ -9,7 +9,6 @@ import "../config"
 Item {
     id: eyeCareService
 
-    property bool enabled: false
     property bool onBreak: false
     property int intervalMin: 20
     property int breakSec: 20
@@ -24,23 +23,10 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    function toggle() {
-        enabled = !enabled
-        persist()
-        if (!enabled) {
-            onBreak = false
-            remaining = 0
-            intervalTimer.stop()
-            breakTimer.stop()
-        } else {
-            startInterval()
-        }
-    }
-
     function setIntervalMin(v) {
         intervalMin = Math.max(5, Math.min(60, v))
         persist()
-        if (enabled && !onBreak) startInterval()
+        if (!onBreak) startInterval()
     }
 
     function setBreakSec(v) {
@@ -56,8 +42,8 @@ Item {
     function persist() {
         persistProc.running = false
         persistProc.command = ["bash", "-c",
-            'mkdir -p "$(dirname ' + confPath + ')" && printf "enabled=%s\\ninterval_min=%s\\nbreak_sec=%s\\n" ' +
-            (enabled ? "1" : "0") + " " + intervalMin + " " + breakSec + ' > "' + confPath + '"']
+            'mkdir -p "$(dirname ' + confPath + ')" && printf "interval_min=%s\\nbreak_sec=%s\\n" ' +
+            intervalMin + " " + breakSec + ' > "' + confPath + '"']
         persistProc.running = true
     }
 
@@ -110,11 +96,10 @@ Item {
                 const lines = this.text.trim().split("\n")
                 for (const line of lines) {
                     const [k, v] = line.split("=")
-                    if (k === "enabled") eyeCareService.enabled = v === "1"
-                    else if (k === "interval_min") eyeCareService.intervalMin = parseInt(v) || 20
+                    if (k === "interval_min") eyeCareService.intervalMin = parseInt(v) || 20
                     else if (k === "break_sec") eyeCareService.breakSec = parseInt(v) || 20
                 }
-                if (eyeCareService.enabled) eyeCareService.startInterval()
+                eyeCareService.startInterval()
             }
         }
     }

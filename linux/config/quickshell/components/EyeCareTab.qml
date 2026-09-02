@@ -103,12 +103,11 @@ Rectangle {
         anchors.margins: 16
         spacing: 10
 
-        // Estado grande
         Text {
             width: parent.width
             text: EyeCareService.onBreak
                   ? EyeCareService.remaining + "s"
-                  : (EyeCareService.enabled ? EyeCareService.fmt(EyeCareService.remaining) : "—")
+                  : EyeCareService.fmt(EyeCareService.remaining)
             color: Theme.fg
             font.family: Theme.fontFamily
             font.pixelSize: 36
@@ -120,7 +119,7 @@ Rectangle {
             width: parent.width
             text: EyeCareService.onBreak
                   ? "Descansando la vista"
-                  : (EyeCareService.enabled ? "Próximo descanso" : "Inactivo")
+                  : "Próximo descanso"
             color: Theme.fgDim
             font.family: Theme.fontFamily
             font.pixelSize: Theme.pixelTitle
@@ -129,7 +128,6 @@ Rectangle {
 
         Text {
             width: parent.width
-            visible: EyeCareService.enabled
             text: "Cada " + EyeCareService.intervalMin + " min — " + EyeCareService.breakSec + "s de descanso"
             color: Theme.fgDimmer
             font.family: Theme.fontFamily
@@ -137,40 +135,7 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        // Botón toggle
-        Rectangle {
-            width: parent.width
-            height: 36
-            radius: 8
-            color: toggleArea.containsMouse
-                   ? (EyeCareService.enabled ? Theme.danger : Theme.fg)
-                   : (EyeCareService.enabled ? Theme.fg : Theme.bgItem)
-            border.color: Theme.border
-            border.width: 1
-
-            Text {
-                anchors.centerIn: parent
-                text: EyeCareService.enabled ? "\uf00c ACTIVADO" : "\uf019 ACTIVAR"
-                color: EyeCareService.enabled ? Theme.fgOnWhite : Theme.fg
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.pixelNormal
-                font.bold: true
-            }
-
-            MouseArea {
-                id: toggleArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: EyeCareService.toggle()
-            }
-        }
-
-        Rectangle {
-            width: parent.width
-            height: 1
-            color: Theme.border
-        }
+        Rectangle { width: parent.width; height: 1; color: Theme.border }
 
         // Config
         Grid {
