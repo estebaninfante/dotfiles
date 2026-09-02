@@ -373,8 +373,8 @@ hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/sh
 -- ========================
 -- Atras (BTN_SIDE): copiar | Adelante (BTN_EXTRA): pegar
 -- Rueda (mouse:274): Warp → Ctrl derecho mantenido | resto → Handy F7 (toggle)
-hl.bind("mouse:275", hl.dsp.exec_cmd("wtype -M ctrl c -m ctrl"))
-hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl v -m ctrl"))
+hl.bind("mouse:275", hl.dsp.exec_cmd("wtype -M ctrl -M shift c -m shift -m ctrl"))
+hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl -M shift v -m shift -m ctrl"))
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh down"))
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { release = true })
 
