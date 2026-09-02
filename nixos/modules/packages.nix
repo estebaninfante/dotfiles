@@ -193,9 +193,11 @@ with pkgs; [  # ── Shell & terminal ──
   clang
   nodejs
   live-server # servidor estatico con recarga (live-server.nvim)
-  python3
-  python3Packages.pip
-  python3Packages.evdev   # python3-evdev
+  (python3.withPackages (ps: with ps; [
+    pip
+    evdev                  # python3-evdev
+    openinference-instrumentation-openai
+  ]))
   rustc
   cargo
   go
