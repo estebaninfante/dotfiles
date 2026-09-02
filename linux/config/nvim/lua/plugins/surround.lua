@@ -1,8 +1,8 @@
 return {
   {
     "kylechui/nvim-surround",
-    version = "*",
-    event = "VeryLazy",
+    version = "^4.0.0",
+    lazy = false,
     config = function()
       require("nvim-surround").setup()
     end,
