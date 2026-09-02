@@ -4,6 +4,7 @@ import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import "../config"
+import "../services"
 
 PopupWindow {
     id: powerMenu
