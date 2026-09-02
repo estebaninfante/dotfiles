@@ -91,6 +91,7 @@ Item {
 
     function run(args) {
         runnerProcess.running = false;
+<<<<<<< Updated upstream
         // Doble fork: sh hijo (Process lo mata) → sh nieto (exec app) sobrevive.
         // scope: cgroup separado → sobrevive restart de quickshell.
         var escaped = args.map(function(a) {
@@ -100,6 +101,11 @@ Item {
             "systemd-run", "--user", "--scope", "--collect", "--quiet",
             "sh", "-c", "sh -c " + escaped + " &"
         ];
+=======
+        // systemd-run --scope saca la app del cgroup de quickshell.service:
+        // sobrevive restarts de quickshell (y no la mata un segundo launch).
+        runnerProcess.command = ["systemd-run", "--user", "--scope", "--collect", "--quiet"].concat(args);
+>>>>>>> Stashed changes
         runnerProcess.running = true;
     }
 
