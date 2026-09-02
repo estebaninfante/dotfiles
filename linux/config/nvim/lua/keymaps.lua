@@ -30,6 +30,7 @@ vim.opt.autoindent = true
 vim.opt.smartindent = true
 vim.keymap.set("i", "uu", "<Esc>")
 vim.keymap.set("i", "<C-Backspace>", "<C-w>", { desc = "Borrar palabra (ctrl+backspace)" })
+vim.keymap.set("i", "ñ", "<C-o>o", { desc = "Línea vacía abajo (insert)" })
 
 -- Enter: mantener columna actual (no ir a inicio de línea)
 vim.keymap.set("i", "<CR>", function()
