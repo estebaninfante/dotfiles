@@ -91,11 +91,14 @@ Item {
 
     function run(args) {
         runnerProcess.running = false;
-        // Fork (sh hijo) + scope: la app queda como nieto de quickshell
-        // y en cgroup propio → sobrevive hot-reload Y restart.
+        // Doble fork: sh hijo (Process lo mata) → sh nieto (exec app) sobrevive.
+        // scope: cgroup separado → sobrevive restart de quickshell.
+        var escaped = args.map(function(a) {
+            return "'" + a.replace(/'/g, "'\\''") + "'";
+        }).join(" ");
         runnerProcess.command = [
             "systemd-run", "--user", "--scope", "--collect", "--quiet",
-            "sh", "-c", "sh -c '" + args.join("' '") + "' &"
+            "sh", "-c", "sh -c " + escaped + " &"
         ];
         runnerProcess.running = true;
     }
