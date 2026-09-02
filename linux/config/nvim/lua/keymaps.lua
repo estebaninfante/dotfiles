@@ -12,8 +12,8 @@ vim.opt.wrap = false
 vim.opt.scrolloff = 999
 
 -- Dos columnas de números: absoluta + relativa
-vim.api.nvim_set_hl(0, "StatusColAbs", { bold = true, fg = "#ED82C2" })
-vim.api.nvim_set_hl(0, "StatusColRel", { bold = false, fg = "#8155BA" })
+vim.api.nvim_set_hl(0, "StatusColAbs", { bold = false, fg = "#808080" })
+vim.api.nvim_set_hl(0, "StatusColRel", { bold = false, fg = "#50C878" })
 
 function _G.StatusColNumbers()
   local lnum = vim.v.lnum
