@@ -1,6 +1,8 @@
 ---
 name: repomap
 description: Generate architectural maps of repositories as RepoGraph JSON using local deterministic analysis, and serve interactive visualizations
+trigger: /repomap
+user-invocable: true
 license: MIT
 compatibility: opencode
 metadata:
