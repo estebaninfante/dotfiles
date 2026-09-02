@@ -2,26 +2,31 @@ import QtQuick
 import "../config"
 import "../services"
 
-Row {
-    id: clockRow
+Item {
+    id: clockContainer
     anchors.centerIn: parent
-    spacing: 8
 
-    Text {
-        id: clockText
-        color: "white"
-        font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 12
-        text: ClockService.clockText
-    }
+    Row {
+        id: clockRow
+        anchors.centerIn: parent
+        spacing: 8
 
-    Text {
-        id: countdownText
-        color: "#cba6f7"
-        font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 10
-        text: "→ " + ClockService.countdownText
-        visible: ClockService.countdownText !== "🎉"
+        Text {
+            id: clockText
+            color: "white"
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 12
+            text: ClockService.clockText
+        }
+
+        Text {
+            id: countdownText
+            color: "#cba6f7"
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 10
+            text: "→ " + ClockService.countdownText
+            visible: ClockService.countdownText !== "🎉"
+        }
     }
 
     MouseArea {
