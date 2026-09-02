@@ -5,13 +5,16 @@
 # Se ejecuta como servicio de sistema (root).
 
 on_battery() {
-  for p in /sys/class/power_supply/AC*/online; do
-    [ -f "$p" ] && [ "$(cat "$p")" = "1" ] && return 1
+  for p in /sys/class/power_supply/*/online; do
+    [ -f "$p" ] || continue
+    # Saltar baterías: solo importa fuente externa (ADP0, AC*, etc.)
+    case "$p" in */BAT*) continue;; esac
+    [ "$(cat "$p")" = "1" ] && return 1
   done
   return 0
 }
 
-LID="/proc/acpi/button/lid/LID/state"
+LID="/proc/acpi/button/lid/LID0/state"
 
 # Esperar a que aparezca el archivo de estado de la tapa.
 while [ ! -f "$LID" ]; do sleep 2; done

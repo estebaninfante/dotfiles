@@ -3,8 +3,10 @@
 set -euo pipefail
 
 on_battery() {
-  for p in /sys/class/power_supply/AC*/online; do
-    [ -f "$p" ] && [ "$(cat "$p")" = "1" ] && return 1
+  for p in /sys/class/power_supply/*/online; do
+    [ -f "$p" ] || continue
+    case "$p" in */BAT*) continue;; esac
+    [ "$(cat "$p")" = "1" ] && return 1
   done
   return 0
 }

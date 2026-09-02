@@ -484,7 +484,7 @@ in
   powerManagement.powertop.enable = lib.mkIf (machineType == "laptop") true;
 
   # ── Servicio: suppress idle suspend en AC ──────────────────────
-  # Se inicia/para desde ac-idle-handler.sh (udev trigger en cambios de Mains).
+  # Se inicia/para desde ac-idle-handler.service (triggered by udev en cambios de Mains).
   # Bloquea logind IdleAction mientras hay corriente; al desenchufar se para
   # y logind vuelve a suspender por inactividad en batería.
   systemd.services.ac-idle-inhibit = lib.mkIf (machineType == "laptop") {
@@ -492,6 +492,15 @@ in
     serviceConfig = {
       Type = "simple";
       ExecStart = "${pkgs.systemd}/bin/systemd-inhibit --what=idle --mode=block --who=ac-idle-inhibit --why='AC conectado' ${pkgs.coreutils}/bin/sleep infinity";
+    };
+  };
+
+  # Oneshot: verifica estado AC y start/stop del inhibitor.
+  systemd.services.ac-idle-handler = lib.mkIf (machineType == "laptop") {
+    description = "Verificar AC y ajustar inhibitor de idle";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash /home/eztvn/dotfiles/linux/bin/ac-idle-handler.sh";
     };
   };
 
@@ -513,7 +522,7 @@ in
     # Flujo de energía Mains (AC) → dispara la guarda de la GPU.
     SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="${pkgs.systemd}/bin/systemctl --no-block start gpu-power-guard.service"
     # Flujo de energía Mains (AC) → inhibitor de idle suspend.
-    SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="/home/eztvn/dotfiles/linux/bin/ac-idle-handler.sh"
+    SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="${pkgs.systemd}/bin/systemctl --no-block start ac-idle-handler.service"
   '';
 
   # ── fprintd: restart tras resume ──────────────────────────────
