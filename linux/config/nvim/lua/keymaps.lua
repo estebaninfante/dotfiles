@@ -2,13 +2,30 @@ vim.g.mapleader = " "
 
 -- Sincronizar el portapapeles de Neovim con el del sistema operativo
 vim.opt.clipboard = "unnamedplus"
-vim.opt.number = true
-vim.opt.relativenumber = true
+vim.opt.number = false
+vim.opt.relativenumber = false
 vim.opt.tabstop = 2
 vim.opt.shiftwidth = 2
 vim.opt.expandtab = true
 vim.opt.termguicolors = true
 vim.opt.wrap = false
+vim.opt.scrolloff = 999
+
+-- Dos columnas de números: absoluta + relativa
+vim.api.nvim_set_hl(0, "StatusColAbs", { bold = true, fg = "#ED82C2" })
+vim.api.nvim_set_hl(0, "StatusColRel", { bold = false, fg = "#8155BA" })
+
+function _G.StatusColNumbers()
+  local lnum = vim.v.lnum
+  local curr = vim.fn.line(".")
+  local rel = (lnum == curr) and 0 or math.abs(lnum - curr)
+  if rel == 0 then
+    return string.format("%%#StatusColRel#%3d%%* %%#StatusColAbs#%3d │ %%*", rel, lnum)
+  end
+  return string.format("%%#StatusColAbs#%3d%%* %%#StatusColRel#%3d │ %%*", lnum, rel)
+end
+
+vim.o.statuscolumn = "%!v:lua.StatusColNumbers()"
 vim.opt.autoindent = true
 vim.opt.smartindent = true
 vim.keymap.set("i", "uu", "<Esc>")
