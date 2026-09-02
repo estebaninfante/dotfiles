@@ -389,7 +389,7 @@ hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 -- Toggle TTS: activa/desactiva la voz (daemon + alertas de opencode).
 -- El dictado se hace con Handy (F7); la voz solo habla respuestas.
 -- Para cambiarla: bindear otra tecla a "~/.local/bin/voice tts toggle".
-hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("~/.local/bin/voice tts toggle"))
+hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("handy --toggle-post-process"))
 
 -- OpenCode / TV toggle / Tema claro-oscuro
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode ~/.opencode/bin/opencode"))
