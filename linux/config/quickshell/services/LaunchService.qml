@@ -93,10 +93,9 @@ Item {
         runnerProcess.running = false;
         // Fork (sh hijo) + scope: la app queda como nieto de quickshell
         // y en cgroup propio → sobrevive hot-reload Y restart.
-        var cmd = args.map(function(a) { return "'" + a.replace(/'/g, "'\\''") + "'"; }).join(" ");
         runnerProcess.command = [
             "systemd-run", "--user", "--scope", "--collect", "--quiet",
-            "sh", "-c", "sh -c " + cmd + " &"
+            "sh", "-c", "sh -c '" + args.join("' '") + "' &"
         ];
         runnerProcess.running = true;
     }
