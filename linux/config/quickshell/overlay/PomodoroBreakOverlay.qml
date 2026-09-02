@@ -5,9 +5,14 @@ import "../config"
 import "../services"
 
 // Pantalla negra fullscreen durante el descanso del pomodoro.
+// Pausa hypridle para que hyprlock no se active durante el overlay.
 PanelWindow {
     id: pomodoroOverlay
     visible: PomodoroService.state === "break" || PomodoroService.state === "paused_break"
+    onVisibleChanged: {
+        if (visible) killIdle.running = true;
+        else startIdle.running = true;
+    }
 
     WlrLayershell.layer: WlrLayer.Overlay
     exclusionMode: ExclusionMode.Ignore
