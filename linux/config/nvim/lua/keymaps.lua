@@ -30,6 +30,21 @@ vim.opt.autoindent = true
 vim.opt.smartindent = true
 vim.keymap.set("i", "uu", "<Esc>")
 vim.keymap.set("i", "<C-Backspace>", "<C-w>", { desc = "Borrar palabra (ctrl+backspace)" })
+
+-- Enter: mantener columna actual (no ir a inicio de línea)
+vim.keymap.set("i", "<CR>", function()
+  local col = vim.fn.col(".")
+  return "<CR><C-o>" .. col .. "|"
+end, { expr = true, desc = "Enter manteniendo columna" })
+
+-- Tab: ir al nivel de indentación de la línea anterior
+vim.keymap.set("i", "<Tab>", function()
+  local prev = vim.fn.indent(vim.fn.line(".") - 1)
+  if prev > 0 then
+    return "<C-o>" .. prev .. "|"
+  end
+  return "<Tab>"
+end, { expr = true, desc = "Tab al indent anterior" })
 -- Navegación fluida entre paneles / ventanas (Splits) con Ctrl + hjkl
 vim.keymap.set("n", "<C-h>", "<C-w>h", { desc = "Mover a panel izquierdo" })
 vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Mover a panel inferior" })
