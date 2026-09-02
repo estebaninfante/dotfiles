@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 TOPIC="opencode-laptop"
-MESSAGE="Laptop se suspendera ahora: termino el tiempo de proteccion de tapa."
+MESSAGE="Laptop se suspenderá: expiró la protección de tapa (toggle desactivado)."
 
 # Si no hay red, curl falla y suspension continua normalmente.
 if curl --fail --silent --show-error --max-time 5 --connect-timeout 2 \

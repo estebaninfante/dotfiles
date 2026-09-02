@@ -438,9 +438,15 @@ in
 
   # Si no hay actividad, suspender conserva batería mucho mejor que dejar
   # pantalla apagada indefinidamente. Solo laptop.
+  # HandleLidSwitch* = "ignore": manejamos tapa nosotros (lid-close-handler.sh).
+  # IdleAction = "suspend": suspende por inactividad en batería; en AC lo
+  # bloquea ac-idle-inhibit.service (triggered by udev en cambios de corriente).
   services.logind.settings.Login = lib.mkIf (machineType == "laptop") {
     IdleAction = "suspend";
     IdleActionSec = "15min";
+    HandleLidSwitch = "ignore";
+    HandleLidSwitchExternalPower = "ignore";
+    HandleLidSwitchDocked = "ignore";
   };
 
   # ── Ahorro laptop: guarda automática por fuente de energía ────
@@ -477,10 +483,37 @@ in
   # powertop --auto-tune al boot: runtime PM agresivo (PCI, SATA, audio).
   powerManagement.powertop.enable = lib.mkIf (machineType == "laptop") true;
 
+  # ── Servicio: suppress idle suspend en AC ──────────────────────
+  # Se inicia/para desde ac-idle-handler.sh (udev trigger en cambios de Mains).
+  # Bloquea logind IdleAction mientras hay corriente; al desenchufar se para
+  # y logind vuelve a suspender por inactividad en batería.
+  systemd.services.ac-idle-inhibit = lib.mkIf (machineType == "laptop") {
+    description = "Inhibir idle suspend cuando hay corriente AC";
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.systemd}/bin/systemd-inhibit --what=idle --mode=block --who=ac-idle-inhibit --why='AC conectado' ${pkgs.coreutils}/bin/sleep infinity";
+    };
+  };
+
+  # ── Servicio: handler de tapa (lid close) ─────────────────────
+  # Monitorea /proc/acpi/button/lid/LID/state cada 1s.
+  # Suspende al cerrar si: batería O flag /run/lid-suspend-force (toggle F10).
+  systemd.services.lid-close-handler = lib.mkIf (machineType == "laptop") {
+    description = "Manejar cierre de tapa: suspender en batería o con toggle";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "simple";
+      Restart = "always";
+      RestartSec = 5;
+      ExecStart = "${pkgs.bash}/bin/bash /home/eztvn/dotfiles/linux/bin/lid-close-handler.sh";
+    };
+  };
+
   services.udev.extraRules = lib.mkIf (machineType == "laptop") ''
     # Flujo de energía Mains (AC) → dispara la guarda de la GPU.
-    # Solo existe un device type=Mains en laptops; en desktop no → no dispara.
     SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="${pkgs.systemd}/bin/systemctl --no-block start gpu-power-guard.service"
+    # Flujo de energía Mains (AC) → inhibitor de idle suspend.
+    SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="/home/eztvn/dotfiles/linux/bin/ac-idle-handler.sh"
   '';
 
   # ── fprintd: restart tras resume ──────────────────────────────

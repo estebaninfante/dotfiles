@@ -206,25 +206,27 @@ in
     Install = { WantedBy = [ "default.target" ]; };
   };
 
-  # F10 permite mantener laptop despierta con tapa cerrada, pero solo por
-  # 30 minutos. Luego suspende aunque tapa ya este cerrada.
+  # Toggle "suspender al cerrar": servicio flag. Cuando está activo,
+  # el flag /run/lid-suspend-force existe y lid-close-handler.sh suspende
+  # al cerrar tapa aunque esté en AC. El timeout (30min) lo desactiva.
   systemd.user.services.lid-inhibit = lib.mkIf (machineType == "laptop") {
-    Unit = { Description = "Allow laptop to stay awake with lid closed"; };
+    Unit = { Description = "Flag: suspender al cerrar en AC"; };
     Service = {
       Type = "simple";
-      ExecStart = "${pkgs.systemd}/bin/systemd-inhibit --what=handle-lid-switch --mode=block ${pkgs.coreutils}/bin/sleep infinity";
+      ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
     };
   };
 
+  # Timeout del toggle "suspender al cerrar": después de 30min, desactiva el
+  # toggle automáticamente (vuelve a solo-batería). No suspende: si la laptop
+  # está encendida en AC con tapa abierta, no hay razón para suspender.
   systemd.user.services.lid-inhibit-timeout = lib.mkIf (machineType == "laptop") {
-    Unit = { Description = "Suspend laptop after lid inhibit timeout"; };
+    Unit = { Description = "Desactivar toggle de tapa tras 30min"; };
     Service = {
       Type = "oneshot";
       ExecStartPre = "${bin}/notify-lid-suspend.sh";
-      ExecStart = [
-        "${pkgs.systemd}/bin/systemctl --user stop lid-inhibit.timer lid-inhibit.service"
-        "${pkgs.systemd}/bin/systemctl suspend"
-      ];
+      ExecStart = "${pkgs.systemd}/bin/systemctl --user stop lid-inhibit.timer lid-inhibit.service";
+      ExecStartPost = "${pkgs.coreutils}/bin/rm -f /run/lid-suspend-force";
     };
   };
 

@@ -2,11 +2,13 @@
 
 # Waybar custom module: lid inhibit status
 
+FLAG="/run/lid-suspend-force"
+
 update() {
-    if systemctl --user is-active --quiet lid-inhibit.service || pgrep -f 'systemd-inhibit --what=handle-lid-switch sleep infinity' >/dev/null; then
-        echo '{"text":"S", "tooltip":"Suspender al cerrar: Desactivado (inhibido)", "class":"inhibited"}'
+    if [ -f "$FLAG" ]; then
+        echo '{"text":"S", "tooltip":"Suspender al cerrar: ACTIVADO (enchufada también)", "class":"active"}'
     else
-        echo '{"text":"S", "tooltip":"Suspender al cerrar: Activado", "class":"active"}'
+        echo '{"text":"S", "tooltip":"Suspender al cerrar: DESACTIVADO (solo batería)", "class":"inhibited"}'
     fi
 }
 
