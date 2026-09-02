@@ -19,6 +19,10 @@ PopupWindow {
     property string pendingAction: ""
     readonly property bool powerProfilesOpen: UIState.powerMenuProfilesOpen
     property string powerProfile: ""
+    property string battState: "---"
+    property double battPct: 0
+    property double battWatts: 0
+    property string battEta: ""
 
     onOpenedChanged: {
         if (!opened) {
@@ -27,6 +31,8 @@ PopupWindow {
         } else {
             pendingAction = "";
             powerProfileStatus.running = true;
+            battStatus.running = false;
+            battStatus.running = true;
         }
     }
     onVisibleChanged: { if (!visible && UIState.powerMenuOpen) UIState.powerMenuOpen = false; }
@@ -59,6 +65,87 @@ PopupWindow {
             font.pixelSize: 10
             font.letterSpacing: 3
             font.bold: true
+        }
+
+        Rectangle {
+            width: parent.width
+            height: 54
+            radius: 8
+            color: "#141414"
+            visible: BatteryService.hasBattery
+
+            Row {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 10
+
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+                    Text {
+                        text: Math.round(battPct) + "%"
+                        color: "white"
+                        font.family: fontFamily
+                        font.pixelSize: 18
+                        font.bold: true
+                    }
+                    Text {
+                        text: battState
+                        color: "#aaa"
+                        font.family: fontFamily
+                        font.pixelSize: 8
+                    }
+                }
+
+                Rectangle {
+                    width: 1
+                    height: 30
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: "#333"
+                }
+
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+                    Text {
+                        text: battWatts > 0 ? battWatts.toFixed(1) + " W" : "---"
+                        color: battWatts > 0 ? "#a6e3a1" : "#555"
+                        font.family: fontFamily
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
+                    Text {
+                        text: "consumo actual"
+                        color: "#666"
+                        font.family: fontFamily
+                        font.pixelSize: 8
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+                    visible: battEta !== ""
+                    Text {
+                        text: battEta
+                        color: "white"
+                        font.family: fontFamily
+                        font.pixelSize: 11
+                        font.bold: true
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    Text {
+                        text: battState === "Cargando" ? "hasta completa" : "restante"
+                        color: "#666"
+                        font.family: fontFamily
+                        font.pixelSize: 8
+                        horizontalAlignment: Text.AlignRight
+                    }
+                }
+            }
         }
 
         Text {
@@ -282,6 +369,39 @@ PopupWindow {
         stdout: StdioCollector {
             onStreamFinished: powerProfile = this.text.trim()
         }
+    }
+
+    Process {
+        id: battStatus
+        command: ["bash", "-c", "upower -i /org/freedesktop/UPower/devices/battery_BAT0 | awk '/state:/{s=$2} /energy-rate:/{w=$2} /percentage:/{p=$1} /time-to-full:/{tf=$2} /time-to-empty:/{te=$2} END{print s\"|\"p\"|\"w\"|\"tf\"|\"te}'"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const parts = this.text.trim().split("|");
+                if (parts.length < 5) return;
+                const stateMap = {"charging": "Cargando", "discharging": "Descargando", "fully-charged": "Cargada", "empty": "Vacía"};
+                battState = stateMap[parts[0]] || parts[0];
+                battPct = parseFloat(parts[1]) || 0;
+                battWatts = parseFloat(parts[2]) || 0;
+                const tf = parseInt(parts[3]) || 0;
+                const te = parseInt(parts[4]) || 0;
+                const sec = parts[0] === "charging" ? tf : te;
+                if (sec > 0) {
+                    const h = Math.floor(sec / 3600);
+                    const m = Math.round((sec % 3600) / 60);
+                    battEta = h > 0 ? h + "h " + String(m).padStart(2, "0") + "m" : m + "m";
+                } else {
+                    battEta = "";
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 3000
+        running: powerMenu.opened && BatteryService.hasBattery
+        repeat: true
+        onTriggered: { battStatus.running = false; battStatus.running = true }
     }
 
     Process {
