@@ -40,6 +40,11 @@ alias walls='wallpaper-switch.sh list'
 export PATH=/home/eztvn/.opencode/bin:$PATH
 alias opencode="script -q -c \"opencode\" /dev/null"
 
+# Arize Phoenix tracing (LLM observability)
+export PHOENIX_ENDPOINT="http://localhost:6006"
+export PHOENIX_PROJECT="opencode"
+export ARIZE_TRACE_ENABLED="true"
+
 # kitty: disable SIGTSTP so ctrl+z reaches opencode as undo
 if [[ -n "$KITTY_WINDOW_ID" ]]; then
     stty susp ^-
