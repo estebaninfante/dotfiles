@@ -80,6 +80,15 @@ in
   # algun dia quieres separar; por ahora nada para no duplicar.
   home.packages = [ ];
 
+  # ── Session env vars (via environment.d) ──────────────────────
+  # Electron/Brave on Wayland: fuerza Wayland nativo para apps Electron.
+  # force_zero_scaling=true en Hyprland hace que XWayland renderice a 1x,
+  # así que Electron DEBE correr como Wayland nativo para escalar bien.
+  home.sessionVariables = {
+    ELECTRON_OZONE_PLATFORM_HINT = "wayland";
+    NIXOS_OZONE_WL = "1";
+  };
+
   # ── machine-type (lo lee hyprland.lua) ─────────────────────────
   # ── Config dirs (~/.config/<app>) ────────────────────────────
   home.file = lib.mkMerge [
