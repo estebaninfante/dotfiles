@@ -17,7 +17,10 @@ return {
     -- Snippets: friendly-snippets (HTML, CSS, JS, TS, React, Next.js, ...)
     -- + snippets propios en lua/snippets/ (formato LuaSnip)
     require("luasnip.loaders.from_vscode").lazy_load()
-    require("luasnip.loaders.from_lua").lazy_load({ paths = vim.fn.stdpath("config") .. "/lua/snippets" })
+    -- from_lua con load() eager: lazy_load exige que el archivo se llame
+    -- como el filetype (typescriptreact.lua), y nextjs.lua no matchea nada.
+    -- El archivo es tiny (2KB), costo startup despreciable.
+    require("luasnip.loaders.from_lua").load({ paths = vim.fn.stdpath("config") .. "/lua/snippets" })
     local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
     vim.lsp.config("*", { capabilities = capabilities })

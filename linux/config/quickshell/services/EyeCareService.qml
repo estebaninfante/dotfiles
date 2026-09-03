@@ -35,7 +35,21 @@ Item {
         persist()
     }
 
+    function toggleEnabled() {
+        enabled = !enabled
+        if (!enabled) {
+            intervalTimer.stop()
+            breakTimer.stop()
+            onBreak = false
+            remaining = 0
+        } else {
+            startInterval()
+        }
+        persist()
+    }
+
     function startInterval() {
+        if (!enabled) return
         remaining = intervalMin * 60
         intervalTimer.start()
     }
@@ -43,8 +57,8 @@ Item {
     function persist() {
         persistProc.running = false
         persistProc.command = ["bash", "-c",
-            'mkdir -p "$(dirname ' + confPath + ')" && printf "interval_min=%s\\nbreak_sec=%s\\n" ' +
-            intervalMin + " " + breakSec + ' > "' + confPath + '"']
+            'mkdir -p "$(dirname ' + confPath + ')" && printf "enabled=%s\\ninterval_min=%s\\nbreak_sec=%s\\n" ' +
+            (enabled ? "1" : "0") + " " + intervalMin + " " + breakSec + ' > "' + confPath + '"']
         persistProc.running = true
     }
 
@@ -83,7 +97,7 @@ Item {
             if (eyeCareService.remaining <= 0) {
                 breakTimer.stop()
                 eyeCareService.onBreak = false
-                eyeCareService.startInterval()
+                if (eyeCareService.enabled) eyeCareService.startInterval()
             }
         }
     }
@@ -97,7 +111,8 @@ Item {
                 const lines = this.text.trim().split("\n")
                 for (const line of lines) {
                     const [k, v] = line.split("=")
-                    if (k === "interval_min") eyeCareService.intervalMin = parseInt(v) || 20
+                    if (k === "enabled") eyeCareService.enabled = v !== "0"
+                    else if (k === "interval_min") eyeCareService.intervalMin = parseInt(v) || 20
                     else if (k === "break_sec") eyeCareService.breakSec = parseInt(v) || 20
                 }
                 eyeCareService.startInterval()

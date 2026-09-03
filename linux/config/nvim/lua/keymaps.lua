@@ -49,9 +49,9 @@ vim.keymap.set("i", "<Tab>", function()
     ls.expand_or_jump()
     return ""
   end
-  local minuet_ok, minuet = pcall(require, "minuet.virtualtext")
-  if minuet_ok and minuet.get() and #minuet.get() > 0 then
-    minuet.confirm()
+  local minuet_ok, minuet_vt = pcall(require, "minuet.virtualtext")
+  if minuet_ok and minuet_vt.action and minuet_vt.action.is_visible and minuet_vt.action.is_visible() then
+    minuet_vt.action.accept()
     return ""
   end
   local prev = vim.fn.indent(vim.fn.line(".") - 1)
