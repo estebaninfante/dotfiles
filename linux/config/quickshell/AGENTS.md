@@ -166,6 +166,7 @@ hyprland.lua (wrapper `~/.local/bin/qs-launcher.sh`):
 | `apps` | SUPER+SPACE | `apps-list.sh` (drun) | exec |
 | `files` | SUPER+SHIFT+SPACE | `file-list.sh` | xdg-open / kitty-nvim (code) |
 | `scripts` | SUPER+ALT+SPACE | `script-list.sh` | kitty si está en scripts/linux, si no exec |
+| `all` | tab TODO (←/→ o clic) | los tres producers en paralelo | según kind |
 
 - Abrir/cerrar por IPC: `qs ipc call launcher toggle <mode>` (válido también
   `open <mode>` / `close`). `LaunchService` expone el `IpcHandler` target

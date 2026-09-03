@@ -6,7 +6,7 @@ import "../config"
 
 // Launcher (rofi → quickshell). Dueño de las fuentes de datos (apps/files/
 // scripts), el filtrado y el arranque. La UI en menus/Launcher.qml.
-// IPC: qs ipc call launcher {toggle|open|close} [mode]
+// IPC: qs ipc call launcher {toggle|open|close} (arg modo ignorado)
 Item {
     id: launchService
 
@@ -24,30 +24,24 @@ Item {
         return path.search(RegExp("\\.(" + codeExts + ")$", "i")) >= 0;
     }
 
-    function dataFor(mode) {
-        if (mode === "apps") return allApps;
-        if (mode === "files") return allFiles;
-        return allScripts;
+    function dataFor() {
+        return allApps.concat(allFiles, allScripts);
     }
 
-    function reload(mode) {
+    function reload() {
         loading = true;
         query = "";
-        if (mode === "apps") {
-            allApps = [];
-            appsProcess.running = false; appsProcess.running = true;
-        } else if (mode === "files") {
-            allFiles = [];
-            filesProcess.running = false; filesProcess.running = true;
-        } else {
-            allScripts = [];
-            scriptsProcess.running = false; scriptsProcess.running = true;
-        }
+        allApps = [];
+        allFiles = [];
+        allScripts = [];
+        appsProcess.running = false; appsProcess.running = true;
+        filesProcess.running = false; filesProcess.running = true;
+        scriptsProcess.running = false; scriptsProcess.running = true;
     }
 
     function updateSearch() {
         var q = query.trim().toLowerCase();
-        var src = dataFor(UIState.launcherMode);
+        var src = dataFor();
         var out = [];
         for (var i = 0; i < src.length; i++) {
             var e = src[i];
@@ -106,16 +100,10 @@ Item {
         target: "launcher"
 
         function toggle(mode: string): void {
-            if (UIState.launcherOpen && UIState.launcherMode === mode)
-                UIState.launcherOpen = false;
-            else {
-                UIState.launcherMode = mode;
-                UIState.launcherOpen = true;
-            }
+            UIState.launcherOpen = !UIState.launcherOpen;
         }
 
         function open(mode: string): void {
-            UIState.launcherMode = mode;
             UIState.launcherOpen = true;
         }
 
@@ -129,14 +117,18 @@ Item {
         target: UIState
         function onLauncherOpenChanged() {
             if (UIState.launcherOpen)
-                launchService.reload(UIState.launcherMode);
+                launchService.reload();
             else
                 launchService.results = [];
         }
-        function onLauncherModeChanged() {
-            if (UIState.launcherOpen)
-                launchService.reload(UIState.launcherMode);
-        }
+    }
+
+    // Los tres producers corren en paralelo: solo filtrar
+    // cuando los tres hayan terminado (si no, resultados parciales).
+    function onProducerDone() {
+        if (appsProcess.running || filesProcess.running || scriptsProcess.running) return;
+        loading = false;
+        updateSearch();
     }
 
     // ── Producers ──────────────────────────────────────────────
@@ -161,8 +153,7 @@ Item {
         }
         onRunningChanged: {
             if (!running) {
-                loading = false;
-                updateSearch();
+                onProducerDone();
             }
         }
     }
@@ -181,8 +172,7 @@ Item {
         }
         onRunningChanged: {
             if (!running) {
-                loading = false;
-                updateSearch();
+                onProducerDone();
             }
         }
     }
@@ -202,8 +192,7 @@ Item {
         }
         onRunningChanged: {
             if (!running) {
-                loading = false;
-                updateSearch();
+                onProducerDone();
             }
         }
     }

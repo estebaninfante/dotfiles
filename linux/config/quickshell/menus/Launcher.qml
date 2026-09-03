@@ -6,7 +6,7 @@ import "../config"
 import "../services"
 
 // Launcher (reemplazo de rofi). Fuente de datos + arranque en LaunchService.
-// Tabs de modo, búsqueda, lista de resultados y menú contextual
+// Vista única: búsqueda, lista de resultados y menú contextual
 // (Shift+Enter, paridad con rofi-context-menu).
 // FloatingWindow (toplevel wayland normal, tipo rofi): sin layer-shell ni grab
 // de teclado fullscreen (el grab al cerrar dejaba el teclado en estado raro).
@@ -27,13 +27,10 @@ FloatingWindow {
     property int ctxIndex: 0
 
     readonly property int cardW: 560
-    readonly property int headerH: 44
     readonly property int inputH: 44
     readonly property int footerH: 26
     readonly property int listH: Math.min(Math.max(LaunchService.results.length, 1) * 42, 328)
     readonly property int ctxH: Math.min(Math.max(contextActions.length, 1) * 38, 260)
-
-    readonly property var modeTabs: [["apps", "APLICACIONES"], ["files", "ARCHIVOS"], ["scripts", "SCRIPTS"]]
 
     onVisibleChanged: {
         if (!visible && UIState.launcherOpen) UIState.launcherOpen = false;
@@ -52,9 +49,6 @@ FloatingWindow {
                 UIState.hoversReset();
             }
         }
-        function onLauncherModeChanged() {
-            if (UIState.launcherOpen) input.text = "";
-        }
     }
 
     function navigate(delta) {
@@ -65,13 +59,6 @@ FloatingWindow {
             var n = LaunchService.results.length;
             if (n > 0) currentIndex = (currentIndex + delta + n) % n;
         }
-    }
-
-    function cycleMode(delta) {
-        var order = ["apps", "files", "scripts"];
-        var i = order.indexOf(UIState.launcherMode);
-        UIState.launcherMode = order[(i + delta + order.length) % order.length];
-        currentIndex = 0;
     }
 
     function activate() {
@@ -148,80 +135,7 @@ FloatingWindow {
             id: launcherCol
             anchors.fill: parent
 
-            // ── Tabs de modo ────────────────────────────────────
-            Rectangle {
-                width: parent.width
-                height: launcher.headerH
-                radius: 15
-                color: Theme.bg
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 10
-                    spacing: 6
-
-                    Repeater {
-                        model: launcher.modeTabs
-                        delegate: Rectangle {
-                            required property var modelData
-                            property bool active: UIState.launcherMode === modelData[0]
-                            width: Math.max(90, tabLabel.implicitWidth + 22)
-                            height: parent.height - 14
-                            Layout.alignment: Qt.AlignVCenter
-                            radius: 9
-                            color: active ? Theme.fg : tabArea.containsMouse ? Theme.bgHover : Theme.bgItem
-
-                            Text {
-                                id: tabLabel
-                                anchors.centerIn: parent
-                                text: modelData[1]
-                                color: active ? Theme.fgOnWhite : Theme.fgDim
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.pixelSmall
-                                font.bold: true
-                            }
-
-                            MouseArea {
-                                id: tabArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: {
-                                    UIState.launcherMode = modelData[0];
-                                    launcher.currentIndex = 0;
-                                }
-                            }
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    Rectangle {
-                        id: closeLauncher
-                        width: 30
-                        height: parent.height - 14
-                        Layout.alignment: Qt.AlignVCenter
-                        radius: 9
-                        color: closeLauncherArea.containsMouse ? Theme.bgItem : "transparent"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "\uf00d"
-                            color: Theme.fgFaint
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.pixelNormal
-                        }
-                        MouseArea {
-                            id: closeLauncherArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: UIState.launcherOpen = false
-                        }
-                    }
-                }
-            }
-
-            // ── Búsqueda ───────────────────────────────────────
+            // ── Búsqueda ──
             Rectangle {
                 width: parent.width
                 height: launcher.inputH
@@ -268,14 +182,6 @@ FloatingWindow {
                         Keys.onPressed: event => {
                             if (event.key === Qt.Key_Down) { launcher.navigate(1); event.accepted = true; }
                             else if (event.key === Qt.Key_Up) { launcher.navigate(-1); event.accepted = true; }
-                            else if (event.key === Qt.Key_Left) {
-                                if (!launcher.contextActive) launcher.cycleMode(-1);
-                                event.accepted = true;
-                            }
-                            else if (event.key === Qt.Key_Right) {
-                                if (!launcher.contextActive) launcher.cycleMode(1);
-                                event.accepted = true;
-                            }
                             else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                 if (event.modifiers & Qt.ShiftModifier)
                                     launcher.openContext();
