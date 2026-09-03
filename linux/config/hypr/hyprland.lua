@@ -1,5 +1,6 @@
 -- ========================
 -- GLOBAL VARIABLES
+
 -- ========================
 local mainMod = "SUPER"
 local terminal = "kitty"
