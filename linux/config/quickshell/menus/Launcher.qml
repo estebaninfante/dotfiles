@@ -1,7 +1,6 @@
 import Quickshell
 import Quickshell.Widgets
 import QtQuick
-import QtQuick.Layouts
 import "../config"
 import "../services"
 
@@ -126,7 +125,7 @@ FloatingWindow {
 
     Rectangle {
         anchors.fill: parent
-        radius: 16
+        radius: 24
         color: Theme.bg
         border.color: Theme.border
         border.width: 1
@@ -139,7 +138,16 @@ FloatingWindow {
             Rectangle {
                 width: parent.width
                 height: launcher.inputH
+                radius: 24
                 color: Theme.bg
+
+                // Anula el radio inferior: solo esquinas de arriba redondas
+                Rectangle {
+                    width: parent.width
+                    height: 24
+                    anchors.bottom: parent.bottom
+                    color: Theme.bg
+                }
 
                 Row {
                     anchors.fill: parent
@@ -350,7 +358,16 @@ FloatingWindow {
             Rectangle {
                 width: parent.width
                 height: launcher.footerH
+                radius: 24
                 color: Theme.bg
+
+                // Anula el radio superior: solo esquinas de abajo redondas
+                Rectangle {
+                    width: parent.width
+                    height: 24
+                    anchors.top: parent.top
+                    color: Theme.bg
+                }
                 Text {
                     anchors.centerIn: parent
                     text: launcher.contextActive ? "↑↓ mover · Enter ejecutar · Esc volver" : "↑↓ mover · Enter abrir · Shift+Enter opciones · Esc cerrar"

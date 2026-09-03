@@ -323,8 +323,6 @@ hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
 -- ========================
 hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("~/.local/bin/qs-launcher.sh apps"))
-hl.bind(mainMod .. " + SHIFT + SPACE", hl.dsp.exec_cmd("~/.local/bin/qs-launcher.sh files"))
-hl.bind(mainMod .. " + ALT + SPACE",   hl.dsp.exec_cmd("~/.local/bin/qs-launcher.sh scripts"))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.local/bin/antigravity-ui.sh"))
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("firefox"))
 
