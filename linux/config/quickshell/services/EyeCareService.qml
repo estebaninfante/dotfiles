@@ -9,6 +9,7 @@ import "../config"
 Item {
     id: eyeCareService
 
+    property bool enabled: true
     property bool onBreak: false
     property int intervalMin: 20
     property int breakSec: 20

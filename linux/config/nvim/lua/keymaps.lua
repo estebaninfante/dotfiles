@@ -41,7 +41,7 @@ end, { expr = true, desc = "Enter manteniendo columna" })
 vim.keymap.set("i", "<Tab>", function()
   local cmp_ok, cmp = pcall(require, "cmp")
   if cmp_ok and cmp.visible() then
-    cmp.select_next_item()
+    vim.schedule(function() cmp.select_next_item() end)
     return ""
   end
   local ls_ok, ls = pcall(require, "luasnip")
