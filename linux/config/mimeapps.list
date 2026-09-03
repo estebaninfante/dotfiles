@@ -19,6 +19,7 @@ x-scheme-handler/http=brave-browser.desktop
 x-scheme-handler/https=brave-browser.desktop
 x-scheme-handler/claude-cli=claude-code-url-handler.desktop
 x-scheme-handler/antigravity=antigravity.desktop
+application/vnd.openxmlformats-officedocument.wordprocessingml.document=writer.desktop
 
 [Added Associations]
 application/nix=nvim.desktop;
@@ -30,3 +31,4 @@ application/xml=nvim.desktop;
 application/x-yaml=nvim.desktop;
 image/jpeg=org.videolan.VLC.desktop;
 text/plain=nvim.desktop;
+application/vnd.openxmlformats-officedocument.wordprocessingml.document=writer.desktop;
