@@ -159,9 +159,12 @@ hl.config({
 
 -- Arbol desactivado por defecto: todo hereda "off" salvo lo que se activa
 -- explicitamente abajo (windowsMove + workspaces).
+
 hl.animation({
     leaf = "global",
-    enabled = false
+    enabled = true,
+    speed = 8,
+    bezier = "default"
 })
 
 -- Solo el movimiento se anima (glide suave al mover flotantes por teclado);
