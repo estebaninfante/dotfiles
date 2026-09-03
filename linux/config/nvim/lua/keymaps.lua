@@ -17,10 +17,9 @@ vim.api.nvim_set_hl(0, "StatusColRel", { bold = false, fg = "#50C878" })
 
 function _G.StatusColNumbers()
   local lnum = vim.v.lnum
-  local curr = vim.fn.line(".")
-  local rel = (lnum == curr) and 0 or math.abs(lnum - curr)
+  local rel = vim.v.relnum
   if rel == 0 then
-    return string.format("%%#StatusColRel#%3d%%* %%#StatusColAbs#%3d │ %%*", rel, lnum)
+    return string.format("%%#StatusColRel#%3d%%* %%#StatusColAbs#%3d │ %%*", 0, lnum)
   end
   return string.format("%%#StatusColAbs#%3d%%* %%#StatusColRel#%3d │ %%*", lnum, rel)
 end
