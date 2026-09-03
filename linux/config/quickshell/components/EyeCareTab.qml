@@ -103,8 +103,56 @@ Rectangle {
         anchors.margins: 16
         spacing: 10
 
+        // Toggle on/off
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "\uf06e  Protector visual"
+                color: EyeCareService.enabled ? Theme.fg : Theme.fgDim
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.pixelNormal
+                font.bold: true
+            }
+
+            Item { width: parent.width - 120 - 44; height: 1 }
+
+            Rectangle {
+                width: 44
+                height: 24
+                radius: 12
+                anchors.verticalCenter: parent.verticalCenter
+                color: EyeCareService.enabled ? Theme.accent : Theme.bgHoverSoft
+                border.color: EyeCareService.enabled ? Theme.accent : Theme.border
+                border.width: 1
+
+                Rectangle {
+                    x: EyeCareService.enabled ? 22 : 2
+                    width: 20
+                    height: 20
+                    radius: 10
+                    color: "white"
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Behavior on x {
+                        NumberAnimation { duration: 150; easing.type: Motion.easingOutCubic }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: EyeCareService.toggleEnabled()
+                }
+            }
+        }
+
+        // Timer display
         Text {
             width: parent.width
+            visible: EyeCareService.enabled
             text: EyeCareService.onBreak
                   ? EyeCareService.remaining + "s"
                   : EyeCareService.fmt(EyeCareService.remaining)
@@ -117,6 +165,7 @@ Rectangle {
 
         Text {
             width: parent.width
+            visible: EyeCareService.enabled
             text: EyeCareService.onBreak
                   ? "Descansando la vista"
                   : "Próximo descanso"
@@ -128,6 +177,7 @@ Rectangle {
 
         Text {
             width: parent.width
+            visible: EyeCareService.enabled
             text: "Cada " + EyeCareService.intervalMin + " min — " + EyeCareService.breakSec + "s de descanso"
             color: Theme.fgDimmer
             font.family: Theme.fontFamily
@@ -135,10 +185,11 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        Rectangle { width: parent.width; height: 1; color: Theme.border }
+        Rectangle { width: parent.width; height: 1; color: Theme.border; visible: EyeCareService.enabled }
 
         // Config
         Grid {
+            visible: EyeCareService.enabled
             columns: 2
             width: parent.width
             rowSpacing: 10
@@ -189,11 +240,12 @@ Rectangle {
             }
         }
 
-        Rectangle { width: parent.width; height: 1; color: Theme.border }
+        Rectangle { width: parent.width; height: 1; color: Theme.border; visible: EyeCareService.enabled }
 
         // Info
         Column {
             width: parent.width
+            visible: EyeCareService.enabled
             spacing: 4
 
             Text {

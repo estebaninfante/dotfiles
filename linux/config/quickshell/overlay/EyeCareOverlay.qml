@@ -74,7 +74,7 @@ PanelWindow {
         onClicked: {
             EyeCareService.onBreak = false
             EyeCareService.remaining = 0
-            EyeCareService.startInterval()
+            if (EyeCareService.enabled) EyeCareService.startInterval()
         }
     }
 

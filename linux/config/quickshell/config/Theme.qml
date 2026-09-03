@@ -16,6 +16,7 @@ Item {
     readonly property color fgDimmer: "#555555"
     readonly property color fgFaint: "#888888"
     readonly property color danger: "#eba0ac"
+    readonly property color accent: "#7aa2f7"
 
     readonly property int pixelSmall: 9
     readonly property int pixelMedium: 10
