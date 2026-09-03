@@ -259,8 +259,11 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("swaync")
 
     -- 3. D-Bus environment and portals
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=Hyprland")
-    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
+    -- ELECTRON_OZONE_PLATFORM_HINT/GDK_SCALE: apps activadas via dbus/systemd
+    -- (tray, xdg-open) no heredan env de Hyprland. Sin el hint, Electron cae a
+    -- XWayland y con force_zero_scaling abre 1x sobre monitor scale=2 (chico).
+    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=Hyprland ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE")
+    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE")
     -- Los paths /usr/libexec no existen en NixOS (store). Arrancar via
     -- systemd da a la unit el env (WAYLAND_DISPLAY) que necesita su condicion.
     hl.exec_cmd("sleep 2 && systemctl --user start xdg-desktop-portal-hyprland && systemctl --user restart xdg-desktop-portal && systemctl --user start lan-mouse")
