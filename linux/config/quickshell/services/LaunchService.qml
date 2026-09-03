@@ -87,7 +87,13 @@ Item {
         runnerProcess.running = false;
         // systemd-run --scope saca la app del cgroup de quickshell.service:
         // sobrevive restarts de quickshell (y no la mata un segundo launch).
-        runnerProcess.command = ["systemd-run", "--user", "--scope", "--collect", "--quiet"].concat(args);
+        // --setenv: systemd-run --scope NO hereda env de Hyprland (hl.env()),
+        // así que hay que pasar explícitamente las vars que las apps necesitan.
+        runnerProcess.command = [
+            "systemd-run", "--user", "--scope", "--collect", "--quiet",
+            "--setenv", "ELECTRON_OZONE_PLATFORM_HINT=wayland",
+            "--setenv", "NIXOS_OZONE_WL=1",
+        ].concat(args);
         runnerProcess.running = true;
     }
 
