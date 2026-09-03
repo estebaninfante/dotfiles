@@ -114,8 +114,8 @@ hl.config({
         rounding = 10,
         blur = {
             enabled = true,
-            size   = 4,
-            passes = 2
+            size   = 8,
+            passes = 3
         }
     }
 })
@@ -293,7 +293,7 @@ end)
 -- ========================
 -- WINDOW RULES
 -- ========================
-hl.window_rule({ match = { class = "kitty" }, opacity = "0.9" })
+hl.window_rule({ match = { class = "kitty" }, opacity = "0.90" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, workspace = "10" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, fullscreen = 1 })
 hl.window_rule({ match = { class = "leia" }, workspace = "10" })
