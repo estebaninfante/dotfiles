@@ -290,7 +290,7 @@ end)
 -- ========================
 -- WINDOW RULES
 -- ========================
-hl.window_rule({ match = { class = "kitty" }, opacity = "1 1" })
+hl.window_rule({ match = { class = "kitty" }, opacity = "0.9" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, workspace = "10" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, fullscreen = 1 })
 hl.window_rule({ match = { class = "leia" }, workspace = "10" })
@@ -306,10 +306,7 @@ hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
 -- compositor (la card pinta su propio borde/radio). Los floats nuevos abren
 -- centrados por defecto en el monitor activo.
 hl.window_rule({ match = { title = "quickshell-launcher" }, float = true, size = "760 500", border_size = 0, rounding = 0 })
--- File chooser portal (GTK): ventana de selección de archivos un poco menos alta
 hl.window_rule({ match = { class = "xdg-desktop-portal-gtk" }, max_size = "1260 560" })
--- Handy fallback overlay is a normal window on desktop NVIDIA. Keep it
--- visible without changing the target application's focus or blur state.
 if machine == "desktop" then
     hl.window_rule({ match = { class = "handy", title = "Recording" }, float = 1, no_initial_focus = 1, no_blur = 1, border_size = 0 })
 end
