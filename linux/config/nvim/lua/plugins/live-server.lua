@@ -5,8 +5,7 @@ return {
     vim.g.live_server = {
       port = 8080,
       root = ".",
-      open = false,
-      wait = 100,
+      open = true,
     }
   end,
 }
