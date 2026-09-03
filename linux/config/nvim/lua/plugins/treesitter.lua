@@ -19,6 +19,11 @@ return {
           if not pcall(vim.treesitter.start) then
             return
           end
+          -- html: indent TS (rama main) devuelve -1 y deja hijo en col 1;
+          -- HtmlIndent() nativo sí indenta. No pisarlo.
+          if ft == "html" then
+            return
+          end
           if vim.treesitter.query.get(ft, "indents", { warn = false }) then
             vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
             vim.bo.indentkeys = vim.bo.indentkeys .. ",=end"

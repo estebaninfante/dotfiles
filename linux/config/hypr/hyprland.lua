@@ -204,16 +204,16 @@ hl.animation({
     enabled = true,
     speed = 4,
     bezier = "default",
-    style = "popin 10%"
+    style = "slide"
 })
 
 -- Cierre: colapso inverso (popin reproducido en reversa).
 hl.animation({
     leaf = "windowsOut",
     enabled = true,
-    speed = 8,
+    speed = 2,
     bezier = "default",
-    style = "popin 10%"
+    style = "slide"
 })
 
 -- Layers (waybar, swaync, quickshell): apertura con popin

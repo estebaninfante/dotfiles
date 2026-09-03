@@ -27,16 +27,22 @@ end
 
 vim.o.statuscolumn = "%!v:lua.StatusColNumbers()"
 vim.opt.autoindent = true
-vim.opt.smartindent = true
+vim.opt.smartindent = false
+vim.cmd("filetype plugin indent on")
+-- Enter nativo: deja que indentexpr/treesitter calcule nivel (HTML/web).
+-- (Antes había mapeo <CR><C-o>col| que pisaba indent y mandaba a col 1.)
+-- Indent web a 2 espacios (prettier default); resto mantiene 4 global.
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "html", "css", "javascript", "javascriptreact", "typescript", "typescriptreact", "json", "qml" },
+  callback = function()
+    vim.opt_local.shiftwidth = 2
+    vim.opt_local.tabstop = 2
+    vim.opt_local.softtabstop = 2
+  end,
+})
 vim.keymap.set("i", "uu", "<Esc>")
 vim.keymap.set("i", "\x1b[127;5~", "<C-w>", { desc = "Borrar palabra (ctrl+backspace)" })
 vim.keymap.set("n", "ñ", "o<Esc>", { desc = "Línea vacía abajo" })
-
--- Enter: mantener columna actual (no ir a inicio de línea)
-vim.keymap.set("i", "<CR>", function()
-  local col = vim.fn.col(".")
-  return "<CR><C-o>" .. col .. "|"
-end, { expr = true, desc = "Enter manteniendo columna" })
 
 -- Tab unificado: cmp menu → luasnip jump → minuet accept → indent previo
 vim.keymap.set("i", "<Tab>", function()
