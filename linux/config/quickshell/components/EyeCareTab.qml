@@ -49,8 +49,10 @@ Rectangle {
                 onClicked: {
                     const v = Math.max(stepper.min, stepper.value - stepper.step);
                     if (v !== stepper.value) {
-                        if (stepper.key === "interval_min") EyeCareService.setIntervalMin(v)
-                        else if (stepper.key === "break_sec") EyeCareService.setBreakSec(v)
+                        if (stepper.key === "interval_min")
+                            EyeCareService.setIntervalMin(v);
+                        else if (stepper.key === "break_sec")
+                            EyeCareService.setBreakSec(v);
                     }
                 }
             }
@@ -90,8 +92,10 @@ Rectangle {
                 onClicked: {
                     const v = Math.min(stepper.max, stepper.value + stepper.step);
                     if (v !== stepper.value) {
-                        if (stepper.key === "interval_min") EyeCareService.setIntervalMin(v)
-                        else if (stepper.key === "break_sec") EyeCareService.setBreakSec(v)
+                        if (stepper.key === "interval_min")
+                            EyeCareService.setIntervalMin(v);
+                        else if (stepper.key === "break_sec")
+                            EyeCareService.setBreakSec(v);
                     }
                 }
             }
@@ -117,7 +121,10 @@ Rectangle {
                 font.bold: true
             }
 
-            Item { width: parent.width - 120 - 44; height: 1 }
+            Item {
+                width: parent.width - 180 - 44
+                height: 1
+            }
 
             Rectangle {
                 width: 44
@@ -137,7 +144,10 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
 
                     Behavior on x {
-                        NumberAnimation { duration: 150; easing.type: Motion.easingOutCubic }
+                        NumberAnimation {
+                            duration: 150
+                            easing.type: Motion.easingOutCubic
+                        }
                     }
                 }
 
@@ -153,9 +163,7 @@ Rectangle {
         Text {
             width: parent.width
             visible: EyeCareService.enabled
-            text: EyeCareService.onBreak
-                  ? EyeCareService.remaining + "s"
-                  : EyeCareService.fmt(EyeCareService.remaining)
+            text: EyeCareService.onBreak ? EyeCareService.remaining + "s" : EyeCareService.fmt(EyeCareService.remaining)
             color: Theme.fg
             font.family: Theme.fontFamily
             font.pixelSize: 36
@@ -166,9 +174,7 @@ Rectangle {
         Text {
             width: parent.width
             visible: EyeCareService.enabled
-            text: EyeCareService.onBreak
-                  ? "Descansando la vista"
-                  : "Próximo descanso"
+            text: EyeCareService.onBreak ? "Descansando la vista" : "Próximo descanso"
             color: Theme.fgDim
             font.family: Theme.fontFamily
             font.pixelSize: Theme.pixelTitle
@@ -185,7 +191,12 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        Rectangle { width: parent.width; height: 1; color: Theme.border; visible: EyeCareService.enabled }
+        Rectangle {
+            width: parent.width
+            height: 1
+            color: Theme.border
+            visible: EyeCareService.enabled
+        }
 
         // Config
         Grid {
@@ -240,7 +251,12 @@ Rectangle {
             }
         }
 
-        Rectangle { width: parent.width; height: 1; color: Theme.border; visible: EyeCareService.enabled }
+        Rectangle {
+            width: parent.width
+            height: 1
+            color: Theme.border
+            visible: EyeCareService.enabled
+        }
 
         // Info
         Column {
