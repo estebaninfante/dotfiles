@@ -39,7 +39,6 @@ hl.config({
 -- ENVIRONMENT VARIABLES
 -- ========================
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
-hl.env("NIXOS_OZONE_WL", "1")
 -- GDK_SCALE debe coincidir con la escala del monitor principal:
 -- laptop eDP-1 scale=2, desktop DP-1 scale=1. Mismatch → GTK apps 2x.
 if machine == "desktop" then

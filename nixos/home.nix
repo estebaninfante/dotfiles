@@ -86,7 +86,6 @@ in
   # así que Electron DEBE correr como Wayland nativo para escalar bien.
   home.sessionVariables = {
     ELECTRON_OZONE_PLATFORM_HINT = "wayland";
-    NIXOS_OZONE_WL = "1";
   };
 
   # ── machine-type (lo lee hyprland.lua) ─────────────────────────

@@ -92,7 +92,6 @@ Item {
         runnerProcess.command = [
             "systemd-run", "--user", "--scope", "--collect", "--quiet",
             "--setenv", "ELECTRON_OZONE_PLATFORM_HINT=wayland",
-            "--setenv", "NIXOS_OZONE_WL=1",
         ].concat(args);
         runnerProcess.running = true;
     }
