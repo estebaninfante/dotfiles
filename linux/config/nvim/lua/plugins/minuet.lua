@@ -43,7 +43,7 @@ return {
         show_on_completion_menu = false, -- oculto cuando abre menú nvim-cmp
         auto_trigger_ft = { "*" }, -- ghost text automático; toggle con <leader>ia
         keymap = {
-          accept = "<Tab>",
+          accept = "<C-j>", -- Tab manejado en keymaps.lua (unificado)
           accept_line = "<M-L>",
           next = "<M-]>",
           prev = "<M-[>",

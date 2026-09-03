@@ -28,7 +28,7 @@ vim.o.statuscolumn = "%!v:lua.StatusColNumbers()"
 vim.opt.autoindent = true
 vim.opt.smartindent = true
 vim.keymap.set("i", "uu", "<Esc>")
-vim.keymap.set("i", "<C-Backspace>", "<C-w>", { desc = "Borrar palabra (ctrl+backspace)" })
+vim.keymap.set("i", "\x1b[127;5~", "<C-w>", { desc = "Borrar palabra (ctrl+backspace)" })
 vim.keymap.set("n", "ñ", "o<Esc>", { desc = "Línea vacía abajo" })
 
 -- Enter: mantener columna actual (no ir a inicio de línea)
@@ -37,14 +37,43 @@ vim.keymap.set("i", "<CR>", function()
   return "<CR><C-o>" .. col .. "|"
 end, { expr = true, desc = "Enter manteniendo columna" })
 
--- Tab: ir al nivel de indentación de la línea anterior
+-- Tab unificado: cmp menu → luasnip jump → minuet accept → indent previo
 vim.keymap.set("i", "<Tab>", function()
+  local cmp_ok, cmp = pcall(require, "cmp")
+  if cmp_ok and cmp.visible() then
+    cmp.select_next_item()
+    return ""
+  end
+  local ls_ok, ls = pcall(require, "luasnip")
+  if ls_ok and ls.expand_or_jumpable() then
+    ls.expand_or_jump()
+    return ""
+  end
+  local minuet_ok, minuet = pcall(require, "minuet.virtualtext")
+  if minuet_ok and minuet.get() and #minuet.get() > 0 then
+    minuet.confirm()
+    return ""
+  end
   local prev = vim.fn.indent(vim.fn.line(".") - 1)
   if prev > 0 then
     return "<C-o>" .. prev .. "|"
   end
   return "<Tab>"
-end, { expr = true, desc = "Tab al indent anterior" })
+end, { expr = true, desc = "Tab unificado (cmp/luasnip/minuet/indent)" })
+-- S-Tab unificado: cmp menu → luasnip jump prev → nothing → nothing
+vim.keymap.set("i", "<S-Tab>", function()
+  local cmp_ok, cmp = pcall(require, "cmp")
+  if cmp_ok and cmp.visible() then
+    cmp.select_prev_item()
+    return ""
+  end
+  local ls_ok, ls = pcall(require, "luasnip")
+  if ls_ok and ls.jumpable(-1) then
+    ls.jump(-1)
+    return ""
+  end
+  return "<S-Tab>"
+end, { expr = true, desc = "S-Tab unificado (cmp/luasnip)" })
 -- Navegación fluida entre paneles / ventanas (Splits) con Ctrl + hjkl
 vim.keymap.set("n", "<C-h>", "<C-w>h", { desc = "Mover a panel izquierdo" })
 vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Mover a panel inferior" })
