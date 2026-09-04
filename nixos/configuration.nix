@@ -14,6 +14,13 @@ let
   # theme.conf se referencia con `include themes/rEFInd-minimal/theme.conf`.
   # Los values (source paths) se pasan sin string context: builtins.toJSON
   # de refind-install.json RECHAZA strings con context de store path.
+  # BUG FIX (GC): el source raw del flake input NO queda en el closure del
+  # system (sin context → GC lo borra) → refind-install.py moría con
+  # FileNotFoundError LICENSE y los entries del boot quedaban congelados
+  # (por eso rEFInd mostró conf vieja hasta la gen 90). Fix: copiar el tema
+  # a un derivation propio y rootearlo via system.extraDependencies.
+  refindThemeDrv = pkgs.runCommand "refind-minimal-theme" { }
+    "cp -r ${refind-minimal-theme} $out && chmod -R u+w $out";
   flattenDir = dir:
     let entries = builtins.readDir dir;
     in builtins.concatMap
@@ -21,7 +28,7 @@ let
         let type = entries.${name};
         in if type == "directory" then flattenDir "${dir}/${name}" else [ "${dir}/${name}" ])
       (builtins.attrNames entries);
-  refindThemeFiles = flattenDir refind-minimal-theme;
+  refindThemeFiles = flattenDir refindThemeDrv;
   refindThemeAdditional = lib.listToAttrs (map
     (file: {
       name = builtins.unsafeDiscardStringContext
@@ -52,6 +59,9 @@ in
   # theme.conf (evanpurkhiser) NO trae timeout/default_selection, asi que
   # no sobreescribe los nuestros. Solo showtools shutdown.
   boot.loader.refind.additionalFiles = refindThemeAdditional;
+  # Root del tema en el closure del system: sin esto GC borra el source y
+  # refind-install falla en el siguiente rebuild (ver BUG FIX arriba).
+  system.extraDependencies = [ refindThemeDrv ];
   # Generaciones NixOS visibles en el menu rEFInd. El generador ordena
   # descendente (la mas reciente primero) y default_selection la auto-bootea
   # tras el timeout. 1 = solo la ultima gen, un menu limpio (Windows + NixOS).
