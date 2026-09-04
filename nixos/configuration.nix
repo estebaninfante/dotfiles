@@ -32,7 +32,7 @@ let
   refindThemeAdditional = lib.listToAttrs (map
     (file: {
       name = builtins.unsafeDiscardStringContext
-        "themes/rEFInd-minimal/${lib.removePrefix "${refind-minimal-theme}/" file}";
+        "themes/rEFInd-minimal/${lib.removePrefix "${refindThemeDrv}/" file}";
       value = builtins.unsafeDiscardStringContext file;
     })
     refindThemeFiles);
