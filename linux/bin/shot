@@ -56,15 +56,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-freeze_screen
-
 case "$MODE" in
     active)
+        freeze_screen
         GEOMETRY=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
         [ -z "$GEOMETRY" ] && { notify-send -u critical "shot" "No se pudo obtener ventana activa"; exit 1; }
         grim -g "$GEOMETRY" - > /tmp/shot.png
         ;;
     full)
+        freeze_screen
         grim - > /tmp/shot.png
         ;;
     area)

@@ -292,6 +292,10 @@ hl.on("hyprland.start", function()
 
     -- Arrancar siempre en el workspace 5
     hl.exec_cmd("sleep 0.5 && hyprctl dispatch workspace 5")
+
+    -- Re-parsea config ~3s después del inicio para limpiar la barra de
+    -- error transitorio de Hyprland (aparece al login, desaparece al guardar).
+    hl.exec_cmd("sleep 3 && hyprctl reload")
 end)
 
 -- ========================
