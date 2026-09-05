@@ -14,6 +14,7 @@ with pkgs; [  # ── Shell & terminal ──
 
   # ── Editores ──
   neovim
+  antigravity-ide-fhs   # Google Antigravity IDE (FHS wrap para extensiones)
 
   # ── Hyprland ecosystem ──
   hyprpicker
