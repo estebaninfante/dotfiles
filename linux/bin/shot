@@ -68,9 +68,15 @@ case "$MODE" in
         grim - > /tmp/shot.png
         ;;
     area)
-        GEOMETRY=$(slurp -d)
-        [ -z "$GEOMETRY" ] && exit 1
-        grim -g "$GEOMETRY" - > /tmp/shot.png
+        grim - > /tmp/shot_full.png
+        GEOMETRY=$(slurp)
+        [ -z "$GEOMETRY" ] && { rm -f /tmp/shot_full.png; exit 1; }
+        POS=$(echo "$GEOMETRY" | cut -d' ' -f1)
+        SIZE=$(echo "$GEOMETRY" | cut -d' ' -f2)
+        X=$(echo "$POS" | cut -d',' -f1)
+        Y=$(echo "$POS" | cut -d',' -f2)
+        convert /tmp/shot_full.png -crop "${SIZE}+${X}+${Y}" +repage /tmp/shot.png
+        rm -f /tmp/shot_full.png
         ;;
 esac
 
