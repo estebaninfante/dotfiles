@@ -30,7 +30,7 @@ let
 
   # ── Inventarios ─────────────────────────────────────────────
   configDirs = [
-    "hypr" "waybar" "kitty" "nvim" "kanata" "fastfetch"
+    "waybar" "kitty" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
     "quickshell" "tmux" "voice"
   ];
@@ -172,6 +172,20 @@ in
     ${pkgs.coreutils}/bin/install -m 0644 \
       "${cfg}/input-remapper-2/presets/Nintendo Wii Remote Pro Controller/desktop.json" \
       "$ir_dir/presets/Nintendo Wii Remote Pro Controller/desktop.json"
+  '';
+
+  # hyprland.lua lives inside ~/.config/hypr/ (recursive symlink via configDirs).
+  # During nixos-rebuild switch, home-manager recreates the symlink — brief
+  # ENOENT window causes "no such file" error at every login. Fix: break the
+  # symlink and replace with a real directory containing all hypr config files.
+  # This persists across rebuilds (activation script re-runs each time).
+  home.activation.hyprConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    hypr_dir="$HOME/.config/hypr"
+    if [ -L "$hypr_dir" ]; then
+      rm "$hypr_dir"
+    fi
+    mkdir -p "$hypr_dir"
+    ${pkgs.coreutils}/bin/cp -ru "${cfg}/hypr/." "$hypr_dir/"
   '';
 
   # Keep generated dependencies/builds local. Source, configs and lockfiles
