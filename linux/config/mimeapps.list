@@ -20,6 +20,7 @@ x-scheme-handler/https=brave-browser.desktop
 x-scheme-handler/claude-cli=claude-code-url-handler.desktop
 x-scheme-handler/antigravity=antigravity.desktop
 application/vnd.openxmlformats-officedocument.wordprocessingml.document=writer.desktop
+x-scheme-handler/mailto=brave-browser.desktop
 
 [Added Associations]
 application/nix=nvim.desktop;
