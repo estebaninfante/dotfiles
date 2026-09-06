@@ -302,6 +302,7 @@ end)
 -- WINDOW RULES
 -- ========================
 hl.window_rule({ match = { class = "kitty" }, opacity = "0.90" })
+hl.window_rule({ match = { class = "com.stremio.Stremio" }, idle_inhibitor = true })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, workspace = "10" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, fullscreen = 1 })
 hl.window_rule({ match = { class = "leia" }, workspace = "10" })
