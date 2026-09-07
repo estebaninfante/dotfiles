@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# pomodoro.sh — pomodoro + recordatorio de ojos para el centro de quickshell
-# (pestaña Pomodoro del DateMenu + pill flotante). Sustituyó a pomodoro-waybar.sh.
+# pomodoro.sh — pomodoro + recordatorio de ojos + log de actividad
 # Estado en $XDG_RUNTIME_DIR/pomodoro/ (sobrevive a reinicios de quickshell).
 # Config en ~/.local/state/quickshell/pomodoro.conf (clave=valor).
-# Uso: pomodoro.sh {start|pause|resume|stop|skip|status|config [clave valor]}
+# Log en ~/alicia/Pomodoro/YYYY-MM-DD.md (vault Obsidian).
+# Uso: pomodoro.sh {start|pause|resume|stop|skip|status|config [clave valor]|log "texto"}
 
 set -euo pipefail
 
