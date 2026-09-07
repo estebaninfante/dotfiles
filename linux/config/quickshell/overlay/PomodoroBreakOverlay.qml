@@ -29,6 +29,17 @@ PanelWindow {
 
     property string activityText: ""
 
+    MouseArea {
+        anchors.fill: parent
+        propagateComposedEvents: true
+        onClicked: function(mouse) {
+            if (PomodoroService.state !== "break_done")
+                PomodoroService.skip()
+            else
+                mouse.accepted = false
+        }
+    }
+
     Column {
         anchors.centerIn: parent
         spacing: 18
@@ -76,6 +87,7 @@ PanelWindow {
 
         // Campo de texto para actividad
         Rectangle {
+            id: inputBox
             width: 320
             height: 40
             radius: 8
@@ -94,6 +106,7 @@ PanelWindow {
                 font.pixelSize: 13
                 clip: true
                 selectByMouse: true
+                focus: true
                 property string placeholderText: "¿Qué hiciste en este ciclo?"
 
                 Text {
@@ -107,9 +120,20 @@ PanelWindow {
                 }
 
                 onAccepted: {
-                    pomodoroOverlay.activityText = text
-                    PomodoroService.log(text)
-                    text = ""
+                    if (text.length > 0) {
+                        PomodoroService.log(text)
+                        text = ""
+                    }
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                propagateComposedEvents: true
+                cursorShape: Qt.IBeamCursor
+                onClicked: function(mouse) {
+                    activityInput.forceActiveFocus()
+                    mouse.accepted = false
                 }
             }
         }
@@ -202,14 +226,6 @@ PanelWindow {
                     onClicked: PomodoroService.stop()
                 }
             }
-        }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        onClicked: {
-            if (PomodoroService.state !== "break_done")
-                PomodoroService.skip()
         }
     }
 

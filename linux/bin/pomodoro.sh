@@ -124,6 +124,7 @@ skip() {
             notify "Saltado — descansa $(cfg break_min 5) min"
             ;;
         break|paused_break)
+            log_activity ""
             local c; c="$(cycle_get)"
             printf 'break_done' > "$RUN_DIR/state"
             printf '0' > "$RUN_DIR/end"
@@ -172,6 +173,7 @@ status() {
                     s="break"; remain=$(( $(cfg break_min 5) * 60 ))
                     notify "Ciclo $c listo — descansa $(cfg break_min 5) min"
                 else
+                    log_activity ""
                     local c; c="$(cycle_get)"
                     printf 'break_done' > "$RUN_DIR/state"
                     printf '0' > "$RUN_DIR/end"
