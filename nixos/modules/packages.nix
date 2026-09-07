@@ -15,6 +15,8 @@ with pkgs; [  # ── Shell & terminal ──
   # ── Editores ──
   neovim
   antigravity-ide-fhs   # Google Antigravity IDE (FHS wrap para extensiones)
+  vscode-fhs            # Microsoft VS Code (FHS wrap para extensiones del marketplace)
+  zed-editor            # Zed — editor Rust nativo, GPU-accelerated, Agent Client Protocol
 
   # ── Hyprland ecosystem ──
   hyprpicker
