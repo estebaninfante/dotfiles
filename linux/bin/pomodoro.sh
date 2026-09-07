@@ -21,6 +21,42 @@ cycle_get() { cat "$RUN_DIR/cycle" 2>/dev/null || echo 0; }
 
 notify() { notify-send -a Pomodoro -t 5000 "Pomodoro" "$1" 2>/dev/null || true; }
 
+log_activity() {
+    local text="${1:-}"
+    local cycle_num
+    cycle_num="$(cycle_get)"
+    [ "$cycle_num" -gt 0 ] || return 0
+    
+    local log_dir="$HOME/alicia/Pomodoro"
+    mkdir -p "$log_dir"
+    local log_file="$log_dir/$(date +%Y-%m-%d).md"
+    
+    # Crear archivo si no existe
+    if [ ! -f "$log_file" ]; then
+        printf "# Pomodoro — %s\n\n" "$(date +%Y-%m-%d)" > "$log_file"
+    fi
+    
+    # Obtener timestamp de inicio del work
+    local work_start
+    work_start="$(cat "$RUN_DIR/work_start" 2>/dev/null || echo 0)"
+    if [ "$work_start" -gt 0 ]; then
+        local start_time
+        start_time="$(date -d "@$work_start" +%H:%M)"
+        local end_time
+        end_time="$(date -d "@$(date +%s)" +%H:%M)"
+        local duration
+        duration="$(cfg work_min 25)"
+        
+        if [ -n "$text" ]; then
+            printf "## Ciclo %s (%s–%s)\n- **Duración:** %s min\n- **Actividad:** %s\n\n" \
+                "$cycle_num" "$start_time" "$end_time" "$duration" "$text" >> "$log_file"
+        else
+            printf "## Ciclo %s (%s–%s)\n- **Duración:** %s min\n- **Actividad:** _sin descripción_\n\n" \
+                "$cycle_num" "$start_time" "$end_time" "$duration" >> "$log_file"
+        fi
+    fi
+}
+
 set_conf() {
     local k="$1" v="$2"
     case "$k" in
@@ -34,6 +70,7 @@ set_conf() {
 start() {
     printf 'work' > "$RUN_DIR/state"
     printf '%s' $(( $(date +%s) + $(cfg work_min 25) * 60 )) > "$RUN_DIR/end"
+    printf '%s' "$(date +%s)" > "$RUN_DIR/work_start"
     printf '0' > "$RUN_DIR/cycle"
     if [ "$(cfg eyes_on 1)" = "1" ]; then
         printf '%s' $(( $(date +%s) + $(cfg eyes_min 20) * 60 )) > "$RUN_DIR/eyes_end"
@@ -74,7 +111,7 @@ stop() {
     printf '0' > "$RUN_DIR/end"
     printf '0' > "$RUN_DIR/eyes_end"
     printf '0' > "$RUN_DIR/cycle"
-    rm -f "$RUN_DIR/remain" "$RUN_DIR/eyes_remain"
+    rm -f "$RUN_DIR/remain" "$RUN_DIR/eyes_remain" "$RUN_DIR/work_start"
 }
 
 skip() {
@@ -87,8 +124,31 @@ skip() {
             notify "Saltado — descansa $(cfg break_min 5) min"
             ;;
         break|paused_break)
-            notify "Pomodoro terminado — $(cycle_get) ciclo(s)"
-            stop
+            local c; c="$(cycle_get)"
+            printf 'break_done' > "$RUN_DIR/state"
+            printf '0' > "$RUN_DIR/end"
+            printf '0' > "$RUN_DIR/eyes_end"
+            notify "Descanso terminado — $c ciclo(s). ¿Continuar?"
+            ;;
+    esac
+}
+
+continue_next() {
+    local s; s="$(state_get)"
+    case "$s" in
+        break_done)
+            local c; c="$(cycle_get)"
+            printf 'work' > "$RUN_DIR/state"
+            printf '%s' $(( $(date +%s) + $(cfg work_min 25) * 60 )) > "$RUN_DIR/end"
+            printf '%s' "$(date +%s)" > "$RUN_DIR/work_start"
+            rm -f "$RUN_DIR/remain" "$RUN_DIR/eyes_remain"
+            if [ "$(cfg eyes_on 1)" = "1" ]; then
+                printf '%s' $(( $(date +%s) + $(cfg eyes_min 20) * 60 )) > "$RUN_DIR/eyes_end"
+            fi
+            notify "Iniciando ciclo $(( c + 1 )) — $(cfg work_min 25) min"
+            ;;
+        idle)
+            start
             ;;
     esac
 }
@@ -113,9 +173,11 @@ status() {
                     notify "Ciclo $c listo — descansa $(cfg break_min 5) min"
                 else
                     local c; c="$(cycle_get)"
-                    stop
-                    s="idle"; remain=0
-                    notify "Descanso terminado — $c ciclo(s) completados"
+                    printf 'break_done' > "$RUN_DIR/state"
+                    printf '0' > "$RUN_DIR/end"
+                    printf '0' > "$RUN_DIR/eyes_end"
+                    s="break_done"; remain=0
+                    notify "Descanso terminado — $c ciclo(s). ¿Continuar?"
                 fi
             fi
             ;;
@@ -124,7 +186,7 @@ status() {
             ;;
     esac
 
-    if [ "$s" != "idle" ] && [ "$(cfg eyes_on 1)" = "1" ] && [ "$eyes" -gt 0 ]; then
+    if [ "$s" != "idle" ] && [ "$s" != "break_done" ] && [ "$(cfg eyes_on 1)" = "1" ] && [ "$eyes" -gt 0 ]; then
         if [ "$s" = "paused_work" ] || [ "$s" = "paused_break" ]; then
             eyes_in=$(cat "$RUN_DIR/eyes_remain" 2>/dev/null || echo -1)
         else
@@ -146,8 +208,10 @@ case "${1:-}" in
     resume) resume ;;
     stop) stop ;;
     skip) skip ;;
+    continue) continue_next ;;
     status) status ;;
+    log) log_activity "${2:-}" ;;
     config)
         if [ $# -ge 3 ]; then set_conf "$2" "$3"; else cat "$CONF"; fi ;;
-    *) echo "uso: pomodoro.sh {start|pause|resume|stop|skip|status|config [clave valor]}"; exit 1 ;;
+    *) echo "uso: pomodoro.sh {start|pause|resume|stop|skip|continue|status|log \"texto\"|config [clave valor]}"; exit 1 ;;
 esac

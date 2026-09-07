@@ -41,6 +41,8 @@ Item {
     function resume() { cmd("resume"); }
     function stop() { cmd("stop"); }
     function skip() { cmd("skip"); }
+    function continueNext() { cmd("continue"); }
+    function log(text) { cmd("log " + JSON.stringify(text)); }
     function setConfig(k, v) { cmd("config " + k + " " + v); }
 
     Timer {
