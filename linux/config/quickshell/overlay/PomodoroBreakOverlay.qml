@@ -10,8 +10,13 @@ PanelWindow {
     id: pomodoroOverlay
     visible: PomodoroService.state === "break" || PomodoroService.state === "paused_break" || PomodoroService.state === "break_done"
     onVisibleChanged: {
-        if (visible) killIdle.running = true;
-        else startIdle.running = true;
+        if (visible) {
+            killIdle.running = true;
+            if (PomodoroService.state === "break" || PomodoroService.state === "paused_break")
+                activityInput.forceActiveFocus();
+        } else {
+            startIdle.running = true;
+        }
     }
 
     WlrLayershell.layer: WlrLayer.Overlay
@@ -124,16 +129,6 @@ PanelWindow {
                         PomodoroService.log(text)
                         text = ""
                     }
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                propagateComposedEvents: true
-                cursorShape: Qt.IBeamCursor
-                onClicked: function(mouse) {
-                    activityInput.forceActiveFocus()
-                    mouse.accepted = false
                 }
             }
         }

@@ -11,7 +11,7 @@ import "../config"
 Item {
     id: pomodoroService
 
-    property string state: "idle"   // idle|work|break|paused_work|paused_break
+    property string state: "idle"   // idle|work|break|break_done|paused_work|paused_break
     property int remaining: 0
     property int workMin: 25
     property int breakMin: 5

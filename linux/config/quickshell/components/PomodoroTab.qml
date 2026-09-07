@@ -117,6 +117,8 @@ Rectangle {
                     return "Trabajo — ciclo " + (PomodoroService.cycle + 1);
                 if (s === "break")
                     return "Descanso";
+                if (s === "break_done")
+                    return "Ciclo " + PomodoroService.cycle + " listo";
                 if (s === "paused_work" || s === "paused_break")
                     return "Pausado";
                 return "Inactivo";
@@ -158,7 +160,15 @@ Rectangle {
                 color: mainArea.containsMouse ? Theme.fgFaint : Theme.fg
                 Text {
                     anchors.centerIn: parent
-                    text: PomodoroService.paused ? "\uf04c Pausar" : (PomodoroService.active ? "\uf04c Pausar" : "\uf04b Iniciar")
+                    text: {
+                        if (PomodoroService.state === "break_done")
+                            return "\uf04b Continuar";
+                        if (PomodoroService.paused)
+                            return "\uf04c Pausar";
+                        if (PomodoroService.active)
+                            return "\uf04c Pausar";
+                        return "\uf04b Iniciar";
+                    }
                     color: Theme.fgOnWhite
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.pixelNormal
@@ -170,7 +180,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        if (PomodoroService.paused)
+                        if (PomodoroService.state === "break_done")
+                            PomodoroService.continueNext();
+                        else if (PomodoroService.paused)
                             PomodoroService.resume();
                         else if (PomodoroService.active)
                             PomodoroService.pause();
