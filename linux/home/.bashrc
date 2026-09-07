@@ -25,6 +25,9 @@ fi
 unset rc
 export PATH="$HOME/.local/bin:$PATH"
 
+# deeptutor
+alias deeptutor='source ~/deeptutor-env/bin/activate && deeptutor'
+
 # Alias para abrir LibreOffice desde la terminal en segundo plano
 lo() {
     libreoffice "$@" >/dev/null 2>&1 &
