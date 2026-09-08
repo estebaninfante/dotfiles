@@ -75,6 +75,17 @@ case "$MODE" in
         SIZE=$(echo "$GEOMETRY" | cut -d' ' -f2)
         X=$(echo "$POS" | cut -d',' -f1)
         Y=$(echo "$POS" | cut -d',' -f2)
+        SCALE=$(hyprctl monitors -j | jq -r '[.[] | .scale] | first')
+        SCALE=${SCALE:-1}
+        if [ "$SCALE" != "1" ] && [ "$SCALE" != "1.0" ] && [ "$SCALE" != "1.00" ]; then
+            W=$(echo "$SIZE" | cut -d'x' -f1)
+            H=$(echo "$SIZE" | cut -d'x' -f2)
+            X=$(awk "BEGIN {printf \"%d\", $X * $SCALE}")
+            Y=$(awk "BEGIN {printf \"%d\", $Y * $SCALE}")
+            W=$(awk "BEGIN {printf \"%d\", $W * $SCALE}")
+            H=$(awk "BEGIN {printf \"%d\", $H * $SCALE}")
+            SIZE="${W}x${H}"
+        fi
         convert /tmp/shot_full.png -crop "${SIZE}+${X}+${Y}" +repage /tmp/shot.png
         rm -f /tmp/shot_full.png
         ;;
