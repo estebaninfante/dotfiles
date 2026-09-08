@@ -84,10 +84,35 @@ in
     # del ESP: systemd (bootloader anterior), EFI/Boot (fallback) y EFI/nixos
     # (loader + stubs EFI que duplican la entrada manual de NixOS). Sin esto
     # el menu muestra ~10 entradas (una por dir con .efi en el ESP).
-    dont_scan_dirs /EFI/systemd,/EFI/Boot,/EFI/nixos
+    dont_scan_dirs /EFI/systemd,/EFI/Boot,/EFI/nixos,/EFI/refind
     include themes/rEFInd-minimal/theme.conf
   '';
   boot.loader.efi.canTouchEfiVariables = true;
+
+  # Parche post-rebuild: refind-install.py genera entries con paths de store
+  # (/nix/store/...) pero SIN volume UUID (rEFInd no sabe qué partición buscar)
+  # y con icon refind_menu.png (NixOS logo) en vez de os_linux.png (pingüino).
+  # Este script corre DESPUÉS de la instalación del bootloader y corrige ambos.
+  # El UUID de la ESP se detecta dinámicamente (laptop y desktop difieren).
+  system.activationScripts.refind-uuid = {
+    text = ''
+      conf="/boot/EFI/refind/refind.conf"
+      if [ -f "$conf" ] && grep -q 'menuentry' "$conf"; then
+        esp_uuid=$(findmnt -no UUID /boot)
+        if [ -n "$esp_uuid" ]; then
+          # Añadir volume UUID después de cada línea menuentry (si no existe ya)
+          if ! grep -q "volume \"$esp_uuid\"" "$conf"; then
+            sed -i "/^menuentry /a\\  volume \"$esp_uuid\"" "$conf"
+          fi
+        fi
+        # Reemplazar icon de NixOS por pingüino (si no es ya el nuestro)
+        if grep -q 'icon /EFI/refind/refind_menu.png' "$conf"; then
+          sed -i 's|icon /EFI/refind/refind_menu.png|icon /EFI/refind/themes/rEFInd-minimal/icons/os_linux.png|' "$conf"
+        fi
+      fi
+    '';
+    deps = [ "boot" ];
+  };
 
   # ── Kernel / hardware base ────────────────────────────────────
   hardware.graphics.enable = true;
