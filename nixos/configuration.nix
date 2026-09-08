@@ -76,10 +76,9 @@ in
   boot.loader.refind.extraConfig = ''
     use_graphics_for linux,windows
     # scanfor explícito: SOLO internal (Windows en el ESP) + manual (entradas
-    # del config abajo) + firmware (entrada UEFI). El default incluye external,
-    # que escanea particiones (btrfs/ext4) y arma entradas sin init= que bootean
-    # a la raíz (el "ícono NixOS → Root"). Sin external el menú queda limpio:
-    # Windows + NixOS (única, manual) + UEFI.
+    # del config abajo). El default incluye external, que escanea particiones
+    # (btrfs/ext4) y arma entradas sin init= que bootean a la raíz.
+    # Sin external el menú queda limpio: Windows + NixOS (única, manual).
     scanfor internal,manual
     # Solo dejar pasar Windows (EFI/Microsoft). Ocultar del escaneo el resto
     # del ESP: systemd (bootloader anterior), EFI/Boot (fallback) y EFI/nixos
