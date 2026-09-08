@@ -22,6 +22,18 @@ PanelWindow {
 
     color: "#000000"
 
+    // Reloj grande arriba
+    Text {
+        anchors.top: parent.top
+        anchors.topMargin: 80
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: ClockService.clockText
+        color: Theme.fg
+        font.family: Theme.fontFamily
+        font.pixelSize: 72
+        font.bold: true
+    }
+
     // Countdown grande al centro
     Column {
         anchors.centerIn: parent
