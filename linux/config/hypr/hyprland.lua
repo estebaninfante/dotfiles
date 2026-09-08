@@ -66,7 +66,11 @@ end
 -- bgcolor=rgba(0,0,0,1) eliminates white flash before wallpaper loads
 if machine == "laptop" then
     hl.monitor({ output = "eDP-1",     mode = "2880x1800@120", position = "0x0",      scale = 2 })
-    hl.monitor({ output = "HDMI-A-1",  mode = "2560x1440@144", position = "auto", scale = 1, mirror = "eDP-1" })
+    -- NOTE: mirror = "eDP-1" has race condition in Hyprland 0.56.1.
+    -- If mirror doesn't apply on boot, run workaround:
+    --   hyprctl eval 'hl.monitor({ output = "HDMI-A-1", disabled = true })'
+    --   sleep 1 && hyprctl eval 'hl.monitor({ output = "HDMI-A-1", mode = "2560x1440@144", position = "0x0", scale = 1, mirror = "eDP-1", disabled = false })'
+    hl.monitor({ output = "HDMI-A-1",  mode = "2560x1440@144", position = "0x0", scale = 1, mirror = "eDP-1" })
 elseif machine == "desktop" then
     hl.monitor({ output = "DP-2",  mode = "2560x1440@144", position = "0x0", scale = 1 })
 end
