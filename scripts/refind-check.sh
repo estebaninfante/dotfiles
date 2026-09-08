@@ -129,11 +129,12 @@ while IFS= read -r line || [ -n "$line" ]; do
       elif [[ "$init_path" != /nix/store/* ]]; then
         log_fail "[$CURRENT_ENTRY] init= no apunta a /nix/store/: $init_path"
       else
-        # Verify it matches the active system profile
-        if [ -n "$EXPECTED_INIT" ] && [ "$init_path" != "$EXPECTED_INIT" ]; then
-          log_warn "[$CURRENT_ENTRY] init= ($init_path) no coincide con perfil activo"
-        else
+        # Verify the store path exists (handles specialisations with different paths)
+        init_dir="$(dirname "$init_path")"
+        if [ -d "$init_dir" ] || [ -x "$init_path" ]; then
           log_ok "[$CURRENT_ENTRY] init= path valido (${#init_path} chars)"
+        else
+          log_fail "[$CURRENT_ENTRY] init= store path no existe: $init_path"
         fi
       fi
     else

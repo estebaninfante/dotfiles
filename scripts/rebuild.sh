@@ -61,12 +61,18 @@ if [ -f "$HOME/.config/machine-type" ] && \
 fi
 
 echo "→ sudo nixos-rebuild $ACTION --flake $REPO#$machine"
+REBUILD_EXIT=0
 if [ -n "${NIX_CONFIG:-}" ]; then
-  # sudo borra el entorno por defecto (env_reset): NIX_CONFIG NO llega al
-  # nixos-rebuild → el daemon usa max-jobs=auto=24 y congela la maquina.
-  # Propagar explicitamente para respetar el paralelismo controlado
-  # (auto-sync.sh lo setea; rebuild manual puede pasarlo como env).
-  exec sudo env NIX_CONFIG="$NIX_CONFIG" nixos-rebuild "$ACTION" --flake "$REPO#$machine" "$@"
+  sudo env NIX_CONFIG="$NIX_CONFIG" nixos-rebuild "$ACTION" --flake "$REPO#$machine" "$@" || REBUILD_EXIT=$?
 else
-  exec sudo nixos-rebuild "$ACTION" --flake "$REPO#$machine" "$@"
+  sudo nixos-rebuild "$ACTION" --flake "$REPO#$machine" "$@" || REBUILD_EXIT=$?
 fi
+
+# ── 4. Verificar integridad de rEFInd post-rebuild ──
+if [ "$ACTION" = "switch" ] || [ "$ACTION" = "boot" ]; then
+  echo ""
+  echo "── Verificando rEFInd post-rebuild ──"
+  bash "$REPO/scripts/refind-check.sh" --quiet || true
+fi
+
+exit $REBUILD_EXIT
