@@ -257,6 +257,7 @@ in
   programs.nix-ld.libraries = with pkgs; [
     stdenv.cc.cc.lib  # libstdc++.so.6 + libgcc_s.so
     zlib
+    libglvnd          # libEGL.so.1 for MediaPipe FaceLandmarker
   ];
 
   # ── Paquetes del sistema ─────────────────────────────────────
