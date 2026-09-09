@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 # gesturecontrol-engine — wrapper for gestureControl.py engine
+# NixOS: numpy/opencv need libstdc++ from gcc
+export LD_LIBRARY_PATH="/nix/store/0lp4iwhqb1yhnbdbgq78ackk66lpq906-gcc-15.3.0-lib/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec ~/.local/share/gesturecontrol/venv/bin/python3 \
   ~/.local/share/gesturecontrol/gestureControl.py "$@"
