@@ -1,9 +1,8 @@
 [settings]
-format = MJPG
-height = 540
-width = 960
+onnx_threads = 8
+fps = 30
 face_every = 1
-body_every = 8
+body_every = 10
 camera = 0
 dwell_ms = 200
 
@@ -107,3 +106,14 @@ trigger = { type = "swipe", hand = "right", direction = "left", min_displacement
 # name = "mode_switch"
 # require = [{hand = "either", pose = "FIST"}]
 # trigger = { type = "swipe", hand = "right", direction = "left" }
+
+
+# Presencia: apaga pantalla al irte (sin cara ni movimiento), enciende al volver.
+[presence]
+enabled = true
+idleSeconds = 25
+useFace = true
+useMotionDetection = true
+motionThreshold = 5.0
+checkHz = 2
+pauseModelsWhenAbsent = true
