@@ -100,7 +100,8 @@ trigger = { hand = "left", step_dwell_ms = 5, steps = ["FIVE", "FOUR"], type = "
 
 [[bindings]]
 name = "browser_back"
-trigger = { type = "swipe", hand = "right", direction = "left", min_displacement = 0.15 }
+trigger = { type = "swipe", hand = "right", direction = "left", min_displacement = 0.15, min_hand_height = 0.45 }
+
 
 # Example: require either hand to hold FIST as a modifier for a swipe
 # [[bindings]]
@@ -113,12 +114,22 @@ trigger = { type = "swipe", hand = "right", direction = "left", min_displacement
 # ── Workspaces Hyprland (swipe) ──────────────────────────────────────────────
 [[bindings]]
 name = "workspace_next"
-trigger = { type = "swipe", hand = "right", direction = "right", min_displacement = 0.15 }
+trigger = { type = "swipe", hand = "right", direction = "right", min_displacement = 0.15, min_hand_height = 0.45 }
+
 
 [[bindings]]
 name = "workspace_prev"
-trigger = { type = "swipe", hand = "right", direction = "left", min_displacement = 0.15 }
+trigger = { type = "swipe", hand = "right", direction = "left", min_displacement = 0.15, min_hand_height = 0.45 }
 
+
+
+
+
+# ── Handy (dictado ↔ texto) con pulgar arriba (mano izquierda) ────────────────
+[[bindings]]
+name = "handy_toggle"
+modes = ["pc"]
+trigger = { type = "pose", hand = "left", shape = "THUMBS_UP", dwell_ms = 300 }
 
 
 # ── Cambio de modo SIN teclado (siempre activos, una mano por modo) ──────────

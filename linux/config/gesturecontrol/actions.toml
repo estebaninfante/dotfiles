@@ -41,3 +41,8 @@ action = { type = "exec", cmd = ["/home/eztvn/.local/share/gesturecontrol/gestur
 [[bindings]]
 signal = "mode_pc"
 action = { type = "exec", cmd = ["/home/eztvn/.local/share/gesturecontrol/gesturecontrol-mode", "pc"] }
+
+# ── Handy: dictado/post-process con un gesto ─────────────────────────────────
+[[bindings]]
+signal = "handy_toggle"
+action = { type = "exec", cmd = ["handy", "--toggle-post-process"] }
