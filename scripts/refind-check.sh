@@ -49,7 +49,9 @@ def log_fail(msg):
     print(f'  ✗ FAIL: {msg}', file=sys.stderr)
 
 def check_file(path):
-    return os.path.isfile(path)
+    import subprocess
+    result = subprocess.run(['sudo', 'test', '-f', path], capture_output=True)
+    return result.returncode == 0
 
 # Read system profile
 try:
