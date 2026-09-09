@@ -18,13 +18,13 @@
         }
       }
     },
-    "voice-use": {
-      "description": "Voice computer use. Handy STT + Hyprland + mouse/teclado. Uso headless.",
+    "computer-use": {
+      "description": "Computer use. Handy STT + Hyprland + mouse/teclado. Uso headless: Traduce voz a acciones de escritorio. Auto-mejora.",
       "mode": "primary",
       "model": "anthropic/claude-sonnet-4-6",
       "permission": {
         "bash": "allow",
-        "edit": "deny",
+        "edit": "allow",
         "read": "allow"
       }
     },
