@@ -205,6 +205,39 @@ with pkgs; [  # ── Shell & terminal ──
     pycairo                # gesturecontrol: dependencia de pygobject3
   ]))
   v4l-utils                # gesturecontrol: nombre de dispositivos camara en config UI
+
+  # gesturecontrol: entorno FHS para pip packages con deps nativas
+  # (numpy, opencv, mediapipe necesitan libstdc++, OpenGL, etc.)
+  (buildFHSEnv {
+    name = "gesturecontrol-fhs";
+    targetPkgs = pkgs: with pkgs; [
+      python3
+      python3Packages.pip
+      python3Packages.setuptools
+      python3Packages.wheel
+      python3Packages.numpy
+      python3Packages.opencv4
+      python3Packages.flask
+      python3Packages.pillow
+      python3Packages.dbus-python
+      python3Packages.pygobject3
+      python3Packages.pycairo
+      stdenv.cc.cc.lib  # libstdc++.so.6
+      zlib
+      libGL
+      glib
+      libgcc
+      xorg.libX11
+      xorg.libXext
+      libxkbcommon
+      mesa
+      wayland
+    ];
+    runScript = "bash";
+    profile = ''
+      pip install mediapipe 2>/dev/null || true
+    '';
+  })
   rustc
   cargo
   go

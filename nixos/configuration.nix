@@ -249,6 +249,16 @@ in
   # NOTA: console.keyMap NO se define aqui — el modulo keyboard.nix
   # lo pone en dvk_prog (tu layout custom).
 
+  # ── nix-ld: compatibilidad FHS para binarios pip/conda/etc ──
+  # Permite que numpy/opencv/etc de pip encuentren libstdc++ y otras
+  # librerías de sistema. Sin esto, las .so de pip buscan en /usr/lib
+  # que no existe en NixOS → "cannot open shared object".
+  programs.nix-ld.enable = true;
+  programs.nix-ld.libraries = with pkgs; [
+    stdenv.cc.cc.lib  # libstdc++.so.6 + libgcc_s.so
+    zlib
+  ];
+
   # ── Paquetes del sistema ─────────────────────────────────────
   environment.systemPackages = import ./modules/packages.nix { inherit pkgs handyPackage piperVoices; };
 
