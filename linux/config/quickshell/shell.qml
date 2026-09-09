@@ -51,4 +51,5 @@ PanelWindow {
     PomodoroPill { }
     PomodoroBreakOverlay { }
     EyeCareOverlay { }
+    VoiceHalo { }
 }
