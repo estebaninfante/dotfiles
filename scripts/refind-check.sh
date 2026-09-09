@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ── refind-check.sh ──
 # Verifica integridad de /boot/EFI/refind/refind.conf despues de cada rebuild.
-# Chequea: existencia de archivos, integridad de options (init=), coherencia
-# con el perfil del sistema activo.
+# Chequea: existencia de archivos, integridad de options (init=), estructura
+# de menuentry (loader/initrd/options en raiz, no solo en submenuentry).
 #
 # Uso:
-#   bash refind-check.sh          # verificacion completa (requiere sudo para /boot)
+#   bash refind-check.sh          # verificacion completa
 #   bash refind-check.sh --quiet  # solo errores (exit 1 si hay problemas)
 #
 # Ejecutado automaticamente por rebuild.sh tras cada nixos-rebuild.
@@ -14,160 +14,225 @@ set -uo pipefail
 
 CONF="/boot/EFI/refind/refind.conf"
 KERNELS_DIR="/boot/EFI/refind/kernels"
-QUIET=false
-ERRORS=0
-WARNINGS=0
-
-[[ "${1:-}" == "--quiet" ]] && QUIET=true
-
-# Helper: leer archivos de /boot via sudo
-cat_boot() { sudo cat "$1" 2>/dev/null; }
-test_boot() { sudo test "$1" 2>/dev/null; }
-ls_boot() { sudo ls "$1" 2>/dev/null; }
-
-log_ok()   { $QUIET || echo "  ✓ $1"; }
-log_warn() { echo "  ⚠ WARN: $1" >&2; ((WARNINGS++)); }
-log_fail() { echo "  ✗ FAIL: $1" >&2; ((ERRORS++)); }
 
 echo "── refind-check: verificando integridad ──"
 
-# ── 1. Verificar que refind.conf existe ──
-if ! test_boot "$CONF"; then
-  log_fail "refind.conf no existe en $CONF"
-  echo "Resultado: FAIL ($ERRORS errores, $WARNINGS warnings)"
+# Leer refind.conf via sudo (necesario para /boot)
+CONF_CONTENT="$(sudo cat "$CONF" 2>/dev/null)"
+if [ -z "$CONF_CONTENT" ]; then
+  echo "  ✗ FAIL: refind.conf no existe o sin permisos" >&2
+  echo "Resultado: FAIL"
   exit 1
 fi
-log_ok "refind.conf existe"
 
-# ── 2. Leer el perfil del sistema activo ──
-SYSTEM_PROFILE="$(readlink -f /nix/var/nix/profiles/system 2>/dev/null || true)"
-if [ -z "$SYSTEM_PROFILE" ]; then
-  log_warn "No se pudo leer perfil del sistema (/nix/var/nix/profiles/system)"
-  EXPECTED_INIT=""
-else
-  EXPECTED_INIT="${SYSTEM_PROFILE}/init"
-  log_ok "Perfil activo: $SYSTEM_PROFILE"
-fi
+echo "$CONF_CONTENT" | python3 -c "
+import re, sys, os
 
-# ── 3. Parsear refind.conf y verificar cada entrada ──
-# Variables de contexto para el menuentry actual
-CURRENT_ENTRY=""
-IN_MENUENTRY=false
+conf = sys.argv[1]
+kernels_dir = sys.argv[2]
+quiet = '--quiet' in sys.argv
 
-while IFS= read -r line || [ -n "$line" ]; do
-  # Detectar inicio de menuentry
-  if [[ "$line" =~ ^menuentry[[:space:]]+\"([^\"]+)\" ]]; then
-    CURRENT_ENTRY="${BASH_REMATCH[1]}"
-    IN_MENUENTRY=true
-    continue
-  fi
+errors = 0
+warnings = 0
 
-  # Detectar submenuentry
-  if [[ "$line" =~ ^[[:space:]]*submenuentry[[:space:]]+\"([^\"]+)\" ]]; then
-    CURRENT_ENTRY="${CURRENT_ENTRY} > ${BASH_REMATCH[1]}"
-    continue
-  fi
+def log_ok(msg):
+    if not quiet:
+        print(f'  ✓ {msg}')
 
-  # Fin de bloque (linea vacia fuera de menuentry)
-  if $IN_MENUENTRY && [[ -z "${line// /}" ]]; then
-    CURRENT_ENTRY=""
-    IN_MENUENTRY=false
-    continue
-  fi
+def log_warn(msg):
+    global warnings
+    warnings += 1
+    print(f'  ⚠ WARN: {msg}', file=sys.stderr)
 
-  # ── Verificar loader ──
-  if [[ "$line" =~ ^[[:space:]]*loader[[:space:]]+(.+)$ ]]; then
-    loader_path="${BASH_REMATCH[1]}"
-    loader_path="${loader_path%"${loader_path##*[![:space:]]}"}"  # trim trailing
-    # Convertir a ruta absoluta en el ESP
-    if [[ "$loader_path" == /* ]]; then
-      full_path="/boot${loader_path}"
-    else
-      full_path="/boot/EFI/${loader_path}"
-    fi
-    if test_boot "$full_path"; then
-      log_ok "[$CURRENT_ENTRY] loader existe: $(basename "$full_path")"
-    else
-      log_fail "[$CURRENT_ENTRY] loader NO existe: $full_path"
-    fi
-  fi
+def log_fail(msg):
+    global errors
+    errors += 1
+    print(f'  ✗ FAIL: {msg}', file=sys.stderr)
 
-  # ── Verificar initrd ──
-  if [[ "$line" =~ ^[[:space:]]*initrd[[:space:]]+(.+)$ ]]; then
-    initrd_path="${BASH_REMATCH[1]}"
-    initrd_path="${initrd_path%"${initrd_path##*[![:space:]]}"}"
-    if [[ "$initrd_path" == /* ]]; then
-      full_path="/boot${initrd_path}"
-    else
-      full_path="/boot/EFI/${initrd_path}"
-    fi
-    if test_boot "$full_path"; then
-      log_ok "[$CURRENT_ENTRY] initrd existe: $(basename "$full_path")"
-    else
-      log_fail "[$CURRENT_ENTRY] initrd NO existe: $full_path"
-    fi
-  fi
+def check_file(path):
+    return os.path.isfile(path)
 
-  # ── Verificar options (init=) ──
-  if [[ "$line" =~ ^[[:space:]]*options[[:space:]]+(.+)$ ]]; then
-    options_raw="${BASH_REMATCH[1]}"
-    # Limpiar comillas
-    options_clean="${options_raw//\"/}"
-    options_clean="${options_clean//\'/}"
+# Read system profile
+try:
+    profile = os.path.realpath('/nix/var/nix/profiles/system')
+    log_ok(f'Perfil activo: {profile}')
+except Exception:
+    log_warn('No se pudo leer perfil del sistema')
+    profile = None
 
-    # Check for corruption: > char in options
-    if [[ "$options_clean" == *">"* ]]; then
-      log_fail "[$CURRENT_ENTRY] '>' corrupto en options: $options_clean"
-    fi
+with open(conf) as f:
+    content = f.read()
 
-    # Extract init= path
-    if [[ "$options_clean" =~ init=([^[:space:]]+) ]]; then
-      init_path="${BASH_REMATCH[1]}"
-      # Verify init path length (Nix store paths are ~60+ chars)
-      if [ ${#init_path} -lt 40 ]; then
-        log_fail "[$CURRENT_ENTRY] init= path muy corto (${#init_path} chars, posible truncamiento): $init_path"
-      elif [[ "$init_path" != /nix/store/* ]]; then
-        log_fail "[$CURRENT_ENTRY] init= no apunta a /nix/store/: $init_path"
-      else
-        # Verify the store path exists (handles specialisations with different paths)
-        init_dir="$(dirname "$init_path")"
-        if [ -d "$init_dir" ] || [ -x "$init_path" ]; then
-          log_ok "[$CURRENT_ENTRY] init= path valido (${#init_path} chars)"
-        else
-          log_fail "[$CURRENT_ENTRY] init= store path no existe: $init_path"
-        fi
-      fi
-    else
-      log_fail "[$CURRENT_ENTRY] options sin init=: $options_clean"
-    fi
-  fi
+# Parse menuentry blocks
+lines = content.split('\n')
+i = 0
+while i < len(lines):
+    line = lines[i]
 
-done < <(cat_boot "$CONF")
+    # Detect menuentry
+    m = re.match(r'^menuentry\s+\"([^\"]+)\"', line)
+    if m:
+        entry_name = m.group(1)
+        # Collect entire menuentry block
+        block = [line]
+        depth = line.count('{') - line.count('}')
+        i += 1
+        while i < len(lines) and depth > 0:
+            block.append(lines[i])
+            depth += lines[i].count('{') - lines[i].count('}')
+            i += 1
 
-# ── 4. Verificar que no hay archivos huérfanos en kernels/ ──
-if ls_boot "$KERNELS_DIR" >/dev/null 2>&1; then
-  orphan_count=0
-  for f in $(ls_boot "$KERNELS_DIR"); do
-    fname="$(basename "$f")"
-    if ! sudo grep -q "$fname" "$CONF" 2>/dev/null; then
-      log_warn "Archivo huérfano en kernels/: $fname"
-      ((orphan_count++))
-    fi
-  done
-  [ $orphan_count -eq 0 ] && log_ok "Sin archivos huérfanos en kernels/"
-fi
+        # Analyze: find root-level loader/initrd/options (before first submenuentry)
+        root_loader = None
+        root_initrd = None
+        root_options = None
+        first_submenu = None
+        in_submenu = False
+        sub_depth = 0
 
-# ── Resultado ──
-echo ""
-if [ $ERRORS -gt 0 ]; then
-  echo "Resultado: FAIL ($ERRORS errores, $WARNINGS warnings)"
-  echo "⚠ refind.conf tiene problemas que pueden impedir el boot."
-  echo "Corregir ANTES de reiniciar. Usar un live USB si el sistema no arranca."
-  exit 1
-elif [ $WARNINGS -gt 0 ]; then
-  echo "Resultado: PASS con warnings ($WARNINGS warnings)"
-  exit 0
-else
-  echo "Resultado: PASS"
-  exit 0
-fi
+        for j, bline in enumerate(block):
+            if j == 0:
+                continue
+
+            # Detect submenuentry
+            sm = re.match(r'\s*submenuentry\s+\"([^\"]+)\"', bline)
+            if sm:
+                if first_submenu is None:
+                    first_submenu = j
+                in_submenu = True
+                sub_depth = bline.count('{') - bline.count('}')
+                continue
+
+            if in_submenu:
+                sub_depth += bline.count('{') - bline.count('}')
+                if sub_depth <= 0:
+                    in_submenu = False
+                continue
+
+            # Root level: check for loader/initrd/options
+            lm = re.match(r'\s*loader\s+(.+)', bline)
+            if lm:
+                root_loader = lm.group(1).strip()
+            im = re.match(r'\s*initrd\s+(.+)', bline)
+            if im:
+                root_initrd = im.group(1).strip()
+            om = re.match(r'\s*options\s+(.+)', bline)
+            if om:
+                root_options = om.group(1).strip()
+
+        # Check root-level directives
+        has_root = root_loader and root_initrd and root_options
+        if not has_root and first_submenu is not None:
+            log_fail(f'[{entry_name}] loader/initrd/options ausentes en raiz del menuentry (solo en submenuentry)')
+        elif has_root:
+            log_ok(f'[{entry_name}] loader/initrd/options en raiz del menuentry')
+
+        # Collect all loader/initrd/options from root + submenuentries
+        all_loaders = []
+        all_initrds = []
+        all_options_list = []
+
+        if root_loader:
+            all_loaders.append(('root', root_loader))
+        if root_initrd:
+            all_initrds.append(('root', root_initrd))
+        if root_options:
+            all_options_list.append(('root', root_options))
+
+        # Extract from submenuentries
+        in_submenu = False
+        sub_depth = 0
+        current_sub = None
+        for j, bline in enumerate(block):
+            if j == 0:
+                continue
+            sm = re.match(r'\s*submenuentry\s+\"([^\"]+)\"', bline)
+            if sm:
+                current_sub = sm.group(1)
+                in_submenu = True
+                sub_depth = bline.count('{') - bline.count('}')
+                continue
+            if in_submenu:
+                sub_depth += bline.count('{') - bline.count('}')
+                if sub_depth <= 0:
+                    in_submenu = False
+                lm = re.match(r'\s*loader\s+(.+)', bline)
+                if lm and current_sub:
+                    all_loaders.append((current_sub, lm.group(1).strip()))
+                im = re.match(r'\s*initrd\s+(.+)', bline)
+                if im and current_sub:
+                    all_initrds.append((current_sub, im.group(1).strip()))
+                om = re.match(r'\s*options\s+(.+)', bline)
+                if om and current_sub:
+                    all_options_list.append((current_sub, om.group(1).strip()))
+
+        # Check loader/initrd file existence
+        for where, path in all_loaders:
+            if path.startswith('/'):
+                full = '/boot' + path
+            else:
+                full = '/boot/EFI/' + path
+            tag = f'{entry_name} > {where}' if where != 'root' else entry_name
+            if check_file(full):
+                log_ok(f'[{tag}] loader: {os.path.basename(full)}')
+            else:
+                log_fail(f'[{tag}] loader NO existe: {full}')
+
+        for where, path in all_initrds:
+            if path.startswith('/'):
+                full = '/boot' + path
+            else:
+                full = '/boot/EFI/' + path
+            tag = f'{entry_name} > {where}' if where != 'root' else entry_name
+            if check_file(full):
+                log_ok(f'[{tag}] initrd: {os.path.basename(full)}')
+            else:
+                log_fail(f'[{tag}] initrd NO existe: {full}')
+
+        # Check options integrity
+        for where, opts in all_options_list:
+            clean = opts.replace('\"', '').replace(\"'\", '')
+            tag = f'{entry_name} > {where}' if where != 'root' else entry_name
+            if '>' in clean:
+                log_fail(f'[{tag}] > corrupto en options: {clean}')
+            if 'init=' in clean:
+                init_match = re.search(r'init=(\S+)', clean)
+                if init_match:
+                    init_path = init_match.group(1)
+                    if len(init_path) < 40:
+                        log_fail(f'[{tag}] init= muy corto ({len(init_path)} chars): {init_path}')
+                    elif not init_path.startswith('/nix/store/'):
+                        log_fail(f'[{tag}] init= no es /nix/store/: {init_path}')
+                    else:
+                        log_ok(f'[{tag}] init= valido ({len(init_path)} chars)')
+            else:
+                log_fail(f'[{tag}] options sin init=: {clean}')
+
+    i += 1
+
+# Check orphan files in kernels/
+if os.path.isdir(kernels_dir):
+    orphans = 0
+    for fname in os.listdir(kernels_dir):
+        if fname.startswith('.'):
+            continue
+        if fname not in content:
+            log_warn(f'Archivo huérfano en kernels/: {fname}')
+            orphans += 1
+    if orphans == 0:
+        log_ok('Sin archivos huérfanos en kernels/')
+
+# Output result
+print()
+if errors > 0:
+    print(f'Resultado: FAIL ({errors} errores, {warnings} warnings)')
+    print('⚠ refind.conf tiene problemas que pueden impedir el boot.')
+    print('Corregir ANTES de reiniciar. Usar un live USB si el sistema no arranca.')
+    sys.exit(1)
+elif warnings > 0:
+    print(f'Resultado: PASS con warnings ({warnings} warnings)')
+    sys.exit(0)
+else:
+    print('Resultado: PASS')
+    sys.exit(0)
+" "$CONF" "$KERNELS_DIR" ${1:-}

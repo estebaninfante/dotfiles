@@ -89,16 +89,100 @@ in
   '';
   boot.loader.efi.canTouchEfiVariables = true;
 
-   # Parche post-rebuild: refind-install.py genera entries SIN icon personalizado.
-   # Este script añade os_linux.png (pingüino) después de cada menuentry.
-   # NOTA: el `volume` directive causaba "Error: Not Found" en rEFInd — NO agregarlo.
-   system.activationScripts.refind-icon = {
+   # Parche post-rebuild: refind-install.py genera entries SIN icon personalizado
+   # Y SIN loader/initrd/options en la raíz del menuentry cuando hay
+   # specialisations (solo los pone dentro del submenuentry). rEFInd necesita
+   # esas directivas en la raíz para poder booteear la entrada principal.
+   # Script Python que arregla ambas cosas de forma atómica.
+   system.activationScripts.refind-fix = {
      text = ''
        conf="/boot/EFI/refind/refind.conf"
        if [ -f "$conf" ] && grep -q 'menuentry' "$conf"; then
-         if ! grep -q 'icon.*os_linux.png' "$conf"; then
-           ${pkgs.gnused}/bin/sed -i '/^menuentry /a\  icon /EFI/refind/themes/rEFInd-minimal/icons/os_linux.png' "$conf"
-         fi
+         ${pkgs.python3}/bin/python3 -c "
+       import re, sys
+
+       conf = sys.argv[1]
+       with open(conf, 'r') as f:
+           content = f.read()
+
+       # 1. Añadir icon si falta
+       if 'icon.*os_linux.png' not in content:
+           content = re.sub(
+               r'^(menuentry\s+\"[^\"]+\"\s*\{)\s*$',
+               r'\1\n  icon /EFI/refind/themes/rEFInd-minimal/icons/os_linux.png',
+               content, flags=re.MULTILINE
+           )
+
+       # 2. Para cada menuentry: si loader/initrd/options NO aparecen antes
+       #    del primer submenuentry, copiarlos desde el primer submenuentry "Default".
+       lines = content.split('\n')
+       result = []
+       i = 0
+       while i < len(lines):
+           line = lines[i]
+           result.append(line)
+
+           # Detectar menuentry
+           if re.match(r'^menuentry\s+\"', line):
+               # Recopilar lineas del bloque menuentry hasta el cierre '}'
+               menuentry_block = [line]
+               brace_depth = line.count('{') - line.count('}')
+               i += 1
+               while i < len(lines) and brace_depth > 0:
+                   menuentry_block.append(lines[i])
+                   brace_depth += lines[i].count('{') - lines[i].count('}')
+                   i += 1
+
+               # Analizar: hay loader/initrd/options en la raiz del menuentry?
+               # (antes de cualquier submenuentry)
+               has_root_loader = False
+               first_submenu_idx = None
+               first_default_block = None
+               in_submenu = False
+               sub_depth = 0
+               default_lines = []
+
+               for j, mline in enumerate(menuentry_block):
+                   if j == 0:
+                       continue  # skip menuentry line itself
+                   if re.match(r'\s*submenuentry\s+', mline):
+                       if first_submenu_idx is None:
+                           first_submenu_idx = j
+                       in_submenu = True
+                       sub_depth = mline.count('{') - mline.count('}')
+                       # Capturar bloque Default
+                       if 'Default' in mline and first_default_block is None:
+                           first_default_block = [mline]
+                       elif first_default_block is not None:
+                           first_default_block.append(mline)
+                       continue
+                   if in_submenu:
+                       sub_depth += mline.count('{') - mline.count('}')
+                       if sub_depth <= 0:
+                           in_submenu = False
+                       if first_default_block is not None:
+                           first_default_block.append(mline)
+                       continue
+                   if re.match(r'\s*(loader|initrd|options)\s+', mline):
+                       has_root_loader = True
+
+               # Si no hay loader en raiz y hay submenuentry Default, insertar
+               if not has_root_loader and first_default_block is not None and first_submenu_idx is not None:
+                   insert_lines = []
+                   for dline in first_default_block:
+                       if re.match(r'\s*(loader|initrd|options)\s+', dline):
+                           insert_lines.append(dline)
+                   # Insertar antes del primer submenuentry
+                   for j, iline in enumerate(insert_lines):
+                       menuentry_block.insert(first_submenu_idx + j, iline)
+
+               result.extend(menuentry_block)
+           else:
+               i += 1
+
+       with open(conf, 'w') as f:
+           f.write('\n'.join(result))
+       " "$conf"
        fi
      '';
      deps = [ "etc" ];
