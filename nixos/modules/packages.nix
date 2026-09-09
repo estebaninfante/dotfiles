@@ -18,6 +18,9 @@ with pkgs; [  # ── Shell & terminal ──
   vscode-fhs            # Microsoft VS Code (FHS wrap para extensiones del marketplace)
   zed-editor            # Zed — editor Rust nativo, GPU-accelerated, Agent Client Protocol
 
+  # ── Media / Graphics ──
+  mesa                  # libEGL.so.1 for MediaPipe FaceLandmarker
+
   # ── Hyprland ecosystem ──
   hyprpicker
   hypridle
