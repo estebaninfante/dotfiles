@@ -631,7 +631,7 @@ in
       StandardOutput = "append:%h/.cache/gesturecontrol.log";
       StandardError = "append:%h/.cache/gesturecontrol.log";
     };
-    Install = { };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
   };
 
   systemd.user.services.gesturecontrol-actions = {
@@ -648,7 +648,7 @@ in
       StandardOutput = "append:%h/.cache/gesturecontrol-actions.log";
       StandardError = "append:%h/.cache/gesturecontrol-actions.log";
     };
-    Install = { };
+    Install = { WantedBy = [ "graphical-session.target" ]; };
   };
 
 }
