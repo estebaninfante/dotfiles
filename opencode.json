@@ -5,13 +5,17 @@
   },
   "agent": {
     "dotfiles": {
-      "description": "Agente de dotfiles NixOS. Crea scripts, edita configs, rebuild, gestiona symlinks, llama subagentes.",
+      "description": "Agente de dotfiles NixOS. Crea scripts, edita configs, rebuild, gestiona symlinks, llama subagentes. Auto-mejora: actualiza su config, crea skills, evoluciona.",
       "mode": "primary",
       "model": "anthropic/claude-sonnet-4-6",
       "permission": {
         "bash": "allow",
         "edit": "allow",
-        "read": "allow"
+        "read": "allow",
+        "external_directory": {
+          "~/.config/opencode/**": "allow",
+          "~/dotfiles/**": "allow"
+        }
       }
     },
     "voice-use": {
