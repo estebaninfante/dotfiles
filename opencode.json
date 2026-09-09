@@ -5,12 +5,22 @@
   },
   "agent": {
     "dotfiles": {
-      "description": "Agente principal para dotfiles NixOS. Maneja computador: Hyprland, scripts, configs, rebuild, voice control, computer use.",
+      "description": "Agente de dotfiles NixOS. Crea scripts, edita configs, rebuild, gestiona symlinks, llama subagentes.",
       "mode": "primary",
       "model": "anthropic/claude-sonnet-4-6",
       "permission": {
         "bash": "allow",
         "edit": "allow",
+        "read": "allow"
+      }
+    },
+    "voice-use": {
+      "description": "Voice computer use. Handy STT + Hyprland + mouse/teclado. Uso headless.",
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-6",
+      "permission": {
+        "bash": "allow",
+        "edit": "deny",
         "read": "allow"
       }
     },
