@@ -167,7 +167,12 @@ while i < len(lines):
 
         # Check loader/initrd file existence
         for where, path in all_loaders:
-            if path.startswith('/'):
+            # rEFInd paths are relative to ESP root (/efi/...)
+            # Map to /boot/EFI/... (actual mount point)
+            path_lower = path.lower()
+            if path_lower.startswith('/efi/'):
+                full = '/boot/EFI/' + path[5:]
+            elif path.startswith('/'):
                 full = '/boot' + path
             else:
                 full = '/boot/EFI/' + path
@@ -178,7 +183,10 @@ while i < len(lines):
                 log_fail(f'[{tag}] loader NO existe: {full}')
 
         for where, path in all_initrds:
-            if path.startswith('/'):
+            path_lower = path.lower()
+            if path_lower.startswith('/efi/'):
+                full = '/boot/EFI/' + path[5:]
+            elif path.startswith('/'):
                 full = '/boot' + path
             else:
                 full = '/boot/EFI/' + path
