@@ -12,6 +12,7 @@ Card {
     property bool engineRunning: false
     property int handsDetected: 0
     property int facesDetected: 0
+    property int bodyDetected: 0
 
     cIcon: "\uf040"
     cAccent: gcCard.engineRunning ? "#a6e3a1" : "#555"
@@ -19,6 +20,7 @@ Card {
     cBig: gcCard.engineRunning ? "Activo" : "Inactivo"
     cSub: gcCard.engineRunning
         ? gcCard.handsDetected + " manos · " + gcCard.facesDetected + " caras"
+          + (gcCard.bodyDetected > 0 ? " · cuerpo" : "")
         : "Click para iniciar"
     cVal: gcCard.engineRunning ? 100 : 0
     dDel: 50
@@ -67,7 +69,7 @@ Card {
     // Poll hand/face count from SSE
     Process {
         id: gcHands
-        command: ["bash", "-c", "curl -s --max-time 2 http://127.0.0.1:7071/state 2>/dev/null | python3 -c \"import sys,json; d=json.load(sys.stdin); h=d.get('hands',{}); f=d.get('faces',[]); print(len(h),len(f))\" 2>/dev/null || echo '0 0'"]
+        command: ["bash", "-c", "curl -s --max-time 2 http://127.0.0.1:7071/state 2>/dev/null | python3 -c \"import sys,json; d=json.load(sys.stdin); c=d.get('capture',{}); h=c.get('hands',{}); f=c.get('faces',[]); b=1 if c.get('body') else 0; print(len(h),len(f),b)\" 2>/dev/null || echo '0 0 0'"]
         running: gcCard.engineRunning
         stdout: StdioCollector {
             onStreamFinished: {
@@ -75,6 +77,7 @@ Card {
                 if (parts.length >= 2) {
                     gcCard.handsDetected = parseInt(parts[0]) || 0;
                     gcCard.facesDetected = parseInt(parts[1]) || 0;
+                    gcCard.bodyDetected  = parseInt(parts[2]) || 0;
                 }
             }
         }
