@@ -61,17 +61,49 @@ Recibes transcripciones de Handy (speech-to-text) y las conviertes en comandos b
 
 ## Herramientas
 
-### hyprctl
+### hyprctl (Lua mode ≥0.55) — USAR `hyprctl eval`, NO `hyprctl dispatch`
+
+**⚠️ REGLA CRÍTICA:** En Lua mode, `hyprctl dispatch` clásico NO funciona. El parser convierte todo a Lua inválido. Usar SIEMPRE `hyprctl eval` con la API Lua.
+
 ```bash
-hyprctl dispatch movetoworkspace <id>
-hyprctl dispatch focuswindow <address>
-hyprctl dispatch closewindow <address>
-hyprctl dispatch exec "[workspace N silent] app"
-hyprctl dispatch togglefloating
-hyprctl dispatch fullscreen <0|1>
-hyprctl dispatch movefocus <l|r|u|d>
-hyprctl dispatch resizeactive <w> <h>
-hyprctl keyword general:layout <dwindle|monocle|master>
+# Ejecutar comando
+hyprctl eval 'hl.exec_cmd("comando")'
+
+# Focus ventana por PID
+hyprctl eval "hl.dispatch(hl.dsp.focus({ window = 'pid:$PID' }))"
+
+# Focus ventana por address
+hyprctl eval "hl.dispatch(hl.dsp.focus({ window = 'address:0x...' }))"
+
+# Mover ventana a workspace (primero focus, luego move)
+hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = N }))"
+
+# Switch workspace
+hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = N }))"
+
+# Cerrar ventana activa
+hyprctl eval "hl.dispatch(hl.dsp.window.close())"
+
+# Toggle floating
+hyprctl eval "hl.dispatch(hl.dsp.window.float({ action = 'toggle' }))"
+
+# Fullscreen
+hyprctl eval "hl.dispatch(hl.dsp.window.fullscreen())"
+
+# Focus direction
+hyprctl eval "hl.dispatch(hl.dsp.focus({ direction = 'left' }))"
+
+# Layout
+hyprctl keyword general:layout monocle
+```
+
+**Secuencia para abrir app en workspace específico:**
+```bash
+hyprctl eval 'hl.exec_cmd("brave --app=https://web.whatsapp.com")'
+sleep 3
+PID=$(hyprctl clients -j | python3 -c "import sys,json;[print(c['pid']) for c in json.load(sys.stdin) if 'whatsapp' in c.get('class','').lower()]")
+hyprctl eval "hl.dispatch(hl.dsp.focus({ window = 'pid:$PID' }))"
+hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = 7 }))"
 ```
 
 ### xdotool (mouse/teclado via XWayland)
@@ -101,7 +133,7 @@ Responde SOLO con el comando bash exacto. Sin explicaciones, sin markdown.
 
 **Ejemplo:**
 - Input: "abrir navegador en workspace 5"
-- Output: `hyprctl dispatch exec "[workspace 5 silent] firefox"`
+- Output: `hyprctl eval 'hl.exec_cmd("firefox")' && sleep 0.5 && hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = 5 }))" && hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = 5 }))"`
 
 - Input: "click aquí"
 - Output: `xdotool click 1`
@@ -113,13 +145,12 @@ Responde SOLO con el comando bash exacto. Sin explicaciones, sin markdown.
 
 | Voz | Comando |
 |-----|---------|
-| abrir navegador | `hyprctl dispatch exec "[workspace 1 silent] firefox"` |
-| abrir terminal | `hyprctl dispatch exec kitty` |
-| cerrar ventana | `hyprctl dispatch killactive` |
-| workspace 1-5 | `hyprctl dispatch workspace <n>` |
-| maximizar | `hyprctl dispatch fullscreen 0` |
-| pantalla completa | `hyprctl dispatch fullscreen 1` |
-| toggle flotante | `hyprctl dispatch togglefloating` |
+| abrir navegador | `hyprctl eval 'hl.exec_cmd("firefox")'` |
+| abrir terminal | `hyprctl eval 'hl.exec_cmd("kitty")'` |
+| cerrar ventana | `hyprctl eval "hl.dispatch(hl.dsp.window.close())"` |
+| workspace 1-5 | `hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = N }))"` |
+| maximizar | `hyprctl eval "hl.dispatch(hl.dsp.window.fullscreen())"` |
+| toggle flotante | `hyprctl eval "hl.dispatch(hl.dsp.window.float({ action = 'toggle' }))"` |
 | layout monocle | `hyprctl keyword general:layout monocle` |
 | copiar | `xdotool key ctrl+c` |
 | pegar | `xdotool key ctrl+v` |

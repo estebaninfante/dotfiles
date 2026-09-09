@@ -56,7 +56,7 @@ allScripts = [
     "gamepad-watch.sh" "hypr-input-bridge.sh"
     "qs-launcher.sh" "apps-list.sh" "file-list.sh" "script-list.sh"
     "scroll-momentum.py" "phoenix.sh"
-    "refind-check.sh"
+    "refind-check.sh" "hypr-lua.sh"
   ];
   # Solo laptop
   laptopScripts = [
