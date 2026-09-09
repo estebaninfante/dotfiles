@@ -43,6 +43,8 @@ signal = "mode_pc"
 action = { type = "exec", cmd = ["/home/eztvn/.local/share/gesturecontrol/gesturecontrol-mode", "pc"] }
 
 # ── Handy: dictado/post-process con un gesto ─────────────────────────────────
+# handy-toggle.sh toggles Handy AND mirrors on/off to a state file so
+# Quickshell's VoiceHalo can show live feedback.
 [[bindings]]
 signal = "handy_toggle"
-action = { type = "exec", cmd = ["handy", "--toggle-post-process"] }
+action = { type = "exec", cmd = ["/home/eztvn/dotfiles/linux/bin/handy-toggle.sh"] }

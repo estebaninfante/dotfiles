@@ -12,10 +12,12 @@ Item {
     property string lastTranscript: ""
     property int patternCount: 0
 
-    // Check Handy status
+    // Check Handy dictation state.
+    // Handy itself never exposes its recording state; the handy_toggle gesture
+    // mirrors on/off to ~/.local/state/voice/handy-active, which we poll here.
     Process {
         id: handyCheck
-        command: ["bash", "-c", "pgrep -x handy >/dev/null && echo 'running' || echo 'stopped'"]
+        command: ["bash", "-c", "test -f \"$HOME/.local/state/voice/handy-active\" && echo 'running' || echo 'stopped'"]
         running: true
         stdout: StdioCollector {
             onStreamFinished: {

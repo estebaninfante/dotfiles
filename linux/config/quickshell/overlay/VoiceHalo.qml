@@ -5,47 +5,57 @@ import QtQuick
 import "../config"
 import "../services"
 
+// Halo de feedback para el dictado de Handy.
+//
+// Posicionamiento: Quickshell's PanelWindow `anchors` SOLO soporta
+// left/right/top/bottom (no existe `horizontalCenter` a nivel de panel), así
+// que para centrar el halo la ventana ocupa la franja inferior completa y el
+// pill se centra dentro con un `anchors.horizontalCenter` de hijo.
 PanelWindow {
     id: voiceHalo
     visible: VoiceService.handyRunning || VoiceService.loopActive
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
+    focusable: false
     WlrLayershell.layer: WlrLayer.Overlay
 
-    property int posX: 0
-    property int posY: 0
-
-    implicitWidth: 280
     implicitHeight: 80
-
-    anchors.bottom: true
-    anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+    anchors {
+        bottom: true
+        left: true
+        right: true
+    }
     margins {
-        bottom: 60
+        bottom: 48
     }
 
     Rectangle {
         id: haloBody
-        anchors.fill: parent
+        width: 280
+        height: 80
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
         radius: 40
         color: "#e60d0d12"
         border.color: VoiceService.handyRunning ? "#a6e3a1" : "#89b4fa"
         border.width: 2
 
-        // Glow effect when recording
+        // Glow effect when recording (pulses only while Handy listens)
+        property real glowOpacity: 0.3
+
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
             color: "transparent"
             border.color: VoiceService.handyRunning ? "#40a6e3a1" : "#4089b4fa"
             border.width: 4
-            opacity: pulseAnim.value
+            opacity: haloBody.glowOpacity
         }
 
         PropertyAnimation {
             id: pulseAnim
-            target: pulseAnim
-            property: "value"
+            target: haloBody
+            property: "glowOpacity"
             from: 0.3
             to: 1.0
             duration: 1000
@@ -80,7 +90,7 @@ PanelWindow {
                 spacing: 2
 
                 Text {
-                    text: VoiceService.handyRunning ? "ESCUCHANDO" : "LOOP ACTIVO"
+                    text: VoiceService.handyRunning ? "ESCUCHANDO" : "LISTO"
                     color: VoiceService.handyRunning ? "#a6e3a1" : "#89b4fa"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 11
@@ -100,65 +110,21 @@ PanelWindow {
             }
         }
 
-        // Close button
-        Rectangle {
-            width: 24
-            height: 24
-            radius: 12
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 8
-            color: closeArea.containsMouse ? "#f38ba8" : "transparent"
-
-            Text {
-                anchors.centerIn: parent
-                text: "\uf00d"
-                color: closeArea.containsMouse ? "#000000" : "#f38ba8"
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 10
-            }
-
-            MouseArea {
-                id: closeArea
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: {
-                    if (VoiceService.loopActive) {
-                        loopStopProc.running = false;
-                        loopStopProc.running = true;
-                    }
-                }
-            }
-        }
-
-        // Click to toggle
+        // Click en el halo: alterna el dictado (igual que el gesto de pulgar).
         MouseArea {
             anchors.fill: parent
             anchors.margins: 8
             onClicked: {
-                if (VoiceService.loopActive) {
-                    loopStopProc.running = false;
-                    loopStopProc.running = true;
-                } else {
-                    loopStartProc.running = false;
-                    loopStartProc.running = true;
-                }
+                toggleProc.running = false;
+                toggleProc.running = true;
             }
         }
     }
 
+    // Alterna Handy del mismo modo que el gesto (mantiene el mirror file).
     Process {
-        id: loopStartProc
-        command: ["bash", "-c", "~/.local/bin/voice-loop.sh start"]
+        id: toggleProc
+        command: ["bash", "-c", "/home/eztvn/dotfiles/linux/bin/handy-toggle.sh"]
         running: false
     }
-
-    Process {
-        id: loopStopProc
-        command: ["bash", "-c", "~/.local/bin/voice-loop.sh stop"]
-        running: false
-    }
-
-    Behavior on implicitWidth { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-    Behavior on implicitHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 }
