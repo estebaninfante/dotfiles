@@ -28,8 +28,7 @@ fi
 echo "$CONF_CONTENT" | python3 -c "
 import re, sys, os
 
-conf = sys.argv[1]
-kernels_dir = sys.argv[2]
+kernels_dir = sys.argv[1]
 quiet = '--quiet' in sys.argv
 
 errors = 0
@@ -60,8 +59,8 @@ except Exception:
     log_warn('No se pudo leer perfil del sistema')
     profile = None
 
-with open(conf) as f:
-    content = f.read()
+# Content comes from stdin (piped via sudo cat)
+content = sys.stdin.read()
 
 # Parse menuentry blocks
 lines = content.split('\n')
@@ -235,4 +234,4 @@ elif warnings > 0:
 else:
     print('Resultado: PASS')
     sys.exit(0)
-" "$CONF" "$KERNELS_DIR" ${1:-}
+" "$KERNELS_DIR" ${1:-}
