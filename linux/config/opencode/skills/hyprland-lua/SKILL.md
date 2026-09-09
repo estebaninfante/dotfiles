@@ -5,6 +5,13 @@ description: Guide for configuring Hyprland in Lua mode (≥0.55). Covers migrat
 
 # Hyprland Lua Skill
 
+## Version & Reference
+- **Hyprland version**: 0.56.1 (Lua config stable since 0.55)
+- **Config path**: `~/.config/hypr/hyprland.lua`
+- **Wiki**: https://wiki.hypr.land/Configuring/Start/
+- **Lua utilities reference**: https://wiki.hypr.land/configuring/core/advanced-configuration/lua-utilities/
+- **Official example config**: https://github.com/hyprwm/Hyprland/blob/main/example/hyprland.lua
+
 ## Migration (hyprlang -> Lua)
 - Since Hyprland 0.55, hyprlang deprecated in favor of Lua config: `$XDG_CONFIG_HOME/hypr/hyprland.lua`.
 - Use `hl.config(section.key)` for value expansion instead of `${section:key}`.
@@ -173,6 +180,6 @@ hl.bind("XF86MonBrightnessDown",hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%-")
 - Use `hl.dsp.window.float(...)` for advanced dispatching.
 
 ## References
-- https://wiki.hypr.land/0.55.0/Configuring/Start
-- https://wiki.hypr.land/configuring/core/advanced-configuration/lua-utilities/
-- https://github.com/hyprwm/Hyprland/blob/main/example/hyprland.lua
+- Wiki (Start): https://wiki.hypr.land/Configuring/Start/
+- Wiki (Lua utilities): https://wiki.hypr.land/configuring/core/advanced-configuration/lua-utilities/
+- Official example config: https://github.com/hyprwm/Hyprland/blob/main/example/hyprland.lua
