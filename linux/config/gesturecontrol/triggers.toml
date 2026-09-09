@@ -1,5 +1,5 @@
 [settings]
-camera = 2
+camera = 0
 dwell_ms = 200
 format = "GREY"
 
