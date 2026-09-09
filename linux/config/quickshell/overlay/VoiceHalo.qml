@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Io
 import QtQuick
 import "../config"
 import "../services"
@@ -17,10 +18,8 @@ PanelWindow {
     implicitWidth: 280
     implicitHeight: 80
 
-    anchors {
-        bottom: true
-        horizontalCenter: true
-    }
+    anchors.bottom: true
+    anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
     margins {
         bottom: 60
     }

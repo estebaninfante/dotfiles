@@ -51,5 +51,5 @@ PanelWindow {
     PomodoroPill { }
     PomodoroBreakOverlay { }
     EyeCareOverlay { }
-    VoiceHalo { }
+    // VoiceHalo { }  // Deshabilitado: su posicionamiento no es compatible con PanelWindow (anchors.horizontalCenter no existe en un panel top-level). Arreglar antes de re-activar.
 }
