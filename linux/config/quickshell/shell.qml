@@ -51,5 +51,5 @@ PanelWindow {
     PomodoroPill { }
     PomodoroBreakOverlay { }
     EyeCareOverlay { }
-    VoiceHalo { }
+    // VoiceHalo está deshabilitado de propósito (feedback de dictado no deseado).
 }
