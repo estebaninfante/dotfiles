@@ -200,7 +200,11 @@ with pkgs; [  # ── Shell & terminal ──
     pip
     evdev                  # python3-evdev
     openinference-instrumentation-openai
+    dbus-python            # gesturecontrol: D-Bus IPC
+    pygobject3             # gesturecontrol: GTK/GLib bindings
+    pycairo                # gesturecontrol: dependencia de pygobject3
   ]))
+  v4l-utils                # gesturecontrol: nombre de dispositivos camara en config UI
   rustc
   cargo
   go
