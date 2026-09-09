@@ -61,49 +61,42 @@ Recibes transcripciones de Handy (speech-to-text) y las conviertes en comandos b
 
 ## Herramientas
 
-### hyprctl (Lua mode ≥0.55) — USAR `hyprctl eval`, NO `hyprctl dispatch`
+### hypr-lua.sh (Hyprland Lua mode ≥0.55)
 
-**⚠️ REGLA CRÍTICA:** En Lua mode, `hyprctl dispatch` clásico NO funciona. El parser convierte todo a Lua inválido. Usar SIEMPRE `hyprctl eval` con la API Lua.
+**⚠️ REGLA CRÍTICA:** En Lua mode, `hyprctl dispatch` clásico NO funciona. Usar SIEMPRE `hypr-lua.sh` (wrapper en `~/.local/bin/`). NUNCA construir `hyprctl eval` directamente — el quoting rompe.
 
 ```bash
 # Ejecutar comando
-hyprctl eval 'hl.exec_cmd("comando")'
+hypr-lua.sh exec "comando"
 
-# Focus ventana por PID
-hyprctl eval "hl.dispatch(hl.dsp.focus({ window = 'pid:$PID' }))"
+# Abrir app en workspace específico
+hypr-lua.sh open-in-workspace "brave --app=https://web.whatsapp.com" 7 brave
 
-# Focus ventana por address
-hyprctl eval "hl.dispatch(hl.dsp.focus({ window = 'address:0x...' }))"
+# Cambiar workspace
+hypr-lua.sh workspace 7
 
-# Mover ventana a workspace (primero focus, luego move)
-hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = N }))"
+# Mover ventana activa a workspace
+hypr-lua.sh move 7
 
-# Switch workspace
-hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = N }))"
+# Focus por dirección
+hypr-lua.sh focus left
 
-# Cerrar ventana activa
-hyprctl eval "hl.dispatch(hl.dsp.window.close())"
+# Cerrar ventana
+hypr-lua.sh close
 
-# Toggle floating
-hyprctl eval "hl.dispatch(hl.dsp.window.float({ action = 'toggle' }))"
+# Fullscreen / float
+hypr-lua.sh fullscreen
+hypr-lua.sh float
 
-# Fullscreen
-hyprctl eval "hl.dispatch(hl.dsp.window.fullscreen())"
+# Focus por PID o address
+hypr-lua.sh focus-pid 12345
+hypr-lua.sh focus-address 0x5a71878698a0
 
-# Focus direction
-hyprctl eval "hl.dispatch(hl.dsp.focus({ direction = 'left' }))"
+# Listar ventanas ( filtrar por class)
+hypr-lua.sh clients whatsapp
 
 # Layout
 hyprctl keyword general:layout monocle
-```
-
-**Secuencia para abrir app en workspace específico:**
-```bash
-hyprctl eval 'hl.exec_cmd("brave --app=https://web.whatsapp.com")'
-sleep 3
-PID=$(hyprctl clients -j | python3 -c "import sys,json;[print(c['pid']) for c in json.load(sys.stdin) if 'whatsapp' in c.get('class','').lower()]")
-hyprctl eval "hl.dispatch(hl.dsp.focus({ window = 'pid:$PID' }))"
-hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = 7 }))"
 ```
 
 ### xdotool (mouse/teclado via XWayland)
@@ -133,7 +126,7 @@ Responde SOLO con el comando bash exacto. Sin explicaciones, sin markdown.
 
 **Ejemplo:**
 - Input: "abrir navegador en workspace 5"
-- Output: `hyprctl eval 'hl.exec_cmd("firefox")' && sleep 0.5 && hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = 5 }))" && hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = 5 }))"`
+- Output: `hypr-lua.sh exec "firefox" && sleep 0.5 && hypr-lua.sh workspace 5 && hypr-lua.sh move 5`
 
 - Input: "click aquí"
 - Output: `xdotool click 1`
@@ -145,12 +138,12 @@ Responde SOLO con el comando bash exacto. Sin explicaciones, sin markdown.
 
 | Voz | Comando |
 |-----|---------|
-| abrir navegador | `hyprctl eval 'hl.exec_cmd("firefox")'` |
-| abrir terminal | `hyprctl eval 'hl.exec_cmd("kitty")'` |
-| cerrar ventana | `hyprctl eval "hl.dispatch(hl.dsp.window.close())"` |
-| workspace 1-5 | `hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = N }))"` |
-| maximizar | `hyprctl eval "hl.dispatch(hl.dsp.window.fullscreen())"` |
-| toggle flotante | `hyprctl eval "hl.dispatch(hl.dsp.window.float({ action = 'toggle' }))"` |
+| abrir navegador | `hypr-lua.sh exec "firefox"` |
+| abrir terminal | `hypr-lua.sh exec "kitty"` |
+| cerrar ventana | `hypr-lua.sh close` |
+| workspace 1-5 | `hypr-lua.sh workspace N` |
+| maximizar | `hypr-lua.sh fullscreen` |
+| toggle flotante | `hypr-lua.sh float` |
 | layout monocle | `hyprctl keyword general:layout monocle` |
 | copiar | `xdotool key ctrl+c` |
 | pegar | `xdotool key ctrl+v` |

@@ -1,9 +1,60 @@
 ---
 name: hyprland-lua
-description: Guide for configuring Hyprland in Lua mode (≥0.55). Covers migration from hyprlang, Lua core configuration via hl module, bind dispatchers, dynamic rules, timers, and advanced event hooks.
+description: Control Hyprland from CLI and configure Lua mode (≥0.55). Use hypr-lua.sh wrapper for all hyprctl commands. Covers dispatchers, workspace management, window focus/move, and Lua config migration.
 ---
 
 # Hyprland Lua Skill
+
+## CLI Control (hypr-lua.sh)
+
+**NUNCA** usar `hyprctl dispatch exec "[workspace N] cmd"` — syntax clásica MUERTA en Lua mode.
+
+**SIEMPRE** usar `hypr-lua.sh` (~/.local/bin/):
+
+```bash
+# Abrir app en workspace específico
+hypr-lua.sh open-in-workspace "brave --app=https://web.whatsapp.com" 7 brave
+
+# Ejecutar comando
+hypr-lua.sh exec "kitty"
+
+# Cambiar workspace
+hypr-lua.sh workspace 7
+
+# Mover ventana activa a workspace
+hypr-lua.sh move 7
+
+# Focus por dirección
+hypr-lua.sh focus left
+
+# Cerrar ventana
+hypr-lua.sh close
+
+# Fullscreen / float
+hypr-lua.sh fullscreen
+hypr-lua.sh float
+
+# Focus por PID o address
+hypr-lua.sh focus-pid 12345
+hypr-lua.sh focus-address 0x5a71878698a0
+
+# Listar ventanas ( filtrar por class)
+hypr-lua.sh clients whatsapp
+```
+
+### Secuencia óptima para "abrir app en workspace N"
+
+```bash
+# 1. Ejecutar app
+hypr-lua.sh exec "brave --app=https://web.whatsapp.com"
+# 2. Esperar que aparezca
+sleep 2
+# 3. Buscar ventana por class
+hypr-lua.sh clients whatsapp
+# 4. Focus + mover (usar PID o address del paso 3)
+hypr-lua.sh focus-pid <PID>
+hypr-lua.sh move 7
+```
 
 ## Version & Reference
 - **Hyprland version**: 0.56.1 (Lua config stable since 0.55)
