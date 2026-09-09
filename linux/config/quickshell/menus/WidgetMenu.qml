@@ -153,6 +153,7 @@ PopupWindow {
                 BattCard { id: battCard }
                 GpuCard { id: gpuCard }
                 AudioCard { id: audioCard }
+                GestureControlCard { id: gestureControlCard }
                 CpuCard { id: cpuCard }
                 SystemCard { id: systemCard }
                 ScreenCard { id: screenCard }
