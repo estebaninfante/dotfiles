@@ -105,22 +105,11 @@ in
        with open(conf, 'r') as f:
            content = f.read()
 
-       # 1. Añadir icon si falta
-       if 'icon.*os_linux.png' not in content:
-           content = re.sub(
-               r'^(menuentry\s+\"[^\"]+\"\s*\{)\s*$',
-               r'\1\n  icon /EFI/refind/themes/rEFInd-minimal/icons/os_linux.png',
-               content, flags=re.MULTILINE
-           )
-
-       # 2. Para cada menuentry: si loader/initrd/options NO aparecen antes
-       #    del primer submenuentry, copiarlos desde el primer submenuentry "Default".
        lines = content.split('\n')
        result = []
        i = 0
        while i < len(lines):
            line = lines[i]
-           result.append(line)
 
            # Detectar menuentry
            if re.match(r'^menuentry\s+\"', line):
@@ -133,51 +122,61 @@ in
                    brace_depth += lines[i].count('{') - lines[i].count('}')
                    i += 1
 
-               # Analizar: hay loader/initrd/options en la raiz del menuentry?
-               # (antes de cualquier submenuentry)
+               # Analizar bloque
+               has_icon = False
                has_root_loader = False
                first_submenu_idx = None
-               first_default_block = None
+               default_loader_lines = []
                in_submenu = False
                sub_depth = 0
-               default_lines = []
+               in_default = False
+               default_name = None
 
                for j, mline in enumerate(menuentry_block):
                    if j == 0:
-                       continue  # skip menuentry line itself
-                   if re.match(r'\s*submenuentry\s+', mline):
+                       continue
+                   # Check for icon
+                   if 'icon' in mline and 'os_linux.png' in mline:
+                       has_icon = True
+                   # Detectar submenuentry
+                   sm = re.match(r'\s*submenuentry\s+\"([^\"]+)\"', mline)
+                   if sm:
                        if first_submenu_idx is None:
                            first_submenu_idx = j
                        in_submenu = True
                        sub_depth = mline.count('{') - mline.count('}')
-                       # Capturar bloque Default
-                       if 'Default' in mline and first_default_block is None:
-                           first_default_block = [mline]
-                       elif first_default_block is not None:
-                           first_default_block.append(mline)
+                       default_name = sm.group(1)
+                       if sm.group(1) == 'Default':
+                           in_default = True
                        continue
                    if in_submenu:
                        sub_depth += mline.count('{') - mline.count('}')
                        if sub_depth <= 0:
                            in_submenu = False
-                       if first_default_block is not None:
-                           first_default_block.append(mline)
+                           in_default = False
+                       if in_default:
+                           lm = re.match(r'\s*loader\s+', mline)
+                           im = re.match(r'\s*initrd\s+', mline)
+                           om = re.match(r'\s*options\s+', mline)
+                           if lm or im or om:
+                               default_loader_lines.append(mline)
                        continue
+                   # Root level
                    if re.match(r'\s*(loader|initrd|options)\s+', mline):
                        has_root_loader = True
 
-               # Si no hay loader en raiz y hay submenuentry Default, insertar
-               if not has_root_loader and first_default_block is not None and first_submenu_idx is not None:
-                   insert_lines = []
-                   for dline in first_default_block:
-                       if re.match(r'\s*(loader|initrd|options)\s+', dline):
-                           insert_lines.append(dline)
-                   # Insertar antes del primer submenuentry
-                   for j, iline in enumerate(insert_lines):
-                       menuentry_block.insert(first_submenu_idx + j, iline)
+               # 1. Agregar icon si falta
+               if not has_icon:
+                   menuentry_block.insert(1, '  icon /EFI/refind/themes/rEFInd-minimal/icons/os_linux.png')
+
+               # 2. Si no hay loader en raiz y hay submenuentry Default, copiar
+               if not has_root_loader and default_loader_lines and first_submenu_idx is not None:
+                   for j, dline in enumerate(default_loader_lines):
+                       menuentry_block.insert(first_submenu_idx + j, dline)
 
                result.extend(menuentry_block)
            else:
+               result.append(line)
                i += 1
 
        with open(conf, 'w') as f:
