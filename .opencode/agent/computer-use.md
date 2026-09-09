@@ -1,7 +1,7 @@
 ---
 description: Agente de computer use. Handy STT + Hyprland + mouse/teclado. Uso headless: Traduce voz a acciones de escritorio. Auto-mejora: actualiza su config, crea skills, evoluciona.
 mode: primary
-model: openrouter/muse-spark-1.2-free
+model: opencode/muse-spark-1.2-contributor-free
 permission:
   bash: allow
   edit: allow
