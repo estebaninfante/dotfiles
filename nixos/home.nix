@@ -615,6 +615,10 @@ in
   # Engine: webcam + MediaPipe ONNX → señales D-Bus (pose/swipe/continuous/etc)
   # Actions: escucha D-Bus → ejecuta comandos/hyprctl/wpctl/etc
   # Config: ~/.config/gesturecontrol/ (triggers.toml + actions.toml)
+  # MediaPipe necesita el cargador `libEGL.so.1` (libglvnd) al cargarse, aunque
+  # corra en CPU. Sin LD_LIBRARY_PATH falla con `OSError: libEGL.so.1: cannot
+  # open shared object file` → el servicio entra en bucle de reinicio y spamea
+  # la notificación de GPU/CUDA. `libglvnd`/`mesa` ya están en systemPackages.
   systemd.user.services.gesturecontrol-engine = {
     Unit = {
       Description = "Gesture control engine (webcam → D-Bus signals)";
@@ -624,7 +628,7 @@ in
     };
     Service = {
       Type = "simple";
-      Environment = [ "PYTHONUNBUFFERED=1" ];
+      Environment = [ "PYTHONUNBUFFERED=1" "LD_LIBRARY_PATH=${pkgs.libglvnd}/lib" ];
       ExecStart = "${bin}/gesturecontrol-engine";
       Restart = "on-failure";
       RestartSec = "5";
