@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# gesturecontrol-config — wrapper for gestureControl-config.py (Flask UI)
+exec ~/.local/share/gesturecontrol/venv/bin/python3 \
+  ~/.local/share/gesturecontrol/gestureControl-config.py "$@"

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# gesturecontrol-tray — wrapper for gestureControl-tray.py (GTK tray icon)
+exec ~/.local/share/gesturecontrol/venv/bin/python3 \
+  ~/.local/share/gesturecontrol/gestureControl-tray.py "$@"

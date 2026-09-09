@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# gesturecontrol-actions — wrapper for gestureControl-actions.py daemon
+exec ~/.local/share/gesturecontrol/venv/bin/python3 \
+  ~/.local/share/gesturecontrol/gestureControl-actions.py "$@"

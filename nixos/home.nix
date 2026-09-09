@@ -32,7 +32,7 @@ let
   configDirs = [
     "waybar" "kitty" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
-    "quickshell" "tmux" "voice"
+    "quickshell" "tmux" "voice" "gesturecontrol"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -57,6 +57,7 @@ allScripts = [
     "qs-launcher.sh" "apps-list.sh" "file-list.sh" "script-list.sh"
     "scroll-momentum.py" "phoenix.sh"
     "refind-check.sh" "hypr-lua.sh"
+    "gesturecontrol-engine" "gesturecontrol-actions" "gesturecontrol-config" "gesturecontrol-tray"
   ];
   # Solo laptop
   laptopScripts = [
@@ -608,6 +609,46 @@ in
       Environment = [ "XDG_RUNTIME_DIR=/run/user/%U" ];
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # ── gesturecontrol: hand tracking → D-Bus → acciones ──────────
+  # Engine: webcam + MediaPipe ONNX → señales D-Bus (pose/swipe/continuous/etc)
+  # Actions: escucha D-Bus → ejecuta comandos/hyprctl/wpctl/etc
+  # Config: ~/.config/gesturecontrol/ (triggers.toml + actions.toml)
+  systemd.user.services.gesturecontrol-engine = {
+    Unit = {
+      Description = "Gesture control engine (webcam → D-Bus signals)";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+      Wants = [ "gesturecontrol-actions.service" ];
+    };
+    Service = {
+      Type = "simple";
+      Environment = [ "PYTHONUNBUFFERED=1" ];
+      ExecStart = "${bin}/gesturecontrol-engine";
+      Restart = "on-failure";
+      RestartSec = "5";
+      StandardOutput = "append:%h/.cache/gesturecontrol.log";
+      StandardError = "append:%h/.cache/gesturecontrol.log";
+    };
+    Install = { };
+  };
+
+  systemd.user.services.gesturecontrol-actions = {
+    Unit = {
+      Description = "Gesture control actions (D-Bus → commands)";
+      After = [ "graphical-session.target" "gesturecontrol-engine.service" ];
+    };
+    Service = {
+      Type = "simple";
+      Environment = [ "PYTHONUNBUFFERED=1" ];
+      ExecStart = "${bin}/gesturecontrol-actions";
+      Restart = "on-failure";
+      RestartSec = "5";
+      StandardOutput = "append:%h/.cache/gesturecontrol-actions.log";
+      StandardError = "append:%h/.cache/gesturecontrol-actions.log";
+    };
+    Install = { };
   };
 
 }

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# gesturecontrol-engine — wrapper for gestureControl.py engine
+exec ~/.local/share/gesturecontrol/venv/bin/python3 \
+  ~/.local/share/gesturecontrol/gestureControl.py "$@"
