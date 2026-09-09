@@ -23,3 +23,12 @@ action = { type = "key", key = "shift+h" }
 # signal = "set_volume"
 # action = { type = "exec", cmd = ["playerctl", "set-volume", "{value}"] }
 # onEnd = { type = "exec", cmd = ["notify-send", "Volume control ended"] }
+
+# ── Workspaces Hyprland (swipe) ──────────────────────────────────────────────
+[[bindings]]
+signal = "workspace_next"
+action = { type = "exec", cmd = ["hyprctl", "dispatch", 'hl.dsp.focus({ workspace = "e+1" })'] }
+
+[[bindings]]
+signal = "workspace_prev"
+action = { type = "exec", cmd = ["hyprctl", "dispatch", 'hl.dsp.focus({ workspace = "e-1" })'] }
