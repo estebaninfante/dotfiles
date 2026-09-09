@@ -1,4 +1,5 @@
 [settings]
+body_enabled = false
 onnx_threads = 8
 fps = 30
 face_every = 1
