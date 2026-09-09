@@ -5,6 +5,7 @@
 # y provee subcomandos para interactuar con páginas web programáticamente.
 #
 # Uso:
+#   brave-cdp.sh restart [url]              # relanzar Brave con CDP
 #   brave-cdp.sh tabs                         # listar pestañas
 #   brave-cdp.sh open <url>                   # nueva pestaña
 #   brave-cdp.sh focus <index>                # enfocar pestaña por índice
@@ -84,29 +85,38 @@ get_tabs() {
 
 # ── Lanzar Brave con CDP si no está corriendo ──
 ensure_brave() {
-  if ! curl -s "http://${CDP_HOST}:${CDP_PORT}/json" >/dev/null 2>&1; then
-    echo "Iniciando Brave con CDP en puerto $CDP_PORT..." >&2
-    "$BRAVE_PROC" \
-      --remote-debugging-port="$CDP_PORT" \
-      --no-first-run \
-      --disable-default-apps \
-      --disable-popup-blocking \
-      --disable-translate \
-      --disable-background-timer-throttling \
-      --disable-backgrounding-occluded-windows \
-      --disable-renderer-backgrounding \
-      "$@" &>/dev/null &
-    # Esperar a que CDP esté listo
-    for i in $(seq 1 20); do
-      sleep 0.5
-      if curl -s "http://${CDP_HOST}:${CDP_PORT}/json" >/dev/null 2>&1; then
-        echo "Brave CDP listo." >&2
-        return 0
-      fi
-    done
-    echo "ERROR: Brave no respondió en CDP tras ${STARTUP_DELAY}s" >&2
-    return 1
+  if curl -s "http://${CDP_HOST}:${CDP_PORT}/json" >/dev/null 2>&1; then
+    return 0  # CDP ya activo
   fi
+
+  # Brave corriendo pero sin CDP — no se puede habilitar sin reiniciar
+  if pgrep -f "brave" >/dev/null 2>&1; then
+    echo "WARNING: Brave corriendo SIN CDP (--remote-debugging-port)." >&2
+    echo "Para habilitar CDP: brave-cdp.sh restart" >&2
+    echo "Iniciando nueva instancia con CDP (la actual sigue sin CDP)..." >&2
+  fi
+
+  echo "Iniciando Brave con CDP en puerto $CDP_PORT..." >&2
+  "$BRAVE_PROC" \
+    --remote-debugging-port="$CDP_PORT" \
+    --no-first-run \
+    --disable-default-apps \
+    --disable-popup-blocking \
+    --disable-translate \
+    --disable-background-timer-throttling \
+    --disable-backgrounding-occluded-windows \
+    --disable-renderer-backgrounding \
+    "$@" &>/dev/null &
+  # Esperar a que CDP esté listo
+  for i in $(seq 1 20); do
+    sleep 0.5
+    if curl -s "http://${CDP_HOST}:${CDP_PORT}/json" >/dev/null 2>&1; then
+      echo "Brave CDP listo." >&2
+      return 0
+    fi
+  done
+  echo "ERROR: Brave no respondió en CDP tras 10s" >&2
+  return 1
 }
 
 # ── Subcomandos ──
@@ -365,6 +375,13 @@ for i, t in enumerate(tabs):
 # ── Main ──
 
 case "${1:-help}" in
+  restart)
+    echo "Cerrando Brave..." >&2
+    pkill -f "brave" 2>/dev/null
+    sleep 2
+    echo "Relanzando Brave con CDP..." >&2
+    exec bash "$0" open "${2:-https://newtab.com}"
+    ;;
   tabs)       shift; cmd_tabs "$@";;
   open)       shift; cmd_open "$@";;
   focus)      shift; cmd_focus "$@";;
@@ -384,27 +401,30 @@ brave-cdp.sh — Control Brave via Chrome DevTools Protocol
 Requiere: python3, websockets (Python), curl
 
 Uso:
-  brave-cdp.sh tabs                          Listar pestañas abiertas
-  brave-cdp.sh open <url>                    Abrir URL en nueva pestaña
-  brave-cdp.sh focus <index>                 Enfocar pestaña (índice 0-based)
-  brave-cdp.sh navigate <index> <url>        Navegar pestaña existente
-  brave-cdp.sh eval <index> <js>             Ejecutar JavaScript
-  brave-cdp.sh click <index> <selector>      Clickear elemento CSS
-  brave-cdp.sh type <index> <sel> <text>     Escribir en campo (focus+insertText)
+  brave-cdp.sh restart [url]              Relanzar Brave con CDP (mata instancia actual)
+  brave-cdp.sh tabs                       Listar pestañas abiertas
+  brave-cdp.sh open <url>                 Abrir URL en nueva pestaña
+  brave-cdp.sh focus <index>              Enfocar pestaña (índice 0-based)
+  brave-cdp.sh navigate <index> <url>     Navegar pestaña existente
+  brave-cdp.sh eval <index> <js>          Ejecutar JavaScript
+  brave-cdp.sh click <index> <selector>   Clickear elemento CSS
+  brave-cdp.sh type <index> <sel> <text>  Escribir en campo (focus+insertText)
   brave-cdp.sh type-enter <index> <sel> <txt>  Escribir + Enter
-  brave-cdp.sh read <index> [selector]       Leer texto (full page o selector)
-  brave-cdp.sh screenshot <index> [file]     Captura de pestaña (PNG)
-  brave-cdp.sh press <index> <key>           Presionar tecla (Enter, Tab, etc.)
+  brave-cdp.sh read <index> [selector]    Leer texto (full page o selector)
+  brave-cdp.sh screenshot <index> [file]  Captura de pestaña (PNG)
+  brave-cdp.sh press <index> <key>        Presionar tecla (Enter, Tab, etc.)
   brave-cdp.sh wait-and-type <url> <sel> <txt>  Abrir URL, esperar selector, escribir+Enter
 
+⚠️ CDP requiere Brave lanzado con --remote-debugging-port=9222.
+   Si Brave ya está corriendo sin CDP: brave-cdp.sh restart
+
 Ejemplo — preguntar a Grok:
-  brave-cdp.sh open "https://grok.com"
+  brave-cdp.sh restart "https://grok.com"
   sleep 3
-  brave-cdp.sh type 0 "textarea, [contenteditable]" "hola, ¿qué skills existen?"
-  brave-cdp.sh press 0 Enter
+  brave-cdp.sh type-enter 0 "textarea, [contenteditable]" "hola, ¿qué skills existen?"
 
 Entorno:
-  CDP_PORT=9222    Puerto CDP (default: 9222)
+  CDP_PORT=9222       Puerto CDP (default: 9222)
   CDP_HOST=localhost  Host CDP (default: localhost)
 EOF
     ;;

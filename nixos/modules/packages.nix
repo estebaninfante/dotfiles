@@ -211,6 +211,7 @@ with pkgs; [  # ── Shell & terminal ──
     flask                  # gesturecontrol: config web UI
     pillow                 # gesturecontrol: image handling
     websockets             # gesturecontrol: WebSocket landmark server
+    playwright             # brave-cdp.sh: browser automation via CDP
   ]))
   v4l-utils                # gesturecontrol: nombre de dispositivos camara en config UI
   rustc
