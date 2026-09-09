@@ -32,3 +32,12 @@ action = { type = "exec", cmd = ["hyprctl", "dispatch", 'hl.dsp.focus({ workspac
 [[bindings]]
 signal = "workspace_prev"
 action = { type = "exec", cmd = ["hyprctl", "dispatch", 'hl.dsp.focus({ workspace = "e-1" })'] }
+
+# ── Cambio de modo (gesto) ──────────────────────────────────────────────────
+[[bindings]]
+signal = "mode_3d"
+action = { type = "exec", cmd = ["/home/eztvn/.local/share/gesturecontrol/gesturecontrol-mode", "3d"] }
+
+[[bindings]]
+signal = "mode_pc"
+action = { type = "exec", cmd = ["/home/eztvn/.local/share/gesturecontrol/gesturecontrol-mode", "pc"] }

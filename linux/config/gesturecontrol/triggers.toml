@@ -120,6 +120,22 @@ name = "workspace_prev"
 trigger = { type = "swipe", hand = "right", direction = "left", min_displacement = 0.15 }
 
 
+
+# ── Cambio de modo SIN teclado (siempre activos, una mano por modo) ──────────
+# Mano izq SIGN → modo 3D (modelado) | mano der SIGN → modo PC (navegación)
+[[bindings]]
+name = "mode_3d"
+modes = ["pc", "3d"]
+no_suppress = true
+trigger = { type = "pose", hand = "left", shape = "SIGN", dwell_ms = 350 }
+
+[[bindings]]
+name = "mode_pc"
+modes = ["pc", "3d"]
+no_suppress = true
+trigger = { type = "pose", hand = "right", shape = "SIGN", dwell_ms = 350 }
+
+
 # Presencia: apaga pantalla al irte (sin cara ni movimiento), enciende al volver.
 [presence]
 enabled = true
