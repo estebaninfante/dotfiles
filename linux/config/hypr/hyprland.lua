@@ -402,6 +402,10 @@ hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 -- Para cambiarla: bindear otra tecla a "~/.local/bin/voice tts toggle".
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("handy --toggle-post-process"))
 
+-- Voice Loop: Handy + opencode computer use
+-- Shift+F7: toggle continuous voice control loop
+hl.bind("shift + F7", hl.dsp.exec_cmd("~/.local/bin/voice-loop.sh toggle"))
+
 -- OpenCode / TV toggle / Tema claro-oscuro
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode ~/.opencode/bin/opencode"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))

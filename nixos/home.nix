@@ -57,6 +57,7 @@ allScripts = [
     "qs-launcher.sh" "apps-list.sh" "file-list.sh" "script-list.sh"
     "scroll-momentum.py" "phoenix.sh"
     "refind-check.sh"
+    "voice-cmd.sh" "voice-loop.sh" "handy-voice-bridge.sh"
   ];
   # Solo laptop
   laptopScripts = [
