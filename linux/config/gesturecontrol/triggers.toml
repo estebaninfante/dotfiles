@@ -1,4 +1,9 @@
 [settings]
+format = MJPG
+height = 540
+width = 960
+face_every = 1
+body_every = 8
 camera = 0
 dwell_ms = 200
 
