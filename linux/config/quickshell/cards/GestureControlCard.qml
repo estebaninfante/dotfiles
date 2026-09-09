@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import "../config"
 import "../services"
+import "../components"
 
 Card {
     id: gcCard
