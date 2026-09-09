@@ -57,7 +57,7 @@ allScripts = [
     "qs-launcher.sh" "apps-list.sh" "file-list.sh" "script-list.sh"
     "scroll-momentum.py" "phoenix.sh"
     "refind-check.sh" "hypr-lua.sh"
-    "gesturecontrol-engine" "gesturecontrol-actions" "gesturecontrol-config" "gesturecontrol-tray"
+    "gesturecontrol-engine" "gesturecontrol-actions" "gesturecontrol-config" "gesturecontrol-tray" "gesturecontrol-landmarks"
   ];
   # Solo laptop
   laptopScripts = [

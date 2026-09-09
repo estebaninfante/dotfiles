@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""
+gesturecontrol-landmarks — WebSocket client for hand landmarks.
+
+Connects to gesturecontrol's WebSocket server (ws://127.0.0.1:7072) and
+receives 21 hand landmarks per hand at ~30fps.
+
+Usage:
+  gesturecontrol-landmarks              # print landmarks as JSON
+  gesturecontrol-landmarks --3d         # simple 3D visualization (needs curses)
+  gesturecontrol-landmarks --raw        # raw JSON output
+  gesturecontrol-landmarks --metrics    # show computed metrics only
+
+Protocol:
+  Server sends JSON: {"hands": {"right": {"landmarks": [...], "pose": "...", "metrics": {...}}, ...}}
+  Each landmark: {"x": 0.5, "y": 0.3, "z": -0.01}  (normalized 0-1, z is depth)
+
+Use cases:
+  - 3D model manipulation: read landmarks, map to rotation/zoom/pan
+  - Custom gesture recognition: build on top of raw landmark data
+  - Data recording: pipe to file for ML training
+"""
+
+import sys
+import os
+_VENV = os.path.expanduser("~/.local/share/gesturecontrol/venv/bin/python3")
+if sys.executable != _VENV and os.path.exists(_VENV):
+    os.execv(_VENV, [_VENV] + sys.argv)
+
+import argparse
+import json
+import asyncio
+import websockets
+
+LANDMARK_NAMES = [
+    "WRIST",
+    "THUMB_CMC", "THUMB_MCP", "THUMB_IP", "THUMB_TIP",
+    "INDEX_FINGER_MCP", "INDEX_FINGER_PIP", "INDEX_FINGER_DIP", "INDEX_FINGER_TIP",
+    "MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP",
+    "RING_FINGER_MCP", "RING_FINGER_PIP", "RING_FINGER_DIP", "RING_FINGER_TIP",
+    "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP",
+]
+
+
+async def print_landmarks(args):
+    uri = f"ws://127.0.0.1:{args.port}"
+    print(f"Connecting to {uri}...")
+    async with websockets.connect(uri) as ws:
+        print("Connected! Listening for landmarks...\n")
+        async for msg in ws:
+            data = json.loads(msg)
+            hands = data.get("hands", {})
+
+            if args.raw:
+                print(json.dumps(data, indent=2))
+            elif args.metrics:
+                for side, hand in hands.items():
+                    metrics = hand.get("metrics", {})
+                    pose = hand.get("pose", "?")
+                    print(f"{side}: pose={pose}  metrics={json.dumps(metrics)}")
+            else:
+                for side, hand in hands.items():
+                    lm = hand.get("landmarks", [])
+                    pose = hand.get("pose", "?")
+                    metrics = hand.get("metrics", {})
+                    if not lm:
+                        print(f"{side}: no hand detected")
+                        continue
+                    # Show fingertip positions
+                    tips = [4, 8, 12, 16, 20]  # thumb, index, middle, ring, pinky
+                    tip_names = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"]
+                    print(f"--- {side.upper()} hand (pose={pose}) ---")
+                    for i, (ti, tn) in enumerate(zip(tips, tip_names)):
+                        pt = lm[ti]
+                        print(f"  {tn}_TIP: x={pt['x']:.3f} y={pt['y']:.3f} z={pt['z']:.3f}")
+                    if metrics:
+                        print(f"  metrics: {json.dumps(metrics)}")
+                    print()
+
+
+async def curses_3d(args):
+    """Simple 3D view using curses — shows hand as ASCII art."""
+    import curses
+    import math
+
+    def draw_hand(stdscr, lm, offset_x, offset_y, label):
+        if not lm:
+            return
+        h, w = stdscr.getmaxyx()
+        # Scale landmarks to terminal size
+        connections = [
+            (0, 1), (1, 2), (2, 3), (3, 4),       # thumb
+            (0, 5), (5, 6), (6, 7), (7, 8),       # index
+            (0, 9), (9, 10), (10, 11), (11, 12),  # middle
+            (0, 13), (13, 14), (14, 15), (15, 16),# ring
+            (0, 17), (17, 18), (18, 19), (19, 20),# pinky
+            (5, 9), (9, 13), (13, 17),             # palm
+        ]
+        for a, b in connections:
+            if a < len(lm) and b < len(lm):
+                x1 = int(lm[a]["x"] * (w - 4) * 0.4) + offset_x
+                y1 = int(lm[a]["y"] * (h - 4) * 0.4) + offset_y
+                x2 = int(lm[b]["x"] * (w - 4) * 0.4) + offset_x
+                y2 = int(lm[b]["y"] * (h - 4) * 0.4) + offset_y
+                try:
+                    stdscr.addch(y1, x1, ".")
+                    stdscr.addch(y2, x2, ".")
+                except curses.error:
+                    pass
+        stdscr.addstr(offset_y - 1, offset_x, label, curses.A_BOLD)
+
+    stdscr = curses.initscr()
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+    stdscr.timeout(33)  # ~30fps
+
+    uri = f"ws://127.0.0.1:{args.port}"
+    async with websockets.connect(uri) as ws:
+        while True:
+            try:
+                msg = await asyncio.wait_for(ws.recv(), timeout=0.1)
+                data = json.loads(msg)
+                hands = data.get("hands", {})
+
+                stdscr.erase()
+                h, w = stdscr.getmaxyx()
+                stdscr.addstr(0, 0, "GestureControl Landmarks — press q to quit", curses.A_BOLD)
+
+                if "right" in hands:
+                    draw_hand(stdscr, hands["right"].get("landmarks", []), 2, 3, "RIGHT")
+                if "left" in hands:
+                    draw_hand(stdscr, hands["left"].get("landmarks", []), w // 2, 3, "LEFT")
+
+                stdscr.refresh()
+            except asyncio.TimeoutError:
+                pass
+            except websockets.ConnectionClosed:
+                break
+
+            if stdscr.getch() == ord("q"):
+                break
+
+    curses.endwin()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="WebSocket client for gesturecontrol hand landmarks"
+    )
+    parser.add_argument("--port", type=int, default=7072, help="WebSocket port (default: 7072)")
+    parser.add_argument("--raw", action="store_true", help="Output raw JSON")
+    parser.add_argument("--metrics", action="store_true", help="Show computed metrics only")
+    parser.add_argument("--3d", dest="view3d", action="store_true", help="Simple 3D curses visualization")
+    args = parser.parse_args()
+
+    try:
+        if args.view3d:
+            asyncio.run(curses_3d(args))
+        else:
+            asyncio.run(print_landmarks(args))
+    except KeyboardInterrupt:
+        print("\nDisconnected.")
+    except ConnectionRefusedError:
+        print(f"Connection refused. Is gesturecontrol-engine running?")
+        print(f"  systemctl --user start gesturecontrol-engine")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

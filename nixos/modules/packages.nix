@@ -207,6 +207,7 @@ with pkgs; [  # ── Shell & terminal ──
     opencv4                # gesturecontrol: webcam capture (nixpkgs, avoids pip libstdc++ issue)
     flask                  # gesturecontrol: config web UI
     pillow                 # gesturecontrol: image handling
+    websockets             # gesturecontrol: WebSocket landmark server
   ]))
   v4l-utils                # gesturecontrol: nombre de dispositivos camara en config UI
   rustc
