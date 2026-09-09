@@ -4,13 +4,23 @@
     "external_directory": "allow"
   },
   "agent": {
-    "hyprland-computer-use": {
-      "description": "Agente especializado en computer use bajo Hyprland. Controla escritorio: ventanas, workspaces, aplicaciones, layout, gaps, splits, fullscreen, floating, pins, focus, move, resize.",
+    "dotfiles": {
+      "description": "Agente principal para dotfiles NixOS. Maneja computador: Hyprland, scripts, configs, rebuild, voice control, computer use.",
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-6",
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      }
+    },
+    "quickshell": {
+      "description": "Subagente para modificaciones de quickshell QML. Services, components, overlays, menus, bars.",
       "mode": "subagent",
       "model": "anthropic/claude-sonnet-4-6",
       "permission": {
         "bash": "allow",
-        "edit": "deny",
+        "edit": "allow",
         "read": "allow"
       }
     }
