@@ -1,7 +1,6 @@
 [settings]
 camera = 0
 dwell_ms = 200
-format = "GREY"
 
 [[poses]]
 name = "FIST"
