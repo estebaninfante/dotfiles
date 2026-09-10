@@ -730,12 +730,14 @@ in
   nix.gc.automatic = true;
   nix.gc.options = "--delete-older-than 14d";
 
-  # Cachix de handy (github:cjpais/Handy): evita compilar handy desde fuente
+  # Caché binarios: CUDA (torch/cudnn/nccl pre-built), NixOS base, Handy
   nix.settings.substituters = [
+    "https://cache.nixos-cuda.org"   # CUDA: torch, cudnn, nccl, onnxruntime, magma...
     "https://cache.nixos.org"
     "https://handy-computer.cachix.org"
   ];
   nix.settings.trusted-public-keys = [
+    "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
     "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
     "handy-computer.cachix.org-1:Sihzctn6DC0CJM5QeL+9nBEL3CL8c33m777C+eIv748="
   ];
