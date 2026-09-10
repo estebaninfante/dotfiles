@@ -19,6 +19,8 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - `~/.config/gesturecontrol/triggers.toml` — config de triggers (pose, swipe, continuous, etc.)
 - `~/.config/gesturecontrol/actions.toml` — mapeo de señales a acciones
 - `~/.local/share/gesturecontrol/gestureControl.py` — engine parcheado (cv2.waitKey fix)
+- **Bedtime timer**: desktop se apaga a las 21:00 (hora Colombia). `bedtime-skip.sh` crea flag `/run/bedtime-skip` para cancelar una noche. IMPORTANTE: builds largos (CUDA) necesitan skip o se interrumpen.
+- **CUDA rebuild**: `scripts/cuda-rebuild.sh` con retry loop (5 intentos). Logs en `~/.local/state/dotfiles/cuda-rebuild.{log,error,status}`. Paralelismo: `NIX_CONFIG="max-jobs=2, cores=8"`.
 
 ## Skills creadas
 
@@ -31,15 +33,21 @@ _(Agente: listar skills creadas por auto-mejora)_
 
 ## Historial de sesiones (últimas 5)
 
-### Sesión 2026-09-09: WebSocket Landmark Server
-- **Qué se hizo**: Modificar gesturecontrol engine para exponer 21 landmarks por mano vía WebSocket (puerto 7072)
-- **Cambios**:
-  - `gestureControl.py`: Añadido `LandmarkServer` class, modificado `processFrame` para incluir landmarks en hands dict, añadidos args `--landmark-port` y `--no-landmarks`
-  - `packages.nix`: Añadido `websockets` a python3.withPackages
-  - `home.nix`: Añadido `gesturecontrol-landmarks` a allScripts
-  - Nuevo script: `linux/bin/gesturecontrol-landmarks` — cliente WebSocket con 3 modos (print, raw JSON, curses 3D)
-- **Qué funcionó**: Compilación OK, rebuild OK, server inicia correctamente
-- **Pendiente**: Test con cámara real (en este contexto no hay cámara física)
+### Sesión 2026-09-10: CUDA rebuild interrumpido + reinicio
+- **Qué se hizo**: Activar CUDA en desktop.nix (RTX 3070), crear cuda-rebuild.sh con retry loop, limpiar 43GB de store
+- **Qué falló**: Build interrumpido por bedtime timer (21:00). El build estaba compilando opencv/magma/cudnn cuando la máquina se apagó.
+- **Acción tomada**: `bedtime-skip.sh` para saltar apagado, limpieza de store (43.1 GiB), reinicio del build
+- **Pendiente**: Verificar que el build CUDA complete (varias horas). Then: cachear para laptop, probar CUIDA
+- **Lección**: SIEMPRE saltar bedtime para builds CUDA largos (`bash ~/dotfiles/linux/bin/bedtime-skip.sh`)
+
+### Sesión 2026-09-09: CUDA preparation + WebSocket Landmark Server
+- **Qué se hizo**: 
+  1. Activar CUDA en desktop.nix (uncomment cudaSupport + sunshine override)
+  2. Crear `scripts/cuda-rebuild.sh` (retry loop, logging, NIX_CONFIG controlado)
+  3. Dry-build: 101 derivaciones, ~14GB unpacked (torch ×2, cudnn, magma, opencv)
+  4. Modificar gesturecontrol engine para landmarks WebSocket (puerto 7072)
+- **Cambios**: desktop.nix, cuda-rebuild.sh (nuevo), packages.nix, gestureControl.py
+- **Pendiente**: Build CUDA completo, test CUIDA, cachear para laptop
 
 ---
-_Ultima actualización: 2026-09-09_
+_Ultima actualización: 2026-09-10_
