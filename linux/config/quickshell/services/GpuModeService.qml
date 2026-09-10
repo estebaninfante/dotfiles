@@ -22,7 +22,7 @@ Item {
 
     Process {
         id: gpuStatus
-        command: ["gpu-mode.sh", "status"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/gpu-mode.sh" status']
         running: gpuModeService.hasBattery
 
         stdout: SplitParser {
@@ -47,7 +47,7 @@ Item {
 
     Process {
         id: gpuToggle
-        command: ["gpu-mode.sh", "toggle"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/gpu-mode.sh" toggle']
         running: false
 
         stdout: StdioCollector {

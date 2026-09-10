@@ -29,7 +29,7 @@ Item {
 
     Process {
         id: superMonitor
-        command: ["super-hold-monitor.sh"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/super-hold-monitor.sh"']
         running: true
         stdout: SplitParser {
             splitMarker: "\n"

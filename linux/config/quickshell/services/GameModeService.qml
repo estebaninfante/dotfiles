@@ -28,11 +28,11 @@ Item {
         gameLaunch.running = true;
     }
     function gameConfirmClose() {
-        gameLaunch.command = ["game-mode.sh"];
+        gameLaunch.command = ["bash", "-c", 'exec "$HOME/.local/bin/game-mode.sh"'];
         gameGo();
     }
     function gameConfirmNoClose() {
-        gameLaunch.command = ["game-mode.sh", "noclose"];
+        gameLaunch.command = ["bash", "-c", 'exec "$HOME/.local/bin/game-mode.sh" noclose'];
         gameGo();
     }
     function gameExit() {
@@ -48,7 +48,7 @@ Item {
     // Monitor de volante (botón PS, BTN_MODE): emite "1" → toglea modo juegos.
     Process {
         id: wheelMonitor
-        command: ["wheel-mode-monitor.sh"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/wheel-mode-monitor.sh"']
         running: true
         stdout: SplitParser {
             splitMarker: "\n"
@@ -82,7 +82,7 @@ Item {
 
     Process {
         id: gameExitProc
-        command: ["game-mode.sh", "exit"]
+        command: ["bash", "-c", 'exec "$HOME/.local/bin/game-mode.sh" exit']
         running: false
     }
 }
