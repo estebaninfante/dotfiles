@@ -51,9 +51,22 @@ echo "start=$(date -Iseconds)" >> "$STATUS_FILE"
 echo "attempt=1" >> "$STATUS_FILE"
 echo "" > "$ERROR_FILE"
 
-# ── NIX_CONFIG: paralelismo controlado ──
+# ── NIX_CONFIG: paralelismo conservador ──
+# max-jobs=1: un solo job paralelo (torch/onnxruntime comen ~8-12GB cada uno)
+# cores=4: limita cores por job para no saturar RAM
+# Override: NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" bash cuda-rebuild.sh
 if [ -z "${NIX_CONFIG:-}" ]; then
-  export NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8"
+  export NIX_CONFIG="max-jobs = 1"$'\n'"cores = 4"
+fi
+
+# ── Stop heavy services (optional: STOP_SERVICES=1) ──
+if [ "${STOP_SERVICES:-0}" = "1" ]; then
+  echo " Deteniendo servicios pesados para liberar RAM..."
+  for svc in syncthing tailscaled lan-mouse sunshine; do
+    systemctl --user stop "$svc.service" 2>/dev/null && echo "  ✓ $svc stopped" || true
+  done
+  # Stop docker if running (can eat RAM)
+  systemctl stop docker.socket docker.service 2>/dev/null && echo "  ✓ docker stopped" || true
 fi
 
 echo "═══════════════════════════════════════════════════════════════"
