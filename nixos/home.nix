@@ -58,6 +58,7 @@ allScripts = [
     "scroll-momentum.py" "phoenix.sh"
     "refind-check.sh" "hypr-lua.sh" "brave-cdp.sh"
     "gesturecontrol-engine" "gesturecontrol-actions" "gesturecontrol-config" "gesturecontrol-tray" "gesturecontrol-landmarks"
+    "cuda-error-loop.sh" "cuda-rebuild.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -653,6 +654,27 @@ in
       StandardError = "append:%h/.cache/gesturecontrol-actions.log";
     };
     Install = { WantedBy = [ "graphical-session.target" ]; };
+  };
+
+  # ── CUDA error loop: auto-fix + retry until success ────────────
+  # Corre en background, si el build falla lanza opencode para auto-fix.
+  # Se detiene cuando el build tiene éxito. Kill manual: systemctl --user stop cuda-error-loop
+  systemd.user.services.cuda-error-loop = {
+    Unit = {
+      Description = "CUDA rebuild with auto-fix loop";
+      After = [ "network-online.target" ];
+      Wants = [ "network-online.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${bin}/cuda-error-loop.sh";
+      Environment = [
+        "MAX_FIX_ATTEMPTS=3"
+        "NIX_CONFIG=max-jobs = 2\ncores = 8"
+      ];
+      # No restart: the script has its own loop. If it dies, it dies.
+      Restart = "no";
+    };
   };
 
 }
