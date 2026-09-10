@@ -83,6 +83,9 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
   # Clear previous error
   : > "$ERROR_FILE"
 
+  echo ""
+  echo " Starting build at $(date) — attempt $attempt/$MAX_RETRIES"
+
   # Run rebuild, capture both stdout and stderr
   if NIX_CONFIG="$NIX_CONFIG" bash "$REPO/scripts/rebuild.sh" "$ACTION" \
     2>&1 | tee -a "$LOG_FILE"; then
