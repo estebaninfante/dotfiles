@@ -58,7 +58,7 @@ allScripts = [
     "scroll-momentum.py" "phoenix.sh"
     "refind-check.sh" "hypr-lua.sh" "brave-cdp.sh"
     "gesturecontrol-engine" "gesturecontrol-actions" "gesturecontrol-config" "gesturecontrol-tray" "gesturecontrol-landmarks"
-    "cuda-error-loop.sh" "cuda-rebuild.sh"
+    "cuda-error-loop.sh" "cuda-rebuild.sh" "cuda-watchdog.sh"
   ];
   # Solo laptop
   laptopScripts = [
@@ -238,6 +238,20 @@ in
   systemd.user.timers.dotfiles-sync = {
     Unit = { Description = "Dotfiles sync periodico"; };
     Timer = { OnBootSec = "2min"; OnUnitActiveSec = "5min"; };
+    Install = { WantedBy = [ "default.target" ]; };
+  };
+
+  systemd.user.services.cuda-watchdog = {
+    Unit = { Description = "CUDA build watchdog (check every 30min)"; };
+    Service = {
+      Type = "oneshot";
+      ExecStart = "${repo}/scripts/cuda-watchdog.sh";
+    };
+  };
+
+  systemd.user.timers.cuda-watchdog = {
+    Unit = { Description = "CUDA build watchdog timer"; };
+    Timer = { OnBootSec = "5min"; OnUnitActiveSec = "30min"; };
     Install = { WantedBy = [ "default.target" ]; };
   };
 
