@@ -132,3 +132,39 @@ vim.keymap.set("n", "<leader>.", function()
     vim.cmd("normal! .j")
   end
 end, { desc = "Repetir último . en N líneas" })
+
+-- ── Markdown / Obsidian ─────────────────────────────────────────
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "markdown" },
+  callback = function()
+    local buf = vim.api.nvim_get_current_buf()
+    local opts = { buffer = buf, silent = true }
+
+    -- Navegar headings: ]h / [h
+    vim.keymap.set("n", "]h", function()
+      vim.fn.search("^\\(#\\{1,6\\} \\)", "W")
+    end, vim.tbl_extend("force", opts, { desc = "Heading siguiente" }))
+    vim.keymap.set("n", "[h", function()
+      vim.fn.search("^\\(#\\{1,6\\} \\)", "bW")
+    end, vim.tbl_extend("force", opts, { desc = "Heading anterior" }))
+
+    -- Indent/dedent list items
+    vim.keymap.set("v", ">", ">gv", vim.tbl_extend("force", opts, { desc = "Indent item" }))
+    vim.keymap.set("v", "<", "<gv", vim.tbl_extend("force", opts, { desc = "Dedent item" }))
+
+    -- Wrap/unwrap inline code
+    vim.keymap.set("n", "<leader>c", function()
+      local line = vim.api.nvim_get_current_line()
+      local col = vim.fn.col(".")
+      -- Find word boundaries
+      local before = line:sub(1, col - 1)
+      local after = line:sub(col)
+      local word_before = before:match("(%S+)$") or ""
+      local word_after = after:match("^(%S+)") or ""
+      if word_before == "" and word_after == "" then return end
+      local new_line = before:gsub(word_before .. "$", "`" .. word_before .. "`")
+        .. after:gsub("^" .. word_after, "`" .. word_after .. "`")
+      vim.api.nvim_set_current_line(new_line)
+    end, vim.tbl_extend("force", opts, { desc = "Toggle inline code" }))
+  end,
+})
