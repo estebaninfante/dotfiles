@@ -42,6 +42,22 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 vim.keymap.set("i", "uu", "<Esc>")
 vim.keymap.set("i", "\x1b[127;5~", "<C-w>", { desc = "Borrar palabra (ctrl+backspace)" })
+-- Backspace respeta nivel de indentación: bloquea cuando el cursor está en
+-- el whitespace líder y la indentación actual == la que indentexpr determina.
+-- No permite bajar del nivel que el código requiere.
+vim.keymap.set("i", "<BS>", function()
+  local col = vim.fn.col(".")
+  local line = vim.fn.getline(".")
+  local before = line:sub(1, col - 1)
+  if before:match("^%s*$") and #before > 0 then
+    local current_indent = vim.fn.indent(".")
+    local expected = vim.fn.cindent(".")
+    if expected > 0 and current_indent == expected then
+      return ""
+    end
+  end
+  return "<BS>"
+end, { expr = true, desc = "Backspace respeta indent level" })
 vim.keymap.set("n", "ñ", "o<Esc>", { desc = "Línea vacía abajo" })
 
 -- Tab unificado: cmp menu → luasnip jump → minuet accept → indent previo
