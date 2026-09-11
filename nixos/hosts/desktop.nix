@@ -42,11 +42,14 @@
   # dirigidos.
   nixpkgs.overlays = [
     (final: prev: {
+      # torch CUDA para Kokoro/ML
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
           torch = python-prev.torch.override { cudaSupport = true; };
         })
       ];
+      # opencv4 CUDA para gesturecontrol (webcam capture + feature detection)
+      opencv4 = prev.opencv4.override { enableCuda = true; };
     })
   ];
 
