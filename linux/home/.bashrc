@@ -40,6 +40,7 @@ alias walls='wallpaper-switch.sh list'
 
 
 # opencode
+export EXPLABS_API_KEY="xpl_f2e5b828961bb3e61d40350545c979ef555ff624"
 export PATH=/home/eztvn/.opencode/bin:$PATH
 alias opencode="script -q -c \"opencode\" /dev/null"
 
