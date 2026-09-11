@@ -329,7 +329,7 @@ PopupWindow {
                     hoverEnabled: true
                     onClicked: {
                             powerAction.command = pendingAction === "SUSPENDER" ? ["systemctl", "suspend"] : pendingAction === "CERRAR SESIÓN" ? ["hyprctl", "dispatch", "exit"] : pendingAction === "REINICIAR" ? ["systemctl", "reboot"] : pendingAction === "APAGAR AMBAS" ?
-                                ["bash", "-c", "M=$(cat ~/.config/machine-type 2>/dev/null || hostname -s); if [ \"$M\" = laptop ]; then O=desktop; else O=laptop; fi; notify-send -u critical Apagando \"Enviando shutdown a $O...\"; ssh eztvn@$O sudo /run/current-system/sw/bin/systemctl poweroff 2>/dev/null || true; sleep 2; systemctl poweroff"] :
+                                ["bash", "-c", "M=$(cat ~/.config/machine-type 2>/dev/null || hostname -s); if [ \"$M\" = laptop ]; then O=desktop; else O=laptop; fi; notify-send -u critical Apagando \"Enviando shutdown a $O...\"; ssh eztvn@$O sudo systemctl poweroff 2>/dev/null || true; sleep 2; systemctl poweroff"] :
                                 ["systemctl", "poweroff"];
                             UIState.powerMenuOpen = false;
                             pendingAction = "";

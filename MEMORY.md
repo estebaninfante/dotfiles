@@ -26,12 +26,36 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 
 _(Agente: listar skills creadas por auto-mejora)_
 
+## Migración NixOS → Ubuntu 24.04 LTS
+
+**Estado**: Script creado, pendiente de ejecutar en máquina fresca.
+
+**Archivos migration script**: `scripts/migrate-to-ubuntu.sh`
+**Fixes quickshell**: `cards/NotifCard.qml` (sound path), `menus/PowerMenu.qml` (systemctl path) — ambos ahora multi-path compatible.
+
+**Stack Ubuntu**:
+- Hyprland via PPA oficial (`ppa:hyprland/release`)
+- NVIDIA via `ubuntu-drivers install` + `nvidia-cuda-toolkit`
+- PyTorch CUDA pre-compilado: `pip install torch --index-url https://download.pytorch.org/whl/cu128`
+- keyd desde GitHub (make install)
+- quickshell desde fuente o AppImage
+- Configs: symlinks directos al repo (sin home-manager)
+- Snap: quitado y bloqueado
+
+**Pendiente**: Ejecutar en máquina fresca, probar Hyprland, testear CUDA/torch.
+
 ## Pendientes de mejora
 
 - WebSocket landmark server necesita `websockets` en venv (ya instalado) y en packages.nix (ya añadido).
 - Considerar añadir `websockets` a `linux/bin/gesturecontrol-landmarks` wrapper si se usa standalone.
 
 ## Historial de sesiones (últimas 5)
+
+### Sesión 2026-09-10 (tarde): Migración NixOS → Ubuntu
+- **Qué se hizo**: Analicé viabilidad de migración a Ubuntu. Fix 2 paths NixOS en quickshell. Creé `scripts/migrate-to-ubuntu.sh`.
+- **Decisión**: Migrar a Ubuntu 24.04 LTS. CUDA pre-compilado (pip wheels) resuelve el problema de builds OOM.
+- **Archivos modificados**: `cards/NotifCard.qml` (sound path multi-distro), `menus/PowerMenu.qml` (systemctl path), `scripts/migrate-to-ubuntu.sh` (nuevo), `MEMORY.md`.
+- **Pendiente**: Ejecutar en máquina fresca, testear Hyprland + quickshell + CUDA.
 
 ### Sesión 2026-09-10: CUDA rebuild interrumpido + reinicio
 - **Qué se hizo**: Activar CUDA en desktop.nix (RTX 3070), crear cuda-rebuild.sh con retry loop, limpiar 43GB de store

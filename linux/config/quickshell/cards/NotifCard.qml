@@ -173,7 +173,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        soundTest.command = ["bash", "-c", "pw-play /run/current-system/sw/share/sounds/freedesktop/stereo/complete.oga"];
+                        soundTest.command = ["bash", "-c", "for f in /run/current-system/sw/share/sounds/freedesktop/stereo/complete.oga /usr/share/sounds/freedesktop/stereo/complete.oga; do [ -f \"$f\" ] && pw-play \"$f\" && break; done"];
                         soundTest.running = false;
                         soundTest.running = true;
                     }
