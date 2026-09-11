@@ -626,15 +626,9 @@ in
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
 
-  # ── gesturecontrol: hand tracking → D-Bus → acciones ──────────
-  # Engine: webcam + MediaPipe ONNX → señales D-Bus (pose/swipe/continuous/etc)
-  # Actions: escucha D-Bus → ejecuta comandos/hyprctl/wpctl/etc
-  # Config: ~/.config/gesturecontrol/ (triggers.toml + actions.toml)
-  # MediaPipe necesita el cargador `libEGL.so.1` (libglvnd) al cargarse, aunque
-  # corra en CPU. Sin LD_LIBRARY_PATH falla con `OSError: libEGL.so.1: cannot
-  # open shared object file` → el servicio entra en bucle de reinicio y spamea
-  # la notificación de GPU/CUDA. `libglvnd`/`mesa` ya están en systemPackages.
-  systemd.user.services.gesturecontrol-engine = {
+   # ── gesturecontrol: DESHABILITADO (1289% CPU, stuck in signal loop) ──
+   # Para re-habilitar: cambiar mkIf true + rebuild
+   systemd.user.services.gesturecontrol-engine = lib.mkIf false {
     Unit = {
       Description = "Gesture control engine (webcam → D-Bus signals)";
       After = [ "graphical-session.target" ];
@@ -653,7 +647,7 @@ in
     Install = { WantedBy = [ "graphical-session.target" ]; };
   };
 
-  systemd.user.services.gesturecontrol-actions = {
+  systemd.user.services.gesturecontrol-actions = lib.mkIf false {
     Unit = {
       Description = "Gesture control actions (D-Bus → commands)";
       After = [ "graphical-session.target" "gesturecontrol-engine.service" ];

@@ -68,7 +68,8 @@ with pkgs; [  # ── Shell & terminal ──
   # ── Navegadores ──
   brave
   (google-chrome.override { commandLineArgs = "--enable-speech-dispatcher"; })
-  firefox
+  # firefox — deshabilitado temporalmente: ld.lld PGO linker consume 15GB RAM → OOM/crash
+  # Restaurar cuando se tenga más RAM o se resuelva el内存 del linker
 
   # ── Utilidades ──
   git
