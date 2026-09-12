@@ -9,12 +9,15 @@ Item {
 
     property bool soundOn: true
     property bool voiceOn: false
+    property bool pushOn: true
 
     function refresh() {
         soundStateRead.running = false;
         soundStateRead.running = true;
         voiceStateRead.running = false;
         voiceStateRead.running = true;
+        pushStateRead.running = false;
+        pushStateRead.running = true;
     }
 
     function writeFile(name, val) {
@@ -39,6 +42,14 @@ Item {
         running: false
         stdout: StdioCollector {
             onStreamFinished: notifyService.voiceOn = this.text.trim() === "1"
+        }
+    }
+    Process {
+        id: pushStateRead
+        command: ["bash", "-c", "cat \"$HOME/.local/state/opencode/notify-push-enabled\" 2>/dev/null || echo 1"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: notifyService.pushOn = this.text.trim() !== "0"
         }
     }
     Process { id: soundStateWrite; command: ["true"]; running: false }

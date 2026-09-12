@@ -151,6 +151,67 @@ Rectangle {
 
         RowLayout {
             width: parent.width
+
+            Text {
+                text: "\uf1e0"
+                color: NotifyService.pushOn ? "white" : "#888"
+                font.family: Theme.fontFamily
+                font.pixelSize: 20
+                Layout.preferredWidth: 28
+            }
+
+            Column {
+                spacing: 2
+                Layout.fillWidth: true
+
+                Text {
+                    text: "PUSH CELULAR"
+                    color: "#aaa"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 9
+                    font.letterSpacing: 1.5
+                }
+
+                Text {
+                    text: NotifyService.pushOn ? "Notificaciones en el celular" : "Push desactivado"
+                    color: NotifyService.pushOn ? "white" : "#aaa"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 14
+                }
+            }
+
+            Rectangle {
+                width: 48
+                height: 30
+                radius: 9
+                color: pushToggleArea.containsMouse ? "white" : NotifyService.pushOn ? "#141414" : "#141414"
+                border.color: NotifyService.pushOn ? "white" : "#333"
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: NotifyService.pushOn ? "ON" : "OFF"
+                    color: pushToggleArea.containsMouse ? "#000000" : NotifyService.pushOn ? "white" : "#555"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+
+                MouseArea {
+                    id: pushToggleArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: {
+                        const next = !NotifyService.pushOn;
+                        NotifyService.pushOn = next;
+                        NotifyService.writeFile("notify-push-enabled", NotifyService.fmtBool(next));
+                    }
+                }
+            }
+        }
+
+        RowLayout {
+            width: parent.width
             spacing: 8
 
             Rectangle {
