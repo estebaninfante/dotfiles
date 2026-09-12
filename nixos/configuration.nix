@@ -392,8 +392,8 @@ in
     enable = true;
     ports = [22];
     settings = {
-      PasswordAuthentication = true;
-      PermitRootLogin = "yes";
+      PasswordAuthentication = false;
+      PermitRootLogin = "no";
     };
   };
 

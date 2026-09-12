@@ -11,13 +11,11 @@
 
   networking.hostName = "desktop";
 
-  # ── Sunshine NVENC (RTX 3070) ────────────────────────────────
-  # Solo desktop: NVENC para gaming en streaming. Requiere recompilar
-  # sunshine con cudaSupport (SUNSHINE_ENABLE_CUDA) para la conversion de
-  # color por GPU. La laptop usa el paquete plain (software), suficiente
-  # para solo ver. ⚠️ Compilar con paralelismo limitado (max-jobs/cores)
-  # o la build C++ con 24 jobs OOM y congela (sin swap).
-  services.sunshine.package = (pkgs.sunshine.override { cudaSupport = true; });
+  # ── Sunshine (RTX 3070) ──────────────────────────────────────
+  # Paquete plain (sin NVENC): recompilar con cudaSupport triggea horas
+  # de build CUDA (cudnn ~2GB + libcublas ~1GB). NVENC no esencial para
+  # streaming local. Para re-habilitar: uncomment la linea de abajo.
+  # services.sunshine.package = (pkgs.sunshine.override { cudaSupport = true; });
 
   # ── DaVinci Resolve (solo desktop) ──────────────────────────
   # Edicion de video con aceleracion CUDA (RTX 3070). Unfree pero
@@ -35,32 +33,21 @@
   services.xserver.videoDrivers = [ "nvidia" ];
 
   # ── CUDA para ML/TTS (torch/Kokoro) ─────────────────────────
-  # Overlay SOLO habilita CUDA en torch (via pythonPackagesExtensions, que
-  # modifica el paquete ANTES de que python313.withPackages lo capture).
-  # Sin cudaSupport global: opencv4/onnxruntime → CPU-only (gesturecontrol
-  # y Firefox no recompilan). torch y sunshine mantienen CUDA via overrides
-  # dirigidos.
-  nixpkgs.overlays = [
-    (final: prev: {
-      # torch CUDA para Kokoro/ML
-      pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
-        (python-final: python-prev: {
-          torch = python-prev.torch.override { cudaSupport = true; };
-        })
-      ];
-      # opencv4 CUDA para gesturecontrol (webcam capture + feature detection)
-      opencv4 = prev.opencv4.override { enableCuda = true; };
-    })
-  ];
+  # DESHABILITADO: torch CUDA y opencv4 CUDA se compilan desde fuente
+  # con cudnn/cublas (~2GB cada uno). torch funciona en CPU (lento pero
+  # funcional). Para re-habilitar: uncomment el bloque de overlays.
+  # nixpkgs.overlays = [
+  #   (final: prev: {
+  #     pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
+  #       (python-final: python-prev: {
+  #         torch = python-prev.torch.override { cudaSupport = true; };
+  #       })
+  #     ];
+  #     opencv4 = prev.opencv4.override { enableCuda = true; };
+  #   })
+  # ];
 
-  # cudaCapabilities limitado a las archs REALES de este host (RTX 3070 =
-  # sm_86) + laptop (RTX 4060 = sm_89). Default de nixpkgs compila ~10 archs
-  # (compute_75…121): magma/torch/opencv se disparan gigantes y el `as` de
-  # binutils 2.46 CRASHEA con "BFD assertion fail elf.c:3571" en el object
-  # gigante sgeqr2_batched_fused_reg_medium.cu (arch compute_120). Limitar a
-  # 2 archs reales ≈ 5-10x menos trabajo y evita el bug. Mismo valor en
-  # laptop.nix para que los store hashes coincidan y se copien con nix copy.
-  nixpkgs.config.cudaCapabilities = [ "8.6" "8.9" ];
+  # nixpkgs.config.cudaCapabilities = [ "8.6" "8.9" ];  # DESHABILITADO: sin overrides CUDA, innecesario
 
   hardware.nvidia = {
     # Driver propietario.
