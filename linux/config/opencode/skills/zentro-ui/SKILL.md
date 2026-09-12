@@ -69,11 +69,13 @@ Rules:
 - Fixed `w-[400px] max-w-[92vw]`, absolute positioned
 - Padding: `px-4 py-3` for content areas
 - Scrollable content: `flex-1 overflow-y-auto overflow-x-hidden`
+- **Fullscreen mode**: `w-full` with `mx-auto max-w-[1100px]` inner wrapper
+  to constrain content on ultrawide screens — never let elements stretch edge-to-edge
 
 ### Cards (result cards, list items)
 - **Full width** — never `mx-2` or horizontal margins that waste space
 - `rounded-xl border border-border/60 bg-background/40`
-- Internal padding: `px-3.5 py-4`
+- Internal padding: `px-3.5 py-4` (normal) / `p-4` (compact grid mode)
 - Sections separated by `border-t border-border/30 my-3`
 - More vertical breathing room: `my-1.5` between cards
 
@@ -83,6 +85,13 @@ Rules:
 - Style: `rounded-lg border border-border/40 bg-muted/60`
 - Disabled: `opacity-40 pointer-events-none cursor-not-allowed`
 - Never hide buttons — show them disabled when data is missing
+
+### Fullscreen Sidebar Layout
+When sidebar is expanded (`expanded && activeTab === "discover"`):
+- Flex row: left panel (scrollable) + right panel (BusinessDetailPanel, `w-[380px]`)
+- Left panel inner content wrapped in `mx-auto max-w-[1100px]` to prevent edge-to-edge stretching
+- Grid of cards: `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`
+- Non-discover tabs also use `mx-auto max-w-[1100px]` wrapper for consistent centering
 
 ## 4. UX Patterns
 
@@ -123,6 +132,8 @@ Rules:
 | Button gap | `gap-2` |
 | Tag container padding | `px-2.5 py-2` |
 | Section divider | `border-t border-border/30 my-3` |
+| Grid cards (compact) | `p-4` |
+| Grid gap | `gap-4` |
 
 ## 6. Dark Mode Color Rules
 
@@ -135,7 +146,7 @@ Rules:
 
 ## 7. Common Patterns
 
-### Result Card (canonical example)
+### Result Card — Full (sidebar / normal mode)
 ```
 ┌────────────────────────────────────────────┐
 │ Name                            ★ 4.5 (11) │
@@ -152,6 +163,26 @@ Rules:
 └────────────────────────────────────────────┘
 ```
 
+### Result Card — Compact (fullscreen grid)
+```
+┌──────────────────────────┐
+│ Name              ★ 4.5  │
+│ 📍 Address               │
+│ [Tag1] [Tag2] +1         │
+│ [Call] [Web] [Directions]│
+│ ┌──────────────────────┐ │
+│ │ ● Status         ▼   │ │
+│ └──────────────────────┘ │
+└──────────────────────────┘
+```
+- `p-4` padding, `text-sm` name, `text-xs` address
+- Status dropdown always present (never hide in compact mode)
+
+### Grid Layout (fullscreen discover)
+- `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`
+- 4 columns on ultrawide, responsive down to 1 on mobile
+- Each card is a compact ResultCard
+
 ### List with Filters
 ```
 ┌──────────────────────────────┐
@@ -165,13 +196,24 @@ Rules:
 └──────────────────────────────┘
 ```
 
-## 8. i18n
+## 8. Performance Patterns
+
+### Large Datasets (1000+ items)
+- **Map markers**: Use `leaflet.markercluster` for clustering — never render 1000+ individual markers
+- **Grid/list**: Use `react-virtuoso` for virtual scrolling — only render visible items
+- **State**: Paginate server-side, never hold 100k items in React state
+- **Server actions**: Use cursor-based pagination, never `pageSize` truncation
+
+### Package Manager
+- **Always use `pnpm`** — never npm or yarn
+
+## 9. i18n
 
 - All user-visible strings via `useTranslations("namespace")`
 - Never hardcode Spanish/English strings
 - Namespace per module: `businessSearch`, `crm`, etc.
 
-## 9. What NOT to Do
+## 10. What NOT to Do
 
 - ❌ `mx-2` or horizontal margins on cards (wastes space)
 - ❌ `inline-flex` on containers that should fill width
@@ -182,3 +224,6 @@ Rules:
 - ❌ Raw hex colors in Tailwind classes
 - ❌ `export default` for components
 - ❌ Custom interfaces when `React.ComponentProps` works
+- ❌ Edge-to-edge content on ultrawide screens (use `max-w-[1100px] mx-auto` wrapper)
+- ❌ Hiding status dropdown in compact cards (always show it)
+- ❌ Using npm or yarn (always use pnpm)
