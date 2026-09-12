@@ -9,8 +9,7 @@
   },
   "plugin": [
     "file:///home/eztvn/.config/opencode/plugins/notify-sound/plugin.js",
-    "file:///home/eztvn/.config/opencode/plugins/caveman/plugin.js",
-    "@smart-coders-hq/opencode-model-fallback"
+    "file:///home/eztvn/.config/opencode/plugins/caveman/plugin.js"
   ],
   "permission": {
     "bash": {
