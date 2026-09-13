@@ -279,13 +279,10 @@ MACHINE=$(cat "$HOME/.config/machine-type" 2>/dev/null || echo "desktop")
 WANTED_SCRIPTS=(
     "theme-toggle.sh"
     "kitty-theme-toggle.sh"
-    "shot"
     "apagar.sh"
     "reiniciar.sh"
     "cerrar-sesion.sh"
     "lan-mouse-escape.sh"
-    "bedtime.sh"
-    "bedtime-skip.sh"
 )
 
 COUNT=0
