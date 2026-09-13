@@ -158,9 +158,10 @@ __speak_direct() {
 speak_core_piper() { # speak_core_piper <voz> <texto> — sin flock, sin daemon
   local voice="$1"; shift
   local model json rate
-  for d in /run/current-system/sw/share/piper-voices \
-           "/nix/var/nix/profiles/default/share/piper-voices" \
-           "$HOME/.local/share/tts/piper/voices"; do
+  for d in "$HOME/.local/share/tts/piper/voices" \
+           "/usr/share/piper-voices" \
+           "/run/current-system/sw/share/piper-voices" \
+           "/nix/var/nix/profiles/default/share/piper-voices"; do
     if [ -f "$d/$voice/$voice.onnx" ]; then model="$d/$voice/$voice.onnx"; break; fi
   done
   [ -n "${model:-}" ] || { echo "voice: voz $voice no encontrada" >&2; return 1; }

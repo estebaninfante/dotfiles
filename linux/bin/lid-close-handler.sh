@@ -33,7 +33,7 @@ while true; do
 
     if on_battery || [ "$suspend_force" = "true" ]; then
       sleep 1  # debounce
-      /run/current-system/sw/bin/systemctl suspend
+      systemctl suspend
       # Tras resume, esperar a que el sistema se estabilice
       sleep 5
       state="$(cat "$LID" 2>/dev/null || echo unknown)"

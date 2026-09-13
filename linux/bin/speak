@@ -23,9 +23,10 @@ VOICE="${SPEAK_VOICE:-es_MX-ald-medium}"
 # Directorios donde buscar voces (orden de prioridad).
 voices_dirs=(
   "${PIPER_VOICES_DIR:-}"
+  "$HOME/.local/share/tts/piper/voices"
   "/run/current-system/sw/share/piper-voices"
   "/nix/var/nix/profiles/default/share/piper-voices"
-  "$HOME/.local/share/tts/piper/voices"
+  "/usr/share/piper-voices"
 )
 
 notify=0

@@ -13,7 +13,7 @@ on_battery() {
 }
 
 if on_battery; then
-  /run/current-system/sw/bin/systemctl stop ac-idle-inhibit.service 2>/dev/null || true
+  systemctl stop ac-idle-inhibit.service 2>/dev/null || true
 else
-  /run/current-system/sw/bin/systemctl start ac-idle-inhibit.service 2>/dev/null || true
+  systemctl start ac-idle-inhibit.service 2>/dev/null || true
 fi
