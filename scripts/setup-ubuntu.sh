@@ -142,14 +142,24 @@ install_apt_packages() {
   local core=(
     build-essential git curl wget ca-certificates gnupg lsb-release
     software-properties-common apt-transport-https
-    openssh-server tailscale
+    openssh-server
     network-manager network-manager-gnome bluez blueman
     power-profiles-daemon fprintd
-    polkit-gnome gnome-themes-extra adwaita-icon-theme
+    gnome-themes-extra adwaita-icon-theme
     xdg-desktop-portal xdg-desktop-portal-gtk
     fonts-noto fonts-noto-color-emoji
   )
   $DRY sudo apt install -y "${core[@]}"
+
+  # ── Tailscale (needs its own repo) ──
+  if ! command -v tailscale &>/dev/null; then
+    curl -fsSL https://tailscale.com/install.sh | sh || warn "Tailscale: instalar manualmente"
+  fi
+
+  # ── Polkit (nombre varia por distro) ──
+  $DRY sudo apt install -y policykit-1 2>/dev/null || \
+  $DRY sudo apt install -y polkit-gnome 2>/dev/null || \
+    warn "Polkit: instalar manualmente"
 
   # ── Shell & terminal ──
   local shell_tools=(
