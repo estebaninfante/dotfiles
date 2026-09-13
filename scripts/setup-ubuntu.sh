@@ -149,7 +149,12 @@ install_apt_packages() {
     xdg-desktop-portal xdg-desktop-portal-gtk
     fonts-noto fonts-noto-color-emoji
   )
-  $DRY sudo apt install -y "${core[@]}"
+  $DRY sudo apt install -y "${core[@]}" || {
+    warn "Algunos paquetes core no disponibles. Instalando uno por uno..."
+    for pkg in "${core[@]}"; do
+      $DRY sudo apt install -y "$pkg" 2>/dev/null || warn "Falta: $pkg"
+    done
+  }
 
   # ── Tailscale (needs its own repo) ──
   if ! command -v tailscale &>/dev/null; then
@@ -167,13 +172,18 @@ install_apt_packages() {
     jq yq tree rsync ncdu duf unzip zip p7zip unrar
     socat evtest
   )
-  $DRY sudo apt install -y "${shell_tools[@]}"
+  $DRY sudo apt install -y "${shell_tools[@]}" || {
+    warn "Algunos paquetes shell no disponibles. Instalando uno por uno..."
+    for pkg in "${shell_tools[@]}"; do
+      $DRY sudo apt install -y "$pkg" 2>/dev/null || warn "Falta: $pkg"
+    done
+  }
 
   # ── Neovim ──
-  $DRY sudo apt install -y neovim
+  $DRY sudo apt install -y neovim || warn "Neovim: instalar manualmente"
 
   # ── Navegadores ──
-  $DRY sudo apt install -y brave-browser
+  $DRY sudo apt install -y brave-browser || warn "Brave: instalar manualmente"
   # Chrome via .deb
   $DRY wget -q -O /tmp/google-chrome.deb "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" || true
   $DRY sudo dpkg -i /tmp/google-chrome.deb 2>/dev/null || $DRY sudo apt -f install -y
@@ -202,7 +212,7 @@ install_apt_packages() {
     qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
     qml6-module-qtquick-controls qml6-module-qtquick-layouts \
     qml6-module-qtgraphicaleffects libqt6svg6-dev qt6-imageformats \
-    libqt6quick6 qt6-tools-dev qt6-tools-dev-tools
+    libqt6quick6 qt6-tools-dev qt6-tools-dev-tools || warn "Qt6: instalar manualmente"
 
   # ── KDE/GNOME apps ──
   local desktop_apps=(
