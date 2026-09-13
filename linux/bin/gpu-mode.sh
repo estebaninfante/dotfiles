@@ -52,13 +52,18 @@ driver_active() {
 switch_profile() {
   local profile="$1"
   local switcher
+  # NixOS: switch-to-configuration. Arch/Omarchy: not supported (warn).
   if [ "$profile" = "nvidia" ]; then
     switcher="/run/current-system/specialisation/nvidia/bin/switch-to-configuration"
   else
     switcher="/run/current-system/bin/switch-to-configuration"
   fi
   if [ ! -x "$switcher" ]; then
-    echo "Perfil NVIDIA no disponible: ejecuta rebuild primero" >&2
+    if [ -f /etc/arch-release ]; then
+      echo "gpu-mode: perfil '$profile' no soportado en Arch. Usa nvidia-smi o reinicia manualmente." >&2
+    else
+      echo "Perfil NVIDIA no disponible: ejecuta rebuild primero" >&2
+    fi
     exit 1
   fi
   if [ "$(id -u)" = "0" ]; then

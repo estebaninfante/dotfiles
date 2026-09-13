@@ -82,7 +82,7 @@ done
 
 if [[ -z "$model" ]]; then
   echo "speak: voz '$VOICE' no encontrada en: ${voices_dirs[*]}" >&2
-  echo "  (instalada via packages.nix: piperVoices)" >&2
+  echo "  (instalada via packages.nix/pacman: piper-tts + voces)" >&2
   exit 1
 fi
 

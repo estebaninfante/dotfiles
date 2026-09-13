@@ -26,23 +26,49 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 
 _(Agente: listar skills creadas por auto-mejora)_
 
-## Migración NixOS → Ubuntu 24.04 LTS
+## Migración NixOS → Omarchy (Arch Linux)
 
-**Estado**: Script creado, pendiente de ejecutar en máquina fresca.
+**Estado**: Script creado (`scripts/setup-omarchy.sh`), listo para ejecutar.
 
-**Archivos migration script**: `scripts/migrate-to-ubuntu.sh`
-**Fixes quickshell**: `cards/NotifCard.qml` (sound path), `menus/PowerMenu.qml` (systemctl path) — ambos ahora multi-path compatible.
+**Un solo comando post-install de Omarchy**:
+```bash
+bash ~/dotfiles/scripts/setup-omarchy.sh
+```
 
-**Stack Ubuntu**:
-- Hyprland via PPA oficial (`ppa:hyprland/release`)
-- NVIDIA via `ubuntu-drivers install` + `nvidia-cuda-toolkit`
-- PyTorch CUDA pre-compilado: `pip install torch --index-url https://download.pytorch.org/whl/cu128`
-- keyd desde GitHub (make install)
-- quickshell desde fuente o AppImage
-- Configs: symlinks directos al repo (sin home-manager)
-- Snap: quitado y bloqueado
+**Qué hace el script (15 fases)**:
+1. Detecta Omarchy/Arch, clona repo si falta
+2. Instala yay (AUR helper)
+3. Instala paquetes extra (hyprpaper, kitty, tmux, starship, zoxide, etc.)
+4. Copia hyprland.lua (reemplaza defaults de Omarchy)
+5. Deshabilita omarchy-shell, symlinkea nuestro quickshell custom
+6. Symlink configs (kitty, nvim, kanata, fastfetch, btop, gh, opencode, tmux, voice)
+7. Enlaza scripts a ~/.local/bin (excluye NixOS-specific: cuda-*, refind-check)
+8. Configura keyd (copia default.conf, habilita servicio)
+9. Systemd user services (quickshell, lan-mouse, clipboard-sync, voice-daemon, etc.)
+10. Servicios de sistema (syncthing, tailscale, input-remapper)
+11. Configs especiales (lan-mouse, input-remapper: copy, no symlink)
+12. PATH en .bashrc
+13. Fonts
+14. NVIDIA drivers (detecta y instala)
+15. AI/ML stack (PyTorch + CUDA via pip)
 
-**Pendiente**: Ejecutar en máquina fresca, probar Hyprland, testear CUDA/torch.
+**Diferencias clave NixOS → Omarchy**:
+- Paquetes: pacman + yay (AUR) en vez de nix-env/nixpkgs
+- No hay home-manager: symlinks directos al repo
+- No hay nixos-rebuild: configs se aplican via symlink + systemctl
+- Omarchy shell deshabilitado: usamos nuestro quickshell custom
+- keyd desde AUR en vez de módulo NixOS
+- Paths multi-distro: scripts fixeados para funcionar sin /run/current-system
+
+**Fixes multi-distro aplicados**:
+- `ac-idle-handler.sh`: systemctl sin path NixOS
+- `lid-close-handler.sh`: systemctl suspend sin path NixOS
+- `speak`: piper-voices search con fallbacks multi-distro
+- `voice`: piper-voices search con fallbacks multi-distro
+- `gpu-mode.sh`: warning en Arch (NVIDIA switching no soportado)
+- `setup-omarchy.sh`: excluye cuda-* y refind-check (NixOS-specific)
+
+**Pendiente**: Ejecutar en Omarchy fresco, probar Hyprland + quickshell + keyd.
 
 ## Pendientes de mejora
 
@@ -50,6 +76,12 @@ _(Agente: listar skills creadas por auto-mejora)_
 - Considerar añadir `websockets` a `linux/bin/gesturecontrol-landmarks` wrapper si se usa standalone.
 
 ## Historial de sesiones (últimas 5)
+
+### Sesión 2026-09-13: Migración a Omarchy
+- **Qué se hizo**: Investigé Omarchy (Arch + Hyprland + Quickshell). Creé `scripts/setup-omarchy.sh` (15 fases, un solo comando). Fix paths NixOS en scripts multi-distro.
+- **Decisión**: Migrar a Omarchy (no Ubuntu). Omarchy ya trae Hyprland + Quickshell, nuestro custom quickshell reemplaza omarchy-shell.
+- **Archivos modificados**: `scripts/setup-omarchy.sh` (nuevo), `linux/bin/ac-idle-handler.sh`, `linux/bin/lid-close-handler.sh`, `linux/bin/speak`, `linux/bin/voice`, `linux/bin/gpu-mode.sh`, `MEMORY.md`.
+- **Pendiente**: Ejecutar en Omarchy fresco, probar todo.
 
 ### Sesión 2026-09-10 (tarde): Migración NixOS → Ubuntu
 - **Qué se hizo**: Analicé viabilidad de migración a Ubuntu. Fix 2 paths NixOS en quickshell. Creé `scripts/migrate-to-ubuntu.sh`.
@@ -74,4 +106,4 @@ _(Agente: listar skills creadas por auto-mejora)_
 - **Pendiente**: Build CUDA completo, test CUIDA, cachear para laptop
 
 ---
-_Ultima actualización: 2026-09-10_
+_Ultima actualización: 2026-09-13_
