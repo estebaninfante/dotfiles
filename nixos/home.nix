@@ -59,6 +59,7 @@ allScripts = [
     "refind-check.sh" "hypr-lua.sh" "brave-cdp.sh"
     "gesturecontrol-engine" "gesturecontrol-actions" "gesturecontrol-config" "gesturecontrol-tray" "gesturecontrol-landmarks"
     "cuda-error-loop.sh" "cuda-rebuild.sh" "cuda-watchdog.sh"
+    "yoink"
   ];
   # Solo laptop
   laptopScripts = [

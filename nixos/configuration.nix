@@ -743,6 +743,7 @@ in
   ];
 
   nixpkgs.config.allowUnfree = true;
+  nixpkgs.config.permittedInsecurePackages = [ "electron-41.10.6" ];
 
   # ── Overlay: waybar patched for Lua IPC dispatch (PR #5013) ──────
   # Waybar v0.15.0 envia comandos dispatch con sintaxis legacy
