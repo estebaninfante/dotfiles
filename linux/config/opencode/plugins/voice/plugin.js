@@ -229,7 +229,8 @@ async function push(title, message, priority) {
 
 function speak(summary) {
   try {
-    Bun.spawn(['voice', 'speak', summary], { stdio: ['ignore', 'ignore', 'ignore'] });
+    const voiceBin = `${process.env.HOME}/.local/bin/voice`;
+    Bun.spawn([voiceBin, 'speak', summary], { stdio: ['ignore', 'ignore', 'ignore'] });
     dbg(`voice speak: ${summary.slice(0, 80)}`);
   } catch (e) { dbg(`voice speak ERROR: ${e.message}`); }
 }
@@ -320,7 +321,6 @@ function startCmdWatcher() {
   // Poll cada 1s para detectar comandos
   setInterval(() => {
     try {
-      const { readdirSync } = require('fs');
       const files = readdirSync(CMD_DIR);
       for (const f of files) {
         if (f.startsWith('.')) continue;
