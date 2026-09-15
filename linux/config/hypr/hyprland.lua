@@ -48,7 +48,7 @@ else
 end
 -- PREPEND ~/.local/bin al PATH existente (NO reemplazarlo).
 -- En NixOS los binarios estan en /run/current-system/sw/bin — si
--- reemplazamos el PATH, Hyprland no encuentra kitty/waybar/quickshell.
+-- reemplazamos el PATH, Hyprland no encuentra kitty/waybar.
 hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. os.getenv("PATH"))
 hl.env("XDG_DATA_HOME", os.getenv("HOME") .. "/.local/share")
 if machine == "desktop" then
@@ -130,16 +130,7 @@ hl.layer_rule({
     blur = true
 })
 
--- Blur gaussiano detrás de la barra quickshell (fondo translúcido).
--- La barra usa `color: "transparent"` + fondo rgba(0,0,0,0.6); Hyprland
--- difumina el escritorio que queda detrás → efecto cristal esmerilado.
-hl.layer_rule({
-    match = { namespace = "quickshell" },
-    blur = true
-})
-
--- Blur detrás del launcher: es un PopupWindow de quickshell, cubierto por el
--- layer_rule de namespace "quickshell" de arriba.
+-- Omarchy shell blur (handled by omarchy's own shell config)
 
 -- ========================
 -- CURSOR
@@ -221,7 +212,7 @@ hl.animation({
     style = "slide"
 })
 
--- Layers (waybar, swaync, quickshell): apertura con popin
+-- Layers (waybar, swaync, omarchy shell): apertura con popin
 -- rápido. Rofi es un layer → sin esto abre instantáneo sin animación.
 hl.animation({
     leaf = "layers",
@@ -259,7 +250,8 @@ hl.on("hyprland.start", function()
         -- Desktop: linux-wallpaperengine via systemd user service
     end
 
-    -- 2. Bar and UI (quickshell via systemd user service)
+    -- 2. Bar and UI (omarchy shell via omarchy-launch-shell)
+    hl.exec_cmd("omarchy-launch-shell")
     hl.exec_cmd("swaync")
 
     -- 3. D-Bus environment and portals
@@ -318,10 +310,7 @@ hl.window_rule({ match = { class = "swayosd-server" }, float = 1 })
 hl.window_rule({ match = { class = "swayosd-server" }, move = "1% 40%" })
 hl.window_rule({ match = { class = "swayosd-server" }, size = "200 20" })
 hl.window_rule({ match = { class = "swayosd-server" }, border_size = 0 })
--- Launcher quickshell: toplevel flotante tipo rofi, sin decoracion del
--- compositor (la card pinta su propio borde/radio). Los floats nuevos abren
--- centrados por defecto en el monitor activo.
-hl.window_rule({ match = { title = "quickshell-launcher" }, float = true, size = "760 500", border_size = 0, rounding = 0 })
+-- Omarchy menu (replaces custom quickshell launcher)
 hl.window_rule({ match = { class = "xdg-desktop-portal-gtk" }, max_size = "1260 560" })
 if machine == "desktop" then
     hl.window_rule({ match = { class = "handy", title = "Recording" }, float = 1, no_initial_focus = 1, no_blur = 1, border_size = 0 })
@@ -335,7 +324,7 @@ hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
 -- KEYBINDS: SYSTEM & APPS
 -- ========================
 hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
-hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("~/.local/bin/qs-launcher.sh apps"))
+hl.bind(mainMod .. " + SPACE",  hl.dsp.exec_cmd("omarchy-menu toggle"))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.local/bin/antigravity-ui.sh"))
 hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("firefox"))
 
