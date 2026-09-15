@@ -32,7 +32,7 @@ let
   configDirs = [
     "waybar" "kitty" "nvim" "kanata" "fastfetch"
     "mako" "swaync" "swayosd" "avizo" "btop" "gh" "opencode"
-    "quickshell" "tmux" "voice" "gesturecontrol"
+    "tmux" "voice" "gesturecontrol"
   ];
   configFiles = [
     "libinput-gestures.conf" "mimeapps.list" "user-dirs.dirs" "user-dirs.locale"
@@ -54,7 +54,6 @@ allScripts = [
     "kitty-theme-toggle.sh" "obsidian-theme-toggle.sh"
     "theme-toggle.sh"
     "gamepad-watch.sh" "hypr-input-bridge.sh"
-    "qs-launcher.sh" "apps-list.sh" "file-list.sh" "script-list.sh"
     "scroll-momentum.py" "phoenix.sh"
     "refind-check.sh" "hypr-lua.sh" "brave-cdp.sh"
     "gesturecontrol-engine" "gesturecontrol-actions" "gesturecontrol-config" "gesturecontrol-tray" "gesturecontrol-landmarks"
@@ -391,36 +390,9 @@ in
   # y la capa compuesta [control+numpad] garantizan Ctrl+Alt+F<N> (cambio de TTY).
   # No hay user service para evitar duplicar el daemon (crash-loop por doble grab).
 
-  # ── quickshell: barra/panel QML ──────────────────────────────
-  # Reemplaza el exec_cmd de hyprland.lua. Config: ~/.config/quickshell/
-  # (symlink al repo). --no-duplicate evita instancias multiples.
-  systemd.user.services.quickshell = {
-    Unit = {
-      Description = "Quickshell panel (QML bar)";
-      After = [ "graphical-session.target" ];
-      PartOf = [ "graphical-session.target" ];
-    };
-    Service = {
-      Type = "simple";
-      ExecStartPre = pkgs.writeShellScript "quickshell-wait" ''
-        for i in $(seq 1 30); do
-          [ -S "/run/user/%U/wayland-1" ] && exit 0
-          sleep 0.5
-        done
-        exit 0
-      '';
-      ExecStart = "${pkgs.quickshell}/bin/quickshell --no-duplicate";
-      Environment = [
-        "WAYLAND_DISPLAY=wayland-1"
-        "XDG_RUNTIME_DIR=/run/user/%U"
-        "XDG_CURRENT_DESKTOP=Hyprland"
-        "QT_SCALE_FACTOR=1"
-      ];
-      Restart = "always";
-      RestartSec = "3";
-    };
-    Install = { WantedBy = [ "graphical-session.target" ]; };
-  };
+  # ── quickshell: REMOVED — using omarchy default shell ──────────
+  # Omarchy shell launched by `omarchy-launch-shell` in hyprland.lua autostart.
+  # Config: ~/.config/omarchy/shell.json (managed by omarchy, not dotfiles).
 
   # ── holder de graphical-session.target (portales xdg) ─────────
   # La sesion de Hyprland no arranca graphical-session.target (eso lo
