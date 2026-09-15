@@ -357,6 +357,19 @@ PYEOF
     [ "$#" -ge 2 ] || { echo "uso: voice transcribe <wav>" >&2; exit 2; }
     transcribe "$2"
     ;;
+  summarize)
+    # On-demand summary: escribe archivo que el plugin voice lee y genera resumen + speak
+    mkdir -p "$CACHE_DIR/cmd"
+    local cmd="${2:-summarize}"
+    touch "$CACHE_DIR/cmd/$cmd"
+    echo "voice: comando '$cmd' enviado al plugin"
+    ;;
+  toggle)
+    # Toggle auto-speak on idle
+    mkdir -p "$CACHE_DIR/cmd"
+    touch "$CACHE_DIR/cmd/toggle"
+    echo "voice: toggle auto-speak"
+    ;;
   daemon)
     case "${2:-status}" in
       start) systemctl --user start voice-daemon ;;

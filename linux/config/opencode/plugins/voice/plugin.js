@@ -1,238 +1,377 @@
-// voice — opencode plugin: voz local para eventos de la sesion.
+// voice — opencode plugin v2
 //
-// Integra opencode con el sistema de voz local (linux/voice + ~/.local/bin/voice).
+// Arquitectura:
+//   1. Eventos → notificaciones DINAMICAS (contenido real, no textos estaticos)
+//   2. Auto-speak on idle → TOGGLEABLE (default OFF)
+//   3. On-demand summary → via archivo de comando (~/.cache/voice/cmd/)
 //
-// 1. Voz (TTS) para:
-//    - session.idle  → resumen breve de la respuesta (o texto completo si
-//                       state.json → tts.mode == "full")
-//    - permiso       → anuncia el comando que opencode quiere ejecutar
-//    - session.error → anuncia el error sin leer el stack trace
-//    - tool activity → (opcional, throttled) "opencode esta ejecutando <tool>"
-// (La entrada STT se desacoplo de Handy: el dictado se hace con Handy (F7)
-//  de forma independiente; este plugin solo emite voz de salida.)
+// Comandos (keybinding escribe archivo):
+//   ~/.cache/voice/cmd/summarize  → resume ultima respuesta + habla via Chatterbox
+//   ~/.cache/voice/cmd/toggle     → activar/desactivar auto-speak
 //
-// TTS habla via `~/.local/bin/voice speak <texto>` (cola del daemon si
-// voice-daemon.service esta activo; si no, sintesis directa en background).
-// El push a ntfy.sh sigue viviendo en plugins/notify-sound (visual separado).
+// Toggles:
+//   ~/.local/state/opencode/voice-auto-speak ('1' = hablar en idle, default '0')
 //
-// Runtime config: lee tts.enabled / tts.mode desde
-// ~/.local/state/voice/state.json (overrides por-maquina de config.toml).
+// Notificaciones:
+//   - Siempre via notify-send (contenido dinamico generado por el agente)
+//   - Push via ntfy.sh (reutiliza patron de notify-sound)
+//
+// Chatterbox:
+//   - Solo habla cuando auto-speak ON o cuando se ejecuta summarize on-demand
+//   - Usa 'voice speak' que routea al daemon TTS
 
-import fs from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, unlinkSync } from 'fs';
+import { watch } from 'fs';
 
-const HOME = process.env.HOME;
-const VOICE = `${HOME}/.local/bin/voice`;
-const CACHE = process.env.VOICE_CACHE_DIR || `${HOME}/.cache/voice`;
-const LOG_FILE = process.env.VOICE_LOG || `${CACHE}/opencode-voice.log`;
-const LOCK_DIR = '/tmp/opencode/voice-locks';
-const LOCK_TTL_MS = 60000;
+const DEBUG_LOG = process.env.VOICE_PLUGIN_LOG || '/tmp/opencode/voice-plugin.log';
+const CMD_DIR = `${process.env.HOME}/.cache/voice/cmd`;
+const CACHE_DIR = `${process.env.HOME}/.cache/voice`;
+const AUTO_SPEAK_FILE = `${process.env.HOME}/.local/state/opencode/voice-auto-speak`;
+const LAST_SUMMARY_FILE = `${CACHE_DIR}/last-summary.txt`;
+const GROQ_KEY_FILE = `${process.env.HOME}/.local/state/opencode/notify-groq-key`;
 
-// state.json overrides (tts.enabled, tts.mode, ...)
-function readState() {
+const TOPIC = (() => {
   try {
-    return JSON.parse(fs.readFileSync(`${HOME}/.local/state/voice/state.json`, 'utf8'))?.tts || {};
-  } catch { return {}; }
-}
-
-function ttsEnabled(state = readState()) {
-  return state.enabled !== false;
-}
+    const m = readFileSync(`${process.env.HOME}/.config/machine-type`, 'utf8').trim();
+    return m === 'desktop' ? 'opencode-desktop' : 'opencode-laptop';
+  } catch { return 'opencode-laptop'; }
+})();
 
 function dbg(msg) {
-  try { fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
-}
-
-function acquireLock(key) {
   try {
-    const dir = `${LOCK_DIR}/${key}`;
-    try { fs.mkdirSync(dir); } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      const age = Date.now() - fs.statSync(dir).mtimeMs;
-      if (age > LOCK_TTL_MS) {
-        fs.rmSync(dir, { recursive: true, force: true });
-        fs.mkdirSync(dir);
-      } else return false;
-    }
-    fs.writeFileSync(`${dir}/pid`, String(process.pid));
-    return () => { try { fs.writeFileSync(`${dir}/ts`, String(Date.now())); } catch {} };
-  } catch { return () => {}; }
+    appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] [pid ${process.pid}] ${msg}\n`);
+  } catch {}
 }
 
-function speak(text, key) {
-  if (!text || !key) return;
-  if (!ttsEnabled()) { dbg(`tts off, skip: ${key}`); return; }
-  const release = acquireLock(key);
-  if (release === false) return;
+// ── Toggles ─────────────────────────────────────────────────────────────
+function autoSpeakEnabled() {
   try {
-    Bun.spawn([VOICE, 'speak', text], { stdio: ['ignore', 'ignore', 'ignore'] });
-    dbg(`speak[${key}]: ${text.slice(0, 200)}`);
-  } catch (e) { dbg(`speak ERR: ${e.message}`); } finally { release(); }
+    return readFileSync(AUTO_SPEAK_FILE, 'utf8').trim() === '1';
+  } catch {
+    return false; // default OFF
+  }
 }
 
-// sleepy/session util ─────────────────────────────────────────────────────
-function sessionIdOf(e) {
-  return e.properties?.sessionID || e.properties?.id || e.sessionID || e.id || '';
-}
-
-function isSessionIdle(e) {
-  if (e.type === 'session.idle') return true;
-  if (e.type === 'session.status')
-    return e.properties?.status?.type === 'idle' || e.status?.type === 'idle';
-  return false;
-}
-
-function isPermissionAsked(e) {
-  return e.type === 'permission.asked' || e.type === 'permission.updated';
-}
-
-function permissionDetail(e) {
+function setAutoSpeak(enabled) {
   try {
-    const p = e.permission || e.properties || {};
-    return p.request?.command || p.request?.tool || p.prompt
-      || (p.pattern ? String(p.pattern) : '') || p.title || '';
+    mkdirSync(`${process.env.HOME}/.local/state/opencode`, { recursive: true });
+    writeFileSync(AUTO_SPEAK_FILE, enabled ? '1' : '0');
+    dbg(`auto-speak: ${enabled ? 'ON' : 'OFF'}`);
+  } catch (e) {
+    dbg(`setAutoSpeak ERROR: ${e.message}`);
+  }
+}
+
+function groqKey() {
+  try {
+    return readFileSync(GROQ_KEY_FILE, 'utf8').trim() || '';
   } catch { return ''; }
 }
 
-// Extrae el texto de un mensaje assistant sumando los parts de texto.
-function assistantText(msg) {
-  if (!msg?.parts) return '';
-  const out = [];
-  for (const p of msg.parts) {
-    if (p.type === 'text' && typeof p.text === 'string') out.push(p.text);
-    if (p.type === 'texts') out.push(String(p.texts).trim());
+// ── Session helpers ─────────────────────────────────────────────────────
+function sessionIdOf(event) {
+  return event.properties?.sessionID
+    || event.properties?.id
+    || event.sessionID
+    || event.id
+    || '';
+}
+
+async function sessionTitle(client, sessionID) {
+  if (!client?.session?.get || !sessionID) return '';
+  try {
+    const res = await client.session.get({ path: { id: sessionID } });
+    return res?.data?.title || '';
+  } catch { return ''; }
+}
+
+function isSessionIdle(event) {
+  if (event.type === 'session.idle') return true;
+  if (event.type === 'session.status') {
+    return event.properties?.status?.type === 'idle'
+      || event.status?.type === 'idle';
   }
-  return out.join('\n').trim();
+  return false;
 }
 
-// Resumen hablado: texto del ultimo mensaje assistant, recortado.
-// mode=full → se lee completo (cap ~4000 chars); summary → ~320 chars.
-function summarize(raw, mode) {
-  if (!raw) return '';
-  const flat = raw.replace(/\s+/g, ' ').trim();
-  const cap = mode === 'full' ? 4000 : 320;
-  if (flat.length <= cap) return flat;
-  const cut = flat.slice(0, cap);
-  const lastSentence = cut.lastIndexOf('.');
-  const end = lastSentence > cap / 2 ? lastSentence + 1 : cap;
-  return flat.slice(0, end) + ' (respuesta recortada)';
+function isPermissionAsked(event) {
+  return event.type === 'permission.asked' || event.type === 'permission.updated';
 }
 
-// tool activity: solo anuncia cuando el tool lleva rato corriendo y
-// throttled (una vez por tool por ~30s).
-const toolShout = {};
-function toolAnnounce(e) {
+function isSessionError(event) {
+  return event.type === 'session.error';
+}
+
+// ── Dedup ───────────────────────────────────────────────────────────────
+const recent = new Map();
+function alreadyFired(kind, sid) {
+  const key = `${kind}:${sid || 'nosid'}`;
+  const now = Date.now();
+  if (now - (recent.get(key) || 0) < 15000) return true;
+  recent.set(key, now);
+  if (recent.size > 64) for (const [k, t] of recent) if (now - t > 60000) recent.delete(k);
+  return false;
+}
+
+// ── Transcript ──────────────────────────────────────────────────────────
+async function fetchMessages(client, sessionID) {
+  let res;
   try {
-    const part = e.properties || {};
-    if (part.type !== 'tool') return;
-    const tool = part.tool || part.state?.tool || '';
-    const args = part.state?.input?.command || part.args || part.call?.input || '';
-    const name = tool || String(args).split(/\s+/)[0] || 'herramienta';
-    const now = Date.now();
-    if (now - (toolShout[name] || 0) < 30000) return;
-    toolShout[name] = now;
-    speak(`Opencode esta ejecutando: ${name}`, `tool-${name}`);
-  } catch {}
+    res = client.session.messages({ path: { id: sessionID } });
+  } catch { return null; }
+  let val;
+  try { val = await res; } catch { return null; }
+  const list = val?.data ?? val?.response ?? val;
+  return Array.isArray(list) ? list : null;
 }
 
-// ── sesion activa trackeada ─────────────────────────────────────────────
-async function summaryForSession(client, sid, mode) {
-  try {
-    const res = await client.session.messages({ path: { id: sid } });
-    const msgs = res?.data || [];
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].role === 'assistant') {
-        const text = assistantText(msgs[i]);
-        if (text) return summarize(text, mode);
-      }
+async function buildTranscript(client, sessionID) {
+  if (!client?.session?.messages || !sessionID) return '';
+  const list = await fetchMessages(client, sessionID);
+  if (!list) return '';
+  const sorted = [...list].sort((a, b) => {
+    return (a?.info?.time?.created ?? 0) - (b?.info?.time?.created ?? 0);
+  });
+  const out = [];
+  for (const m of sorted) {
+    const role = m?.info?.role;
+    if (role !== 'user' && role !== 'assistant') continue;
+    let text = '';
+    for (const p of m.parts || []) {
+      if (p.type === 'text' && p.text) text += p.text + ' ';
+      else if (p.type === 'tool' && p.tool) text += `[tool:${p.tool}] `;
     }
-  } catch (e) { dbg(`summary ERR: ${e.message}`); }
+    text = text.replace(/\s+/g, ' ').trim().slice(0, 400);
+    if (text) out.push(`${role === 'user' ? 'Usuario' : 'Asistente'}: ${text}`);
+  }
+  return out.slice(-14).join('\n');
+}
+
+async function lastAssistantMessage(client, sessionID) {
+  if (!client?.session?.messages || !sessionID) return '';
+  const list = await fetchMessages(client, sessionID);
+  if (!list) return '';
+  // Find last assistant message with text
+  for (let i = list.length - 1; i >= 0; i--) {
+    const m = list[i];
+    if (m?.info?.role !== 'assistant') continue;
+    let text = '';
+    for (const p of m.parts || []) {
+      if (p.type === 'text' && p.text) text += p.text + ' ';
+    }
+    text = text.replace(/\s+/g, ' ').trim();
+    if (text) return text.slice(0, 800);
+  }
   return '';
 }
 
-async function onIdle(client, sid) {
-  const mode = readState().mode || 'summary';
-  const summary = await summaryForSession(client, sid, mode);
-  if (!summary) {
-    speak('Opencode: la sesion termino', `idle-${sid || 'default'}`);
-    return;
-  }
-  speak(`Termine. ${summary}`, `idle-${sid || 'default'}`);
+// ── Summary via Groq ────────────────────────────────────────────────────
+async function groqSummary(transcript, ctxTitle) {
+  const key = groqKey();
+  if (!key) return '';
+  const body = {
+    model: 'openai/gpt-oss-20b',
+    max_tokens: 500,
+    temperature: 0.3,
+    reasoning_effort: 'low',
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Eres un asistente que resume sesiones de un agente de codigo. '
+          + 'Responde SIEMPRE en espanol tecnico SIMPLE, plano y directo, '
+          + 'sin jerga innecesaria ni anglicismos evitables. '
+          + 'Una sola frase corta (maximo ~20 palabras) que diga QUE se hizo y SI funciono. '
+          + 'Prioriza SIEMPRE lo MAS RECIENTE: los ultimos mensajes del final son lo que cuenta. '
+          + 'Si hubo errores, dilo claramente ("fallo", "quedo pendiente"). '
+          + 'No des saludos ni explicaciones: solo la frase.',
+      },
+      {
+        role: 'user',
+        content: `Sesion${ctxTitle ? ` "${ctxTitle}"` : ''}. Mensajes recientes:\n${transcript}\n\nResume en una frase en espanol tecnico simple.`,
+      },
+    ],
+  };
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    return data?.choices?.[0]?.message?.content?.trim() || '';
+  } catch { return ''; }
 }
 
-// ── entrada voz → opencode: watch to-opencode.json ─────────────────────
-// voice listen escribe transcripts aquí; el plugin los inyecta en la sesión.
-const OC_FILE = process.env.VOICE_CACHE_DIR
-  ? `${process.env.VOICE_CACHE_DIR}/to-opencode.json`
-  : `${HOME}/.cache/voice/to-opencode.json`;
-
-let lastProcessedTs = 0;
-let watchDebounce = null;
-
-function watchIncomingTranscripts(client) {
+// ── Notifications ───────────────────────────────────────────────────────
+function notifyDesktop(title, body) {
   try {
-    fs.mkdirSync(`${HOME}/.cache/voice`, { recursive: true });
+    Bun.spawn(['notify-send', '-t', '8000', title, body], { stdio: ['ignore', 'ignore', 'ignore'] });
+    dbg(`notify: ${title} | ${body}`);
+  } catch (e) { dbg(`notify-send ERROR: ${e.message}`); }
+}
+
+async function push(title, message, priority) {
+  try {
+    const res = await fetch(`https://ntfy.sh/${TOPIC}`, {
+      method: 'POST',
+      body: message,
+      headers: {
+        'Title': title,
+        'Priority': String(priority || 3),
+        'Tags': priority >= 4 ? 'warning' : 'white_check_mark',
+      },
+    });
+    dbg(`push: ${res.status}`);
+  } catch (e) { dbg(`push ERROR: ${e.message}`); }
+}
+
+function speak(summary) {
+  try {
+    Bun.spawn(['voice', 'speak', summary], { stdio: ['ignore', 'ignore', 'ignore'] });
+    dbg(`voice speak: ${summary.slice(0, 80)}`);
+  } catch (e) { dbg(`voice speak ERROR: ${e.message}`); }
+}
+
+// ── File command handler ────────────────────────────────────────────────
+// Keybinding escribe archivos en CMD_DIR para trigger on-demand
+let activeSession = null;
+let activeClient = null;
+
+function handleCommand(filename) {
+  const cmdPath = `${CMD_DIR}/${filename}`;
+  if (!existsSync(cmdPath)) return;
+
+  try {
+    unlinkSync(cmdPath); // consume el comando
+
+    if (filename === 'summarize') {
+      dbg('CMD: summarize (on-demand)');
+      if (!activeSession || !activeClient) {
+        dbg('  no active session');
+        notifyDesktop('voice', 'No hay sesion activa');
+        return;
+      }
+      doSummary(activeClient, activeSession, true); // true = force speak
+    } else if (filename === 'toggle') {
+      const newState = !autoSpeakEnabled();
+      setAutoSpeak(newState);
+      notifyDesktop('voice', `Auto-speak: ${newState ? 'ON' : 'OFF'}`);
+    } else if (filename === 'on') {
+      setAutoSpeak(true);
+      notifyDesktop('voice', 'Auto-speak: ON');
+    } else if (filename === 'off') {
+      setAutoSpeak(false);
+      notifyDesktop('voice', 'Auto-speak: OFF');
+    }
+  } catch (e) {
+    dbg(`CMD handler ERROR: ${e.message}`);
+  }
+}
+
+async function doSummary(client, sessionID, forceSpeak = false) {
+  try {
+    const title = await sessionTitle(client, sessionID);
+    const transcript = await buildTranscript(client, sessionID);
+    let summary = '';
+
+    if (transcript) {
+      summary = await groqSummary(transcript, title);
+    }
+    if (!summary) {
+      // Fallback: usar ultimo mensaje del asistente
+      summary = await lastAssistantMessage(client, sessionID);
+    }
+    if (!summary) {
+      summary = title ? `Sesion "${title}" terminada` : 'Sesion terminada';
+    }
+
+    // Guardar para referencia
+    try {
+      mkdirSync(CACHE_DIR, { recursive: true });
+      writeFileSync(LAST_SUMMARY_FILE, summary);
+    } catch {}
+
+    // Notificacion dinamica (siempre)
+    const notifTitle = title ? `opencode: ${title}` : 'opencode: sesion terminada';
+    notifyDesktop(notifTitle, summary);
+
+    // Push al celular
+    await push('opencode', summary, 3);
+
+    // Speak: solo si force (on-demand) o auto-speak enabled
+    if (forceSpeak || autoSpeakEnabled()) {
+      speak(summary);
+    } else {
+      dbg('auto-speak OFF, no speak');
+    }
+  } catch (e) {
+    dbg(`doSummary ERROR: ${e.message}`);
+  }
+}
+
+// ── Command file watcher ────────────────────────────────────────────────
+function startCmdWatcher() {
+  try {
+    mkdirSync(CMD_DIR, { recursive: true });
   } catch {}
 
-  const poll = async () => {
+  // Poll cada 1s para detectar comandos
+  setInterval(() => {
     try {
-      if (!fs.existsSync(OC_FILE)) return;
-      const raw = fs.readFileSync(OC_FILE, 'utf8').trim();
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (!data.text || (data.ts && data.ts <= lastProcessedTs)) return;
-
-      lastProcessedTs = data.ts || Date.now();
-      dbg(`→ incoming voice: ${data.text.slice(0, 100)}`);
-
-      // Limpiar el archivo para no re-procesar
-      fs.writeFileSync(OC_FILE, '');
-
-      // Inyectar como mensaje del usuario en la sesión activa
-      try {
-        const sessions = await client.session.list();
-        const active = sessions?.data?.[0];
-        if (active?.id) {
-          await client.session.prompt({
-            path: { id: active.id },
-            body: { content: data.text }
-          });
-          dbg(`→ prompt sent to session ${active.id}`);
-        } else {
-          dbg('→ no active session to inject voice');
-        }
-      } catch (e) { dbg(`→ prompt ERR: ${e.message}`); }
+      const { readdirSync } = require('fs');
+      const files = readdirSync(CMD_DIR);
+      for (const f of files) {
+        if (f.startsWith('.')) continue;
+        handleCommand(f);
+      }
     } catch {}
-  };
+  }, 1000);
 
-  // Poll cada 1s (ligero, no fs.watch que a veces falla en NFS/tmpfs)
-  setInterval(poll, 1000);
+  dbg('cmd watcher started');
 }
 
+// ── Plugin entry ────────────────────────────────────────────────────────
 export default async ({ $, client }) => {
-  dbg('plugin init (voice)');
-
-  // Iniciar watcher de transcripts entrantes
-  watchIncomingTranscripts(client);
+  dbg('plugin init v2');
+  startCmdWatcher();
 
   return {
     event: async ({ event }) => {
       try {
         const sid = sessionIdOf(event);
 
-        if (isSessionIdle(event)) {
-          dbg('→ idle');
-          await onIdle(client, sid);
-        } else if (isPermissionAsked(event)) {
-          const detail = permissionDetail(event);
-          speak(`Opencode necesita permiso para: ${detail || 'ejecutar'}`, `perm-${sid || 'default'}`);
-        } else if (event.type === 'session.error') {
-          const msg = String(event.properties?.error?.message || event.error || '')
-            .replace(/\s+/g, ' ').trim().slice(0, 160);
-          speak(`Opencode encontro un error.${msg ? ` ${msg}` : ''}`, `err-${sid || 'default'}`);
-        } else if (event.type === 'message.part.updated') {
-          toolAnnounce(event);
+        // Track sesion activa para on-demand
+        if (sid) {
+          activeSession = sid;
+          activeClient = client;
         }
-      } catch (e) { dbg(`handler ERR: ${e.message}`); }
+
+        if (isSessionIdle(event)) {
+          if (alreadyFired('idle', sid)) return;
+          dbg('session idle');
+          await doSummary(client, sid, false); // false = respect toggle
+        } else if (isPermissionAsked(event)) {
+          if (alreadyFired('perm', sid)) return;
+          const detail = (() => {
+            try {
+              const p = event.permission || event.properties || {};
+              return p.request?.command || p.request?.tool || p.prompt
+                || (p.pattern ? String(p.pattern) : '') || p.title || '';
+            } catch { return ''; }
+          })();
+          notifyDesktop('opencode: permiso', detail || 'Pide permiso');
+          await push('opencode: permiso', `Pide permiso: ${detail}`, 4);
+        } else if (isSessionError(event)) {
+          if (alreadyFired('error', sid)) return;
+          const errMsg = event.properties?.error || event.error || 'Error desconocido';
+          notifyDesktop('opencode: error', String(errMsg));
+          speak(`Error: ${errMsg}`);
+        }
+      } catch (e) {
+        dbg(`event handler ERROR: ${e.message}`);
+      }
     },
   };
 };
