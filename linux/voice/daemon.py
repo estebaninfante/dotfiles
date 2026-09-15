@@ -95,6 +95,19 @@ def synth_and_play(req: dict) -> bool:
 
 def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
     """Sintetiza `text` a `wav` con el motor dado. Devuelve OK (wav creado)."""
+    if engine == "chatterbox":
+        script = os.path.join(os.path.dirname(__file__), "chatterbox_synth.py")
+        venv_python = os.path.expanduser("~/.local/share/tts/venv/bin/python3")
+        if not os.path.exists(venv_python):
+            log("chatterbox: venv python no encontrado")
+            return False
+        cmd = [venv_python, script, text, wav, "--lang", lang]
+        # Si hay reference audio configurada, usarla para voice cloning
+        ref_dir = os.path.join(HOME, ".local", "share", "tts", "chatterbox", "refs")
+        ref_file = os.path.join(ref_dir, f"ref_{lang}.wav")
+        if os.path.isfile(ref_file):
+            cmd.extend(["--ref", ref_file])
+        return _run(cmd, None)
     if engine == "piper":
         model = find_piper_model(voice)
         if not model:

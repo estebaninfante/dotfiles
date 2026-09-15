@@ -30,12 +30,13 @@ CACHE_DIR = os.environ.get("VOICE_CACHE_DIR", os.path.join(HOME, ".cache", "voic
 MACHINE_FILE = os.path.join(HOME, ".config", "machine-type")
 
 # × idioma: engine_<lang>=motor, voice_<lang>=voz.
-# es → piper (es_MX-claude-high suena mejor que el es de kokoro, que es thin).
-# en → kokoro (af_heart, calidad A).
+# es → chatterbox (multilingue, calidad SOTA, voice cloning)
+# en → chatterbox (multilingue, calidad SOTA, voice cloning)
+# Fallback: piper/kokoro si chatterbox no disponible.
 DEFAULTS = {
     "tts": {"enabled": True, "lang": "es", "mode": "summary",
-            "engine_es": "piper", "voice_es": "es_MX-claude-high",
-            "engine_en": "kokoro", "voice_en": "af_heart"},
+            "engine_es": "chatterbox", "voice_es": "default",
+            "engine_en": "chatterbox", "voice_en": "default"},
     "stt": {"accelerator": "auto", "model": "whisper-medium", "lang": "es"},
     "power": {"cpu_on_battery": True, "gpu_on_ac": True},
 }
