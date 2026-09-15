@@ -10,15 +10,34 @@ Rectangle {
     width: parent.width * 0.985
     height: parent.height
     anchors.horizontalCenter: parent.horizontalCenter
-    clip: true
+    clip: false
     opacity: expanded ? 1 : 0
 
     required property bool expanded
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.leftMargin: 50
+        anchors.top: parent.top
+        width: 80
+        height: 22
+        radius: 8
+        color: "red"
+    }
 
     Workspaces {
         anchors.left: parent.left
         anchors.leftMargin: 10
         anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Rectangle {
+        x: 370
+        anchors.verticalCenter: parent.verticalCenter
+        width: 100
+        height: 22
+        radius: 8
+        color: "red"
     }
 
     SystemBar {

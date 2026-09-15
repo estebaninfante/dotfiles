@@ -8,9 +8,11 @@
     }
   },
   "plugin": [
-    "file:///home/eztvn/.config/opencode/plugins/notify-sound/plugin.js",
-    "file:///home/eztvn/.config/opencode/plugins/caveman/plugin.js",
-    "@smart-coders-hq/opencode-model-fallback"
+    "./plugins/caveman/plugin.js",
+    "./plugins/notify-sound/plugin.js",
+    "./plugins/voice/plugin.js",
+    "@smart-coders-hq/opencode-model-fallback",
+    "@tarquinen/opencode-dcp@latest"
   ],
   "permission": {
     "bash": {
