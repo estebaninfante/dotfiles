@@ -4,50 +4,40 @@
 
 **El repositorio (`~/dotfiles/`) es la unica fuente de verdad.**
 
-Todas las configuraciones gestionadas viven aqui. Los archivos en `~/.config/`, `~/.bashrc`, etc. son enlaces simbolicos que apuntan a este repositorio (via home-manager `mkOutOfStoreSymlink`).
+Todas las configuraciones gestionadas viven aqui. Los archivos en `~/.config/`, `~/.bashrc`, etc. son enlaces simbolicos que apuntan a este repositorio.
+
+**El usuario esta en Omarchy (Arch Linux), NO en NixOS.** No tocar archivos en `nixos/` ni ejecutar `nixos-rebuild`. El directorio `nixos/` queda como referencia historica del setup anterior.
 
 ## Reglas permanentes
 
 1. **Editar siempre dentro de `~/dotfiles/`.** Nunca modificar directamente `~/.config/`, `~/.bashrc` u otros destinos enlazados. Excepcion: migraciones puntuales o emergencias justificadas.
 
-2. **Toda nueva configuracion debe anadirse al inventario de `nixos/home.nix`.** No hay excepcion. Anadir una entrada a la lista correspondiente (`configDirs`, `configFiles`, `homeFiles`, `allScripts`, `laptopScripts`) y el symlink se genera solo en el siguiente rebuild.
+2. **Antes de crear un script nuevo, comprobar si uno existente puede reutilizarse o extenderse.** No duplicar funcionalidad.
 
-3. **Antes de crear un script nuevo, comprobar si uno existente puede reutilizarse o extenderse.** No duplicar funcionalidad.
+3. **Evitar duplicar logica.** Si un patron se repite, abstraerlo en una funcion.
 
-4. **Evitar duplicar logica.** Si un patron se repite, abstraerlo en una funcion.
+4. **Usar cambios minimos.** No reescribir archivos completos sin necesidad. Usar `edit` con precision quirurgica.
 
-5. **Usar cambios minimos.** No reescribir archivos completos sin necesidad. Usar `edit` con precision quirurgica.
+5. **Antes de modificar una configuracion existente, revisar el repositorio primero.** Respetar personalizaciones existentes del usuario.
 
-6. **Antes de modificar una configuracion existente, revisar el repositorio primero.** Respetar personalizaciones existentes del usuario.
-
-7. **Al anadir un paquete, anadirlo a `nixos/modules/packages.nix`.**
-
-8. **Configuraciones del sistema** (`services.*`, `environment.etc`, drivers, etc.) van declarativas en `nixos/configuration.nix` o `nixos/hosts/*.nix`. Nada de copiar a `/etc/` a mano.
+6. **NUNCA modificar archivos en `nixos/`.** El usuario ya no usa NixOS. Todo va directo a `~/.config/` o `~/.local/bin/`.
 
 ## Estructura del repositorio
 
 ```
 dotfiles/
-├── flake.nix            # inputs (nixpkgs, home-manager) + hosts laptop/desktop
-├── nixos/
-│   ├── configuration.nix # base comun (servicios, usuario, GDM, Hyprland, keyd)
-│   ├── home.nix          # home-manager: symlinks a linux/config, linux/bin, units
-│   ├── modules/          # packages.nix, keyboard.nix, sudoers.nix
-│   └── hosts/            # laptop.nix, desktop.nix + hardware-configuration.*.nix
+├── nixos/               # HISTORICO (NixOS setup anterior, NO modificar)
 ├── linux/
-│   ├── config/          # ~/.config/ (symlinkeado por home.nix)
+│   ├── config/          # ~/.config/ (symlinked)
 │   ├── home/            # ~/.bashrc, ~/.gitconfig
 │   ├── bin/             # ~/.local/bin/ (scripts propios)
-│   ├── xkb/             # Layout de teclado XKB (fuente de verdad: dvk_prog)
+│   ├── voice/           # TTS daemon + Chatterbox server
+│   ├── xkb/             # Layout de teclado XKB
 │   ├── patches/         # patches (lan-mouse AltGr, waybar Lua dispatch)
 │   └── system/          # keyd, NetworkManager dispatcher
 ├── scripts/
-│   ├── setup-nixos.sh   # Un comando en NixOS: clona + hardware-config + rebuild + Hermes
-│   ├── detect-machine.sh# Detecta laptop/desktop por hardware
-│   ├── sync-developing.sh # sync manual legacy; Syncthing sincroniza ~/developing
-│   ├── sync.sh          # (legacy)
 │   ├── setup-tts.sh     # TTS
-│   ├── setup-secrets.sh # Configura/verifica claves y secrets post-install
+│   ├── setup-secrets.sh # Configura/verifica claves y secrets
 │   └── publish.sh       # Commit + push con confirmacion
 ├── AGENTS.md
 └── README.md
@@ -56,8 +46,6 @@ dotfiles/
 ## Inventario de configuraciones gestionadas
 
 ### Linux config (`linux/config/`) — directorios completos
-
-Gestionados por `nixos/home.nix` (`configDirs`):
 
 | App | Ruta destino |
 |-----|-------------|
@@ -74,8 +62,8 @@ Gestionados por `nixos/home.nix` (`configDirs`):
 | btop | `~/.config/btop/` |
 | gh | `~/.config/gh/` |
 | opencode | `~/.config/opencode/` |
-| quickshell | `~/.config/quickshell/` (bar + menús + **launcher**) |
-| input-remapper-2 | `~/.config/input-remapper-2/` (**copiado**, no symlink: la GUI muta presets; patrón lan-mouse) |
+| quickshell | `~/.config/quickshell/` (bar + menus + launcher) |
+| input-remapper-2 | `~/.config/input-remapper-2/` (copiado, no symlink) |
 
 ### Linux config — archivos sueltos
 
@@ -86,13 +74,6 @@ Gestionados por `nixos/home.nix` (`configDirs`):
 | user-dirs.dirs | `~/.config/user-dirs.dirs` |
 | user-dirs.locale | `~/.config/user-dirs.locale` |
 
-### Lan-mouse (`linux/config/lan-mouse/`)
-
-| Archivo | Descripción |
-|---------|-------------|
-| `lan-mouse.pem` | PEM compartido entre máquinas |
-| `config.laptop.toml` / `config.desktop.toml` | Config por máquina; se copia a `~/.config/lan-mouse/config.toml` (writable, lan-mouse guarda estado) |
-
 ### Home (`linux/home/`)
 
 | Archivo | Ruta destino |
@@ -102,76 +83,25 @@ Gestionados por `nixos/home.nix` (`configDirs`):
 
 ### Scripts (`linux/bin/`)
 
-Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por paquetes). Gestionados por `nixos/home.nix` (`allScripts` + `laptopScripts`).
+Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por paquetes).
 
-### XKB (`linux/xkb/`)
+### Voice (`linux/voice/`)
 
-`dvk_prog` es la fuente de verdad. Lo consume `nixos/modules/keyboard.nix` para TTY, X11/GDM y Wayland (no requiere symlink manual).
-
-### keyd (`linux/system/keyd/default.conf`)
-
-Config de keyd (Caps Lock como Super, overload leftalt→numpad, capa nav, composite control+numpad). El servicio lo define `nixos/configuration.nix` (`services.keyd`).
-
-## Scripts (`scripts/`)
-
-| Script | Descripción |
-|--------|-------------|
-| `detect-machine.sh` | Detecta `laptop`/`desktop` por **hardware** (DMI chassis_type, batería, backlight). NO lee `machine-type`. Usado por `setup-nixos.sh` y `rebuild.sh` para no asumir laptop por defecto |
-| `rebuild.sh` | **Wrapper OBLIGATORIO de `nixos-rebuild`**: detecta máquina por hardware + valida root UUID contra `hardware-configuration.<machine>.nix`; aborta si no coinciden. Uso: `bash ~/dotfiles/scripts/rebuild.sh [switch|boot|test|build|dry-build]` |
-| `setup-nixos.sh` | **Un comando** en NixOS: clona repo + hardware-config + `nixos-rebuild` + Hermes. Detecta máquina por hardware; valida que el hardware-config coincida con el root UUID de la máquina actual |
-| `sync-developing.sh` | sync manual legacy; `~/developing/` usa Syncthing bidireccional |
-| `setup-tts.sh` | Instala/configura TTS |
-| `setup-secrets.sh` | Configura/verifica claves y secrets post-install (SSH host trust, tailscale auth, sunshine creds, gh auth, syncthing, handy Groq, machine-type). Idempotente, no destructivo |
-| `publish.sh` | Commit + push con confirmacion |
+| Archivo | Descripcion |
+|---------|-------------|
+| daemon.py | Daemon TTS con FIFO queue, administra chatterbox server |
+| engine.py | Config/estado TTS (engines, idiomas, toggles) |
+| chatterbox_server.py | Server persistente Chatterbox (model in GPU memory) |
+| chatterbox_synth.py | Wrapper legacy (subprocess mode, fallback) |
 
 ## Flujo de trabajo
 
 1. Editar archivos dentro de `~/dotfiles/`.
 2. Para cambios de configs symlinkeadas (hypr, waybar, nvim, etc.), se aplican al instante (symlink directo al repo).
-3. Para cambios de sistema/paquetes/home-manager: `bash ~/dotfiles/scripts/rebuild.sh` (detecta la máquina, valida el hardware-config y ejecuta `nixos-rebuild switch`). **PROHIBIDO** pasar el host a mano (`#laptop`/`#desktop`) — un host equivocado genera una generación con hardware de otra máquina y rompe el boot (emergency mode). Esto ya pasó: gen 72 inservible en desktop.
+3. Para scripts: guardar en `linux/bin/`, symlink automatico si esta en el inventario.
 4. Ejecutar `~/dotfiles/scripts/publish.sh` para commitear (y pushear con confirmacion).
 
-### Fresh install (NixOS)
-
-```bash
-# 1. Clonar el repo
-git clone <url> ~/dotfiles
-
-# 2. Un comando: hardware-config + paquetes + servicios + symlinks + Hermes
-bash ~/dotfiles/scripts/setup-nixos.sh
-
-# 3. Configurar Hermes
-hermes setup
-
-# 4. Claves/secrets pendientes (tailscale auth, sunshine creds, gh auth,
-#    syncthing pairing, ssh host trust...) — idempotente, pide solo lo que falte.
-bash ~/dotfiles/scripts/setup-secrets.sh
-
-# 5. Recargar shell
-exec bash
-```
-
-### Secrets y llaves tras fresh install
-
-`scripts/setup-secrets.sh` configura/verifica todo lo que necesita claves o
-estado local (SSH host trust, tailscale auth, sunshine creds, gh auth,
-syncthing pairing, handy Groq key, machine-type). Idempotente y no destructivo:
-solo pide los secrets que faltan y reporta PASS/SKIP/MANUAL por item.
-
-Para configurarlo rápido con opencode: **«corre scripts/setup-secrets.sh y dime
-qué falta»** — el agente lo ejecuta y resuelve cada item.
-
-Ver `nixos/README.md` para la guia de instalacion completa.
-
-## Multi-máquina (laptop + desktop)
-
-### Detección
-
-El archivo `~/.config/machine-type` contiene `laptop` o `desktop`. No se commitea al repo (es local a cada máquina).
-
-`setup-nixos.sh` lee este archivo al inicio. **Si no existe, NO asume `laptop`**: lo detecta por hardware con `scripts/detect-machine.sh` (DMI chassis_type, batería, backlight). Esto evita el bug de instalar el desktop como laptop.
-
-`setup-nixos.sh` además valida que `nixos/hosts/hardware-configuration.<machine>.nix` coincida con el **root UUID de la máquina actual** (`findmnt -no UUID /`). Si el archivo contiene hardware de otra máquina, lo regenera automáticamente en vez de montar particiones ajenas.
+## Multi-maquina (laptop + desktop)
 
 ### Configs machine-specific
 
@@ -194,412 +124,147 @@ end
 ```
 
 **`hyprpaper`** tiene dos configs:
-- `hyprpaper-laptop.conf` → monitor eDP-2
-- `hyprpaper-desktop.conf` → monitor DP-1
+- `hyprpaper-laptop.conf` -> monitor eDP-2
+- `hyprpaper-desktop.conf` -> monitor DP-1
 
-El autostart en hyprland.lua carga la correcta:
-```lua
-hl.exec_cmd("hyprpaper --config ~/.config/hypr/hyprpaper-" .. machine .. ".conf")
-```
-
-**Scripts machine-specific** (solo se enlazan en laptop, `laptopScripts` en home.nix):
-- `toggle-lid.sh`
-- `lid-inhibit-waybar.sh`
-- `waybar-battery-top`
-- `trackpad-dwt-daemon`
-- `reload-hyprpaper.sh`
-- `gpu-mode.sh` → perfiles NVIDIA + corte físico ACPI (100% OFF) de la dGPU
-
-### GPU NVIDIA (laptop híbrida)
-
-**Caso:** iGPU AMD (amdgpu) maneja el display; dGPU NVIDIA (RTX 4060) solo para juegos.
-
-**`gpu-mode.sh`** — perfiles + corte físico ACPI de la dGPU:
-- `gpu-mode.sh off` → **corte físico 100%**: llama `\_SB.PCI0.GPP0.PG00._OFF`
-  via `acpi_call` (PowerResource real de la dGPU, ver SSDT). El rail de la
-  GPU se corta (no solo D3cold: el firmware Legion mantiene el rail vivo).
-- `gpu-mode.sh battery` → runtime PM auto + intenta corte ACPI
-- `gpu-mode.sh enable` / `disable` → especialización NVIDIA (reboot) para jugar
-- `gpu-mode.sh toggle` / `status` (status incluye `ACPI: on|off`)
-
-Automático (solo laptop):
-- `gpu-acpi-off.service` (multi-user.target) → corte ACPI al boot.
-- `powerManagement.powerUpCommands` → re-aplica corte tras cada resume
-  (el firmware reenciende el rail en suspend).
-- `battery-power-guard.sh` (evento Mains via udev) → power-saver + corte + syncthing OFF (ON en AC; toggle manual en pill "SYNC" de quickshell, respeta `/tmp/syncthing-manual-off`).
-- `powerManagement.powertop.enable` → `powertop --auto-tune` al boot.
-
-Accesible desde el **PowerMenu** de quickshell (menú "Modo Energia"). Requiere sudo NOPASSWD (definido en `nixos/modules/sudoers.nix`):
-- `tee /sys/bus/pci/devices/*/power/control`
-- `nvidia-smi`
-
-Config NVIDIA en `nixos/hosts/laptop.nix` (`prime.offload`, `powerManagement.enable = false`).
-
-**Systemd units:**
-- `trackpad-dwt.service` → solo laptop (home.nix)
-- `dotfiles-sync.service` + `dotfiles-sync.timer` → ambas máquinas (home.nix)
-- Syncthing `developing` → ambas máquinas (configuration.nix)
-
-### Sync de ~/developing (laptop ↔ desktop)
-
-`~/developing/` usa Syncthing bidireccional en tiempo real. NixOS configura ambos
-dispositivos y carpeta `developing` tipo `sendreceive`, con watcher de filesystem
-y versionado simple de cinco versiones. Puertos LAN: TCP/UDP 22000 y UDP 21027.
-También anuncia IPs Tailscale para sincronizar fuera de casa cuando ambos equipos
-están encendidos. Si un equipo está apagado, Syncthing conserva cambios locales
-y los entrega al reconectar; no existe sincronización mientras equipo está apagado.
-`.stignore` excluye `node_modules`, `.next`, `dist`, builds, caches y logs; se
-regeneran localmente con `pnpm install` o scripts del proyecto.
-
-`scripts/sync-developing.sh` queda como herramienta manual legacy; no existe timer
-rsync para evitar carreras y borrados unidireccionales.
-
-### Sync entre máquinas
-
-Servicio systemd user (`dotfiles-sync.timer`) ejecuta `git pull --ff-only` cada 5 minutos.
-
-Para subir cambios desde una máquina:
-```bash
-bash ~/dotfiles/scripts/publish.sh
-```
-
-La otra máquina recibe los cambios automáticamente.
-
-### IPs LAN estáticas (fuera del pool DHCP)
-
-Para lan-mouse/syncthing ambas máquinas usan IP fija **fuera del pool DHCP**
-(el router nunca las asignará a otro equipo):
+### IPs LAN estaticas (fuera del pool DHCP)
 
 - Laptop: `192.168.1.240` · Desktop: `192.168.1.241`
-- Configuradas via `nmcli` en los perfiles de red de casa (`ipv4.method=manual`,
-  `802-11-wireless.powersave=2` y `bssid` pineado al router para minimizar
-  stalls de KVM). Los perfiles NM
-  viven en `/etc/NetworkManager/system-connections/` (local a cada máquina,
-  NO gestionados por el repo).
-- **IP KVM flotante + ruta simétrica** (`linux/system/NetworkManager/kvm-ensure.sh`,
-  instalado en `/etc/NetworkManager/kvm-ensure.sh` via
-  `environment.etc`): mantiene la IP fija en UNA sola interfaz — ethernet de
-  casa si hay, si no WiFi (SSIDs en `HOME_SSIDS`) — y añade ruta simétrica
-  `PEER/32 dev iface src KVM_IP` para que las respuestas salgan con la IP que
-  el peer espera. Sin esto, con ethernet+WiFi activos en el mismo subnet la
-  laptop responde con la IP del otro medio → routing asimétrico +
-  `checkReversePath` estricto dropea → `Connection timed out`. Se dispara:
-  dispatcher `90-lan-mouse` (eventos NM `up|down|dhcp4-change`) + timer
-  `kvm-ensure` (cada 2 min, safety net si NM pierde eventos o se re-enumera
-  el dock USB ethernet). Reinicia lan-mouse async (el stop cuelga ~90s en
-  desktop con sesión KVM activa, por eso `timeout 20` en background).
-- ⚠️ Lag de lan-mouse en WiFi: el router usa canal 5GHz DFS (112/5560MHz) y hay
-  un repetidor propio co-canal (`74:93:da:a1:0f:1a`, IP .48). Ráfagas de
-  100-200ms incluso hacia el gateway. Fix real: fijar router a canal 5GHz
-  no-DFS (36-48) — pendiente del usuario en el router.
-- Referencias hardcodeadas: `linux/config/lan-mouse/config.*.toml`,
-  syncthing en `nixos/configuration.nix`, docs.
-- Dispatcher `90-lan-mouse` (instalado via `networking.networkmanager.dispatcherScripts`):
-  medium_handoff (ethernet manda: up→disconnect wlo1, down→connect wlo1),
-  `ensure_kvm` + ruta simétrica, watchdog que detecta conflicto
-  ARP/IP no configurable y avisa por ntfy (tópico por hostname: `opencode-desktop`/`opencode-laptop`).
-- `networking.firewall.checkReversePath = "loose"` (fue "strict" default): con
-  rutas asimétricas válidas (dual-interface) no hay que dropear el paquete en
-  la interfaz que no es la preferida.
+- Configuradas via `nmcli` en los perfiles de red
+- IPs KVM flotante + ruta simetrica para lan-mouse
 
-### SSH entre máquinas
-
-Ambas máquinas tienen `services.openssh` habilitado (solo llave pública, sin
-password, puerto 22 únicamente en la interfaz tailscale). Para conectarse:
+### SSH entre maquinas
 
 ```bash
-# desde la laptop hacia el desktop
-ssh eztvn@desktop
-
-# desde el desktop hacia la laptop
-ssh eztvn@laptop
+ssh eztvn@desktop  # desde laptop
+ssh eztvn@laptop   # desde desktop
 ```
 
-- `desktop` / `laptop` se resuelven vía tailscale MagicDNS (solo cuando la
-  otra máquina está online en la tailnet).
-- IPs tailscale: desktop `100.118.58.7`; laptop ver con `tailscale ip -4 laptop`.
-- La llave de la laptop está autorizada en el desktop
-  (`users.users.eztvn.openssh.authorizedKeys.keys` en `configuration.nix`).
-  Para el sentido inverso (desktop → laptop) hay que autorizar la llave del
-  desktop en la laptop.
+- Resolucion via tailscale MagicDNS
+- IPs tailscale: desktop `100.118.58.7`
 
 ### Reglas para AI (opencode)
 
 1. **Nunca modificar bloques `if machine == "X"` sin preguntar.** Esos bloques son machine-specific.
 2. **Configs compartidas** (keybinds, appearance, animations, window rules) se pueden editar libremente.
-3. **Al agregar un script machine-specific**, añadirlo a `laptopScripts` en `nixos/home.nix`.
-4. **Al agregar una unit systemd**, añadirla en `nixos/home.nix` (`systemd.user.services`).
-5. **NUNCA ejecutar `sudo nixos-rebuild` con host hardcodeado** (`#laptop`/`#desktop`). SIEMPRE `bash ~/dotfiles/scripts/rebuild.sh`, que detecta la máquina por hardware y valida el root UUID. Un rebuild con host equivocado rompe el boot (ya ocurrió: gen 72 inservible en desktop).
-6. **NUNCA disparar compilación CUDA.** En el **desktop**, cualquier rebuild evalúa `nixpkgs.config.cudaSupport = true` + `services.sunshine.package = ...override { cudaSupport = true; }` (`desktop.nix`), y el closure system puede incluir `kokoroEnv`/`voice-kokoro` (torch) de `packages.nix`. Eso implica **horas** de build CUDA (cudnn ~2GB + libcublas ~1GB descargados de NVIDIA) + OOM por paralelismo. Regla**: SIEMPRE antes de cualquier `rebuild.sh` en desktop, hacer `nixos-rebuild dry-build` (o `nix build .#nixosConfigurations.desktop.config.system.build.toplevel --dry-run`) y revisar el output: si aparece `cudnn|libcublas|torch|sunshine` → **ABORTAR** y avisar al usuario; el CUDA queda PENDIENTE hasta que el usuario lo apruebe explícitamente y con `NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8"`. Los agentes NO deciden compilar CUDA (el usuario tiene marker `~/.local/state/dotfiles/skip-auto-rebuild` como kill switch del auto-sync; rebuild manual NO lo respeta). Cambios que no afecten closure system (configs symlinkeadas, scripts, home.nix de units) NO requieren rebuild — se aplican via symlink directo.
+3. **NUNCA tocar archivos en `nixos/`.** El usuario ya no usa NixOS.
+4. **Al agregar un script**, guardarlo en `linux/bin/` y agregarlo al symlink manual si es necesario.
 
-## Modo claro/oscuro (tema global)
+## TTS (Text-to-Speech)
 
-**Modo canónico** = symlink `linux/config/kitty/active-theme.conf` (apunta a
-`theme-light.conf` / `theme-dark.conf`, trackeado por git → sync automático
-entre máquinas vía auto-sync). Los demás componentes DERIVAN el modo de ahí
-con `readlink`; no hay archivo de estado separado.
+Sistema TTS con daemon + Chatterbox (Resemble AI).
 
-- `linux/bin/theme-toggle.sh [light|dark|toggle]` — **orquestador**: llama
-  `kitty-theme-toggle.sh` (hot-reload), setea `gsettings color-scheme`
-  (prefer-dark/prefer-light), y cambia el **wallpaper** vía IPC de hyprpaper
-  (`hyprctl hyprpaper preload + wallpaper`). En desktop pausa
-  `linux-wallpaperengine.service` si está activo. Notifica por `notify-send`.
-  Registrado en `allScripts` (`nixos/home.nix`). Keybind `F11` (hyprland.lua)
-  y botón **TEMA** en el widgetMenu de quickshell (card con estado leído de
-  `readlink active-theme.conf`).
-- **Kitty**: `kitty.conf:6 include active-theme.conf`. Paletas por máquina:
-  `theme-light.conf` (crema `#fdf8f0`, texto `#1a1a18`) y `theme-dark.conf`
-  (gris `#161513`, texto `#d4d2cb`) — diseñadas para miopía+astigmatismo.
-  Keybind propio `ctrl+shift+f9`. No requiere rebuild (symlink directo).
-- **Nvim**: `lua/plugins/colorscheme.lua` lee el modo vía `readlink` →
-  `rose-pine` variante `dawn` (claro) / `main` (oscuro). Incluye watcher
-  (`vim.loop.fs_event` sobre `active-theme.conf`) → recarga en vivo sin
-  reiniciar nvim. Según `lualine` sigue colorscheme automáticamente.
-- **Opencode**: `tui.json` → `"theme": "system"` (sigue el fondo del terminal,
-  así que al togglear kitty cambia con él). Cambios aplican al arrancar
-  opencode; en sesión viva usar `/theme`.
-- **Wallpaper**: `linux/config/hypr/wallpapers/porsche_wallpaper.jpg`
-  (oscuro) + `porsche_white.jpg` (claro). Laptop → hyprpaper IPC (eDP-1);
-  desktop → pausa Wallpaper Engine y usa hyprpaper (fallback: híbrido).
-- **GTK/apps**: `hyprland.lua` autostart setea `color-scheme` según el modo
-  al boot (antes hardcodeado a `prefer-dark`); el toggle lo cambia en vivo.
+**Motor principal:** Chatterbox Multilingual V3 (0.5B params, ~3GB VRAM RTX 3070)
+- Soporta 23+ idiomas incluyendo espanol
+- Server persistente (`chatterbox_server.py`) mantiene modelo en GPU
+- Latencia: ~0.75-0.86s synth (post-carga inicial de ~9s)
+- RTF: 0.80-0.94 (mas rapido que tiempo real)
 
-No tocar paletas kitty sin revisar la guía de legibilidad (miopía +
-astigmatismo: nada de blanco/negro puros, crema/gris cálido).
+**Uso:**
+```bash
+voice speak "hola mundo"          # español (default)
+voice lang en && voice speak "hello"  # ingles
+tts "hola"                        # bash function: voice lang + voice speak
+tts -en "hello world"             # ingles via bash function
+```
+
+**Toggles:**
+```bash
+voice on/off        # enable/disable TTS
+voice status        # estado completo
+voice engine X lang # cambiar motor (chatterbox/piper/espeak)
+```
+
+**Chain de fallback:** chatterbox → piper → espeak
+
+**Archivos:**
+- `linux/voice/daemon.py` — daemon principal
+- `linux/voice/chatterbox_server.py` — server persistente
+- `linux/voice/engine.py` — config/estado
+- `linux/home/.bashrc` — funcion `tts()`
 
 ## Handy (Speech-to-Text)
 
-Handy es una app de speech-to-text. En NixOS se instala desde el flake
-upstream `github:cjpais/Handy` (v0.9.5+, no nixpkgs que va atrasado en 0.9.1).
+Handy es una app de speech-to-text.
 
 **Uso:**
 - `handy --start-hidden` — inicia minimizado (en autostart de Hyprland)
-- `handy --toggle-post-process` — transcribe SIEMPRE con post-procesado (keybind `F7`)
-- `handy --toggle-transcription` — transcribe texto plano (sin post-procesado)
-- `handy --cancel` — cancela operación actual
+- `handy --toggle-post-process` — transcribe con post-procesado (keybind `F7`)
+- `handy --toggle-transcription` — transcribe texto plano
+- `handy — cancel` — cancela operacion actual
 
-**Post-procesado:** provider Groq + modelo `openai/gpt-oss-120b`. Config
-persistente en `~/.local/share/com.pais.handy/settings_store.json`
-(prompts custom con variable `${output}`). El prompt activo "Personalizado"
-corrige ortografía, quita muletillas, convierte dictado en texto escrito
-natural y soporta comandos dictados ("coma", "nueva línea", "haz una lista"...).
-
-**Autostart en hyprland.lua:**
-```lua
-hl.exec_cmd("handy --start-hidden")
-```
-
-**Keybind:**
-```lua
-hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-post-process"))
-```
+**Post-procesado:** provider Groq + modelo `openai/gpt-oss-120b`.
 
 ## Sunshine (Moonlight)
 
-Sunshine = host de streaming Moonlight. Instalado en AMBAS máquinas via el
-módulo NixOS `services.sunshine` (`nixos/configuration.nix`).
+Sunshine = host de streaming Moonlight. Instalado en ambas maquinas.
 
-```nix
-services.sunshine = {
-  enable = true;
-  openFirewall = true;   # abre puertos TCP/UDP de Moonlight
-  autoStart = false;     # ver gotcha abajo
-  capSysAdmin = false;   # captura via Wayland (portal), no KMS
-};
-```
-
-**Paquete por máquina:**
-- Desktop (`nixos/hosts/desktop.nix`): `services.sunshine.package = pkgs.sunshine.override { cudaSupport = true; }` → NVENC (RTX 3070) para jugar en streaming.
-- Laptop: paquete plain (software) → suficiente para solo ver. La laptop usa dGPU híbrida; software evita depender de `gpu-mode`.
-
-**Gotcha (IMPORTANTE, causó cuelgue de login):**
-- `autoStart=false` es OBLIGATORIO. Con `Linger=yes` + el servicio
-  `graphical-session-holder` (WantedBy=default.target + Wants=graphical-session.target),
-  `graphical-session.target` se activa al BOOT (antes del login). Si sunshine
-  tiene `wantedBy=graphical-session.target` arranca al boot sin compositor
-  Wayland → captura via KMS → agarra `/dev/dri/card1` → GDM "No GPUs found"
-  → login colgado.
+**Gotcha importante:**
+- `autoStart=false` es OBLIGATORIO. Con `Linger=yes`, graphical-session.target se activa al boot antes del login → sunshine arranca sin compositor Wayland → login colgado.
 - Sunshine se arranca post-login desde `hyprland.lua`:
   `hl.exec_cmd("sleep 8 && systemctl --user start sunshine")`.
 
-**⚠️ Build NVENC:** `sunshine.override { cudaSupport = true; }` recompila
-sunshine desde fuente. Compilar con paralelismo default (`max-jobs=24`, sin
-swap) OOM y congela el sistema. Usar SIEMPRE paralelismo controlado (solo
-ejecutar EN el desktop):
-`NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" bash ~/dotfiles/scripts/rebuild.sh`.
-
-- `rebuild.sh` **propaga `NIX_CONFIG` a través de sudo** (`sudo env NIX_CONFIG=...`):
-  el default de sudo (env_reset) borra la variable → el daemon usa `max-jobs=auto`=24
-  y congela la máquina. Fue la causa del cuelgue del rebuild CUDA del 2026-08-29.
-- Tope global declarativo en `nix.settings.max-jobs = 4` / `cores = 8`
-  (`nixos/configuration.nix`): un `nixos-rebuild` manual SIN `NIX_CONFIG` ya no
-  satura. El cliente puede pedir más con `NIX_CONFIG` (honrado incluso vía daemon,
-  verificado empíricamente).
-- Auto-contexto (`scripts/auto-sync.sh`): paralelismo mínimo (`max-jobs=2`.
-  `cores=4`, override con `AUTO_SYNC_MAX_JOBS`/`AUTO_SYNC_CORES`) + watchdog ntfy
-  (avisa si el rebuild se demora >10min o se estanca >20min; log en
-  `~/.local/state/dotfiles/auto-build.log`; tópico `opencode-$machine`).
-- Kill switch para builds CUDA/pesadas (sunshine NVENC, cudnn/libcublas):
-  marker `~/.local/state/dotfiles/skip-auto-rebuild` (local, NO en repo).
-  Si existe, `auto-sync.sh` hace SOLO publish (pull+commit+push), sin rebuild
-  ni GC. Default tras desactivar CUDA de forma manual: `touch` el marker.
-  Re-activar: `rm` el marker. El rebuild manual via `rebuild.sh` NO respeta el
-  marker — siempre compila. Tras matar un `nixos-rebuild` en curso, quedan
-  huérfanos `nix build` + `nixbld*` (downloads/compiles CUDA) colgados en
-  background → `sudo kill <pid>` del `nix build` y `sudo pkill -u nixbld*`
-  si necesario; el profile (`/nix/var/nix/profiles/system`) queda intacto
-  porque el build no activa hasta el final.
-
-**Web UI + credenciales:**
-- Web UI: `https://localhost:47990` (usuario `eztvn`, password en
-  `~/.config/sunshine/.webui-password` — local, NO en el repo).
-- `sunshine --creds eztvn <pass>` setea credenciales sin navegador.
-- Estado (cert, apps, pairings) vive en `~/.config/sunshine/` (dir real, no
-  symlink al repo). NO sincronizar `sunshine_state.json` entre máquinas:
-  cada host tiene su propio certificado/pairing.
+**Web UI:** `https://localhost:47990` (usuario `eztvn`, password en `~/.config/sunshine/.webui-password`).
 
 **Pairing Moonlight (celular):**
-- App Moonlight → añadir host (IP LAN o tailscale) → PIN → emparejar.
+- App Moonlight → anadir host (IP LAN o tailscale) → PIN → emparejar.
 - Desktop: LAN `192.168.1.241` · tailscale `100.118.58.7`.
-- Laptop: LAN `192.168.1.240` · ver `tailscale ip -4 laptop`.
-- Encoder NVENC ya auto-detectado en desktop (`h264_nvenc`/`hevc_nvenc`); AV1
-  no soportado por RTX 3070.
 
-## Notificaciones fin de sesión (notify-sound)
+## Notificaciones fin de sesion (notify-sound)
 
-`linux/config/opencode/plugins/notify-sound/plugin.js` (registrado en
-`linux/config/opencode/opencode.json`) notifica al terminar cada sesión:
+`linux/config/opencode/plugins/notify-sound/plugin.js` notifica al terminar cada sesion:
 
-1. **Campana local** (`pw-play complete.oga` del tema freedesktop) en `session.idle`.
-2. **Resumen**: lee la transcripción via SDK y si existe key Groq
-   (`openai/gpt-oss-20b`, `reasoning_effort: low`) genera UNA frase en español técnico simple
-   (qué se hizo y si funcionó). Sale por `notify-send`; por voz solo con
-   el toggle VOZ activo (comando `voice speak`). Sin key → fallback
-   "Sesión <título> terminada".
-3. **Push al celular** vía ntfy.sh (`fetch` nativo de Bun, sin curl):
+1. **Campana local** (`pw-play complete.oga`) en `session.idle`.
+2. **Resumen**: genera frase en espanol via Groq. Sin key → fallback "Sesion terminada".
+3. **Push al celular** via ntfy.sh:
    - `session.idle` → "Sesion terminada — <resumen>" (prioridad 3)
    - `permission.updated` → "Pide permiso: <detalle>" (prioridad 4)
 
-<<<<<<< HEAD
-**Toggles** (estado local, escritos por la sección NOTIFICACIONES de
-quickshell; ausente = comportamiento indicado):
+**Toggles** (estado local en `~/.local/state/opencode/`):
 
-| Archivo (`~/.local/state/opencode/`) | Valor |
-|--------------------------------------|-------|
+| Archivo | Valor |
+|---------|-------|
 | `notify-sound-enabled` | `'0'` = sin campana |
 | `notify-voice-enabled` | `'1'` = hablar resumen (default apagado) |
 | `notify-push-enabled` | `'0'` = sin push ntfy |
 
-Key Groq: `~/.local/state/opencode/notify-groq-key` (chmod 600, NUNCA en
-el repo). Privacidad: sin key, la conversación no sale de la máquina.
+## Higiene de sueno (apagado 21:00)
 
-oopencode SÍ autodescubre plugins recursivamente en
-`~/.config/opencode/plugins/` (cualquier `*.js`/`*.ts`, incluso en
-subdirectorios): si un plugin debe estar DORMIDO, renombra su archivo a
-`plugin.js.disabled` — quitarlo de `opencode.json` NO basta. Registro
-explícito en `"plugin": [...]` solo necesario para rutas fuera del dir
-de plugins. Eventos: idle llega como `session.idle` derivado Y como
-`session.status` crudo (dedup interno); permisos como
-`permission.updated`.
-Kill switch TTS global (daemon): `~/.local/state/voice/state.json` =
-`{"tts": {"enabled": false}}`.
+Ambas maquinas se apagan solas a las 21:00 (hora Colombia).
 
-Usa `fetch` nativo de Bun (sin curl). Tópico por máquina (lee `~/.config/machine-type`, patrón hyprland.lua): `opencode-desktop` en desktop, `opencode-laptop` en laptop.
-
-**Suscripción:** en la app ntfy (Android/iOS) agregar los tópicos que
-quieras recibir: `https://ntfy.sh/opencode-laptop` y/o
-`https://ntfy.sh/opencode-desktop` (o desde un explorador, abrir el enlace
-y pulsar "subscribe"). Notificaciones de la laptop van al canal laptop y de
-escritorio al canal desktop.
-
-## Higiene de sueño (apagado 21:00)
-
-Ambas máquinas se apagan solas a las 21:00 (hora Colombia, `time.timeZone = "America/Bogota"`).
-
-- Timer systemd de sistema `bedtime.timer` (compartido en
-  `nixos/configuration.nix`): dispara `bedtime.service` a las **20:55** →
-  aviso (`notify-send` + `wall`) + gracia 5 min → `poweroff` a las 21:00.
-- `Persistent = true`: si la máquina estaba apagada a las 21:00 y se enciende
-  después (ej. 11PM), el trigger perdido compensa al boot → avisa y apaga igual.
-- Escape puntual: **`bedtime-skip`** crea flag `/run/bedtime-skip` con fecha de
-  hoy; cancela el apagado de esa noche incluso durante los 5 min de gracia.
-  Muere al reboot (la noche siguiente vuelve el apagado).
-- Fuente de verdad del script: `linux/bin/bedtime.sh` (ambos scripts en
-  `allScripts`, `nixos/home.nix`). Servicio corre como root con PATH de sistema.
+- Timer systemd `bedtime.timer`: dispara `bedtime.service` a las **20:55** → aviso + gracia 5 min → `poweroff` a las 21:00.
+- `Persistent = true`: compensa triggers perdidos.
+- Escape: **`bedtime-skip`** crea flag `/run/bedtime-skip` (muere al reboot).
+- Fuente de verdad: `linux/bin/bedtime.sh`.
 
 ## Modo consola (gamepad → interfaz)
 
 Experiencia consola en PC: el gamepad controla el escritorio y la UI.
 
-- **`input-remapper`** (`services.input-remapper`, configuration.nix): daemon
-  de sistema que "roba" el pad (grab evdev) y re-emite teclado virtual →
-  funciona en Wayland nativo. Config en `~/.config/input-remapper-2/`
-  (**copiado** desde `linux/config/input-remapper-2/` por `home.activation`,
-  patrón lan-mouse: la GUI muta presets, se pierde en rebuild).
-- **Mapeos**: `presets/Nintendo Wii Remote Pro Controller/desktop.json` — dpad
-  → flechas, A/B → Enter/Esc, X → SUPER+SPACE (launcher quickshell), Y → SUPER+A, L = SUPER
-  (L+B = cerrar), R = SUPER+RETURN, Select → ws1, Start → ws10 (modo juego),
-  stick derecho → ratón, thumbl/r → click. Códigos evdev en el modalias del
-  pad (`k130`=BTN_A, ... `k220..223`=dpad, `ra0,1,3,4`=ejes).
-- **Auto modo juego**: `linux/bin/gamepad-watch.sh` (user service `gamepad-watch`,
-  gráfica-session) detecta conexión/desconexión de pads por modalias `k130`
-  (BTN_GAMEPAD, genérico) con debounce ~6s → `game-mode.sh` / `exit`. No
-  dispara en arranque. En conexión también lanza `input-remapper-control
-  --command autoload`.
-- **Evitar doble input en juegos**: `linux/bin/hypr-input-bridge.sh` (user
-  service `hypr-input-bridge`) escucha socket2 de Hyprland (`socat`) y, dentro
-  del modo juego, si el foco es window fullscreen no-UI → `input-remapper-control
-  --command stop` (pad 100% nativo); si vuelve a la UI (cartridges/shell)
-  → `start --preset desktop`. Lista de UI en `UI_ALLOW` del script.
-- Paquete `socat` en packages.nix. `enableUdevRules=false`: el autoload lo
-  dispara gamepad-watch.
+- **`input-remapper`**: daemon de sistema que re-emite teclado virtual desde pad.
+- **Mapeos**: dpad → flechas, A/B → Enter/Esc, X → SUPER+SPACE, Y → SUPER+A, L = SUPER, R = SUPER+RETURN.
+- **Auto modo juego**: `linux/bin/gamepad-watch.sh` detecta conexion/desconexion de pads → `game-mode.sh` / `exit`.
+- **Evitar doble input**: `linux/bin/hypr-input-bridge.sh` escucha Hyprland socket y para/input-remapper segun foco.
 
 ## Lo que NO se gestiona
 
-Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes (Python, npm, etc.).
+Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes.
 
-## NixOS (`nixos/` + `flake.nix`)
+## Autonomia de ejecucion
 
-El repo es la unica fuente de verdad: home-manager crea symlinks directos
-a `linux/config/`, `linux/home/` y `linux/bin/` via `mkOutOfStoreSymlink`.
+Cuando modifiques archivos de configuracion relacionados con Linux (Hyprland, Waybar, Hyprpaper, PipeWire, systemd, keyd, GTK, Qt, shell, etc.), no te detengas despues de editar.
 
-- `flake.nix` — inputs (nixpkgs, home-manager) y hosts `laptop`/`desktop`
-- `nixos/configuration.nix` — base comun (servicios, fuentes, usuario, GDM, Hyprland, keyd)
-- `nixos/home.nix` — home-manager: symlinks a linux/config, linux/bin, units
-- `nixos/modules/packages.nix` — paquetes del sistema (nixpkgs)
-- `nixos/modules/keyboard.nix` — layout dvk_prog en TTY, X11/GDM y Wayland
-- `nixos/modules/sudoers.nix` — NOPASSWD (gpu-mode.sh)
-- `nixos/hosts/laptop.nix` — NVIDIA hybrid, keyd
-- `nixos/hosts/desktop.nix` — NVIDIA RTX 3070 (dGPU unica)
-- `nixos/hosts/hardware-configuration.*.nix` — hardware REAL por máquina (generado con `nixos-generate-config`), commiteado. `setup-nixos.sh` lo regenera si el root UUID no coincide con la máquina actual
+Despues de cada modificacion:
 
-**Reglas:**
-1. Al añadir un paquete, añadirlo a `nixos/modules/packages.nix`.
-2. Al añadir un config nuevo, añadirlo al inventario de `nixos/home.nix`.
-3. Los `hardware-configuration.*.nix` son por-máquina y se commitean con el hardware real de cada una (`nixos-generate-config`). Excepción a la regla de no commitear datos de máquina: el hardware-config es necesario para fresh installs; `setup-nixos.sh` valida por root UUID y regenera si la máquina difiere. **Lo que NO se commitea**: claves, tokens, passwords ni datos de usuario.
-4. Los scripts de `linux/bin/` se symlinkean via `allScripts`; los laptop-only siguen la lista `laptopScripts`.
-5. Comandos: SIEMPRE via `bash ~/dotfiles/scripts/rebuild.sh [switch|boot|test|build|dry-build]`. Nunca invocar `nixos-rebuild` con `--flake ~/dotfiles#laptop|#desktop` hardcodeado: el script detecta la máquina por hardware y valida el root UUID contra `hardware-configuration.<machine>.nix`; aborta si no coinciden.
+1. Ejecuta automaticamente todos los comandos necesarios para aplicar los cambios.
+2. Verifica que los cambios se hayan aplicado correctamente.
+3. Si aparece un error, investiga la causa e intenta solucionarlo.
+4. Repite el ciclo de editar → aplicar → verificar hasta que el problema quede resuelto.
 
-Ver `nixos/README.md` para la guía de instalación completa.
-
-## Autonomía de ejecución
-
-Cuando modifiques archivos de configuración relacionados con Linux (Hyprland, Waybar, Hyprpaper, PipeWire, systemd, keyd, GDM, GTK, Qt, shell, etc.), no te detengas después de editar.
-
-Después de cada modificación:
-
-1. Ejecuta automáticamente todos los comandos necesarios para aplicar los cambios (recargar servicios, reiniciar procesos, ejecutar scripts, `nixos-rebuild switch`, etc.).
-2. Verifica que los cambios se hayan aplicado correctamente mediante los comandos de validación apropiados.
-3. Si aparece un error, investiga la causa e intenta solucionarlo de forma autónoma antes de pedirme ayuda.
-4. Repite el ciclo de editar → aplicar → verificar hasta que el problema quede resuelto o ya no puedas avanzar sin intervención humana.
-5. Siempre que sea posible, realiza tú mismo las acciones necesarias. No me pidas que ejecute comandos manualmente si puedes hacerlo tú.
-
-Solo solicita confirmación para operaciones potencialmente destructivas o de alto impacto, como:
-
+Solo solicita confirmacion para operaciones potencialmente destructivas:
 - Eliminar archivos o directorios.
 - Reinstalar o desinstalar paquetes.
 - Sobrescribir datos importantes.
 - Reiniciar o apagar el sistema.
-- Cambios irreversibles o con riesgo de pérdida de datos.
 
-Los reinicios de aplicaciones, recargas de servicios, validaciones de configuración, consultas con `journalctl`, ejecución de scripts del repositorio y demás operaciones rutinarias **no requieren confirmación**.
+Los reinicios de aplicaciones, recargas de servicios, validaciones de configuracion y operaciones rutinarias **no requieren confirmacion**.
