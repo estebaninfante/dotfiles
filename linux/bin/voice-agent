@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# voice-agent — Agente de voz: graba → transcribe → opencode → TTS.
+#
+# Uso:
+#   voice-agent              Toggle: graba al pulsar, procesa al soltar
+#   voice-agent "pregunta"   Directo: envía texto sin grabar
+#
+# Keybind: Super+V (hyprland.lua)
+# Flujo: Handy (GPU) → opencode (con acceso a archivos) → voice speak (TTS)
+
+set -uo pipefail
+
+REPO="${VOICE_REPO:-$HOME/dotfiles}"
+CACHE_DIR="${VOICE_CACHE_DIR:-$HOME/.cache/voice}"
+LISTEN_PID="$CACHE_DIR/listen.pid"
+RECORDING_FILE="$CACHE_DIR/agent-record.wav"
+STATE_DIR="$HOME/.local/state/voice"
+
+# ── helpers ─────────────────────────────────────────────────────────────
+notify() {
+  swayosd-client --custom-symbol "mic" --custom-message "$1" >/dev/null 2>&1 &
+}
+
+transcribe() {
+  local wav="$1"
+  local model
+  model=$(python3 -c "
+import json, os
+try:
+    st = json.load(open(os.path.expanduser('$STATE_DIR/state.json')))
+    print(st.get('stt', {}).get('model', ''))
+except: print('')
+" 2>/dev/null)
+
+  python3 "$REPO/linux/voice/stt.py" transcribe "$wav" --model "$model" 2>/dev/null
+}
+
+speak() {
+  bash "$REPO/linux/bin/voice" speak "$1"
+}
+
+is_opencode_running() {
+  pgrep -u "$(id -u)" -f "opencode" >/dev/null 2>&1
+}
+
+# ── grabación (toggle) ──────────────────────────────────────────────────
+record_toggle() {
+  mkdir -p "$CACHE_DIR"
+
+  # Si ya está grabando, detener
+  if [ -f "$LISTEN_PID" ]; then
+    local pid
+    pid=$(cat "$LISTEN_PID")
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null
+      wait "$pid" 2>/dev/null
+      rm -f "$LISTEN_PID"
+      notify "Procesando..."
+      return 0
+    fi
+    rm -f "$LISTEN_PID"
+  fi
+
+  # Iniciar grabación
+  notify "🎙 Grabando... (Super+V para cortar)"
+
+  # Grabar con silence detection (max 15s)
+  rec -q "$RECORDING_FILE" rate 16k channels 1 silence 1 0.3 0.8% 1 0.9 0.8% timeout 15 &
+  local rpid=$!
+  echo "$rpid" > "$LISTEN_PID"
+  wait "$rpid" 2>/dev/null
+  rm -f "$LISTEN_PID"
+
+  [ -s "$RECORDING_FILE" ] || { notify "Sin audio capturado"; return 1; }
+}
+
+# ── enviar a opencode ───────────────────────────────────────────────────
+send_to_opencode() {
+  local text="$1"
+
+  if is_opencode_running; then
+    # Método 1: Typing directo al terminal de opencode (requiere foco)
+    # wtype es más rápido que xdotool y funciona en Wayland
+    if command -v wtype >/dev/null 2>&1; then
+      wtype -d 10 -- "$text"
+      sleep 0.3
+      wtype -d 10 -- return
+      echo "voice-agent: enviado a opencode via wtype" >&2
+      return 0
+    fi
+
+    # Método 2: xdotool fallback
+    if command -v xdotool >/dev/null 2>&1; then
+      xdotool type --delay 10 -- "$text"
+      sleep 0.3
+      xdotool key Return
+      echo "voice-agent: enviado a opencode via xdotool" >&2
+      return 0
+    fi
+
+    echo "voice-agent: opencode corriendo pero sin wtype/xdotool" >&2
+    return 1
+  else
+    echo "voice-agent: opencode no está corriendo. Abre opencode primero." >&2
+    speak "Necesito que abras opencode primero para poder ayudarte."
+    return 1
+  fi
+}
+
+# ── flujo principal ─────────────────────────────────────────────────────
+main() {
+  local query=""
+
+  case "${1:-}" in
+    "")
+      # Modo toggle: grabar
+      record_toggle
+      query=$(transcribe "$RECORDING_FILE")
+      ;;
+    *)
+      # Modo directo: texto ya dado
+      query="$*"
+      ;;
+  esac
+
+  if [ -z "$query" ]; then
+    speak "No entendí lo que dijiste. Intenta de nuevo."
+    return 1
+  fi
+
+  echo "📝 $query"
+  notify "Enviando a opencode..."
+
+  # Enviar a opencode (el agente lee archivos y responde)
+  send_to_opencode "$query"
+}
+
+main "$@"
