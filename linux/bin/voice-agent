@@ -7,6 +7,8 @@
 #
 # Keybind: Super+V (hyprland.lua)
 # Flujo: Handy (GPU) → opencode (con acceso a archivos) → voice speak (TTS)
+#
+# Requiere: opencode corriendo + plugin voice habilitado
 
 set -uo pipefail
 
@@ -14,11 +16,20 @@ REPO="${VOICE_REPO:-$HOME/dotfiles}"
 CACHE_DIR="${VOICE_CACHE_DIR:-$HOME/.cache/voice}"
 LISTEN_PID="$CACHE_DIR/listen.pid"
 RECORDING_FILE="$CACHE_DIR/agent-record.wav"
+OC_FILE="$CACHE_DIR/to-opencode.json"
 STATE_DIR="$HOME/.local/state/voice"
 
 # ── helpers ─────────────────────────────────────────────────────────────
 notify() {
   swayosd-client --custom-symbol "mic" --custom-message "$1" >/dev/null 2>&1 &
+}
+
+speak() {
+  bash "$REPO/linux/bin/voice" speak "$1"
+}
+
+is_opencode_running() {
+  pgrep -u "$(id -u)" -f "opencode" >/dev/null 2>&1
 }
 
 transcribe() {
@@ -33,14 +44,6 @@ except: print('')
 " 2>/dev/null)
 
   python3 "$REPO/linux/voice/stt.py" transcribe "$wav" --model "$model" 2>/dev/null
-}
-
-speak() {
-  bash "$REPO/linux/bin/voice" speak "$1"
-}
-
-is_opencode_running() {
-  pgrep -u "$(id -u)" -f "opencode" >/dev/null 2>&1
 }
 
 # ── grabación (toggle) ──────────────────────────────────────────────────
@@ -74,37 +77,24 @@ record_toggle() {
   [ -s "$RECORDING_FILE" ] || { notify "Sin audio capturado"; return 1; }
 }
 
-# ── enviar a opencode ───────────────────────────────────────────────────
+# ── enviar a opencode (via plugin voice) ────────────────────────────────
 send_to_opencode() {
   local text="$1"
 
-  if is_opencode_running; then
-    # Método 1: Typing directo al terminal de opencode (requiere foco)
-    # wtype es más rápido que xdotool y funciona en Wayland
-    if command -v wtype >/dev/null 2>&1; then
-      wtype -d 10 -- "$text"
-      sleep 0.3
-      wtype -d 10 -- return
-      echo "voice-agent: enviado a opencode via wtype" >&2
-      return 0
-    fi
-
-    # Método 2: xdotool fallback
-    if command -v xdotool >/dev/null 2>&1; then
-      xdotool type --delay 10 -- "$text"
-      sleep 0.3
-      xdotool key Return
-      echo "voice-agent: enviado a opencode via xdotool" >&2
-      return 0
-    fi
-
-    echo "voice-agent: opencode corriendo pero sin wtype/xdotool" >&2
-    return 1
-  else
-    echo "voice-agent: opencode no está corriendo. Abre opencode primero." >&2
+  if ! is_opencode_running; then
     speak "Necesito que abras opencode primero para poder ayudarte."
     return 1
   fi
+
+  # Escribir transcript para que el plugin voice lo inyecte en la sesión
+  local tmp="$OC_FILE.tmp"
+  printf '{"text":%s,"ts":%s}\n' \
+    "$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$text")" \
+    "$(date +%s)" > "$tmp"
+  mv "$tmp" "$OC_FILE"
+
+  echo "voice-agent: enviado a opencode" >&2
+  notify "Pensando..."
 }
 
 # ── flujo principal ─────────────────────────────────────────────────────
@@ -129,9 +119,6 @@ main() {
   fi
 
   echo "📝 $query"
-  notify "Enviando a opencode..."
-
-  # Enviar a opencode (el agente lee archivos y responde)
   send_to_opencode "$query"
 }
 
