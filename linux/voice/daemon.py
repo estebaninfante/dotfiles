@@ -21,6 +21,7 @@
 
 import json
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -43,6 +44,7 @@ DEDUP_TTL = float(os.environ.get("VOICE_DEDUP_TTL", "20"))
 _last_key: dict[str, float] = {}
 _queue: list[dict] = []
 _stop = False
+_chatterbox_proc: subprocess.Popen | None = None
 
 
 def log(msg: str) -> None:
@@ -52,6 +54,107 @@ def log(msg: str) -> None:
             fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except OSError:
         pass
+
+
+# ── Chatterbox server lifecycle ──────────────────────────────────────────
+def _ensure_chatterbox_server() -> subprocess.Popen | None:
+    """Start or restart the persistent chatterbox server. Returns the Popen."""
+    global _chatterbox_proc
+
+    # Check if existing server is alive
+    if _chatterbox_proc is not None:
+        rc = _chatterbox_proc.poll()
+        if rc is None:
+            return _chatterbox_proc  # still running
+        log(f"chatterbox server died (rc={rc}), restarting")
+        _chatterbox_proc = None
+
+    venv_python = os.path.expanduser("~/.local/share/tts/venv/bin/python3")
+    if not os.path.exists(venv_python):
+        log("chatterbox: venv python no encontrado")
+        return None
+
+    script = os.path.join(os.path.dirname(__file__), "chatterbox_server.py")
+    if not os.path.exists(script):
+        log(f"chatterbox: server script no encontrado: {script}")
+        return None
+
+    log("chatterbox server starting...")
+    try:
+        proc = subprocess.Popen(
+            [venv_python, script],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,  # line-buffered
+        )
+        _chatterbox_proc = proc
+
+        # Wait for "Ready" on stderr (model loaded)
+        import threading
+        def _read_stderr():
+            for line in proc.stderr:
+                line = line.rstrip()
+                if line:
+                    log(f"chatterbox: {line}")
+        threading.Thread(target=_read_stderr, daemon=True).start()
+
+        # Ping to confirm readiness (wait up to 30s for model load)
+        time.sleep(2)
+        resp = _server_request({"ping": True}, timeout=30)
+        if resp and resp.get("pong"):
+            log("chatterbox server ready")
+            return proc
+        else:
+            log("chatterbox server failed to respond to ping")
+            proc.terminate()
+            _chatterbox_proc = None
+            return None
+    except Exception as e:
+        log(f"chatterbox server start failed: {e}")
+        _chatterbox_proc = None
+        return None
+
+
+def _server_request(req: dict, timeout: float = 120) -> dict | None:
+    """Send JSON request to chatterbox server, return response dict."""
+    global _chatterbox_proc
+    proc = _chatterbox_proc
+    if proc is None or proc.poll() is not None:
+        return None
+    try:
+        proc.stdin.write(json.dumps(req) + "\n")
+        proc.stdin.flush()
+        ready, _, _ = select.select([proc.stdout], [], [], timeout)
+        if not ready:
+            log("chatterbox server timeout")
+            return None
+        line = proc.stdout.readline()
+        if not line:
+            log("chatterbox server EOF")
+            return None
+        return json.loads(line)
+    except Exception as e:
+        log(f"chatterbox server communicate error: {e}")
+        return None
+
+
+def _shutdown_chatterbox_server():
+    """Gracefully shut down the chatterbox server."""
+    global _chatterbox_proc
+    if _chatterbox_proc is None:
+        return
+    try:
+        _chatterbox_proc.stdin.write(json.dumps({"shutdown": True}) + "\n")
+        _chatterbox_proc.stdin.flush()
+        _chatterbox_proc.wait(timeout=5)
+    except Exception:
+        try:
+            _chatterbox_proc.terminate()
+        except Exception:
+            pass
+    _chatterbox_proc = None
 
 
 # ── Sintesis + reproduccion ─────────────────────────────────────────────
@@ -96,18 +199,24 @@ def synth_and_play(req: dict) -> bool:
 def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
     """Sintetiza `text` a `wav` con el motor dado. Devuelve OK (wav creado)."""
     if engine == "chatterbox":
-        script = os.path.join(os.path.dirname(__file__), "chatterbox_synth.py")
-        venv_python = os.path.expanduser("~/.local/share/tts/venv/bin/python3")
-        if not os.path.exists(venv_python):
-            log("chatterbox: venv python no encontrado")
+        proc = _ensure_chatterbox_server()
+        if proc is None:
             return False
-        cmd = [venv_python, script, text, wav, "--lang", lang]
-        # Si hay reference audio configurada, usarla para voice cloning
         ref_dir = os.path.join(os.path.expanduser("~"), ".local", "share", "tts", "chatterbox", "refs")
         ref_file = os.path.join(ref_dir, f"ref_{lang}.wav")
+        req = {"text": text, "output": wav, "lang": lang}
         if os.path.isfile(ref_file):
-            cmd.extend(["--ref", ref_file])
-        return _run(cmd, None)
+            req["ref"] = ref_file
+        resp = _server_request(req, timeout=120)
+        if resp and resp.get("ok"):
+            stats = resp.get("stats", {})
+            log(f"chatterbox: {stats.get('synth_time', '?')}s synth, "
+                f"{stats.get('duration', '?')}s audio, RTF={stats.get('rtf', '?')}")
+            return True
+        else:
+            err = resp.get("error", "unknown") if resp else "no response"
+            log(f"chatterbox synth fail: {err}")
+            return False
     if engine == "piper":
         model = find_piper_model(voice)
         if not model:
@@ -232,6 +341,7 @@ def main() -> None:
 
     def _term(_s, _f):
         log("SIGTERM — saliendo")
+        _shutdown_chatterbox_server()
         sys.exit(0)
 
     def _hup(_s, _f):
