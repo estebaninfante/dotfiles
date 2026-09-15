@@ -102,27 +102,4 @@ Item {
         repeat: true
         onTriggered: dashboardService.refreshMonitoring()
     }
-
-    Process {
-        id: barStatus
-        command: ["bash", "-c", "read -r _ u n s i w irq sirq st _ < /proc/stat; a=$((u+n+s+i+w+irq+sirq+st)); b=$i; sleep .15; read -r _ u n s i w irq sirq st _ < /proc/stat; c=$((u+n+s+i+w+irq+sirq+st)); d=$i; cpu=$(awk -v da=$((c-a)) -v di=$((d-b)) 'BEGIN { if (da > 0) print 100 * (da-di) / da; else print 0 }'); gpu=none; if command -v nvidia-smi >/dev/null 2>&1; then gpu=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | tr -d ' '); fi; printf '%s|%s\\n' $cpu $gpu"]
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const p = this.text.trim().split("|");
-                if (p.length < 2)
-                    return;
-                dashboardService.cpuUsage = Math.max(0, Math.min(100, parseFloat(p[0]) || 0));
-                dashboardService.gpuUsage = parseFloat(p[1]) || 0;
-                dashboardService.gpuTelemetryAvailable = p[1] !== "none" && p[1] !== "";
-            }
-        }
-    }
-
-    Timer {
-        interval: 3000
-        running: true
-        repeat: true
-        onTriggered: barStatus.running = false, barStatus.running = true
-    }
 }

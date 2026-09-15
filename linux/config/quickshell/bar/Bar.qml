@@ -21,12 +21,6 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
     }
 
-    SystemBar {
-        anchors.left: Workspaces.right
-        anchors.leftMargin: 10
-        anchors.verticalCenter: parent.verticalCenter
-    }
-
     Clock {
         anchors.centerIn: parent
     }
