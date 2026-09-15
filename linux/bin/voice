@@ -13,7 +13,7 @@
 #   voice voice [nombre]                 ver/cambiar voz (por-idioma segun lang)
 #   voice voices                         listar voces piper instaladas
 #   voice lang [es|en]                   ver/cambiar idioma (voz principal)
-#   voice engine [kokoro|piper|espeak] [es|en]   motor TTS por idioma
+#   voice engine [chatterbox|kokoro|piper|espeak] [es|en]   motor TTS por idioma
 #   voice mode [summary|full]            ver/cambiar modo de resumen
 #   voice model list|set <id>            listar/cambiar modelo STT Handy
 #   voice transcribe <wav>               STT sobre un archivo
