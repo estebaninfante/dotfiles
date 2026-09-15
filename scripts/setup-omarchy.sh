@@ -347,21 +347,10 @@ OnUnitActiveSec=5min
 WantedBy=default.target
 EOF
 
-# graphical-session-holder
-cat > "$SYSTEMD_DIR/graphical-session-holder.service" << 'EOF'
-[Unit]
-Description=Keep graphical-session.target active (xdg portals)
-After=default.target
-Wants=graphical-session.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/sleep infinity
-Restart=always
-
-[Install]
-WantedBy=default.target
-EOF
+# graphical-session-holder: REMOVIDO — uwsm gestiona graphical-session.target.
+# Con uwsm, este service choca: arranca antes del compositor, activa el target,
+# y uwsm aborta pensando que ya hay una sesión gráfica (pantalla negra).
+# Solo necesario en setups sin uwsm (ej. NixOS con GDM directo).
 
 # lan-mouse
 cat > "$SYSTEMD_DIR/lan-mouse.service" << 'EOF'
@@ -426,7 +415,7 @@ EOF
 
 # Enable services
 systemctl --user daemon-reload
-for svc in dotfiles-sync.timer graphical-session-holder quickshell lan-mouse hyprpolkitagent voice-daemon; do
+for svc in dotfiles-sync.timer quickshell lan-mouse hyprpolkitagent voice-daemon; do
     systemctl --user enable "$svc" 2>/dev/null && ok "$svc habilitado" || warn "$svc no pudo habilitarse"
 done
 
