@@ -39,6 +39,14 @@ alias wall='wallpaper-switch.sh'
 alias walls='wallpaper-switch.sh list'
 
 
+# TTS rápido: tts "hola mundo" | tts -en "hello world"
+tts() {
+    local lang="es"
+    if [ "$1" = "-en" ]; then lang="en"; shift; fi
+    voice lang "$lang" >/dev/null 2>&1
+    voice speak "$@"
+}
+
 # opencode
 export EXPLABS_API_KEY="xpl_f2e5b828961bb3e61d40350545c979ef555ff624"
 export PATH=/home/eztvn/.opencode/bin:$PATH
