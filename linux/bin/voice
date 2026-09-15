@@ -329,7 +329,7 @@ PYEOF
     ;;
   engine)
     if [ "$#" -ge 3 ]; then
-      local e_lang="${3:-$(config_val tts lang)}"
+      e_lang="${3:-$(config_val tts lang)}"
       get_set tts "engine_$e_lang" "$2"; echo "motor TTS [$e_lang]: $2"
     else
       echo "motor es: $(config_val tts engine_es) | en: $(config_val tts engine_en)"

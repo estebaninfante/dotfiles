@@ -16,8 +16,8 @@
 # Dedup: si llega una petición con la misma `key` dentro del TTL se ignora
 # (varios procesos/instancias de opencode pueden emitir el mismo evento).
 #
-# Motor TTS conmuta por config/estado (engine = piper|kokoro|espeak),
-# resuelto durante el arranque. TTS siempre en CPU.
+# Motor TTS conmuta por config/estado (engine = chatterbox|piper|kokoro|espeak),
+# resuelto durante el arranque. Chatterbox usa GPU (CUDA), demas en CPU.
 
 import json
 import os
@@ -103,7 +103,7 @@ def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
             return False
         cmd = [venv_python, script, text, wav, "--lang", lang]
         # Si hay reference audio configurada, usarla para voice cloning
-        ref_dir = os.path.join(HOME, ".local", "share", "tts", "chatterbox", "refs")
+        ref_dir = os.path.join(os.path.expanduser("~"), ".local", "share", "tts", "chatterbox", "refs")
         ref_file = os.path.join(ref_dir, f"ref_{lang}.wav")
         if os.path.isfile(ref_file):
             cmd.extend(["--ref", ref_file])
