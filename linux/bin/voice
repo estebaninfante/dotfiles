@@ -358,17 +358,28 @@ PYEOF
     transcribe "$2"
     ;;
   summarize)
-    # On-demand summary: escribe archivo que el plugin voice lee y genera resumen + speak
-    mkdir -p "$CACHE_DIR/cmd"
-    local cmd="${2:-summarize}"
-    touch "$CACHE_DIR/cmd/$cmd"
-    echo "voice: comando '$cmd' enviado al plugin"
+    # On-demand: lee el ultimo resumen que escribio el plugin voice y lo habla.
+    _sfile="$CACHE_DIR/last-summary.txt"; _rfile="$CACHE_DIR/last-response.txt"
+    _text=""
+    [ -s "$_sfile" ] && _text=$(cat "$_sfile")
+    [ -n "$_text" ] || { [ -s "$_rfile" ] && _text=$(cat "$_rfile"); }
+    if [ -z "$_text" ]; then
+      echo "voice: no hay resumen disponible todavia" >&2
+      speak "No hay resumen disponible todavia."
+      exit 1
+    fi
+    speak "$_text"
+    echo "voice: hablando resumen"
     ;;
   toggle)
-    # Toggle auto-speak on idle
-    mkdir -p "$CACHE_DIR/cmd"
-    touch "$CACHE_DIR/cmd/toggle"
-    echo "voice: toggle auto-speak"
+    # Auto-speak on idle: '1' = ON, '0' = OFF (default OFF)
+    _sf="$HOME/.local/state/opencode/voice-auto-speak"
+    mkdir -p "$(dirname "$_sf")"
+    if [ "$(cat "$_sf" 2>/dev/null)" = "1" ]; then
+      echo "0" > "$_sf"; echo "voice: auto-speak OFF"
+    else
+      echo "1" > "$_sf"; echo "voice: auto-speak ON"
+    fi
     ;;
   daemon)
     case "${2:-status}" in

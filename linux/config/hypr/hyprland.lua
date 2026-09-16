@@ -332,7 +332,8 @@ hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
 hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())
 hl.bind(mainMod .. " + D", hl.dsp.window.float({ action = "toggle" }))
-hl.bind(mainMod .. " + P", hl.dsp.window.pin())
+-- SUPER+P: Beckon voice control (replaced pin — moved to SHIFT+P)
+hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("beckon"))
 
 hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
 hl.bind(mainMod .. " + SHIFT + X", hl.dsp.exit())
@@ -390,6 +391,18 @@ hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 -- El dictado se hace con Handy (F7); la voz solo habla respuestas.
 -- Para cambiarla: bindear otra tecla a "~/.local/bin/voice tts toggle".
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("handy --toggle-post-process"))
+
+-- Voice Agent: graba → STT (Handy/GPU) → LLM (Groq) → TTS
+-- Super+V: toggle grabación (primera pulsación graba, segunda procesa)
+hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("~/.local/bin/voice-agent"))
+
+-- Voice Summary: resume ultima respuesta + Chatterbox habla (on-demand)
+-- Super+Shift+V: genera resumen y lo lee en voz alta
+hl.bind(mainMod .. " + SHIFT + V", hl.dsp.exec_cmd("~/.local/bin/voice summarize"))
+
+-- Voice Toggle: activa/desactiva auto-speak en idle (default OFF)
+-- Super+Ctrl+V: toggle auto-speak
+hl.bind(mainMod .. " + CTRL + V", hl.dsp.exec_cmd("~/.local/bin/voice toggle"))
 
 -- OpenCode / TV toggle / Tema claro-oscuro
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode opencode --agent dotfiles"))
