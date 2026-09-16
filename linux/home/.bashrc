@@ -66,7 +66,7 @@ export ARIZE_TRACE_ENABLED="true"
 if [[ -n "$KITTY_WINDOW_ID" ]]; then
     stty susp ^-
 fi
-. "$HOME/.cargo/env"
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
 # zoxide (smarter cd)
 eval "$(zoxide init bash)"
