@@ -1,7 +1,6 @@
 #!/bin/sh
-# PATH fijo: systemd/NM ejecutan con entorno mínimo y NixOS no tiene
-# /bin/bash; los binarios viven en /run/current-system/sw/bin.
-export PATH="/run/current-system/sw/bin:/usr/bin:/bin:$PATH"
+# PATH fijo: systemd/NM ejecutan con entorno minimo.
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
 # Ensure de la IP KVM flotante y de la ruta simetrica al peer.
 # Fuente de verdad de la logica KVM; la usa el dispatcher NM (source) y
 # un timer systemd (ejecucion directa, safety net ante eventos perdidos).

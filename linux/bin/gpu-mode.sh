@@ -51,28 +51,11 @@ driver_active() {
 
 switch_profile() {
   local profile="$1"
-  local switcher
-  # NixOS: switch-to-configuration. Arch/Omarchy: not supported (warn).
-  if [ "$profile" = "nvidia" ]; then
-    switcher="/run/current-system/specialisation/nvidia/bin/switch-to-configuration"
-  else
-    switcher="/run/current-system/bin/switch-to-configuration"
-  fi
-  if [ ! -x "$switcher" ]; then
-    if [ -f /etc/arch-release ]; then
-      echo "gpu-mode: perfil '$profile' no soportado en Arch. Usa nvidia-smi o reinicia manualmente." >&2
-    else
-      echo "Perfil NVIDIA no disponible: ejecuta rebuild primero" >&2
-    fi
-    exit 1
-  fi
-  if [ "$(id -u)" = "0" ]; then
-    "$switcher" boot
-  else
-    sudo "$switcher" boot
-  fi
-  notify-send "GPU NVIDIA" "Perfil $profile seleccionado; reiniciando" 2>/dev/null || true
-  systemctl reboot
+  # Omarchy/Arch no tiene specialisations (NixOS): no se puede cambiar de
+  # perfil con reboot. Solo se gestiona el driver NVIDIA activo.
+  echo "gpu-mode: cambiar de perfil GPU ('$profile') no soportado en Omarchy/Arch." >&2
+  echo "  Usa 'gpu-mode.sh gaming' | 'gpu-mode.sh battery' sobre el driver activo." >&2
+  exit 1
 }
 
 current_mode() {
@@ -91,7 +74,7 @@ set_mode() { # $1 = on|auto, $2 = persistence 0|1
 
 ac_off() {
   if [ ! -e "$ACPI" ]; then
-    echo "acpi_call no disponible (rebuild requerido)" >&2
+    echo "acpi_call no disponible (modprobe acpi_call)" >&2
     return 1
   fi
   local m ret

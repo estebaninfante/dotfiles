@@ -47,8 +47,13 @@ tts() {
     voice speak "$@"
 }
 
+# Secrets locales (fuera del repo): API keys, tokens.
+# Ver scripts/setup-secrets.sh. NO commitear este archivo.
+if [ -f "$HOME/.config/dotfiles-secrets.sh" ]; then
+    . "$HOME/.config/dotfiles-secrets.sh"
+fi
+
 # opencode
-export EXPLABS_API_KEY="xpl_f2e5b828961bb3e61d40350545c979ef555ff624"
 export PATH=/home/eztvn/.opencode/bin:$PATH
 alias opencode="script -q -c \"opencode\" /dev/null"
 
@@ -69,15 +74,9 @@ eval "$(zoxide init bash)"
 # starship prompt
 eval "$(starship init bash)"
 
-# nixos-rebuild con flake; detecta laptop/desktop por hardware
-nrb() {
-    local machine="$(bash "$HOME/dotfiles/scripts/detect-machine.sh")"
-    if [ "$machine" = "desktop" ]; then
-        # sunshine cudaSupport recompila desde fuente: paralelismo default
-        # (max-jobs=24) OOM sin swap. Controlar max-jobs/cores en desktop.
-        sudo env NIX_CONFIG="max-jobs = 2"$'\n'"cores = 8" \
-            nixos-rebuild "$@" --flake "$HOME/dotfiles#$machine"
-    else
-        sudo nixos-rebuild "$@" --flake "$HOME/dotfiles#$machine"
-    fi
-}
+# Omarchy/Arch: actualizacion y paquetes
+alias update='omarchy-update'          # update completo de Omarchy
+alias pacup='sudo pacman -Syu'         # pacman upgrade
+alias yayup='yay -Syu'                 # AUR + repos
+alias pkg='sudo pacman -S'             # instalar
+alias y='yay -S'                       # instalar (AUR)

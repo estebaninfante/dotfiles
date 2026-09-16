@@ -24,8 +24,6 @@ VOICE="${SPEAK_VOICE:-es_MX-ald-medium}"
 voices_dirs=(
   "${PIPER_VOICES_DIR:-}"
   "$HOME/.local/share/tts/piper/voices"
-  "/run/current-system/sw/share/piper-voices"
-  "/nix/var/nix/profiles/default/share/piper-voices"
   "/usr/share/piper-voices"
 )
 

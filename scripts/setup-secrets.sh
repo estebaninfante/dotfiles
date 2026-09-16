@@ -61,17 +61,20 @@ else
     report SKIP "ssh -> $peer" "tailscale no resuelve $peer (offline?)"
 fi
 
-# ── authorizedKeys en el repo ───────────────────────────────────
-cfg="${REPO}/nixos/configuration.nix"
+# ── authorizedKeys: Omarchy no gestiona authorized_keys declarativo ──
 for pub in "${HOME}/.ssh"/*.pub; do
     [ -e "$pub" ] || continue
     fp="$(cut -d' ' -f1-2 "$pub")"
-    if grep -qF "$fp" "$cfg"; then
-        report PASS "authorizedKey $(basename "$pub" .pub)" "en configuration.nix"
-    else
-        report MANUAL "authorizedKey $(basename "$pub" .pub)" "falta en configuration.nix: $fp"
-    fi
+    report MANUAL "authorizedKey $(basename "$pub" .pub)" "anade a ~/.ssh/authorized_keys del peer: $fp"
 done
+
+# ── dotfiles-secrets.sh (secrets locales fuera del repo) ────────
+sec="${HOME}/.config/dotfiles-secrets.sh"
+if [ -f "$sec" ]; then
+    report PASS "dotfiles-secrets" "presente (sourced por .bashrc)"
+else
+    report MANUAL "dotfiles-secrets" "crear ${sec} con exports (EXPLABS_API_KEY, etc.)"
+fi
 
 # ── tailscale ───────────────────────────────────────────────────
 if tailscale status >/dev/null 2>&1; then

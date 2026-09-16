@@ -19,6 +19,7 @@
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -26,7 +27,7 @@ from engine import choose_handy_device, load_config
 
 # Handy escribe warnings de fontconfig a stderr; lo suprimimos para que stdout
 # (el JSON) quede limpio y parseable.
-HANDY = "/run/current-system/sw/bin/handy"
+HANDY = shutil.which("handy") or "/usr/bin/handy"
 
 
 def _run_handy(argv: list[str], timeout: int = 300) -> subprocess.CompletedProcess:

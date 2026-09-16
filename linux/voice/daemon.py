@@ -22,6 +22,7 @@
 import json
 import os
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -225,8 +226,8 @@ def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
         rate = _piper_sample_rate(model + ".json")
         return _run(["piper", "--model", model, "--output_file", wav], text)
     if engine == "kokoro":
-        kokoro = "/run/current-system/sw/bin/voice-kokoro"
-        if not os.path.exists(kokoro):
+        kokoro = shutil.which("voice-kokoro")
+        if not kokoro:
             log("kokoro: wrapper voice-kokoro no disponible")
             return False
         langc = "en" if lang == "en" else "es"

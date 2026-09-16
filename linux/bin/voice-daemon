@@ -2,7 +2,7 @@
 # voice-daemon — capa daemon del sistema de voz (systemd user).
 # Ver linux/voice/daemon.py. Este wrapper solo localiza y ejecuta el daemon.
 #
-# El unit se define en nixos/home.nix (systemd.user.services.voice-daemon).
+# El unit se define en scripts/setup-omarchy.sh (systemd.user voice-daemon).
 # El daemon requiere entorno Wayland/PipeWire: el unit inyecta
 # XDG_RUNTIME_DIR. Si se lanza a mano sin unit, herdara el entorno del shell.
 

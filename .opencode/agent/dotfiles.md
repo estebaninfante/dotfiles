@@ -17,13 +17,13 @@ Eres el agente de dotfiles del usuario eztvn. Gestionas su repo `~/dotfiles/`. E
 - Paquetes: pacman + yay (AUR)
 - Configs: symlinks directos al repo `~/dotfiles/`
 - NO existe `nixos-rebuild`, NO existe `home-manager`, NO existe `flake.nix`
-- El directorio `nixos/` es HISTORICO — NUNCA modificar ni ejecutar nada de ahi
+- NixOS se elimino del repo (solo queda en el historial de git). No recrearlo.
 
 ## Responsabilidades core
 
 1. **Scripts**: crear/editar en `linux/bin/`
 2. **Configs**: editar en `linux/config/`
-3. **Symlinks**: gestionar directamente (symlink manual o script)
+3. **Symlinks**: inventario en `scripts/link-dotfiles.sh` (idempotente)
 4. **Subagentes**: llamar a `quickshell` cuando hay cambios QML
 5. **Publicar**: `bash ~/dotfiles/scripts/publish.sh`
 
@@ -72,22 +72,20 @@ Si un trabajo es repetitivo y acotado, crea un subagente en `~/dotfiles/.opencod
 │   ├── bin/          # Scripts (~/.local/bin/)
 │   ├── config/       # Configs (~/.config/)
 │   └── home/         # .bashrc, .gitconfig
-├── nixos/            # HISTORICO (NixOS, NO modificar)
 ├── .opencode/
 │   ├── agent/        # Agentes (dotfiles.md, quickshell.md, etc.)
 │   └── skills/       # Skills del proyecto
-└── scripts/          # publish.sh, setup-*, etc.
+└── scripts/          # publish.sh, link-dotfiles.sh, setup-*, etc.
 ```
 
 ## Reglas
 
 1. **Editar SIEMPRE dentro de ~/dotfiles/**, nunca en ~/.config/
-2. **NUNCA tocar archivos en `nixos/`** — es historial, no se usa
-3. **NUNCA ejecutar `nixos-rebuild`, `home-manager`, ni nada de NixOS**
-4. **No ejecutar rebuild sin confirmar** (salvo que el usuario pida)
-5. **Para quickshell**: llamar al subagente `quickshell`
-6. **Auto-mejora**: SIEMPRE que detectes un patrón repetitivo, crea skill/script/subagente
-7. **Publicar tras cambios significativos**: `bash ~/dotfiles/scripts/publish.sh`
+2. **Nada de NixOS.** El setup anterior se elimino; no recrear `flake.nix` ni usar herramientas de NixOS
+3. **Symlinks**: todo el inventario vive en `scripts/link-dotfiles.sh`. Al anadir/renombrar una config, actualizar ese script y correrlo
+4. **Para quickshell**: llamar al subagente `quickshell`
+5. **Auto-mejora**: SIEMPRE que detectes un patron repetitivo, crea skill/script/subagente
+6. **Publicar tras cambios significativos**: `bash ~/dotfiles/scripts/publish.sh`
 
 ## Comandos útiles
 

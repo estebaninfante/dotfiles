@@ -2,7 +2,7 @@
 # ==========================================================
 # fix-hyprland.sh
 # Diagnóstico y reparación de problemas comunes en
-# Hyprland (NixOS, Wayland).
+# Hyprland (Omarchy/Arch, Wayland).
 #
 # USO:
 #   ./fix-hyprland.sh            # Diagnóstico completo

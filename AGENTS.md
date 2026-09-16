@@ -6,7 +6,7 @@
 
 Todas las configuraciones gestionadas viven aqui. Los archivos en `~/.config/`, `~/.bashrc`, etc. son enlaces simbolicos que apuntan a este repositorio.
 
-**El usuario esta en Omarchy (Arch Linux), NO en NixOS.** No tocar archivos en `nixos/` ni ejecutar `nixos-rebuild`. El directorio `nixos/` queda como referencia historica del setup anterior.
+**El usuario esta en Omarchy (Arch Linux), NO en NixOS.** El setup declarativo con NixOS se elimino del repo (queda solo en el historial de git): NO existe `flake.nix`, `nixos-rebuild`, `home-manager` ni specialisations. Paquetes con `pacman` + `yay` (AUR).
 
 ## Reglas permanentes
 
@@ -20,13 +20,12 @@ Todas las configuraciones gestionadas viven aqui. Los archivos en `~/.config/`, 
 
 5. **Antes de modificar una configuracion existente, revisar el repositorio primero.** Respetar personalizaciones existentes del usuario.
 
-6. **NUNCA modificar archivos en `nixos/`.** El usuario ya no usa NixOS. Todo va directo a `~/.config/` o `~/.local/bin/`.
+6. **Nada de NixOS.** No crear `flake.nix`, ni ejecutar `nixos-rebuild`/`home-manager`. Todo va directo a `~/.config/` o `~/.local/bin/` via symlink al repo.
 
 ## Estructura del repositorio
 
 ```
 dotfiles/
-├── nixos/               # HISTORICO (NixOS setup anterior, NO modificar)
 ├── linux/
 │   ├── config/          # ~/.config/ (symlinked)
 │   ├── home/            # ~/.bashrc, ~/.gitconfig
@@ -36,12 +35,18 @@ dotfiles/
 │   ├── patches/         # patches (lan-mouse AltGr, waybar Lua dispatch)
 │   └── system/          # keyd, NetworkManager dispatcher
 ├── scripts/
+│   ├── setup-omarchy.sh # fresh install en un comando
+│   ├── link-dotfiles.sh # aplica el inventario de symlinks (idempotente)
+│   ├── detect-machine.sh# detecta laptop/desktop por hardware
 │   ├── setup-tts.sh     # TTS
 │   ├── setup-secrets.sh # Configura/verifica claves y secrets
 │   └── publish.sh       # Commit + push con confirmacion
 ├── AGENTS.md
 └── README.md
 ```
+
+Los secrets locales viven en `~/.config/dotfiles-secrets.sh` (FUERA del repo,
+sourced por `~/.bashrc`). Nunca commitear claves.
 
 ## Inventario de configuraciones gestionadas
 
@@ -63,6 +68,9 @@ dotfiles/
 | gh | `~/.config/gh/` |
 | opencode | `~/.config/opencode/` |
 | quickshell | `~/.config/quickshell/` (bar + menus + launcher) |
+| tmux | `~/.config/tmux/` |
+| gesturecontrol | `~/.config/gesturecontrol/` |
+| voice | `~/.config/voice/` (config TTS) |
 | input-remapper-2 | `~/.config/input-remapper-2/` (copiado, no symlink) |
 
 ### Linux config — archivos sueltos
@@ -98,8 +106,9 @@ Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por
 
 1. Editar archivos dentro de `~/dotfiles/`.
 2. Para cambios de configs symlinkeadas (hypr, waybar, nvim, etc.), se aplican al instante (symlink directo al repo).
-3. Para scripts: guardar en `linux/bin/`, symlink automatico si esta en el inventario.
-4. Ejecutar `~/dotfiles/scripts/publish.sh` para commitear (y pushear con confirmacion).
+3. Para scripts: guardar en `linux/bin/`; el inventario de `scripts/link-dotfiles.sh` los enlaza.
+4. Al anadir/renombrar una config, agregarla al inventario de `scripts/link-dotfiles.sh` y correrlo.
+5. Ejecutar `~/dotfiles/scripts/publish.sh` para commitear (y pushear con confirmacion).
 
 ## Multi-maquina (laptop + desktop)
 
@@ -147,8 +156,8 @@ ssh eztvn@laptop   # desde desktop
 
 1. **Nunca modificar bloques `if machine == "X"` sin preguntar.** Esos bloques son machine-specific.
 2. **Configs compartidas** (keybinds, appearance, animations, window rules) se pueden editar libremente.
-3. **NUNCA tocar archivos en `nixos/`.** El usuario ya no usa NixOS.
-4. **Al agregar un script**, guardarlo en `linux/bin/` y agregarlo al symlink manual si es necesario.
+3. **Nada de NixOS.** El setup anterior se elimino; no recrear `flake.nix` ni ejecutar herramientas de NixOS.
+4. **Al agregar un script**, guardarlo en `linux/bin/` y correr `scripts/link-dotfiles.sh` (no clobbea archivos reales de Omarchy).
 
 ## TTS (Text-to-Speech)
 

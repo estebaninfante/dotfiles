@@ -43,7 +43,7 @@ echo ""
 # ── Preflight: clonar repo si no existe ────────────────────────
 if [[ ! -d "$REPO" ]]; then
     info "Clonando dotfiles..."
-    git clone https://github.com/eztvn/dotfiles.git "$REPO"
+    git clone https://github.com/estebaninfante/dotfiles.git "$REPO"
     ok "Repo clonado en $REPO"
 else
     info "Repo ya existe en $REPO"
@@ -163,11 +163,11 @@ fi
 # ══════════════════════════════════════════════════════════════
 header "Fase 3: Hyprland config"
 
-# Nuestro hyprland.lua reemplaza los defaults de Omarchy.
-# IMPORTANTE: NO symlink — copiar (Omarchy puede regenerar en updates).
+# Nuestro hyprland.lua + modulos reemplazan los defaults de Omarchy.
+# El symlink a ~/.config/hypr lo aplica scripts/link-dotfiles.sh en Fase 5
+# (repo = fuente de verdad). Aqui solo aseguramos que el dir exista.
 mkdir -p "$HOME/.config/hypr"
-cp -ru "$DOTFILES_CONFIG/hypr/." "$HOME/.config/hypr/"
-ok "Hyprland config copiada"
+ok "Hyprland config (symlink en Fase 5)"
 
 # ══════════════════════════════════════════════════════════════
 # FASE 4: Quickshell custom (reemplaza omarchy-shell)
@@ -226,76 +226,28 @@ ok "quickshell.service habilitado"
 # ══════════════════════════════════════════════════════════════
 # FASE 5: Configs (symlink al repo)
 # ══════════════════════════════════════════════════════════════
-header "Fase 5: Configs"
+header "Fase 5: Configs y symlinks"
 
 mkdir -p "$HOME/.config" "$HOME/.local/bin"
 
-# Config dirs — symlink directo al repo
-CONFIG_DIRS=(
-    kitty nvim kanata fastfetch
-    btop gh opencode tmux
-)
-
-for dir in "${CONFIG_DIRS[@]}"; do
-    src="$DOTFILES_CONFIG/$dir"
-    dst="$HOME/.config/$dir"
-    if [[ -d "$src" ]]; then
-        rm -rf "$dst" 2>/dev/null || true
-        ln -sf "$src" "$dst"
-        ok "~/.config/$dir → symlink"
-    fi
-done
-
-# Config files sueltos
-for file in libinput-gestures.conf mimeapps.list user-dirs.dirs user-dirs.locale; do
-    src="$DOTFILES_CONFIG/$file"
-    dst="$HOME/.config/$file"
-    if [[ -f "$src" ]]; then
-        ln -sf "$src" "$dst"
-        ok "~/.config/$file → symlink"
-    fi
-done
-
-# Home files
-for file in .bashrc .gitconfig; do
-    src="$DOTFILES_HOME/$file"
-    dst="$HOME/$file"
-    if [[ -f "$src" ]]; then
-        ln -sf "$src" "$dst"
-        ok "~/$file → symlink"
-    fi
-done
+# Todo el inventario de symlinks (config dirs, archivos sueltos, home files,
+# scripts) vive en un unico script idempotente. Repo = fuente de verdad.
+if [ -x "$REPO/scripts/link-dotfiles.sh" ]; then
+    bash "$REPO/scripts/link-dotfiles.sh"
+    ok "Symlinks aplicados via link-dotfiles.sh"
+else
+    err "Falta scripts/link-dotfiles.sh — no se pudieron crear symlinks"
+fi
 
 # ══════════════════════════════════════════════════════════════
 # FASE 6: Scripts
 # ══════════════════════════════════════════════════════════════
 header "Fase 6: Scripts"
 
-mkdir -p "$HOME/.local/bin"
-
+# Todos los scripts de linux/bin ya quedaron enlazados en Fase 5
+# via link-dotfiles.sh (no clobbea archivos reales de Omarchy).
 MACHINE=$(cat "$HOME/.config/machine-type" 2>/dev/null || echo "desktop")
-
-# Scripts que el usuario necesita
-WANTED_SCRIPTS=(
-    "theme-toggle.sh"
-    "kitty-theme-toggle.sh"
-    "apagar.sh"
-    "reiniciar.sh"
-    "cerrar-sesion.sh"
-    "lan-mouse-escape.sh"
-)
-
-COUNT=0
-for name in "${WANTED_SCRIPTS[@]}"; do
-    src="$DOTFILES_BIN/$name"
-    if [[ -f "$src" ]]; then
-        ln -sf "$src" "$HOME/.local/bin/$name"
-        ((COUNT++)) || true
-    else
-        warn "Script no encontrado: $name"
-    fi
-done
-ok "Scripts enlazados ($COUNT scripts)"
+ok "Scripts enlazados (inventario completo via link-dotfiles.sh)"
 
 # ══════════════════════════════════════════════════════════════
 # FASE 7: keyd (teclado)
@@ -320,37 +272,10 @@ header "Fase 8: Systemd user services"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 mkdir -p "$SYSTEMD_DIR"
 
-# dotfiles auto-sync
-cat > "$SYSTEMD_DIR/dotfiles-sync.service" << 'EOF'
-[Unit]
-Description=Dotfiles auto-sync (pull + commit + push)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/home/eztvn/dotfiles/scripts/auto-sync.sh
-
-[Install]
-WantedBy=default.target
-EOF
-
-cat > "$SYSTEMD_DIR/dotfiles-sync.timer" << 'EOF'
-[Unit]
-Description=Dotfiles sync periodico
-
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=5min
-
-[Install]
-WantedBy=default.target
-EOF
-
 # graphical-session-holder: REMOVIDO — uwsm gestiona graphical-session.target.
 # Con uwsm, este service choca: arranca antes del compositor, activa el target,
 # y uwsm aborta pensando que ya hay una sesión gráfica (pantalla negra).
-# Solo necesario en setups sin uwsm (ej. NixOS con GDM directo).
+# Solo necesario en setups sin uwsm.
 
 # lan-mouse
 cat > "$SYSTEMD_DIR/lan-mouse.service" << 'EOF'
@@ -415,7 +340,7 @@ EOF
 
 # Enable services
 systemctl --user daemon-reload
-for svc in dotfiles-sync.timer quickshell lan-mouse hyprpolkitagent voice-daemon; do
+for svc in quickshell lan-mouse hyprpolkitagent voice-daemon; do
     systemctl --user enable "$svc" 2>/dev/null && ok "$svc habilitado" || warn "$svc no pudo habilitarse"
 done
 

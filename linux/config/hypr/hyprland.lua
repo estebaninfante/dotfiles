@@ -47,8 +47,7 @@ else
     hl.env("GDK_SCALE", "2")
 end
 -- PREPEND ~/.local/bin al PATH existente (NO reemplazarlo).
--- En NixOS los binarios estan en /run/current-system/sw/bin — si
--- reemplazamos el PATH, Hyprland no encuentra kitty/waybar.
+-- Prepend para no perder el PATH del sistema (kitty/waybar en /usr/bin).
 hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. os.getenv("PATH"))
 hl.env("XDG_DATA_HOME", os.getenv("HOME") .. "/.local/share")
 if machine == "desktop" then
@@ -260,16 +259,13 @@ hl.on("hyprland.start", function()
     -- XWayland y con force_zero_scaling abre 1x sobre monitor scale=2 (chico).
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=Hyprland ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE")
-    -- Los paths /usr/libexec no existen en NixOS (store). Arrancar via
-    -- systemd da a la unit el env (WAYLAND_DISPLAY) que necesita su condicion.
+    -- Arrancar via systemd da a la unit el env (WAYLAND_DISPLAY) que necesita.
     hl.exec_cmd("sleep 2 && systemctl --user start xdg-desktop-portal-hyprland && systemctl --user restart xdg-desktop-portal && systemctl --user start lan-mouse")
 
     -- 4. Background services
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
     hl.exec_cmd("dbus-update-activation-environment --systemd SSH_AUTH_SOCK")
-    -- polkit agent: hyprpolkitagent (unit systemd user, ver home.nix)
-    -- (antes: /usr/libexec/polkit-gnome-authentication-agent-1, path
-    --  inexistente en NixOS → fprintd-enroll denegaba por falta de agente)
+    -- polkit agent: hyprpolkitagent (unit systemd user, ver setup-omarchy.sh)
     hl.exec_cmd("hypridle")
     hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme 'prefer-" .. (theme_mode() == "light" and "light" or "dark") .. "'")
     hl.exec_cmd("urserver --daemon")

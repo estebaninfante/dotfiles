@@ -263,8 +263,7 @@ def find_piper_model(voice: str) -> str | None:
     """Localiza el .onnx de una voz piper en los dirs habituales."""
     dirs = [
         os.environ.get("PIPER_VOICES_DIR", ""),
-        "/run/current-system/sw/share/piper-voices",
-        "/nix/var/nix/profiles/default/share/piper-voices",
+        "/usr/share/piper-voices",
         os.path.join(HOME, ".local", "share", "tts", "piper", "voices"),
     ]
     for d in dirs:
@@ -279,8 +278,7 @@ def find_piper_model(voice: str) -> str | None:
 def list_piper_voices() -> list[str]:
     dirs = [
         os.environ.get("PIPER_VOICES_DIR", ""),
-        "/run/current-system/sw/share/piper-voices",
-        "/nix/var/nix/profiles/default/share/piper-voices",
+        "/usr/share/piper-voices",
         os.path.join(HOME, ".local", "share", "tts", "piper", "voices"),
     ]
     found: list[str] = []

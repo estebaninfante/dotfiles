@@ -60,7 +60,7 @@ const GROQ_KEY_FILE = `${process.env.HOME}/.local/state/opencode/notify-groq-key
 
 // Sonido "lindo" para fin de tarea: completo/acierto del tema freedesktop.
 const CHIME_FILE = process.env.NOTIFY_SOUND_FILE
-  || '/run/current-system/sw/share/sounds/freedesktop/stereo/complete.oga';
+  || '/usr/share/sounds/freedesktop/stereo/complete.oga';
 
 function soundEnabled() {
   try {

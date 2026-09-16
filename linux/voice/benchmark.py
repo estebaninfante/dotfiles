@@ -15,6 +15,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -35,7 +36,7 @@ ENGINES = {
     "espeak": {"es": "es", "en": "en"},
 }
 
-HANDY = "/run/current-system/sw/bin/handy"  # no usado: benchmark es solo TTS
+HANDY = shutil.which("handy") or "/usr/bin/handy"  # no usado: benchmark es solo TTS
 
 
 def synth_to_wav(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
@@ -51,8 +52,8 @@ def synth_to_wav(engine: str, voice: str, lang: str, text: str, wav: str) -> boo
             ["piper", "--model", model, "--output_file", wav],
             input=text, capture_output=True, text=True, timeout=300).returncode == 0
     if engine == "kokoro":
-        kokoro = "/run/current-system/sw/bin/voice-kokoro"
-        if not os.path.exists(kokoro):
+        kokoro = shutil.which("voice-kokoro")
+        if not kokoro:
             return False
         langc = "en" if lang == "en" else "es"
         return subprocess.run(

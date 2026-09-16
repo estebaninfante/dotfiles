@@ -1,0 +1,7 @@
+#!/bin/bash
+case "${1:-live}" in
+  ui)    shift; exec python3 "$HOME/.local/share/beckon/ui.py" "$@" ;;
+  setup) shift; exec bash "$HOME/.local/share/beckon/setup.sh" "$@" ;;
+  live)  shift; exec python3 "$HOME/.local/share/beckon/live.py" "$@" ;;
+  *)     exec python3 "$HOME/.local/share/beckon/live.py" "$@" ;;
+esac

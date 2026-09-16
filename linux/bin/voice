@@ -159,9 +159,7 @@ speak_core_piper() { # speak_core_piper <voz> <texto> — sin flock, sin daemon
   local voice="$1"; shift
   local model json rate
   for d in "$HOME/.local/share/tts/piper/voices" \
-           "/usr/share/piper-voices" \
-           "/run/current-system/sw/share/piper-voices" \
-           "/nix/var/nix/profiles/default/share/piper-voices"; do
+           "/usr/share/piper-voices"; do
     if [ -f "$d/$voice/$voice.onnx" ]; then model="$d/$voice/$voice.onnx"; break; fi
   done
   [ -n "${model:-}" ] || { echo "voice: voz $voice no encontrada" >&2; return 1; }
@@ -358,10 +356,12 @@ PYEOF
     transcribe "$2"
     ;;
   summarize)
-    # On-demand: lee el ultimo resumen que escribio el plugin voice y lo habla.
-    _sfile="$CACHE_DIR/last-summary.txt"; _rfile="$CACHE_DIR/last-response.txt"
+    # On-demand: lee la ultima notificacion del agente (o la ultima respuesta)
+    # y la habla por Chatterbox.
+    _mfile="$CACHE_DIR/last-message.txt"
+    _rfile="$CACHE_DIR/last-response.txt"
     _text=""
-    [ -s "$_sfile" ] && _text=$(cat "$_sfile")
+    [ -s "$_mfile" ] && _text=$(cat "$_mfile")
     [ -n "$_text" ] || { [ -s "$_rfile" ] && _text=$(cat "$_rfile"); }
     if [ -z "$_text" ]; then
       echo "voice: no hay resumen disponible todavia" >&2
@@ -389,7 +389,7 @@ PYEOF
       status) systemctl --user is-active voice-daemon ;;
       *) cat <<EOU
 use: voice daemon start|stop|restart|status
-    (unit: voice-daemon.service, ver nixos/home.nix)
+    (unit: voice-daemon.service, ver scripts/setup-omarchy.sh)
 EOU
         ;;
     esac
