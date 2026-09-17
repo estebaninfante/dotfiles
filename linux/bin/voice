@@ -17,6 +17,7 @@
 #   voice mode [summary|full]            ver/cambiar modo de resumen
 #   voice model list|set <id>            listar/cambiar modelo STT Handy
 #   voice transcribe <wav>               STT sobre un archivo
+#   voice synth <texto> [salida.wav] [--lang es] [--stdout]  TTS a archivo o stdout
 #   voice benchmark                      benchmark TTS (kokoro/piper/espeak × es/en)
 #   voice stop                           vaciar cola TTS + cortar playback
 #   voice daemon start|stop|restart      control del servicio systemd user
@@ -232,7 +233,66 @@ PYEOF
   fi
 }
 
-usage() { sed -n '2,20p' "$0"; }
+synth() {  # synth <texto> [salida.wav] [--lang es] [--stdout] — TTS a archivo/stdout
+  local text="${1:-}"
+  [ -n "$text" ] || { echo "uso: voice synth <texto> [salida.wav] [--lang es] [--stdout]" >&2; return 2; }
+  shift
+  local out="" langarg="" to_stdout=0
+  while [ "$#" -ge 1 ]; do
+    case "$1" in
+      --lang) langarg="${2:-}"; shift 2 ;;
+      --stdout) to_stdout=1; shift ;;
+      *) [ -n "$out" ] || out="$1"; shift ;;
+    esac
+  done
+  if [ "$to_stdout" = "1" ] && [ -z "$out" ]; then
+    out="$(mktemp /tmp/voice-synth-XXXXXX.wav)"
+  fi
+  [ -n "$out" ] || { echo "uso: voice synth <texto> [salida.wav] [--lang es] [--stdout]" >&2; return 2; }
+  daemon_alive || { echo "voice: daemon no activo (voice daemon start)" >&2; return 1; }
+  local got
+  got=$("$PY" - "$CACHE_DIR/synth.sock" "$text" "$out" "$langarg" <<'PYEOF'
+import json, os, socket, sys
+sock_path, text, out, lang = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+out = os.path.abspath(os.path.expanduser(out))
+req = {"text": text, "output": out}
+if lang:
+    req["lang"] = lang
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(600)
+try:
+    s.connect(sock_path)
+except OSError as e:
+    print(f"voice: no se pudo conectar a {sock_path}: {e}", file=sys.stderr)
+    sys.exit(1)
+s.sendall(json.dumps(req).encode("utf-8") + b"\n")
+buf = b""
+while b"\n" not in buf:
+    chunk = s.recv(65536)
+    if not chunk:
+        break
+    buf += chunk
+line = buf.split(b"\n", 1)[0].decode("utf-8", "replace").strip()
+try:
+    resp = json.loads(line)
+except Exception:
+    resp = {"ok": False, "error": f"respuesta invalida: {line[:200]}"}
+if resp.get("ok"):
+    print(out)
+    sys.exit(0)
+print(resp.get("error", "fallo la sintesis"), file=sys.stderr)
+sys.exit(1)
+PYEOF
+) || { [ "$to_stdout" = "1" ] && rm -f "$out"; return 1; }
+  if [ "$to_stdout" = "1" ]; then
+    cat "$got"
+    rm -f "$out"
+  else
+    echo "$got"
+  fi
+}
+
+usage() { sed -n '2,21p' "$0"; }
 
 send_agent() {  # send_agent --agent <nombre> --text "texto"
   local agent="" text=""
@@ -252,6 +312,7 @@ case "${1:-status}" in
   __speak_direct) shift; __speak_direct "$@" ;;
   status) "$PY" "$VOICE_DIR/engine.py" status ;;
   speak) shift; speak "$@" ;;
+  synth) shift; synth "$@" ;;
   listen) listen ;;
   test)
     speak "Hola. Esto es una prueba del sistema de voz local."
@@ -371,15 +432,20 @@ PYEOF
     speak "$_text"
     echo "voice: hablando resumen"
     ;;
-  toggle)
-    # Auto-speak on idle: '1' = ON, '0' = OFF (default OFF)
-    _sf="$HOME/.local/state/opencode/voice-auto-speak"
-    mkdir -p "$(dirname "$_sf")"
-    if [ "$(cat "$_sf" 2>/dev/null)" = "1" ]; then
-      echo "0" > "$_sf"; echo "voice: auto-speak OFF"
-    else
-      echo "1" > "$_sf"; echo "voice: auto-speak ON"
-    fi
+  notify)
+    # Notificaciones del agente opencode: on|off|status (default OFF).
+    _nf="$HOME/.local/state/opencode/voice-notify"
+    mkdir -p "$(dirname "$_nf")"
+    _cur="0"; [ -s "$_nf" ] && _cur=$(cat "$_nf")
+    case "${2:-status}" in
+      on)     echo "1" > "$_nf"; echo "notificaciones: ON" ;;
+      off)    echo "0" > "$_nf"; echo "notificaciones: OFF" ;;
+      toggle)
+        if [ "$_cur" = "1" ]; then echo "0" > "$_nf"; echo "notificaciones: OFF"
+        else echo "1" > "$_nf"; echo "notificaciones: ON"; fi ;;
+      status|*)
+        [ "$_cur" = "1" ] && echo "notificaciones: ON" || echo "notificaciones: OFF" ;;
+    esac
     ;;
   daemon)
     case "${2:-status}" in

@@ -356,14 +356,14 @@ hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("brightnessctl set +3% && swayo
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 3%- && swayosd-client --brightness lower"), { repeating = true })
 
 -- ========================
--- SCREENSHOT (shot: grim + slurp + wl-copy)
+-- SCREENSHOT (shot: wayfreeze + grim + slurp + wl-copy)
 -- ========================
-hl.bind("Print",           hl.dsp.exec_cmd("bash -c '~/.local/bin/shot'"))
-hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("bash -c '~/.local/bin/shot full'"))
-hl.bind("CTRL + Print",    hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -s'"))
-hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -s full'"))
-hl.bind(mainMod .. " + Print",       hl.dsp.exec_cmd("bash -c '~/.local/bin/shot active'"))
-hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd("bash -c '~/.local/bin/shot -e'"))
+hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/shot"))
+hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("~/.local/bin/shot full"))
+hl.bind("CTRL + Print",    hl.dsp.exec_cmd("~/.local/bin/shot -s"))
+hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("~/.local/bin/shot -s full"))
+hl.bind(mainMod .. " + Print",       hl.dsp.exec_cmd("~/.local/bin/shot active"))
+hl.bind(mainMod .. " + SHIFT + Print", hl.dsp.exec_cmd("~/.local/bin/shot -e"))
 
 -- ========================
 -- MOUSE BUTTONS
@@ -388,17 +388,8 @@ hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 -- Para cambiarla: bindear otra tecla a "~/.local/bin/voice tts toggle".
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("handy --toggle-post-process"))
 
--- Voice Agent: graba → STT (Handy/GPU) → LLM (Groq) → TTS
--- Super+V: toggle grabación (primera pulsación graba, segunda procesa)
-hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("~/.local/bin/voice-agent"))
-
--- Voice Summary: resume ultima respuesta + Chatterbox habla (on-demand)
--- Super+Shift+V: genera resumen y lo lee en voz alta
-hl.bind(mainMod .. " + SHIFT + V", hl.dsp.exec_cmd("~/.local/bin/voice summarize"))
-
--- Voice Toggle: activa/desactiva auto-speak en idle (default OFF)
--- Super+Ctrl+V: toggle auto-speak
-hl.bind(mainMod .. " + CTRL + V", hl.dsp.exec_cmd("~/.local/bin/voice toggle"))
+-- Nota: el resumen de voz on-demand y su toggle NO usan keybinds (chocaban con
+-- los workspaces V/SHIFT+V). Se manejan por comando: ver plugin voice de opencode.
 
 -- OpenCode / TV toggle / Tema claro-oscuro
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode opencode --agent dotfiles"))

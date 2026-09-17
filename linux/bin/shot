@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 
 SAVE_DIR="$HOME/Pictures/screenshots"
-TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
+OUT="/tmp/shot.png"
 MODE="area"
 ACTION="copy"
-
-cleanup() {
-    [ -n "$HYPRPICKER_PID" ] && kill "$HYPRPICKER_PID" 2>/dev/null
-    wait "$HYPRPICKER_PID" 2>/dev/null
-}
-trap cleanup EXIT
 
 usage() {
     cat <<EOF
@@ -38,14 +32,6 @@ EOF
     exit 0
 }
 
-freeze_screen() {
-    if command -v hyprpicker &>/dev/null; then
-        hyprpicker -r -z &
-        HYPRPICKER_PID=$!
-        sleep 0.15
-    fi
-}
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -s|--save) ACTION="save"; shift ;;
@@ -56,54 +42,47 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+rm -f "$OUT"
+
 case "$MODE" in
     active)
-        freeze_screen
         GEOMETRY=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
-        [ -z "$GEOMETRY" ] && { notify-send -u critical "shot" "No se pudo obtener ventana activa"; exit 1; }
-        grim -g "$GEOMETRY" - > /tmp/shot.png
+        if [ -z "$GEOMETRY" ] || [[ "$GEOMETRY" == null* ]]; then
+            notify-send -u critical "shot" "No se pudo obtener ventana activa"
+            exit 1
+        fi
+        CAPTURE="grim -g '$GEOMETRY' - > $OUT"
         ;;
     full)
-        freeze_screen
-        grim - > /tmp/shot.png
+        CAPTURE="grim - > $OUT"
         ;;
     area)
-        grim - > /tmp/shot_full.png
-        GEOMETRY=$(slurp)
-        [ -z "$GEOMETRY" ] && { rm -f /tmp/shot_full.png; exit 1; }
-        POS=$(echo "$GEOMETRY" | cut -d' ' -f1)
-        SIZE=$(echo "$GEOMETRY" | cut -d' ' -f2)
-        X=$(echo "$POS" | cut -d',' -f1)
-        Y=$(echo "$POS" | cut -d',' -f2)
-        SCALE=$(hyprctl monitors -j | jq -r '[.[] | .scale] | first')
-        SCALE=${SCALE:-1}
-        if [ "$SCALE" != "1" ] && [ "$SCALE" != "1.0" ] && [ "$SCALE" != "1.00" ]; then
-            W=$(echo "$SIZE" | cut -d'x' -f1)
-            H=$(echo "$SIZE" | cut -d'x' -f2)
-            X=$(awk "BEGIN {printf \"%d\", $X * $SCALE}")
-            Y=$(awk "BEGIN {printf \"%d\", $Y * $SCALE}")
-            W=$(awk "BEGIN {printf \"%d\", $W * $SCALE}")
-            H=$(awk "BEGIN {printf \"%d\", $H * $SCALE}")
-            SIZE="${W}x${H}"
-        fi
-        convert /tmp/shot_full.png -crop "${SIZE}+${X}+${Y}" +repage /tmp/shot.png
-        rm -f /tmp/shot_full.png
+        CAPTURE="g=\$(slurp); [ -n \"\$g\" ] && grim -g \"\$g\" - > $OUT"
         ;;
 esac
 
+if command -v wayfreeze &>/dev/null; then
+    wayfreeze --hide-cursor --after-freeze-cmd "$CAPTURE; killall wayfreeze"
+else
+    eval "$CAPTURE"
+fi
+
+[ -s "$OUT" ] || exit 1
+
 case "$ACTION" in
     copy)
-        wl-copy --type image/png < /tmp/shot.png
+        wl-copy --type image/png < "$OUT"
         notify-send "shot" "Captura copiada al portapapeles"
         ;;
     save)
+        TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
         mkdir -p "$SAVE_DIR"
         FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
-        cp /tmp/shot.png "$FILE"
+        cp "$OUT" "$FILE"
         wl-copy --type image/png < "$FILE"
         notify-send "shot" "Guardada: $FILE"
         ;;
     edit)
-        swappy -f /tmp/shot.png
+        swappy -f "$OUT"
         ;;
 esac

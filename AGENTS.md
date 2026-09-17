@@ -73,6 +73,12 @@ sourced por `~/.bashrc`). Nunca commitear claves.
 | voice | `~/.config/voice/` (config TTS) |
 | input-remapper-2 | `~/.config/input-remapper-2/` (copiado, no symlink) |
 
+### VS Code (caso especial)
+
+Solo se enlazan `settings.json` y `keybindings.json` (el resto de `~/.config/Code/User/`
+lo reescribe el editor). Fuente: `linux/config/vscode/User/`. Extensiones: VSCodeVim,
+Live Server, Rosé Pine. Config: vim-style (leader espacio), UI minimalista, Live Server en 8080.
+
 ### Linux config — archivos sueltos
 
 | Archivo | Ruta destino |

@@ -24,9 +24,11 @@ import os
 import select
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 from engine import (
@@ -40,12 +42,14 @@ from engine import (
 FIFO = os.environ.get("VOICE_TTS_FIFO", os.path.join(CACHE_DIR, "tts.fifo"))
 PID_FILE = os.path.join(CACHE_DIR, "daemon.pid")
 LOG_FILE = os.environ.get("VOICE_LOG", os.path.join(CACHE_DIR, "daemon.log"))
+SYNTH_SOCK = os.environ.get("VOICE_SYNTH_SOCK", os.path.join(CACHE_DIR, "synth.sock"))
 DEDUP_TTL = float(os.environ.get("VOICE_DEDUP_TTL", "20"))
 
 _last_key: dict[str, float] = {}
 _queue: list[dict] = []
 _stop = False
 _chatterbox_proc: subprocess.Popen | None = None
+_chatterbox_lock = threading.Lock()
 
 
 def log(msg: str) -> None:
@@ -200,15 +204,17 @@ def synth_and_play(req: dict) -> bool:
 def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
     """Sintetiza `text` a `wav` con el motor dado. Devuelve OK (wav creado)."""
     if engine == "chatterbox":
-        proc = _ensure_chatterbox_server()
-        if proc is None:
-            return False
         ref_dir = os.path.join(os.path.expanduser("~"), ".local", "share", "tts", "chatterbox", "refs")
         ref_file = os.path.join(ref_dir, f"ref_{lang}.wav")
         req = {"text": text, "output": wav, "lang": lang}
         if os.path.isfile(ref_file):
             req["ref"] = ref_file
-        resp = _server_request(req, timeout=120)
+        # El server chatterbox es single-threaded (stdin/stdout); serializar.
+        with _chatterbox_lock:
+            proc = _ensure_chatterbox_server()
+            if proc is None:
+                return False
+            resp = _server_request(req, timeout=120)
         if resp and resp.get("ok"):
             stats = resp.get("stats", {})
             log(f"chatterbox: {stats.get('synth_time', '?')}s synth, "
@@ -234,6 +240,98 @@ def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
         return _run([kokoro, "-o", wav, "-l", langc, "-t", text, "-v", voice], None)
     # espeak (final)
     return _run(["espeak-ng", "-v", lang, "-s", "160", "-p", "50", "-w", wav, text], None)
+
+
+# ── Socket de sintesis a archivo (sin reproducir) ───────────────────────
+# Permite que procesos externos (p.ej. OpenClaw talk.speak) pidan TTS a un
+# archivo reutilizando el modelo ya cargado en GPU. Protocolo unix socket,
+# JSON por linea: {"text","output","lang"?,"engine"?,"voice"?} -> {"ok",...}
+def _synth_to_file(req: dict) -> tuple[bool, str]:
+    text = (req.get("text") or "").strip()
+    output = req.get("output") or ""
+    if not text or not output:
+        return False, "missing text or output"
+    try:
+        cfg = load_config()
+    except Exception as e:  # config corrupta -> cadena por defecto
+        cfg = {"tts": {"lang": "es"}}
+    lang = req.get("lang") or cfg["tts"]["lang"]
+    try:
+        tcfg = tts_command(cfg, lang)
+        engine = req.get("engine") or tcfg["engine"]
+        voice = req.get("voice") or tcfg["voice"]
+    except Exception as e:
+        return False, f"config: {e}"
+
+    output = os.path.abspath(os.path.expanduser(output))
+    try:
+        os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
+    except OSError:
+        pass
+
+    chain = [engine] + [s for s in ("piper", "espeak") if s != engine]
+    for eng in chain:
+        if _synth(eng, voice, lang, text, output):
+            return True, eng
+    return False, "todos los motores fallaron"
+
+
+def _handle_synth_conn(conn: socket.socket) -> None:
+    try:
+        conn.settimeout(600)
+        buf = b""
+        while b"\n" not in buf:
+            chunk = conn.recv(65536)
+            if not chunk:
+                return
+            buf += chunk
+        line = buf.split(b"\n", 1)[0].decode("utf-8", "replace").strip()
+        if not line:
+            return
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError:
+            _sock_reply(conn, {"ok": False, "error": "invalid JSON"})
+            return
+        ok, detail = _synth_to_file(req)
+        _sock_reply(conn, {"ok": ok, "detail": detail} if ok
+                    else {"ok": False, "error": detail})
+    except Exception as e:
+        try:
+            _sock_reply(conn, {"ok": False, "error": str(e)})
+        except OSError:
+            pass
+    finally:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+
+def _sock_reply(conn: socket.socket, obj: dict) -> None:
+    conn.sendall(json.dumps(obj).encode("utf-8") + b"\n")
+
+
+def serve_synth_socket() -> None:
+    try:
+        os.makedirs(os.path.dirname(SYNTH_SOCK), exist_ok=True)
+        if os.path.exists(SYNTH_SOCK):
+            os.remove(SYNTH_SOCK)
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(SYNTH_SOCK)
+        os.chmod(SYNTH_SOCK, 0o600)
+        srv.listen(8)
+    except OSError as e:
+        log(f"synth socket no disponible: {e}")
+        return
+    log(f"synth socket escuchando: {SYNTH_SOCK}")
+    while True:
+        try:
+            conn, _ = srv.accept()
+        except OSError as e:
+            log(f"synth socket accept error: {e} — saliendo")
+            return
+        threading.Thread(target=_handle_synth_conn, args=(conn,), daemon=True).start()
 
 
 def _piper_sample_rate(json_path: str) -> int | None:
@@ -343,6 +441,11 @@ def main() -> None:
     def _term(_s, _f):
         log("SIGTERM — saliendo")
         _shutdown_chatterbox_server()
+        try:
+            if os.path.exists(SYNTH_SOCK):
+                os.remove(SYNTH_SOCK)
+        except OSError:
+            pass
         sys.exit(0)
 
     def _hup(_s, _f):
@@ -355,8 +458,8 @@ def main() -> None:
     log("voice-daemon arrancado")
     ensure_fifo()
 
-    import threading
     threading.Thread(target=worker, daemon=True).start()
+    threading.Thread(target=serve_synth_socket, daemon=True).start()
 
     # read loop bloqueante
     while True:

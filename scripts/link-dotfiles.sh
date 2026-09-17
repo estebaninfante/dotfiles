@@ -44,6 +44,10 @@ HOME_FILES=( .bashrc .gitconfig )
 COPY_DIRS=( input-remapper-2 )
 # Machine-specific: se copia config.<machine>.toml -> ~/.config/lan-mouse/config.toml
 LANMOUSE_SRC="${CONFIG_SRC}/lan-mouse"
+# VS Code: solo settings.json y keybindings.json dentro de ~/.config/Code/User
+# (el resto del dir User lo reescribe el editor; no se symlinkea entero)
+VSCODE_SRC="${CONFIG_SRC}/vscode/User"
+VSCODE_DST="${HOME}/.config/Code/User"
 
 LINKED=0; SKIPPED=0; BACKED=0
 
@@ -111,6 +115,17 @@ for name in "${HOME_FILES[@]}"; do
     link_path "${HOME_SRC}/${name}" "${HOME}/${name}" true
 done
 
+header "VS Code User (~/.config/Code/User)"
+if [ -d "$VSCODE_SRC" ]; then
+    mkdir -p "$VSCODE_DST"
+    for f in "$VSCODE_SRC"/*.json; do
+        [ -e "$f" ] || continue
+        link_path "$f" "${VSCODE_DST}/$(basename "$f")" true
+    done
+else
+    warn "no existe $VSCODE_SRC"
+fi
+
 header "Scripts (~/.local/bin)"
 if [ -d "$BIN_SRC" ]; then
     for f in "$BIN_SRC"/*; do
@@ -165,6 +180,6 @@ while IFS= read -r l; do
     case "$tgt" in
         "$HOME/dotfiles"/*) err "symlink roto: $l -> $tgt"; broken=$((broken+1)) ;;
     esac
-done < <(find "${HOME}/.config" "${HOME}/.local/bin" -maxdepth 1 -xtype l 2>/dev/null)
+done < <(find "${HOME}/.config" "${HOME}/.local/bin" "${HOME}/.config/Code/User" -maxdepth 1 -xtype l 2>/dev/null)
 [ "$broken" -eq 0 ] && ok "Sin symlinks rotos hacia el repo." || err "$broken symlink(s) roto(s)."
 exit 0

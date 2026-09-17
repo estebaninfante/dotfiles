@@ -18,16 +18,22 @@ Boundaries: code/commits/PRs written normal.
 
 ## Notificaciones al usuario (plugin voice)
 
-Cuando termines una tarea, o cuando algo merezca la atencion del usuario, llama a la
-tool `notify_user` para avisarle:
+Las notificaciones estan en modo ON/OFF (default **OFF**). El usuario las controla con el
+comando `/notify on` y `/notify off` (sin argumento: `/notify` muestra el estado).
 
-- Redacta TU el mensaje, en espanol, breve (1-2 frases) y con contexto real de lo que
-  hiciste y del resultado. No uses frases genericas tipo "sesion terminada".
-- La notificacion siempre se muestra en escritorio y se envia push al celular.
-- La voz (Chatterbox) solo suena si el auto-speak esta activado (Super+Ctrl+V). Para
-  forzar la lectura de un aviso puntual, pasa `speak: true`.
+- **OFF**: NO llames a la tool `notify_user` para avisos normales; aunque la llames, se ignora.
+- **ON**: cuando termines una tarea o algo merezca atencion, llama a la tool `notify_user`.
+
+Formato del mensaje (redactalo TU, con contexto real de lo que hiciste):
+
+- Espanol, breve (1-2 frases). Nada generico tipo "sesion terminada".
+- Toda notificacion se muestra en escritorio, se envia push al celular y se **lee en voz
+  alta con Chatterbox** automaticamente. No hay comando aparte para hablar.
+- No uses la tool en cada mensaje: solo al cerrar una tarea o ante algo relevante.
+
+Los avisos de **permisos** y **errores** se envian siempre (los manda el plugin solo), no
+dependen del toggle.
 
 Ejemplo:
-`notify_user({ message: "Implementado el plugin de voz en modo eventos y probado con Chatterbox.", title: "opencode", priority: 3 })`
+`notify_user({ message: "Refactorice el plugin de voz a modo eventos y verifique el flujo.", title: "opencode", priority: 3 })`
 
-No la llames en cada mensaje: solo al cerrar una tarea o ante algo relevante.
