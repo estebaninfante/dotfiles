@@ -1,6 +1,6 @@
 {
   // ── Tema (alineado con el tema global de kitty/nvim) ───────────
-  "workbench.colorTheme": "Noctokai",
+  "workbench.colorTheme": "Omarchy",
   "workbench.preferredDarkColorTheme": "Rosé Pine",
   "workbench.iconTheme": "vs-seti",
   "workbench.colorCustomizations": {
@@ -262,5 +262,6 @@
   "livePreview.autoRefreshPreview": "On All Changes in Editor",
   "livePreview.showServerStatusNotifications": false,
   "livePreview.defaultPreviewPath": "/index.html",
-  "simpleBrowser.focusLockIndicator.enabled": false
+  "simpleBrowser.focusLockIndicator.enabled": false,
+  "chat.viewSessions.orientation": "stacked"
 }

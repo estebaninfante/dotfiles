@@ -78,11 +78,14 @@ end
 -- INPUT
 -- ========================
 hl.config({
+    general = {
+        resize_on_border = true
+    },
     input = {
         kb_layout   = "dvk_prog,es,us",
         kb_variant  = "basic,,",
         kb_options  = "caps:none",
-        follow_mouse = 1,
+        follow_mouse = 2,
         sensitivity = 0
     }
 })
@@ -128,6 +131,32 @@ hl.layer_rule({
     match = { namespace = "swaync" },
     blur = true
 })
+
+-- Sistema de captura de pantalla (shot: wayfreeze + slurp + grim): ninguna
+-- capa debe animarse. grim captura la salida COMPUESTA, asi que si wayfreeze
+-- o el selector de slurp ("selection") entran/salen con el style "popin" del
+-- leaf "layers" (mas abajo), la captura los pilla a medio animar y sale la
+-- imagen encogida hacia el centro.
+hl.layer_rule({
+    match = { namespace = "wayfreeze" },
+    no_anim = true,
+    animation = "none"
+})
+
+hl.layer_rule({
+    match = { namespace = "selection" },
+    no_anim = true,
+    animation = "none"
+})
+
+hl.layer_rule({
+    match = { namespace = "hyprpicker" },
+    no_anim = true,
+    animation = "none"
+})
+
+-- swappy (editor de capturas) como ventana: sin animacion de entrada/salida.
+hl.window_rule({ match = { class = "swappy" }, no_anim = true })
 
 -- Omarchy shell blur (handled by omarchy's own shell config)
 
@@ -403,6 +432,7 @@ end
 -- ========================
 -- FOCUS (DVORAK-PROG layout)
 -- ========================
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("omarchy-hyprland-window-pop"))
 hl.bind(mainMod .. " + O", hl.dsp.focus({ direction = "l" }))
 hl.bind(mainMod .. " + U", hl.dsp.focus({ direction = "r" }))
 hl.bind(mainMod .. " + ntilde", hl.dsp.focus({ direction = "u" }))
@@ -421,10 +451,10 @@ local function move_window(dir, dx, dy)
         hl.dispatch(hl.dsp.window.move({ direction = dir }))
     end
 end
-hl.bind(mainMod .. " + SHIFT + O",      function() move_window("left",  -50, 0) end)
-hl.bind(mainMod .. " + SHIFT + U",      function() move_window("right",  50, 0) end)
-hl.bind(mainMod .. " + SHIFT + ntilde", function() move_window("up",     0, -50) end)
-hl.bind(mainMod .. " + SHIFT + E",      function() move_window("down",   0, 50) end)
+hl.bind(mainMod .. " + SHIFT + O",      function() move_window("left",  -50, 0) end, { repeating = true })
+hl.bind(mainMod .. " + SHIFT + U",      function() move_window("right",  50, 0) end, { repeating = true })
+hl.bind(mainMod .. " + SHIFT + ntilde", function() move_window("up",     0, -50) end, { repeating = true })
+hl.bind(mainMod .. " + SHIFT + E",      function() move_window("down",   0, 50) end, { repeating = true })
 
 -- ========================
 -- RESIZE
