@@ -452,9 +452,13 @@ if hl.plugin.hyprexpo ~= nil then
     })
 end
 
-hl.bind(mainMod .. " + Y", function()
-    hl.plugin.hyprexpo.expo("toggle")
-end)
+-- expo_focus / expo_ui_toggle se definen mas abajo (seccion fly-through).
+-- Forward-decl para que los binds de abajo (submap) los usen y no queden con nil.
+local expo_focus
+local expo_ui_toggle
+local expo_fly_super_up
+
+hl.bind(mainMod .. " + Y", function() expo_ui_toggle() end)
 
 -- Navegacion por teclado dentro de la grilla expo. El plugin entra al submap
 -- "hyprexpo" al abrir (keynav_enable=1) y lo abandona al cerrar, asi que aqui
@@ -471,12 +475,12 @@ if hl.plugin.hyprexpo ~= nil then
         hl.bind("RETURN", function() hl.plugin.hyprexpo.kb_confirm() end)
         -- Sin esto el catchall se come el primer SUPER+Y y habria que pulsarlo
         -- dos veces para cerrar la grilla.
-        hl.bind(mainMod .. " + Y", function() hl.plugin.hyprexpo.expo("toggle") end)
+        hl.bind(mainMod .. " + Y", function() expo_ui_toggle() end)
         -- Replica de los binds globales SUPER+<ws>: con la grilla abierta,
         -- SUPER+<n> salta al desktop n (fly-through).
         local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
         for i = 1, 10 do
-            hl.bind(mainMod .. " + " .. ws_keys[i], function() hl.plugin.hyprexpo.kb_selectn(i) end)
+            hl.bind(mainMod .. " + " .. ws_keys[i], function() expo_focus(i) end)
         end
         hl.bind("catchall", function() hl.dispatch(hl.dsp.submap("reset")) end)
     end)
@@ -545,6 +549,8 @@ if hl.plugin.hyprexpo ~= nil then
                 expo_hold.super_down = false
                 expo_hold_close()
                 expo_hold.suppressed = false
+                -- Fly-through: al soltar SUPER confirmamos el tile elegido.
+                if expo_fly_super_up then expo_fly_super_up() end
             end
         else -- pressed (1) o repeated (2)
             if is_super then
@@ -834,81 +840,157 @@ local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
 -- Fly-through: SUPER+# abre la grilla y hace zoom al desktop #, para que el
 -- cambio de desktop se sienta tridimensional (morph abrir grilla -> entrar al tile).
 -- Solo para tiles visibles (grilla 3x3 = 1..9); ws 10 cae a focus normal.
--- Interrumpible: si apretas otro SUPER+# durante la animacion, el ultimo gana
--- (se reintenta hasta llegar, asi no queda pegado en el desktop anterior).
--- EXPO_FLY_MS = cuanto espera antes de entrar al tile (deja ver la grilla 3D).
--- Cerca de la duracion de windowsMove (800ms) = la grilla se forma casi del todo
--- antes del zoom de entrada. El morph en si sigue la curva "expoSmooth".
-local EXPO_FLY_MS  = 600
-local EXPO_POLL_MS = 25
-local EXPO_FLY_MAX = 160 -- ticks de seguridad (~4s) para no reintentar sin fin
-local expo_fly = { want = false, opened = false, ticks = 0, age = 0, timer = nil }
+-- Estado del fly-through. Guardamos aca las "posiciones": si la grilla esta
+-- abierta (open), que tile tiene el foco (sel, indice de grilla 1..9 numpad) y
+-- cual es el ultimo destino pedido (want). Mientras encadenas SUPER+# mantenemos
+-- la grilla ABIERTA y solo MOVEMOS el foco (kb_focus), asi recalcular la direccion
+-- es instantaneo y no se corta ninguna animacion.
+--
+-- Modos (EXPO_MODE):
+--   "always3d" (default) SIEMPRE morpha 3D: cada press abre la grilla y hace zoom
+--              al tile. Si encadenas rapido, cada press espera a que termine el
+--              morph anterior y reabre (cola) -> todo 3D, nunca un corte directo.
+--   "hybrid"   como always3d, pero si encadenas durante el cierre cambia de
+--              desktop al toque (corta el morph, maxima respuesta).
+--   "release"  el commit sucede al SOLTAR SUPER: encadenas en 3D sin cortar y al
+--              soltar cae al ultimo tile. EXPO_IDLE_MS es red de seguridad por si
+--              se pierde el evento de release.
+local EXPO_MODE        = "always3d"
+local EXPO_POLL_MS     = 25
+local EXPO_FLY_MS      = 90  -- hybrid: grilla abierta antes de confirmar (da el 3D)
+local EXPO_IDLE_MS     = 700 -- release: red de seguridad si se pierde el release
+local EXPO_CLOSE_TICKS = 34  -- ~850ms: morph de cierre (windowsMove=8) a esperar antes de reabrir
+local expo_fly = {
+    open    = false, -- grilla abierta y navegable por nosotros
+    sel     = nil,   -- tile con el foco actual (indice de grilla 1..9, numpad)
+    want    = nil,   -- ultimo desktop pedido
+    pending = false, -- hay un want esperando a que termine el cierre anterior
+    busy    = 0,     -- ticks restantes del morph de cierre
+    poll    = nil,   -- timer de poll (solo corre si busy>0 o pending)
+    commit  = nil,   -- oneshot de confirmacion por inactividad
+}
 
-local function expo_fly_stop()
-    if expo_fly.timer then
-        expo_fly.timer:set_enabled(false)
-        expo_fly.timer = nil
-    end
-    expo_fly.want   = false
-    expo_fly.opened = false
-    expo_fly.ticks  = 0
-    expo_fly.age    = 0
+-- Indice del desktop n dentro de la grilla visible (top-left = 0).
+-- Config: columns=3, rows=3, reverse_rows=1 -> orden numpad 789/456/123:
+--   fila top 0 = 7,8,9 | fila 1 = 4,5,6 | fila 2 (bottom) = 1,2,3.
+local function ws_grid_index(n)
+    n = ((n - 1) % 9) + 1
+    local col             = (n - 1) % 3
+    local row_from_bottom = math.floor((n - 1) / 3)
+    return (2 - row_from_bottom) * 3 + col
 end
 
-local function expo_fly_step()
-    local want = expo_fly.want
-    local opened = expo_fly.opened
-    if not want then
-        expo_fly_stop()
-        return
-    end
+local fly_goto, fly_commit_now, fly_schedule_commit, fly_poll_step, ensure_poll, fly_open_and_go, fly_abort
 
-    expo_fly.age = expo_fly.age + 1
-    if expo_fly.age > EXPO_FLY_MAX then
-        local target = want
-        expo_fly_stop()
-        hl.plugin.hyprexpo.expo("cancel")
-        hl.dispatch(hl.dsp.focus({ workspace = tostring(target) }))
-        return
-    end
+-- Mueve el foco de la grilla hasta el desktop `target`. Cada kb_focus corre un
+-- tile; calculamos el delta desde `sel` (estado guardado), asi encadenar destinos
+-- es inmediato y siempre parte de la posicion real.
+fly_goto = function(target)
+    if not expo_fly.open then return end
+    local t      = ws_grid_index(target)
+    local sel    = expo_fly.sel or t
+    local cx, cy = sel % 3, math.floor(sel / 3)
+    local tx, ty = t % 3, math.floor(t / 3)
+    local dirx   = tx > cx and "right" or "left"
+    local diry   = ty > cy and "down" or "up"
+    for _ = 1, math.abs(tx - cx) do hl.plugin.hyprexpo.kb_focus(dirx) end
+    for _ = 1, math.abs(ty - cy) do hl.plugin.hyprexpo.kb_focus(diry) end
+    expo_fly.sel = t
+end
 
-    -- Solo cortar cuando el destino quedo asentado: si ya abrimos la grilla,
-    -- changeWorkspace() fija el activo de forma SINCRONA y un corte prematuro
-    -- dejaria el overview a medio cerrar (state colgado en g_overviews).
+-- Confirma y dispara el zoom de entrada al tile elegido (commit inmediato).
+fly_commit_now = function()
+    if not expo_fly.open then return end
+    if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
+    if expo_fly.want then
+        hl.plugin.hyprexpo.kb_selectn(expo_fly.want)
+    else
+        hl.plugin.hyprexpo.kb_confirm()
+    end
+    expo_fly.open = false
+    expo_fly.sel  = nil
+    expo_fly.busy = EXPO_CLOSE_TICKS
+    ensure_poll()
+end
+
+fly_schedule_commit = function()
+    if expo_fly.commit then expo_fly.commit:set_enabled(false) end
+    local delay = (EXPO_MODE == "release") and EXPO_IDLE_MS or EXPO_FLY_MS
+    expo_fly.commit = hl.timer(function()
+        expo_fly.commit = nil
+        fly_commit_now()
+    end, { timeout = delay, type = "oneshot" })
+end
+
+-- Modo "release": al soltar SUPER confirmamos de inmediato. En "hybrid" el commit
+-- ya lo dispara EXPO_FLY_MS, asi que soltar SUPER no hace nada.
+expo_fly_super_up = function()
+    if EXPO_MODE == "release" then
+        fly_commit_now()
+    end
+end
+
+ensure_poll = function()
+    if not expo_fly.poll then
+        expo_fly.poll = hl.timer(fly_poll_step, { timeout = EXPO_POLL_MS, type = "repeat" })
+    end
+end
+
+fly_poll_step = function()
+    if expo_fly.busy > 0 then
+        expo_fly.busy = expo_fly.busy - 1
+        if expo_fly.busy == 0 and expo_fly.pending then
+            local n = expo_fly.want
+            expo_fly.pending = false
+            if n then fly_open_and_go(n) end
+        end
+    end
+    -- Sin nada pendiente ni animacion de cierre, apagamos el poll.
+    if not expo_fly.open and not expo_fly.pending and expo_fly.busy == 0 and expo_fly.poll then
+        expo_fly.poll:set_enabled(false)
+        expo_fly.poll = nil
+    end
+end
+
+-- Abre la grilla y navega al destino n. El foco arranca en el desktop actual.
+fly_open_and_go = function(n)
     local cur = hl.get_active_workspace()
-    if cur and cur.id == want and opened then
-        expo_fly_stop()
-        return
-    end
-
-    if not expo_fly.opened then
-        hl.plugin.hyprexpo.expo("on")
-        expo_fly.opened = true
-        expo_fly.ticks  = math.max(1, math.floor(EXPO_FLY_MS / EXPO_POLL_MS))
-        return
-    end
-
-    if expo_fly.ticks > 0 then
-        expo_fly.ticks = expo_fly.ticks - 1
-        return
-    end
-
-    -- expo("on") es idempotente y kb_selectn se ignora mientras la grilla se
-    -- esta cerrando; el siguiente tick reintenta, por eso el ultimo destino gana.
     hl.plugin.hyprexpo.expo("on")
-    hl.plugin.hyprexpo.kb_selectn(want)
+    expo_fly.open = true
+    expo_fly.sel  = cur and ws_grid_index(cur.id) or nil
+    expo_fly.want = n
+    fly_goto(n)
+    fly_schedule_commit()
 end
 
-local function expo_fly_start(i)
-    if expo_fly.want == i and expo_fly.timer then
-        return
+-- Cancela el fly-through y deja la grilla cerrandose (si estaba abierta).
+fly_abort = function()
+    if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
+    expo_fly.pending = false
+    expo_fly.want    = nil
+    if expo_fly.open then
+        hl.plugin.hyprexpo.expo("cancel")
+        expo_fly.open = false
+        expo_fly.sel  = nil
+        expo_fly.busy = EXPO_CLOSE_TICKS
+        ensure_poll()
     end
-    expo_fly.want   = i
-    expo_fly.opened = false
-    expo_fly.ticks  = 0
-    expo_fly.age    = 0
-    if not expo_fly.timer then
-        expo_fly.timer = hl.timer(expo_fly_step, { timeout = EXPO_POLL_MS, type = "repeat" })
+end
+
+-- SUPER+Y manual: resetea el estado del fly-through (para no quedar desincronizado
+-- si la cerras a mano en medio de un viaje) y luego togglea la grilla. No usamos
+-- fly_abort() porque dispararia "cancel" y el "toggle" la reabriria.
+expo_ui_toggle = function()
+    local was_open = expo_fly.open
+    if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
+    expo_fly.open    = false
+    expo_fly.sel     = nil
+    expo_fly.want    = nil
+    expo_fly.pending = false
+    hl.plugin.hyprexpo.expo("toggle")
+    if was_open then
+        expo_fly.busy = EXPO_CLOSE_TICKS
+        ensure_poll()
     end
 end
 
@@ -933,39 +1015,59 @@ note_ws()
 hl.on("workspace.active", note_ws)
 
 local function expo_fly_back()
-    local target = last_ws_id or (hl.get_active_workspace() and hl.get_active_workspace().id)
-    if not target then
-        return
-    end
-    expo_fly_stop()
-    if hl.plugin.hyprexpo ~= nil then
-        -- Mismo morph que el resto: abre la grilla y entra al desktop anterior.
-        hl.plugin.hyprexpo.expo("on")
-        hl.timer(function()
-            hl.plugin.hyprexpo.kb_selectn(target)
-        end, { timeout = EXPO_FLY_MS, type = "oneshot" })
-    else
-        hl.dispatch(hl.dsp.focus({ workspace = tostring(target) }))
+    if last_ws_id then
+        expo_focus(last_ws_id)
     end
 end
 
-local expo_focus = function(i)
+expo_focus = function(i)
     local has_expo = hl.plugin.hyprexpo ~= nil
+    local cur      = hl.get_active_workspace()
+
     if not has_expo or i > 9 then
-        expo_fly_stop()
-        local cur  = hl.get_active_workspace()
+        fly_abort()
         local same = cur and cur.id == i
         hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
         return
     end
 
-    local cur = hl.get_active_workspace()
-    if not expo_fly.timer and cur and cur.id == i then
+    -- Grilla abierta: recalcula al toque hacia el nuevo destino (sin cerrar).
+    if expo_fly.open then
+        expo_fly.want = i
+        fly_goto(i)
+        fly_schedule_commit()
+        return
+    end
+
+    -- Grilla cerrada, mismo desktop: ir al anterior (si hay historial).
+    if not expo_fly.pending and cur and cur.id == i then
         expo_fly_back()
         return
     end
 
-    expo_fly_start(i)
+    -- Cierre en curso (morph en vuelo):
+    --   always3d -> retarget instantaneo: el plugin re-apunta la animacion al
+    --               nuevo tile en caliente (kb_selectn sin guard de closing).
+    --   hybrid   -> cambio directo (corta el morph: maxima respuesta).
+    --   release  -> encola y reabre cuando termina.
+    if expo_fly.busy > 0 then
+        if EXPO_MODE == "always3d" then
+            expo_fly.want = i
+            hl.plugin.hyprexpo.kb_selectn(i)
+            expo_fly.busy = EXPO_CLOSE_TICKS
+            ensure_poll()
+        elseif EXPO_MODE == "hybrid" then
+            local same = cur and cur.id == i
+            hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
+        else
+            expo_fly.want    = i
+            expo_fly.pending = true
+            ensure_poll()
+        end
+        return
+    end
+
+    fly_open_and_go(i)
 end
 
 for i = 1, 10 do
@@ -1005,3 +1107,6 @@ hl.define_submap("passthrough", function()
     hl.bind("CTRL + Delete", hl.dsp.exec_cmd("~/.local/bin/toggle_moonlight.sh"), { locked = true, submap_universal = true })
     hl.bind("catchall", hl.dsp.submap("reset"))
 end)
+
+-- Lock animation (slide windows off-screen on lock)
+require("lock_anim")

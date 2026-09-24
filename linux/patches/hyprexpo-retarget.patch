@@ -1,0 +1,240 @@
+diff --git a/Overview.hpp b/Overview.hpp
+index 5b7d8e4..885ba81 100644
+--- a/Overview.hpp
++++ b/Overview.hpp
+@@ -112,6 +112,7 @@ class COverview final : public IOverviewSession {
+   private:
+     void       redrawID(int id, bool forcelowres = false);
+     void       redrawAll(bool forcelowres = false);
++    void       applyCloseTarget(int safeID, bool switchToSelection);
+     void       onWorkspaceChange();
+     void       fullRender() override;
+     Hyprexpo::SGridShape currentGridShape() const;
+diff --git a/OverviewCapture.cpp b/OverviewCapture.cpp
+index cb18d2f..b5e5fd3 100644
+--- a/OverviewCapture.cpp
++++ b/OverviewCapture.cpp
+@@ -7,6 +7,8 @@
+ #define private   public
+ #define protected public
+ #include <hyprland/src/animation/WorkspaceAnimationController.hpp>
++#include <hyprland/src/desktop/view/Window.hpp>
++#include <hyprland/src/desktop/state/WindowState.hpp>
+ #include <hyprland/src/helpers/time/Time.hpp>
+ #include <hyprutils/utils/ScopeGuard.hpp>
+ #include <hyprland/src/render/OpenGL.hpp>
+@@ -194,6 +196,7 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+             PHLWORKSPACE previousWS;
+             std::vector<std::pair<PHLWORKSPACE, SWorkspacePreviewState>> previewStates;
+             std::vector<SWindowPreviewState> windowState;
++            std::vector<std::pair<PHLWINDOW, bool>> suspendedState;
+             bool activeChanged   = false;
+             bool previewApplied  = false;
+             bool windowApplied   = false;
+@@ -202,6 +205,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+                 if (temporaryRestored)
+                     return;
+                 try {
++                    for (const auto& [window, suspended] : suspendedState) {
++                        if (window)
++                            window->setSuspended(suspended);
++                    }
+                     if (windowApplied)
+                         restoreWorkspaceWindowGoalState(windowState);
+                     if (previewApplied)
+@@ -220,6 +227,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+                 windowApplied = true;
+             }
+ 
++            // Windows on non-visible workspaces carry XDG toplevel SUSPENDED, so
++            // their clients stop committing frames and the captured tile freezes
++            // (TUI apps like kitty honor this; GPU/media clients often do not).
++            // Clear it for the duration of the offscreen render so the client is
++            // nudged to produce a fresh frame, then restore the prior state.
++            for (const auto& window : Desktop::windowState()->windows()) {
++                if (!windowVisibleOnWorkspace(window, request.workspace))
++                    continue;
++                suspendedState.push_back({window, window->m_suspended});
++                if (window->m_suspended)
++                    window->setSuspended(false);
++            }
++
+             if (request.workspace == request.startedOn)
+                 request.monitor->m_activeSpecialWorkspace = monitorState.activeSpecialWorkspace();
+ 
+@@ -233,6 +253,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+             restoreActiveWorkspaceAfterPreview(request.monitor, previousWS);
+             temporaryRestored = true;
+ 
++            for (const auto& [window, suspended] : suspendedState) {
++                if (window)
++                    window->setSuspended(suspended);
++            }
++            suspendedState.clear();
++
+             if (request.workspace == request.startedOn)
+                 request.monitor->m_activeSpecialWorkspace.reset();
+         } else {
+diff --git a/OverviewInteraction.cpp b/OverviewInteraction.cpp
+index 2eb5aa2..136200c 100644
+--- a/OverviewInteraction.cpp
++++ b/OverviewInteraction.cpp
+@@ -620,13 +620,19 @@ bool COverview::onKbConfirm() {
+ }
+ 
+ bool COverview::onKbSelectNumber(int num) {
+-    if (closing)
+-        return false;
+-
++    // No `closing` guard on purpose: called mid-close it re-targets the
++    // in-flight morph at this tile (instant redirect) instead of being dropped.
+     if (num == 0)
+         num = 10;
+ 
+-    return selectWorkspaceByID(num);
++    for (size_t i = 0; i < images.size(); ++i) {
++        if (images[i].workspaceID == num) {
++            closeOnID = i;
++            return true;
++        }
++    }
++
++    return false;
+ }
+ 
+ bool COverview::onKbSelectToken(int visibleIdx) {
+diff --git a/OverviewRender.cpp b/OverviewRender.cpp
+index f8741ae..67d61f9 100644
+--- a/OverviewRender.cpp
++++ b/OverviewRender.cpp
+@@ -122,39 +122,22 @@ void COverview::onDamageReported() {
+     MON->scheduleFrame();
+ }
+ 
+-void COverview::close(bool switchToSelection) {
+-    if (closing)
+-        return;
+-
+-    // The teardown animation is now committed; lock out further swipe input so a
+-    // re-grabbed gesture can't rewind it (issue #57 follow-up: close replay).
+-    m_closeCommitted = true;
+-
++// Re-aim the (possibly already in-flight) close morph at SAFEID and, if asked,
++// switch the active workspace to that tile. Shared by the first close and by
++// mid-flight redirects: assigning *size/*pos again retargets the running
++// animation from its current value to the new tile, so a rapid SUPER+<n>
++// re-directs the zoom instantly instead of being ignored/queued.
++void COverview::applyCloseTarget(int SAFEID, bool switchToSelection) {
+     const auto MON = pMonitor.lock();
+-    if (!MON) {
+-        closing = true;
+-        destroyOverview(this);
++    if (!MON)
+         return;
+-    }
+ 
+-    resetSubmapIfNeeded();
+-
+-    if (images.empty()) {
+-        destroyOverview(this);
+-        return;
+-    }
+-
+-    const int   ID = closeOnID == -1 ? openedID : closeOnID;
+-
+-    const int   SAFEID = std::clamp(ID, 0, (int)images.size() - 1);
+-    const auto& TILE   = images[SAFEID];
++    const auto& TILE = images[SAFEID];
+ 
+     const auto targetSize = zoomSizeForCurrentGrid(MON->m_size);
+     *size = targetSize;
+     *pos  = -(tilePosForID(SAFEID, targetSize, 0.0) * MON->m_scale);
+ 
+-    closing = true;
+-
+     redrawAll();
+ 
+     if (switchToSelection && (TILE.workspaceID != WORKSPACE_INVALID || emptyTilesSelectable) &&
+@@ -212,6 +195,45 @@ void COverview::close(bool switchToSelection) {
+ 
+         startedOn = MON->m_activeWorkspace;
+     }
++}
++
++void COverview::close(bool switchToSelection) {
++    // Already closing: a NEW selection re-aims the in-flight morph at the new
++    // tile (instant redirect) instead of being ignored. No queue, no delay.
++    if (closing) {
++        const auto MON = pMonitor.lock();
++        if (!switchToSelection || !MON || images.empty())
++            return;
++        const int ID     = closeOnID == -1 ? openedID : closeOnID;
++        const int SAFEID = std::clamp(ID, 0, (int)images.size() - 1);
++        applyCloseTarget(SAFEID, true);
++        return;
++    }
++
++    // The teardown animation is now committed; lock out further swipe input so a
++    // re-grabbed gesture can't rewind it (issue #57 follow-up: close replay).
++    m_closeCommitted = true;
++
++    const auto MON = pMonitor.lock();
++    if (!MON) {
++        closing = true;
++        destroyOverview(this);
++        return;
++    }
++
++    resetSubmapIfNeeded();
++
++    if (images.empty()) {
++        destroyOverview(this);
++        return;
++    }
++
++    const int ID     = closeOnID == -1 ? openedID : closeOnID;
++    const int SAFEID = std::clamp(ID, 0, (int)images.size() - 1);
++
++    closing = true;
++
++    applyCloseTarget(SAFEID, switchToSelection);
+ 
+     size->setCallbackOnEnd(removeOverview);
+ }
+@@ -233,7 +255,7 @@ void COverview::startLiveRefresh() {
+         return;
+ 
+     liveRefreshTimer = makeShared<CEventLoopTimer>(
+-        120ms,
++        33ms,
+         [OVERVIEWKEY, GENERATION](SP<CEventLoopTimer> self, void*) {
+             auto* const OVERVIEW = dynamic_cast<COverview*>(overviewForSession(OVERVIEWKEY, GENERATION));
+             if (!OVERVIEW || OVERVIEW->liveRefreshTimer.get() != self.get()) {
+@@ -251,13 +273,14 @@ void COverview::startLiveRefresh() {
+ 
+             const auto TILE_COUNT = OVERVIEW->images.size();
+             if (TILE_COUNT == 0) {
+-                self->updateTimeout(120ms);
++                self->updateTimeout(33ms);
+                 return;
+             }
+ 
+-            // Stagger: re-capture only a couple of tiles per tick and rotate the
+-            // cursor, so we never pay for N full offscreen renders in one frame.
+-            constexpr size_t MAX_TILES_PER_TICK = 2;
++            // Stagger: re-capture a few tiles per tick and rotate the cursor, so
++            // the per-frame offscreen render cost stays bounded while every tile
++            // still gets refreshed several times per second.
++            constexpr size_t MAX_TILES_PER_TICK = 3;
+             OVERVIEW->liveRefreshActive = true;
+             size_t redrawn = 0;
+             for (size_t checked = 0; checked < TILE_COUNT && redrawn < MAX_TILES_PER_TICK; ++checked) {
+@@ -275,7 +298,7 @@ void COverview::startLiveRefresh() {
+                 MON->scheduleFrame();
+ 
+             // CEventLoopTimer fires once; re-arm so we keep refreshing.
+-            self->updateTimeout(120ms);
++            self->updateTimeout(33ms);
+         },
+         nullptr);
+     g_pEventLoopManager->addTimer(liveRefreshTimer);
