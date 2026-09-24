@@ -85,7 +85,7 @@ hl.config({
         kb_layout   = "dvk_prog,es,us",
         kb_variant  = "basic,,",
         kb_options  = "caps:none",
-        follow_mouse = 2,
+        follow_mouse = 1,
         sensitivity = 0
     }
 })
@@ -320,6 +320,69 @@ hl.on("hyprland.start", function()
 end)
 
 -- ========================
+-- HYPREXPO (overview grilla)
+-- 9 slots fijos: 3 cols × 3 rows. SUPER+Y abre/cierra.
+-- Orden numpad: 789 / 456 / 123 (reverse_rows=1, parche local del plugin).
+-- Autocarga desde config (Hyprland >= 0.56, hl.plugin.load). Así el plugin
+-- queda cargado en cada arranque aunque hyprpm no se invoque al inicio.
+-- ========================
+hl.plugin.load("/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so")
+
+if hl.plugin.hyprexpo ~= nil then
+    hl.config({
+        plugin = {
+            hyprexpo = {
+                columns = 3,
+                rows = 3,
+                dynamic_grid = 0,
+                skip_empty = 0,
+                max_workspace = 9,
+                reverse_rows = 1,
+                gaps_in = 8,
+                gaps_out = 12,
+                bg_col = "rgb(17,17,17)",
+                workspace_method = "first 1",
+                label_enable = 1,
+                show_workspace_numbers = 1,
+                keynav_enable = 1,
+            },
+        },
+    })
+end
+
+hl.bind(mainMod .. " + Y", function()
+    hl.plugin.hyprexpo.expo("toggle")
+end)
+
+-- Navegacion por teclado dentro de la grilla expo. El plugin entra al submap
+-- "hyprexpo" al abrir (keynav_enable=1) y lo abandona al cerrar, asi que aqui
+-- solo definimos sus binds. Flechas mueven el foco del tile, Enter confirma y
+-- salta al workspace, y catchall devuelve el control al submap por defecto.
+-- Forward declaration: el submap "hyprexpo" (definido mas abajo) necesita
+-- llamar a expo_focus, que se define junto a la logica de fly-through.
+local expo_focus
+
+if hl.plugin.hyprexpo ~= nil then
+    hl.define_submap("hyprexpo", function()
+        hl.bind("left",   function() hl.plugin.hyprexpo.kb_focus("left") end,  { repeating = true })
+        hl.bind("right",  function() hl.plugin.hyprexpo.kb_focus("right") end, { repeating = true })
+        hl.bind("up",     function() hl.plugin.hyprexpo.kb_focus("up") end,    { repeating = true })
+        hl.bind("down",   function() hl.plugin.hyprexpo.kb_focus("down") end,  { repeating = true })
+        hl.bind("RETURN", function() hl.plugin.hyprexpo.kb_confirm() end)
+        -- Sin esto el catchall se come el primer SUPER+Y y habria que pulsarlo
+        -- dos veces para cerrar la grilla.
+        hl.bind(mainMod .. " + Y", function() hl.plugin.hyprexpo.expo("toggle") end)
+        -- Dentro del submap perdemos los binds globales SUPER+<ws>. Los replicamos
+        -- aqui para que, con la grilla abierta, SUPER+<n> salte al desktop n.
+        local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
+        for i = 1, 10 do
+            hl.bind(mainMod .. " + " .. ws_keys[i], function() if expo_focus then expo_focus(i) end end)
+        end
+        hl.bind("catchall", hl.dsp.submap("reset"))
+    end)
+end
+
+-- ========================
 -- WINDOW RULES
 -- ========================
 hl.window_rule({ match = { class = "kitty" }, opacity = "0.90" })
@@ -469,15 +532,145 @@ hl.bind(mainMod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative = 
 -- ========================
 -- Key-to-workspace mapping (DVORAK-PROG layout)
 local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
-for i = 1, 10 do
-    hl.bind(mainMod .. " + " .. ws_keys[i], function()
-        local ws = hl.get_active_workspace()
-        if ws and ws.id == i then
-            hl.dispatch(hl.dsp.focus({ workspace = "previous" }))
-        else
-            hl.dispatch(hl.dsp.focus({ workspace = tostring(i) }))
+
+-- Fly-through: SUPER+# abre la grilla y hace zoom al desktop #, para que el
+-- cambio de desktop se sienta tridimensional (morph abrir grilla -> entrar al tile).
+-- Solo para tiles visibles (grilla 3x3 = 1..9); ws 10 cae a focus normal.
+-- Interrumpible: si apretas otro SUPER+# durante la animacion, el ultimo gana
+-- (se reintenta hasta llegar, asi no queda pegado en el desktop anterior).
+-- EXPO_FLY_MS = respiro de la grilla antes de entrar al tile. Mas alto = transicion
+-- mas pausada y comoda (el morph en si sigue la curva "windowsMove" de animations).
+local EXPO_FLY_MS  = 200
+local EXPO_POLL_MS = 25
+local EXPO_FLY_MAX = 160 -- ticks de seguridad (~4s) para no reintentar sin fin
+local expo_fly = { want = false, opened = false, ticks = 0, age = 0, timer = nil }
+
+local function expo_fly_stop()
+    if expo_fly.timer then
+        expo_fly.timer:set_enabled(false)
+        expo_fly.timer = nil
+    end
+    expo_fly.want   = false
+    expo_fly.opened = false
+    expo_fly.ticks  = 0
+    expo_fly.age    = 0
+end
+
+local function expo_fly_step()
+    local want = expo_fly.want
+    local opened = expo_fly.opened
+    if not want then
+        expo_fly_stop()
+        return
+    end
+
+    expo_fly.age = expo_fly.age + 1
+    if expo_fly.age > EXPO_FLY_MAX then
+        local target = want
+        expo_fly_stop()
+        hl.plugin.hyprexpo.expo("cancel")
+        hl.dispatch(hl.dsp.focus({ workspace = tostring(target) }))
+        return
+    end
+
+    -- Solo cortar cuando el destino quedo asentado: si ya abrimos la grilla,
+    -- changeWorkspace() fija el activo de forma SINCRONA y un corte prematuro
+    -- dejaria el overview a medio cerrar (state colgado en g_overviews).
+    local cur = hl.get_active_workspace()
+    if cur and cur.id == want and opened then
+        expo_fly_stop()
+        return
+    end
+
+    if not expo_fly.opened then
+        hl.plugin.hyprexpo.expo("on")
+        expo_fly.opened = true
+        expo_fly.ticks  = math.max(1, math.floor(EXPO_FLY_MS / EXPO_POLL_MS))
+        return
+    end
+
+    if expo_fly.ticks > 0 then
+        expo_fly.ticks = expo_fly.ticks - 1
+        return
+    end
+
+    -- expo("on") es idempotente y kb_selectn se ignora mientras la grilla se
+    -- esta cerrando; el siguiente tick reintenta, por eso el ultimo destino gana.
+    hl.plugin.hyprexpo.expo("on")
+    hl.plugin.hyprexpo.kb_selectn(want)
+end
+
+local function expo_fly_start(i)
+    if expo_fly.want == i and expo_fly.timer then
+        return
+    end
+    expo_fly.want   = i
+    expo_fly.opened = false
+    expo_fly.ticks  = 0
+    expo_fly.age    = 0
+    if not expo_fly.timer then
+        expo_fly.timer = hl.timer(expo_fly_step, { timeout = EXPO_POLL_MS, type = "repeat" })
+    end
+end
+
+-- Memoria de "desktop anterior" propia. Hyprland NO expone el previous en Lua y
+-- el "previous" nativo no sirve: el fly-through hace un cambio interno (grilla ->
+-- tile) que dejaria el destino como anterior, y changeWorkspace() fija el activo
+-- de forma SINCRONA (cuando llega el evento, el previo ya se perdio). Guardamos
+-- el ultimo desktop DISTINTO al actual.
+local cur_ws_id  = nil
+local last_ws_id = nil
+local function note_ws()
+    local w = hl.get_active_workspace()
+    if not w then return end
+    if w.id ~= cur_ws_id then
+        if cur_ws_id ~= nil then
+            last_ws_id = cur_ws_id
         end
-    end)
+        cur_ws_id = w.id
+    end
+end
+note_ws()
+hl.on("workspace.active", note_ws)
+
+local function expo_fly_back()
+    local target = last_ws_id or (hl.get_active_workspace() and hl.get_active_workspace().id)
+    if not target then
+        return
+    end
+    expo_fly_stop()
+    if hl.plugin.hyprexpo ~= nil then
+        -- Mismo morph que el resto: abre la grilla y entra al desktop anterior.
+        hl.plugin.hyprexpo.expo("on")
+        hl.timer(function()
+            hl.plugin.hyprexpo.kb_selectn(target)
+        end, { timeout = EXPO_FLY_MS, type = "oneshot" })
+    else
+        hl.dispatch(hl.dsp.focus({ workspace = tostring(target) }))
+    end
+end
+
+local expo_focus = function(i)
+    local has_expo = hl.plugin.hyprexpo ~= nil
+    if not has_expo or i > 9 then
+        expo_fly_stop()
+        local cur  = hl.get_active_workspace()
+        local same = cur and cur.id == i
+        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
+        return
+    end
+
+    local cur = hl.get_active_workspace()
+    if not expo_fly.timer and cur and cur.id == i then
+        expo_fly_back()
+        return
+    end
+
+    expo_fly_start(i)
+end
+
+for i = 1, 10 do
+    hl.bind(mainMod .. " + " .. ws_keys[i], function() expo_focus(i) end)
     hl.bind(mainMod .. " + SHIFT + " .. ws_keys[i], hl.dsp.window.move({ workspace = tostring(i) }))
 end
 
