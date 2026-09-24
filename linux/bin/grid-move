@@ -7,7 +7,7 @@
 # Recorre los intermedios saltando de uno en uno; cada viaje tarda lo mismo
 # salvo que el presupuesto por paso baje del minimo (suavidad primero).
 # Uso: grid-move <destino 1-9>
-# Tuning via env: GRID_TOTAL_MS (default 450), GRID_MIN_STEP_MS (default 160)
+# Tuning via env: GRID_TOTAL_MS (default 300), GRID_MIN_STEP_MS (default 110)
 import json
 import os
 import select
@@ -16,8 +16,8 @@ import subprocess
 import sys
 import time
 
-TOTAL_MS = float(os.environ.get("GRID_TOTAL_MS", "450"))
-MIN_STEP_MS = float(os.environ.get("GRID_MIN_STEP_MS", "160"))
+TOTAL_MS = float(os.environ.get("GRID_TOTAL_MS", "300"))
+MIN_STEP_MS = float(os.environ.get("GRID_MIN_STEP_MS", "110"))
 
 
 def hyprctl(args):

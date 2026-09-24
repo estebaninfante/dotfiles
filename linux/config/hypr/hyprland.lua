@@ -26,6 +26,29 @@ local function theme_mode()
     return "dark"
 end
 
+-- Colores del tema Omarchy actual, resueltos desde colors.toml via
+-- omarchy-theme-color. Devuelve "rgb(rrggbb)" o el fallback dado. Se cachea
+-- por proceso: al cambiar de tema, omarchy-theme-set hace hyprctl reload y se
+-- vuelve a evaluar esta config, refrescando los colores.
+local theme_color_cache = {}
+local function theme_color(key, fallback)
+    if theme_color_cache[key] ~= nil then return theme_color_cache[key] end
+
+    local val = fallback
+    local p = io.popen("omarchy-theme-color " .. key .. " 2>/dev/null")
+    if p then
+        local out = p:read("*l")
+        p:close()
+        if out and out ~= "" then val = out end
+    end
+
+    local hex = val:match("^#(%x%x%x%x%x%x)$")
+    if hex then val = "rgb(" .. hex .. ")" end
+
+    theme_color_cache[key] = val
+    return val
+end
+
 -- ========================
 -- XWAYLAND
 -- ========================
@@ -86,6 +109,7 @@ hl.config({
         kb_variant  = "basic,,",
         kb_options  = "caps:none",
         follow_mouse = 1,
+        mouse_refocus = true,
         sensitivity = 0
     }
 })
@@ -126,6 +150,49 @@ hl.config({
         }
     }
 })
+
+-- ========================
+-- GAPS DINAMICOS POR Nº DE VENTANAS
+-- ========================
+-- A menos ventanas en el workspace activo, mas aire; a mas ventanas, menos,
+-- con caida tipo polinomio: gap(n) = MIN + (MAX - MIN) / n^DECAY.
+-- Tunear aqui:
+local GAP_IN_MAX,  GAP_IN_MIN  = 16, 4    -- separacion entre tiles
+local GAP_OUT_MAX, GAP_OUT_MIN = 44, 8    -- margen alrededor de la grilla
+local GAP_DECAY                = 2        -- exponente: mayor = cae mas rapido
+
+local function gaps_for(n)
+    n = math.max(1, n)
+    local inv = 1 / (n ^ GAP_DECAY)
+    local gi  = math.floor(GAP_IN_MIN  + (GAP_IN_MAX  - GAP_IN_MIN)  * inv + 0.5)
+    local go  = math.floor(GAP_OUT_MIN + (GAP_OUT_MAX - GAP_OUT_MIN) * inv + 0.5)
+    return gi, go
+end
+
+local last_gi, last_go = -1, -1
+
+local function apply_dynamic_gaps()
+    local ws = hl.get_active_workspace()
+    local n = 0
+    if ws then
+        for _, w in ipairs(hl.get_workspace_windows(ws.id)) do
+            if not w.floating and (w.fullscreen or 0) == 0 then n = n + 1 end
+        end
+    end
+    local gi, go = gaps_for(n)
+    if gi ~= last_gi or go ~= last_go then
+        last_gi, last_go = gi, go
+        hl.config({ general = { gaps_in = gi, gaps_out = go } })
+    end
+end
+
+for _, ev in ipairs({ "window.open", "window.close", "window.destroy",
+                      "window.move_to_workspace", "window.fullscreen",
+                      "window.active", "workspace.active" }) do
+    hl.on(ev, apply_dynamic_gaps)
+end
+hl.on("hyprland.start", apply_dynamic_gaps)
+pcall(apply_dynamic_gaps)
 
 hl.layer_rule({
     match = { namespace = "swaync" },
@@ -184,6 +251,14 @@ hl.config({
 -- Arbol desactivado por defecto: todo hereda "off" salvo lo que se activa
 -- explicitamente abajo (windowsMove + workspaces).
 
+-- Curva suave sin rebote (ease-out): arranca con impulso y desacelera al final.
+-- Reemplaza al bezier "default" (que trae overshoot y se siente mas brusco) en
+-- el morph 3D de la grilla y en el deslizamiento de workspaces.
+hl.curve("expoSmooth", {
+    type = "bezier",
+    points = { { 0.16, 1.0 }, { 0.30, 1.0 } }
+})
+
 hl.animation({
     leaf = "global",
     enabled = true,
@@ -191,13 +266,14 @@ hl.animation({
     bezier = "default"
 })
 
--- Solo el movimiento se anima (glide suave al mover flotantes por teclado);
--- el resto de animaciones sigue desactivado.
+-- windowsMove: glide suave al mover flotantes por teclado Y el morph 3D de la
+-- grilla expo (abrir/cerrar = zoom). Curva sin rebote y mas lento para que el
+-- viaje se sienta tridimensional y no un parpadeo.
 hl.animation({
     leaf = "windowsMove",
     enabled = true,
-    speed = 3,
-    bezier = "default"
+    speed = 8,
+    bezier = "expoSmooth"
 })
 
 -- windowsMove tambien anima los drags manuales (mouse) → se sienten
@@ -208,18 +284,21 @@ hl.config({
         animate_manual_resizes = false,
         animate_mouse_windowdragging = false,
         force_default_wallpaper = -1,
-        disable_hyprland_logo = true
+        disable_hyprland_logo = true,
+        on_focus_under_fullscreen = 1
     }
 })
 
 
 -- Carrusel de workspaces: al saltar ws1→ws5 desliza por los intermedios.
+-- slidefade = deslizamiento + fundido: se nota menos el corte que el slide puro
+-- (mas suave, menos brusco). El % es cuanto funde.
 hl.animation({
     leaf = "workspaces",
     enabled = true,
-    speed = 2,
-    bezier = "default",
-    style = "slide"
+    speed = 10,
+    bezier = "expoSmooth",
+    style = "slidefade 20%"
 })
 
 -- Apertura "TV viejo": bloom casi instantaneo desde 10% (snap on).
@@ -328,6 +407,24 @@ end)
 -- ========================
 hl.plugin.load("/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so")
 
+-- ========================
+-- HYPREXPO: ESTILO (editar aqui)
+-- ========================
+-- Todo el aspecto visual de la grilla vive en esta tabla. Cambia un valor y
+-- ejecuta: hyprctl reload
+-- Los colores salen del tema Omarchy activo (colors.toml); al cambiar de tema
+-- se refrescan solos porque omarchy-theme-set recarga Hyprland.
+local expo_style = {
+    gaps_in       = 0,        -- separacion entre tiles (0 = pegados)
+    gaps_out      = 0,        -- margen alrededor de la grilla (0 = sin margen)
+    border_width  = 0,        -- grosor del borde de cada tile (0 = sin borde)
+    tile_rounding = 0,        -- esquinas redondeadas de los tiles (0 = cuadradas)
+    bg_col         = theme_color("darker_background", "#0e160e"),
+    border_current = theme_color("accent", "#7aba7c"),
+    border_focus   = theme_color("cyan", "#6aca9a"),
+    border_hover   = theme_color("muted", "#6a8a6c"),
+}
+
 if hl.plugin.hyprexpo ~= nil then
     hl.config({
         plugin = {
@@ -338,12 +435,17 @@ if hl.plugin.hyprexpo ~= nil then
                 skip_empty = 0,
                 max_workspace = 9,
                 reverse_rows = 1,
-                gaps_in = 8,
-                gaps_out = 12,
-                bg_col = "rgb(17,17,17)",
+                gaps_in = expo_style.gaps_in,
+                gaps_out = expo_style.gaps_out,
+                bg_col = expo_style.bg_col,
+                border_width = expo_style.border_width,
+                border_color_current = expo_style.border_current,
+                border_color_focus = expo_style.border_focus,
+                border_color_hover = expo_style.border_hover,
+                tile_rounding = expo_style.tile_rounding,
                 workspace_method = "first 1",
-                label_enable = 1,
-                show_workspace_numbers = 1,
+                label_enable = 0,
+                show_workspace_numbers = 0,
                 keynav_enable = 1,
             },
         },
@@ -358,27 +460,116 @@ end)
 -- "hyprexpo" al abrir (keynav_enable=1) y lo abandona al cerrar, asi que aqui
 -- solo definimos sus binds. Flechas mueven el foco del tile, Enter confirma y
 -- salta al workspace, y catchall devuelve el control al submap por defecto.
--- Forward declaration: el submap "hyprexpo" (definido mas abajo) necesita
--- llamar a expo_focus, que se define junto a la logica de fly-through.
-local expo_focus
-
+-- Nota: el submap usa los binds internos del plugin (keynav) tal como vienen.
 if hl.plugin.hyprexpo ~= nil then
     hl.define_submap("hyprexpo", function()
-        hl.bind("left",   function() hl.plugin.hyprexpo.kb_focus("left") end,  { repeating = true })
-        hl.bind("right",  function() hl.plugin.hyprexpo.kb_focus("right") end, { repeating = true })
-        hl.bind("up",     function() hl.plugin.hyprexpo.kb_focus("up") end,    { repeating = true })
-        hl.bind("down",   function() hl.plugin.hyprexpo.kb_focus("down") end,  { repeating = true })
+        -- Flechas: navegan el foco del tile dentro de la grilla (keynav del plugin).
+        hl.bind("left",  function() hl.plugin.hyprexpo.kb_focus("left")  end, { repeating = true })
+        hl.bind("right", function() hl.plugin.hyprexpo.kb_focus("right") end, { repeating = true })
+        hl.bind("up",    function() hl.plugin.hyprexpo.kb_focus("up")    end, { repeating = true })
+        hl.bind("down",  function() hl.plugin.hyprexpo.kb_focus("down")  end, { repeating = true })
         hl.bind("RETURN", function() hl.plugin.hyprexpo.kb_confirm() end)
         -- Sin esto el catchall se come el primer SUPER+Y y habria que pulsarlo
         -- dos veces para cerrar la grilla.
         hl.bind(mainMod .. " + Y", function() hl.plugin.hyprexpo.expo("toggle") end)
-        -- Dentro del submap perdemos los binds globales SUPER+<ws>. Los replicamos
-        -- aqui para que, con la grilla abierta, SUPER+<n> salte al desktop n.
+        -- Replica de los binds globales SUPER+<ws>: con la grilla abierta,
+        -- SUPER+<n> salta al desktop n (fly-through).
         local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
         for i = 1, 10 do
-            hl.bind(mainMod .. " + " .. ws_keys[i], function() if expo_focus then expo_focus(i) end end)
+            hl.bind(mainMod .. " + " .. ws_keys[i], function() hl.plugin.hyprexpo.kb_selectn(i) end)
         end
-        hl.bind("catchall", hl.dsp.submap("reset"))
+        hl.bind("catchall", function() hl.dispatch(hl.dsp.submap("reset")) end)
+    end)
+end
+
+-- ========================
+-- EXPO: LONG-PRESS SUPER
+-- Mantener SUPER en solitario EXPO_HOLD_MS abre la grilla; al soltarlo se cierra
+-- con "cancel" y te deja en el desktop actual (sin cambiar de workspace).
+-- Si mientras SOSTIENES SUPER pulsas cualquier otra tecla (SUPER+flecha, SUPER+Q,
+-- cambio de ventana, etc.) se cancela la apertura y NO se vuelve a armar hasta
+-- soltar SUPER por completo: asi un atajo nunca dispara la grilla.
+-- Deteccion por el bus crudo input.keyboard.key (xkb keycode = evdev + 8, o sea
+-- Super_L=133 / Super_R=134), en vez de un bindr sobre modificador: esos se
+-- cancelan si pulsas otra tecla entre medio y no serian fiables.
+-- El estado es un booleano, NO un contador: Hyprland puede emitir el mismo
+-- evento mas de una vez y el contador se desincronizaba, dejando el long-press
+-- trabado (suppressed pegado) hasta recargar la config.
+-- ========================
+local EXPO_HOLD_MS = 350
+local SUPER_KEYCODES = { [133] = true, [134] = true }
+
+local expo_hold = {
+    timer      = nil,    -- oneshot pendiente para abrir la grilla
+    super_down = false,  -- hay algun Super pulsado ahora mismo
+    suppressed = false,  -- se pulso otra tecla durante este hold: no abrir
+    open       = false,  -- la grilla la abrio este long-press (para cerrarla al soltar)
+}
+
+local function expo_hold_cancel_timer()
+    if expo_hold.timer then
+        expo_hold.timer:set_enabled(false)
+        expo_hold.timer = nil
+    end
+end
+
+local function expo_hold_close()
+    expo_hold_cancel_timer()
+    if expo_hold.open then
+        expo_hold.open = false
+        if hl.plugin.hyprexpo ~= nil then
+            hl.plugin.hyprexpo.expo("cancel")
+        end
+    end
+end
+
+local function expo_hold_arm()
+    if expo_hold.suppressed or expo_hold.open or hl.plugin.hyprexpo == nil then
+        return
+    end
+    expo_hold_cancel_timer()
+    expo_hold.timer = hl.timer(function()
+        expo_hold.timer = nil
+        if expo_hold.super_down and not expo_hold.suppressed and not expo_hold.open then
+            expo_hold.open = true
+            hl.plugin.hyprexpo.expo("on")
+        end
+    end, { timeout = EXPO_HOLD_MS, type = "oneshot" })
+end
+
+if hl.plugin.hyprexpo ~= nil then
+    hl.on("input.keyboard.key", function(keycode, _time, state)
+        local is_super = SUPER_KEYCODES[keycode] == true
+        if state == 0 then -- released
+            if is_super then
+                expo_hold.super_down = false
+                expo_hold_close()
+                expo_hold.suppressed = false
+            end
+        else -- pressed (1) o repeated (2)
+            if is_super then
+                if state == 1 then
+                    -- Re-armar en cada press (idempotente): un release perdido
+                    -- no deja el estado trabado.
+                    expo_hold.super_down = true
+                    expo_hold.suppressed = false
+                    expo_hold_arm()
+                end
+            elseif expo_hold.super_down then
+                -- Otra tecla con SUPER pulsado: es un atajo, no grilla.
+                expo_hold.suppressed = true
+                expo_hold_cancel_timer()
+            end
+        end
+    end)
+
+    -- Si la grilla se cierra por otra via (SUPER+Y, catchall, kb_confirm...) el
+    -- submap sale de "hyprexpo": sincronizamos el estado para no cancelar de mas
+    -- al soltar SUPER.
+    hl.on("keybinds.submap", function(name)
+        if name ~= "hyprexpo" and expo_hold.open then
+            expo_hold.open = false
+        end
     end)
 end
 
@@ -408,6 +599,90 @@ end
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, workspace = "10" })
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
 
+-- Flotantes: tope de tamaño via clamp_float() en SUPER+D / media mode.
+-- NO usar window_rule max_size global: afecta tiled y fuerza float al abrir.
+
+-- ========================
+-- WINDOW HELPERS (foco bajo cursor + media stack)
+-- ========================
+local function focus_under_cursor()
+    local p = hl.get_cursor_pos()
+    if not p then return end
+    local act = hl.get_active_window()
+    local best, best_score = nil, -math.huge
+    for _, w in ipairs(hl.get_windows({ mapped = true })) do
+        if w.visible and not w.hidden and w.at and w.size then
+            local ax, ay = w.at.x, w.at.y
+            local sw, sh = w.size.x, w.size.y
+            if ax and ay and sw and sh
+                and p.x >= ax and p.x < ax + sw
+                and p.y >= ay and p.y < ay + sh then
+                local score = 0
+                if w.floating then score = score + 100 end
+                if (w.fullscreen or 0) > 0 then score = score + 200 end
+                if act and w.address == act.address then score = score + 500 end
+                score = score - (w.focus_history_id or 0)
+                if score > best_score then
+                    best_score = score
+                    best = w
+                end
+            end
+        end
+    end
+    if best and (not act or act.address ~= best.address) then
+        hl.dispatch(hl.dsp.focus({ window = "address:" .. best.address }))
+    end
+end
+
+local function count_floats_on_ws(ws_id)
+    local n = 0
+    for _, w in ipairs(hl.get_windows({ floating = true, mapped = true })) do
+        if w.workspace and w.workspace.id == ws_id then
+            n = n + 1
+        end
+    end
+    return n
+end
+
+local FLOAT_MAX_W, FLOAT_MAX_H = 1600, 900
+
+local function clamp_float(w)
+    if not w or not w.floating or (w.fullscreen or 0) > 0 then return end
+    if not w.size then return end
+    local sw, sh = w.size.x, w.size.y
+    if not sw or not sh then return end
+    if sw > FLOAT_MAX_W or sh > FLOAT_MAX_H then
+        local scale = math.min(FLOAT_MAX_W / sw, FLOAT_MAX_H / sh)
+        hl.dispatch(hl.dsp.window.resize({
+            window = "address:" .. w.address,
+            x = math.floor(sw * scale),
+            y = math.floor(sh * scale),
+            relative = false
+        }))
+    end
+end
+
+local function clamp_floats_on_ws(ws_id)
+    if not ws_id then return end
+    for _, w in ipairs(hl.get_windows({ floating = true, mapped = true })) do
+        if w.workspace and w.workspace.id == ws_id then
+            clamp_float(w)
+        end
+    end
+end
+
+local function cycle_media(next)
+    hl.dispatch(hl.dsp.window.cycle_next({ next = next }))
+    hl.dispatch(hl.dsp.window.bring_to_top())
+    local w = hl.get_active_window()
+    if w and w.floating and w.workspace then
+        if count_floats_on_ws(w.workspace.id) >= 2 then
+            hl.dispatch(hl.dsp.window.fullscreen({ action = "set", mode = "fullscreen" }))
+            clamp_floats_on_ws(w.workspace.id)
+        end
+    end
+end
+
 -- ========================
 -- KEYBINDS: SYSTEM & APPS
 -- ========================
@@ -418,8 +693,26 @@ hl.bind(mainMod .. " + Z", hl.dsp.exec_cmd("firefox"))
 
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("loginctl lock-session"))
-hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())
-hl.bind(mainMod .. " + D", hl.dsp.window.float({ action = "toggle" }))
+-- SUPER+F: fullscreen de la ventana bajo el cursor
+hl.bind(mainMod .. " + F", function()
+    focus_under_cursor()
+    hl.dispatch(hl.dsp.window.fullscreen())
+end)
+-- SUPER+SHIFT+F: modo media (float + fullscreen) de la ventana bajo el cursor
+hl.bind(mainMod .. " + SHIFT + F", function()
+    focus_under_cursor()
+    local w = hl.get_active_window()
+    if w and not w.floating then
+        hl.dispatch(hl.dsp.window.float({ action = "set" }))
+    end
+    hl.dispatch(hl.dsp.window.fullscreen({ action = "set", mode = "fullscreen" }))
+end)
+-- SUPER+D: toggle float bajo el cursor (clamp size para no simular fullscreen)
+hl.bind(mainMod .. " + D", function()
+    focus_under_cursor()
+    hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+    clamp_float(hl.get_active_window())
+end)
 -- SUPER+P: Beckon voice control (replaced pin — moved to SHIFT+P)
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("beckon"))
 
@@ -501,6 +794,11 @@ hl.bind(mainMod .. " + U", hl.dsp.focus({ direction = "r" }))
 hl.bind(mainMod .. " + ntilde", hl.dsp.focus({ direction = "u" }))
 hl.bind(mainMod .. " + E", hl.dsp.focus({ direction = "d" }))
 
+-- SUPER+TAB / SUPER+SHIFT+TAB: ciclar ventanas; si hay par de flotantes
+-- (media: Spotify+Netflix), la activa se re-fullscreen-ea al subirla.
+hl.bind(mainMod .. " + TAB", function() cycle_media(true) end)
+hl.bind(mainMod .. " + SHIFT + TAB", function() cycle_media(false) end)
+
 -- ========================
 -- MOVE WINDOWS
 -- ========================
@@ -538,9 +836,10 @@ local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
 -- Solo para tiles visibles (grilla 3x3 = 1..9); ws 10 cae a focus normal.
 -- Interrumpible: si apretas otro SUPER+# durante la animacion, el ultimo gana
 -- (se reintenta hasta llegar, asi no queda pegado en el desktop anterior).
--- EXPO_FLY_MS = respiro de la grilla antes de entrar al tile. Mas alto = transicion
--- mas pausada y comoda (el morph en si sigue la curva "windowsMove" de animations).
-local EXPO_FLY_MS  = 200
+-- EXPO_FLY_MS = cuanto espera antes de entrar al tile (deja ver la grilla 3D).
+-- Cerca de la duracion de windowsMove (800ms) = la grilla se forma casi del todo
+-- antes del zoom de entrada. El morph en si sigue la curva "expoSmooth".
+local EXPO_FLY_MS  = 600
 local EXPO_POLL_MS = 25
 local EXPO_FLY_MAX = 160 -- ticks de seguridad (~4s) para no reintentar sin fin
 local expo_fly = { want = false, opened = false, ticks = 0, age = 0, timer = nil }
@@ -673,6 +972,28 @@ for i = 1, 10 do
     hl.bind(mainMod .. " + " .. ws_keys[i], function() expo_focus(i) end)
     hl.bind(mainMod .. " + SHIFT + " .. ws_keys[i], hl.dsp.window.move({ workspace = tostring(i) }))
 end
+
+-- Viaje hop-by-hop entre desktops: SUPER+ALT+flechas mueve a la celda vecina del
+-- grid 3x3 (numpad 789/456/123) animando el recorrido por los intermedios via
+-- ~/.local/bin/grid-move. No-op en los bordes (sin wrap).
+local grid_dir = {
+    up    = function(c) if c <= 6 then return c + 3 end end,
+    down  = function(c) if c >= 4 then return c - 3 end end,
+    left  = function(c) if (c - 1) % 3 > 0 then return c - 1 end end,
+    right = function(c) if (c - 1) % 3 < 2 then return c + 1 end end,
+}
+local function grid_travel(dir)
+    local cur = hl.get_active_workspace()
+    if not cur or cur.id < 1 or cur.id > 9 then return end
+    local target = grid_dir[dir] and grid_dir[dir](cur.id)
+    if target then
+        hl.dispatch(hl.dsp.exec_cmd("~/.local/bin/grid-move " .. target))
+    end
+end
+hl.bind(mainMod .. " + ALT + left",  function() grid_travel("left")  end)
+hl.bind(mainMod .. " + ALT + right", function() grid_travel("right") end)
+hl.bind(mainMod .. " + ALT + up",    function() grid_travel("up")    end)
+hl.bind(mainMod .. " + ALT + down",  function() grid_travel("down")  end)
 
 -- ========================
 -- MOONLIGHT MODE (Toggle)
