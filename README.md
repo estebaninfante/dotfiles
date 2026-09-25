@@ -34,6 +34,7 @@ dotfiles/
 │   ├── setup-omarchy.sh # fresh install en un comando
 │   ├── link-dotfiles.sh # aplica symlinks (idempotente)
 │   ├── detect-machine.sh# detecta laptop/desktop por hardware
+│   ├── omarchy-sync.sh  # export/import config del shell Omarchy (barra/plugins)
 │   ├── setup-secrets.sh # configura/verifica claves y secrets
 │   ├── setup-tts.sh     # TTS
 │   └── publish.sh       # commit + push con confirmación
@@ -96,6 +97,13 @@ escritorio y la grilla de hyprexpo nunca quedan desincronizados.
 
 `~/developing` se sincroniza en tiempo real entre laptop y desktop mediante
 Syncthing (Tailscale fuera de casa). Ver `AGENTS.md` para el detalle.
+
+La **barra de Omarchy** (la activa) también se replica: su config
+(`~/.config/omarchy/`, barra `eztvn.bar`, plugins locales, tema) se versiona en
+`linux/config/omarchy/` y se aplica con `scripts/omarchy-sync.sh`
+(`export` en el desktop tras personalizar, `import` en la laptop; el setup lo
+corre solo). Los plugins/temas de git se reinstalan por url
+(`plugins-git.txt` / `themes-git.txt`).
 
 ## Secrets
 

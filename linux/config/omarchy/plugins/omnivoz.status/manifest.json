@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "omnivoz.status",
+  "name": "OmniVoz",
+  "version": "0.1.0",
+  "author": "OmniVoz contributors",
+  "license": "MIT",
+  "description": "Local voice agent status: shows whether OmniVoz is listening, thinking or acting, lets you toggle it, and shows the active configuration.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "OmniVoz",
+    "description": "Voice agent state, toggle and live configuration",
+    "category": "Assistant",
+    "aliases": ["omnivoz", "voice", "voz", "agente"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalMs": 2000,
+      "toggleCommand": "omnivoz-listen",
+      "configPath": "~/.config/omnivoz/config.json"
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalMs",
+        "type": "integer",
+        "label": "Refresh interval (ms)",
+        "description": "How often the widget re-reads the OmniVoz status file.",
+        "min": 500,
+        "max": 10000,
+        "step": 500,
+        "defaultValue": 2000
+      },
+      {
+        "key": "toggleCommand",
+        "type": "string",
+        "label": "Toggle command",
+        "description": "Run with a right or middle click to start/stop listening.",
+        "defaultValue": "omnivoz-listen"
+      },
+      {
+        "key": "configPath",
+        "type": "string",
+        "label": "Config file",
+        "description": "Path shown in the panel (the file read by OmniVoz at startup).",
+        "defaultValue": "~/.config/omnivoz/config.json"
+      }
+    ]
+  },
+  "homepage": "https://github.com/CHANGE-ME/omnivoz",
+  "repository": "https://github.com/CHANGE-ME/omnivoz"
+}

@@ -38,6 +38,7 @@ dotfiles/
 │   ├── setup-omarchy.sh # fresh install en un comando
 │   ├── link-dotfiles.sh # aplica el inventario de symlinks (idempotente)
 │   ├── detect-machine.sh# detecta laptop/desktop por hardware
+│   ├── omarchy-sync.sh  # export/import config del shell Omarchy (barra/plugins)
 │   ├── setup-tts.sh     # TTS
 │   ├── setup-secrets.sh # Configura/verifica claves y secrets
 │   └── publish.sh       # Commit + push con confirmacion
@@ -78,6 +79,21 @@ sourced por `~/.bashrc`). Nunca commitear claves.
 Solo se enlazan `settings.json` y `keybindings.json` (el resto de `~/.config/Code/User/`
 lo reescribe el editor). Fuente: `linux/config/vscode/User/`. Extensiones: VSCodeVim,
 Live Server, Rosé Pine. Config: vim-style (leader espacio), UI minimalista, Live Server en 8080.
+
+### Omarchy shell (`linux/config/omarchy/` — copiado, no symlink)
+
+La barra activa es la de **Omarchy**, no la de dotfiles. Su config vive en
+`~/.config/omarchy/` y se versiona aqui: `shell.json` (barra `eztvn.bar`, layout,
+`centerAnchor`), `shell.toml` (fuente/scrim), `bar/modules/services.qml`,
+`branding/`, `extensions/omarchy-menu.jsonc`, `backgrounds/` (fondos propios),
+`hooks/*.hook` y los plugins locales (`plugins/eztvn.*`, `omnivoz.status`,
+`talk-command.status`). Los plugins/temas instalados por git NO se copian (peso
++ `.git`): sus id+url viven en `plugins-git.txt` / `themes-git.txt` y se
+reinstalan con `omarchy plugin add` / `omarchy theme install`.
+
+`scripts/omarchy-sync.sh export` (desktop, tras personalizar) y `import`
+(laptop/fresh) replican. `setup-omarchy.sh` Fase 10.5 corre `import`
+automaticamente. No symlinkear `~/.config/omarchy`: Omarchy escribe ahi en vivo.
 
 ### Linux config — archivos sueltos
 

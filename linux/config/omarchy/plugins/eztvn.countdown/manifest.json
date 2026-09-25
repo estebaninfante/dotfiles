@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.countdown",
+  "name": "Countdown",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Countdown in days and hours to a target date",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Countdown",
+    "description": "Cuenta atras en dias y horas hasta la fecha objetivo",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "target": "2027-01-25T00:00:00"
+    },
+    "schema": [
+      {
+        "key": "target",
+        "type": "string",
+        "label": "Fecha objetivo (ISO local, ej 2027-01-25T00:00:00)",
+        "defaultValue": "2027-01-25T00:00:00"
+      }
+    ]
+  }
+}

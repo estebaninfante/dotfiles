@@ -411,6 +411,25 @@ if [[ -x "$DOTFILES_BIN/sync-wallpaper.sh" ]]; then
 fi
 
 # ══════════════════════════════════════════════════════════════
+# FASE 10.5: Config del shell de Omarchy (barra, plugins, tema)
+# ══════════════════════════════════════════════════════════════
+header "Fase 10.5: Config Omarchy (barra/plugins/tema)"
+
+# La barra activa es la de Omarchy: su config vive en ~/.config/omarchy (NO en
+# symlinks). omarchy-sync.sh importa shell.json/shell.toml, plugins locales,
+# branding, hooks y reinstala plugins/temas desde git. Sin esto, la laptop
+# arranca con la barra default de Omarchy.
+if [[ -x "$REPO/scripts/omarchy-sync.sh" ]] && command -v omarchy &>/dev/null; then
+    if bash "$REPO/scripts/omarchy-sync.sh" import; then
+        ok "Config Omarchy importada (barra eztvn.bar)"
+    else
+        warn "No se pudo importar la config de Omarchy"
+    fi
+else
+    warn "omarchy-sync.sh no disponible u omarchy ausente — barra default"
+fi
+
+# ══════════════════════════════════════════════════════════════
 # FASE 11: PATH
 # ══════════════════════════════════════════════════════════════
 header "Fase 11: PATH"

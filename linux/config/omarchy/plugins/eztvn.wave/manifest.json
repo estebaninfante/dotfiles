@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.wave",
+  "name": "Audio Wave",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Animated audio spectrum wave that reacts to music and any sound (backed by cava).",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Wave.qml"
+  },
+  "barWidget": {
+    "displayName": "Audio Wave",
+    "description": "Spectrum wave that moves with the sound coming out of the speakers",
+    "category": "Audio",
+    "aliases": ["wave", "audio", "visualizer", "onda", "espectro", "cava"],
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "bars": 14
+    },
+    "schema": [
+      {
+        "key": "bars",
+        "type": "integer",
+        "label": "Bars",
+        "description": "Number of frequency bands drawn in the wave.",
+        "min": 6,
+        "max": 32,
+        "step": 1,
+        "defaultValue": 14
+      }
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "talk-command.status",
+  "name": "talk-command",
+  "version": "0.1.0",
+  "author": "talk-command",
+  "license": "MIT",
+  "description": "Wake words por voz (talk-command): muestra si el servicio escucha, permite activarlo/desactivarlo y ver las keywords y el ultimo trigger.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "talk-command",
+    "description": "Estado, toggle y actividad del servicio de wake words",
+    "category": "Assistant",
+    "aliases": ["talkcommand", "talk", "wake", "keyword", "voz"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalMs": 2000,
+      "serviceName": "talk-command.service",
+      "dashboardUrl": "http://127.0.0.1:8787"
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalMs",
+        "type": "integer",
+        "label": "Refresh interval (ms)",
+        "description": "Cada cuanto se consulta el estado del servicio.",
+        "min": 500,
+        "max": 10000,
+        "step": 500,
+        "defaultValue": 2000
+      },
+      {
+        "key": "serviceName",
+        "type": "string",
+        "label": "Servicio systemd",
+        "description": "Unidad de usuario que se activa/desactiva (systemctl --user).",
+        "defaultValue": "talk-command.service"
+      },
+      {
+        "key": "dashboardUrl",
+        "type": "string",
+        "label": "Dashboard",
+        "description": "URL del panel web de talk-command (solo se muestra).",
+        "defaultValue": "http://127.0.0.1:8787"
+      }
+    ]
+  },
+  "homepage": "https://github.com/CHANGE-ME/talk-command",
+  "repository": "https://github.com/CHANGE-ME/talk-command"
+}

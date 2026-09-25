@@ -1,0 +1,6 @@
+bredda.localsend https://github.com/cryptobredda/omarchy-localsend
+io.github.dragosol.better-displays-pro https://github.com/dragosol/omarchy-better-displays.git
+io.github.keegan-sucks.flowstate https://github.com/keegan-sucks/omarchy-flowstate.git
+izeesoft.omarchy-phone https://github.com/AdamMusa/omarchy-phone.git
+local.opencode-go https://github.com/M4Marvin/omarchy-plugin-opencode-go.git
+vm.sysmem https://github.com/estebaninfante/omarchy-sysmem.git

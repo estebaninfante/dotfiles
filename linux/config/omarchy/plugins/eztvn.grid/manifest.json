@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.grid",
+  "name": "Grid",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Boton de barra para abrir/cerrar la grilla (hyprexpo overview)",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Grid",
+    "description": "Abre o cierra la grilla de escritorios (overview)",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
