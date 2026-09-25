@@ -1,0 +1,4 @@
+# Reaplica el estado de energia al cambiar la fuente (enchufar/desenchufar).
+# battery-power-guard.sh decide ahorro vs rendimiento; tambien corre en boot via
+# WantedBy=multi-user.target.
+ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="/usr/bin/systemctl --no-block start battery-power-guard.service"

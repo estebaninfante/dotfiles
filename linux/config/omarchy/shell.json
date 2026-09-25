@@ -60,7 +60,7 @@
           "id": "omarchy.tray"
         },
         {
-          "id": "talk-command.status"
+          "id": "tomv.battery-usage"
         },
         {
           "id": "local.opencode-go"
@@ -85,7 +85,7 @@
           "id": "io.github.dragosol.better-displays-pro"
         },
         {
-          "id": "omarchy.power"
+          "id": "eztvn.power"
         }
       ]
     },

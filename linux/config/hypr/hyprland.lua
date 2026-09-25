@@ -14,6 +14,35 @@ local f = io.open(os.getenv("HOME") .. "/.config/machine-type", "r")
 local machine = f and f:read("*a"):match("^%s*(.-)%s*$") or "laptop"
 if f then f:close() end
 
+-- Fuente de alimentacion: true si corre con bateria (AC desenchufado).
+-- Se re-evalua en cada parseo/reload de la config (io.open lee el sysfs), de
+-- modo que hyprctl reload aplica el estado de ahorro sin tocar keywords.
+local function power_on_battery()
+    local p = io.open("/sys/class/power_supply/ADP0/online", "r")
+    if not p then return false end
+    local v = p:read("*l")
+    p:close()
+    return v == "0"
+end
+
+-- Perfil activo de power-profiles-daemon via D-Bus (busctl, ~3ms). "power-saver"
+-- implica ahorro. Sin daemon (busctl ausente) -> false (no degradar sin senal).
+local function power_saver_profile()
+    local h = io.popen("busctl get-property org.freedesktop.UPower.PowerProfiles " ..
+        "/org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles " ..
+        "ActiveProfile 2>/dev/null")
+    if not h then return false end
+    local v = h:read("*l")
+    h:close()
+    return v ~= nil and v:find("power-saver") ~= nil
+end
+
+-- Ahorro total: bateria O perfil power-saver (aunque haya AC). Unifica el
+-- criterio de monitor/blur/animaciones.
+local function low_power()
+    return power_on_battery() or power_saver_profile()
+end
+
 -- La grilla 3D/fisheye de hyprexpo es un parche LOCAL del plugin, compilado con
 -- hyprexpo-rebuild.sh e instalado en ambas maquinas (laptop y desktop corren el
 -- mismo .so). EXPO_3D queda en true: el flag se mantiene solo por claridad y
@@ -111,12 +140,15 @@ end
 -- ========================
 -- bgcolor=rgba(0,0,0,1) eliminates white flash before wallpaper loads
 if machine == "laptop" then
-    hl.monitor({ output = "eDP-1",     mode = "2880x1800@120", position = "0x0",      scale = 2 })
-    -- NOTE: mirror = "eDP-1" has race condition in Hyprland 0.56.1.
+    -- Panel interno (eDP-2): 60Hz en ahorro (~3-5W menos), 120Hz en rendimiento.
+    -- low_power() (bateria O power-saver) se re-evalua en cada reload.
+    local edp_refresh = low_power() and 60 or 120
+    hl.monitor({ output = "eDP-2",     mode = "2880x1800@" .. edp_refresh, position = "0x0", scale = 2 })
+    -- NOTE: mirror = "eDP-2" has race condition in Hyprland 0.56.1.
     -- If mirror doesn't apply on boot, run workaround:
     --   hyprctl eval 'hl.monitor({ output = "HDMI-A-1", disabled = true })'
-    --   sleep 1 && hyprctl eval 'hl.monitor({ output = "HDMI-A-1", mode = "2560x1440@144", position = "0x0", scale = 1, mirror = "eDP-1", disabled = false })'
-    hl.monitor({ output = "HDMI-A-1",  mode = "2560x1440@144", position = "0x0", scale = 1, mirror = "eDP-1" })
+    --   sleep 1 && hyprctl eval 'hl.monitor({ output = "HDMI-A-1", mode = "2560x1440@144", position = "0x0", scale = 1, mirror = "eDP-2", disabled = false })'
+    hl.monitor({ output = "HDMI-A-1",  mode = "2560x1440@144", position = "0x0", scale = 1, mirror = "eDP-2" })
 elseif machine == "desktop" then
     hl.monitor({ output = "DP-2",  mode = "2560x1440@144", position = "0x0", scale = 1 })
 end
@@ -171,7 +203,7 @@ local function active_border(fallback)
     if p then p:close() end
     if img and #img > 0 then
         local prog = '{ if (match($0,/\\(([0-9]+),([0-9]+),([0-9]+)/,m)) { r=m[1]+0; g=m[2]+0; b=m[3]+0; l=0.299*r+0.587*g+0.114*b; if (l>ml) { ml=l; br=r; bg=g; bb=b } } } END { printf "%d %d %d", br, bg, bb }'
-        local cmd = "magick '" .. img .. "' -depth 8 -resize 64x64 txt:- 2>/dev/null | sed 1d | awk '" .. prog .. "' 2>/dev/null"
+        local cmd = "magick '" .. img .. "' -colorspace sRGB -depth 8 -resize 64x64 txt:- 2>/dev/null | sed 1d | awk '" .. prog .. "' 2>/dev/null"
         local q = io.popen(cmd)
         if q then
             local r, g, b = q:read("*a"):match("(%d+)%s+(%d+)%s+(%d+)")
@@ -202,13 +234,13 @@ hl.config({
         gaps_in        = 10,
         gaps_out       = 10,
         border_size    = 2,
-        ["col.active_border"]   = active_border("rgba(e0413bff)"),
+        ["col.active_border"]   = active_border("rgba(cdcdcdf2)"),
         ["col.inactive_border"] = "rgba(00000000)"
     },
     decoration = {
         rounding = 3,
         blur = {
-            enabled = true,
+            enabled = not low_power(),
             size   = 8,
             passes = 3
         }
@@ -321,7 +353,7 @@ hl.config({
 -- Debe estar en true para que cualquier leaf animado funcione.
 hl.config({
     animations = {
-        enabled = true
+        enabled = not low_power()
     }
 })
 
@@ -490,8 +522,8 @@ hl.on("hyprland.start", function()
     -- ELECTRON_OZONE_PLATFORM_HINT/GDK_SCALE: apps activadas via dbus/systemd
     -- (tray, xdg-open) no heredan env de Hyprland. Sin el hint, Electron cae a
     -- XWayland y con force_zero_scaling abre 1x sobre monitor scale=2 (chico).
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=Hyprland ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE")
-    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE")
+    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=Hyprland ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE HYPRLAND_INSTANCE_SIGNATURE")
+    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE HYPRLAND_INSTANCE_SIGNATURE")
     -- Arrancar via systemd da a la unit el env (WAYLAND_DISPLAY) que necesita.
     hl.exec_cmd("sleep 2 && systemctl --user start xdg-desktop-portal-hyprland && systemctl --user restart xdg-desktop-portal && systemctl --user start lan-mouse")
 
@@ -505,11 +537,10 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("swayosd-server --top-margin=0.4")
     hl.exec_cmd("sleep 5 && handy --start-hidden")
 
-    -- Sunshine (host Moonlight): arranca con retardo una vez Wayland-1 +
-    -- xdg-desktop-portal estan listos (captura via Wayland, no KMS).
-    -- NO via graphical-session.target: con linger arranca al boot y captura
-    -- la GPU (KMS) antes del compositor → cuelga GDM/login.
-    hl.exec_cmd("sleep 8 && systemctl --user start sunshine")
+    -- Sunshine (host Moonlight): NO se arranca aqui. Lo gobierna
+    -- power-session-guard.service segun la fuente de energia (solo con AC),
+    -- esperando a que hyprctl responda para no capturar la GPU antes del
+    -- compositor. Ver linux/bin/power-session-guard.sh.
 
     if machine == "laptop" then
         hl.exec_cmd("sleep 5 && libinput-gestures-setup start")

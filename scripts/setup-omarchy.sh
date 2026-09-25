@@ -338,13 +338,33 @@ After=graphical-session.target
 [Service]
 Type=simple
 ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do [ -S "/run/user/%U/wayland-1" ] && exit 0; sleep 0.5; done; exit 0'
-ExecStart=/usr/libexec/hyprpolkitagent
+ExecStart=/usr/lib/hyprpolkitagent/hyprpolkitagent
 Environment=WAYLAND_DISPLAY=wayland-1
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XDG_CURRENT_DESKTOP=Hyprland
 Environment=QT_QUICK_CONTROLS_STYLE=default
 Restart=on-failure
 RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+# sunshine (NO se habilita: autoStart=false; lo arranca hyprland.lua post-login)
+cat > "$SYSTEMD_DIR/sunshine.service" << 'EOF'
+[Unit]
+Description=Sunshine Game Streaming Host
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do [ -S "/run/user/%U/wayland-1" ] && exit 0; sleep 0.5; done; exit 0'
+ExecStart=/usr/bin/sunshine
+Restart=on-failure
+RestartSec=3
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=XDG_CURRENT_DESKTOP=Hyprland
 
 [Install]
 WantedBy=graphical-session.target
@@ -389,6 +409,45 @@ fi
 if command -v tailscale &>/dev/null; then
     sudo systemctl enable tailscaled 2>/dev/null || true
     ok "Tailscale habilitado"
+fi
+
+# Power guard: aplica ahorro (bateria) vs rendimiento (AC) al cambiar de fuente.
+# Sin esto, hyprland.lua/monitors.lua quedan en modo AC (120Hz, blur, anims) y
+# no hay `hyprctl reload` que re-evalue el estado -> consumo alto en bateria.
+#   system: battery-power-guard.service + udev 99-power-source.rules
+#   user:   power-session-guard.service (hyprctl reload + sunshine)
+if [[ -f "$DOTFILES_SYSTEM/systemd/battery-power-guard.service" ]]; then
+    sudo install -o root -g root -m 644 \
+        "$DOTFILES_SYSTEM/systemd/battery-power-guard.service" \
+        /etc/systemd/system/battery-power-guard.service
+    sudo install -o root -g root -m 644 \
+        "$DOTFILES_SYSTEM/udev/99-power-source.rules" \
+        /etc/udev/rules.d/99-power-source.rules
+    sudo udevadm control --reload-rules 2>/dev/null || true
+    sudo systemctl daemon-reload 2>/dev/null || true
+    sudo systemctl enable battery-power-guard.service 2>/dev/null || true
+    sudo systemctl start battery-power-guard.service 2>/dev/null || true
+    ok "battery-power-guard (systemd + udev) instalado y habilitado"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd/battery-power-guard.service"
+fi
+
+if [[ -f "$DOTFILES_SYSTEM/systemd-user/power-session-guard.service" ]]; then
+    systemctl --user enable --now power-session-guard.service 2>/dev/null || true
+    ok "power-session-guard (user) habilitado"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd-user/power-session-guard.service"
+fi
+
+# Sudoers: permite al panel de bateria (eztvn.power) reiniciar el guard al
+# cambiar de perfil sin pedir password.
+if [[ -f "$DOTFILES_SYSTEM/sudoers.d/power-guard" ]]; then
+    sudo install -o root -g root -m 0440 \
+        "$DOTFILES_SYSTEM/sudoers.d/power-guard" \
+        /etc/sudoers.d/power-guard
+    ok "sudoers power-guard instalado (NOPASSWD systemctl)"
+else
+    warn "Falta $DOTFILES_SYSTEM/sudoers.d/power-guard"
 fi
 
 # ══════════════════════════════════════════════════════════════

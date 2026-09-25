@@ -1,0 +1,10 @@
+[Unit]
+Description=Power guard por fuente de energia (AC/bateria)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/eztvn/dotfiles/linux/bin/battery-power-guard.sh
+
+[Install]
+WantedBy=multi-user.target

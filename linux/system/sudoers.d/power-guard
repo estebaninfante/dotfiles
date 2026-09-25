@@ -1,0 +1,5 @@
+# Permite al usuario iniciar el power guard (ahorro/rendimiento por fuente o
+# perfil) sin password, para que el panel de bateria (eztvn.power) lo dispare
+# al cambiar de perfil power-saver. Instalar en /etc/sudoers.d/power-guard
+# (root:root 0440) — ver setup-omarchy.sh Fase 9.
+eztvn ALL=(root) NOPASSWD: /usr/bin/systemctl start battery-power-guard.service, /usr/bin/systemctl restart battery-power-guard.service
