@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.animations",
+  "name": "Animations",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Interruptor maestro de animaciones de Hyprland con estado actual",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Animations",
+    "description": "Activa o desactiva las animaciones del escritorio y muestra su estado",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
