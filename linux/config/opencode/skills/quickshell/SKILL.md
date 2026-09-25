@@ -1,9 +1,17 @@
 ---
 name: quickshell
-description: Use when editing, creating, or reviewing quickshell QML files. Covers QML animations (Behavior vs Transition gotcha, Motion.qml singleton tokens, NumberAnimation, ColorAnimation, EasingCurve), modular architecture (services/, components/, config/ extraction, Process/StdioCollector patterns), UX patterns for panel/menus, and Catppuccin Mocha design system. Auto-triggers on *.qml files in quickshell config.
+description: PATRONES QML genericos (animaciones, Process/StdioCollector, PopupWindow, Behavior vs Transition). La barra ACTIVA de esta maquina es el shell de Omarchy, no este. Para Omarchy usa el agente omarchy-shell y ~/.config/omarchy/. Auto-triggers on *.qml files.
 ---
 
 # Quickshell Skill
+
+> ⚠️ **DESACTUALIZADO como fuente de verdad.** Esta skill describe el shell VIEJO
+> de dotfiles (`~/.config/quickshell/`, paleta Catppuccin). Tu barra ACTIVA es el
+> shell de **Omarchy** (`omarchy-shell`): config en `~/.config/omarchy/`, plugins
+> en `~/.config/omarchy/plugins/`, fuente del paquete (solo lectura) en
+> `/usr/share/omarchy/shell/`. Para cambios reales usa el agente **`omarchy-shell`**.
+> Reutiliza de aqui SOLO los patrones genericos de QML/animacion; **ignora** la
+> paleta Catppuccin y la estructura `shell.qml`/`services/` (son de otro shell).
 
 ## Animations
 

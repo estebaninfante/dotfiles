@@ -1,5 +1,11 @@
 # Quickshell AGENTS.md — Contexto para IA
 
+> ⚠️ **DESACTUALIZADO.** Describe el shell viejo de dotfiles
+> (`~/.config/quickshell/`), que NO es la barra activa. La barra activa es el shell
+> de **Omarchy** (`omarchy-shell`): usa el agente global **`omarchy-shell`** y edita
+> `~/.config/omarchy/shell.json` + `~/.config/omarchy/plugins/`. Lo de abajo solo
+> sirve como referencia de patrones QML genericos.
+
 ## Fuente de verdad
 
 **Este archivo es un puntero.** La documentación viva y completa está en:

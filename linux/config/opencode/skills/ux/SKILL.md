@@ -94,6 +94,16 @@ Ver quickshell/AGENTS.md para la tabla completa. Regla: **mismo color = mismo si
 - Radius cards/popups: 14
 - Radius items/botones: 8
 
+## Bar widgets (Omarchy)
+
+Aplica a todo `BarWidget.qml` (plugins en `~/.config/omarchy/plugins/`). Un widget de barra **no** recibe gap del host: **él mismo reserva su padding**.
+
+- Padding horizontal externo >= 8px. Patrón: `readonly property real hPad: Style.spaceReal(8.75)` y `implicitWidth = anchoContenido + hPad*2` (así lo hace `omarchy.clock`). `Style.space()` interno NO cuenta como padding externo.
+- Altura: `implicitHeight: root.barSize`; el contenido nunca llena la barra, deja ~7px de aire (contenido <= `barSize - 7`).
+- La barra arma los widgets en `Row { spacing: 0 }`; el slot mide lo que mida el item, por eso el padding lo aporta el widget.
+- **Verificación obligatoria**: el hot reload NO repinta cambios visuales de plugins. Correr `omarchy restart shell` y mirar un screenshot (`grim` + `magick`) antes de dar por terminado.
+- Linter: `~/.local/bin/omarchy-qml-lint <file>` (o `--all`). Se ejecuta solo al editar QML (`qml-ux-lint`). Corregir todo ERROR (`bar-padding`, `bar-fill`).
+
 ## Empty states
 
 **NUNCA** mostrar "No hay datos" o "---" sin contexto.

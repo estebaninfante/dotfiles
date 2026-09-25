@@ -1,0 +1,58 @@
+{
+  "domains": {
+    "quickshell": {
+      "script": "quickshell.sh",
+      "desc": "QML y shell.json de Omarchy / quickshell",
+      "priority": 20,
+      "globs": [
+        "~/.config/omarchy/**/*.qml",
+        "~/.config/quickshell/**/*.qml",
+        "~/.config/omarchy/shell.json"
+      ]
+    },
+    "hyprland": {
+      "script": "hyprland.sh",
+      "desc": "config Lua/conf de Hyprland",
+      "priority": 20,
+      "globs": [
+        "~/.config/hypr/**/*.lua",
+        "~/.config/hypr/**/*.conf"
+      ]
+    },
+    "systemd": {
+      "script": "systemd.sh",
+      "desc": "units de usuario systemd",
+      "priority": 20,
+      "globs": [
+        "~/.config/systemd/user/**/*.service",
+        "~/.config/systemd/user/**/*.timer",
+        "~/.config/systemd/user/**/*.socket"
+      ]
+    },
+    "code": {
+      "script": "code.sh",
+      "desc": "proyectos con lint/typecheck/tests configurados",
+      "priority": 10,
+      "globs": [
+        "**/package.json",
+        "**/pyproject.toml",
+        "**/Cargo.toml",
+        "**/go.mod"
+      ]
+    },
+    "syntax": {
+      "script": "syntax.sh",
+      "desc": "validacion generica de sintaxis/JSON/TOML/YAML",
+      "priority": 0,
+      "globs": [
+        "**/*.json",
+        "**/*.jsonc",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.sh",
+        "**/*.py",
+        "**/*.toml"
+      ]
+    }
+  }
+}

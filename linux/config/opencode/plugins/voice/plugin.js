@@ -18,6 +18,10 @@
 //  1. Tool `notify_user`: args message (obligatorio), title?, priority? (1-5).
 //  2. permission.asked  → notificacion + push + voz (siempre).
 //  3. session.error     → notificacion + push + voz (siempre).
+//
+// TTS (voz): respetado SIEMPRE. Toggle `voice tts on|off` (state.json +
+// config.toml). OFF → no se spawnea `voice speak` (0 forks, cero motores).
+// Extra: si engine_<lang> = chatterbox, la voz se salta (nunca cargarlo).
 
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs';
 import { tool } from '@opencode-ai/plugin';
@@ -47,6 +51,51 @@ function notifyEnabled() {
   catch { return false; } // default OFF
 }
 
+// ── TTS: estado efectivo (state.json pisa config.toml) ───────────────────
+function parseTomlSection(path, section) {
+  const out = {};
+  let cur = null;
+  for (const raw of readFileSync(path, 'utf8').split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    const hdr = line.match(/^\[(.+)\]$/);
+    if (hdr) { cur = hdr[1].trim(); continue; }
+    if (cur !== section) continue;
+    const eq = line.indexOf('=');
+    if (eq < 0) continue;
+    const k = line.slice(0, eq).trim();
+    let v = line.slice(eq + 1).trim();
+    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+    out[k] = v;
+  }
+  return out;
+}
+
+function ttsState() {
+  const home = process.env.HOME;
+  let cfg = {};
+  try { cfg = parseTomlSection(`${home}/.config/voice/config.toml`, 'tts'); } catch {}
+  try {
+    const s = JSON.parse(readFileSync(`${home}/.local/state/voice/state.json`, 'utf8'));
+    if (s?.tts && typeof s.tts === 'object') Object.assign(cfg, s.tts);
+  } catch {}
+  const enabled = String(cfg.enabled ?? 'true').toLowerCase();
+  const lang = String(cfg.lang || 'es');
+  const engine = String(cfg[`engine_${lang}`] || cfg.engine || 'piper');
+  return {
+    enabled: enabled !== 'false' && enabled !== '0',
+    engine,
+  };
+}
+
+// Voz hablada: solo si TTS ON y el motor NO es chatterbox.
+function speakAllowed() {
+  const t = ttsState();
+  if (!t.enabled) { dbg('speak: TTS OFF, se omite'); return false; }
+  if (t.engine === 'chatterbox') { dbg('speak: engine=chatterbox, se omite'); return false; }
+  return true;
+}
+
 function sessionIdOf(event) {
   return event.properties?.sessionID || event.properties?.id
     || event.sessionID || event.id || '';
@@ -63,9 +112,11 @@ async function deliver(title, body, priority) {
     Bun.spawn(['notify-send', '-t', '8000', title, body], { stdio: ['ignore', 'ignore', 'ignore'] });
   } catch (e) { dbg(`notify-send ERROR: ${e.message}`); }
 
-  try {
-    Bun.spawn([VOICE_BIN, 'speak', body], { stdio: ['ignore', 'ignore', 'ignore'] });
-  } catch (e) { dbg(`voice speak ERROR: ${e.message}`); }
+  if (speakAllowed()) {
+    try {
+      Bun.spawn([VOICE_BIN, 'speak', body], { stdio: ['ignore', 'ignore', 'ignore'] });
+    } catch (e) { dbg(`voice speak ERROR: ${e.message}`); }
+  }
 
   try {
     const res = await fetch(`https://ntfy.sh/${TOPIC}`, {
@@ -97,7 +148,7 @@ export default async ({ client }) => {
     tool: {
       notify_user: tool({
         description:
-          'Avisa al usuario con notificacion de escritorio, push al celular y voz Chatterbox. '
+          'Avisa al usuario con notificacion de escritorio, push al celular y (si TTS ON) voz. '
           + 'Usala al terminar una tarea o cuando algo merezca atencion. Redacta el mensaje tu '
           + 'mismo, con contexto, en espanol claro y breve (1-2 frases). '
           + 'Solo se entrega si las notificaciones estan activas (/notify on); si estan OFF, '
