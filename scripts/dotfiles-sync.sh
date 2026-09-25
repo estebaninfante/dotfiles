@@ -63,6 +63,14 @@ fi
 
 log "OK sync -> $(git rev-parse --short HEAD)"
 
+if [[ -x "$REPO/scripts/omarchy-sync.sh" ]]; then
+    if "$REPO/scripts/omarchy-sync.sh" import >>"$LOG" 2>&1; then
+        log "OK omarchy import"
+    else
+        log "WARN omarchy import fallo"
+    fi
+fi
+
 # Push best-effort: sin credenciales (laptop) falla y se ignora.
 if [[ $(git rev-list --count "origin/$BRANCH..HEAD") -gt 0 ]]; then
     if git push --quiet origin "$BRANCH" >>"$LOG" 2>&1; then

@@ -14,21 +14,10 @@
           "id": "eztvn.menu"
         },
         {
-          "id": "omarchy.weather"
-        },
-        {
           "id": "vm.sysmem"
         },
         {
-          "id": "io.github.keegan-sucks.flowstate",
-          "workMinutes": 50,
-          "shortBreakMinutes": 10
-        },
-        {
           "id": "omarchy.system-update"
-        },
-        {
-          "id": "omarchy.keyboard-layout"
         }
       ],
       "center": [
@@ -36,7 +25,7 @@
           "id": "omarchy.indicators"
         },
         {
-          "id": "omarchy.clock",
+          "id": "eztvn.clock",
           "format": "dddd HH:mm",
           "formatAlt": "d MMMM 'W'ww yyyy",
           "verticalFormat": "HH\n—\nmm"
@@ -50,6 +39,11 @@
         {
           "id": "eztvn.countdown",
           "target": "2027-01-25T00:00:00"
+        },
+        {
+          "id": "io.github.keegan-sucks.flowstate",
+          "workMinutes": 50,
+          "shortBreakMinutes": 10
         }
       ],
       "right": [
@@ -63,6 +57,9 @@
           "id": "omarchy.tray"
         },
         {
+          "id": "omarchy.keyboard-layout"
+        },
+        {
           "id": "tomv.battery-usage"
         },
         {
@@ -70,10 +67,6 @@
         },
         {
           "id": "omarchy.agents"
-        },
-        {
-          "id": "services",
-          "type": "qml"
         },
         {
           "id": "omarchy.network"
@@ -89,6 +82,10 @@
         },
         {
           "id": "eztvn.power"
+        },
+        {
+          "id": "services",
+          "type": "qml"
         }
       ]
     },

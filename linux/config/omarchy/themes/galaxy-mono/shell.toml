@@ -1,16 +1,16 @@
-# Omarchy shell surfaces - Midnight theme (gris + azul)
+# Omarchy shell surfaces - Galaxy Mono theme (grayscale)
 
 [bar]
 background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
-active           = "#2d7fa1"
+active           = "#cdcdcd"
 scale-with-font  = true
 size-horizontal  = 26
 size-vertical    = 28
 
 [hyprland]
-active-border            = "#2d7fa1 #3a3a3e 45deg"
+active-border            = "#cdcdcd #3a3a3e 45deg"
 active-border-foreground = "#f0f0f0 #a0a0a8 45deg"
 
 [controls]
@@ -26,15 +26,15 @@ hover-cursor-border       = "#f0f0f0"
 hover-cursor-border-width = 1
 hover-cursor-border-alpha = 0.25
 
-focus-color        = "#2d7fa1"
+focus-color        = "#cdcdcd"
 focus-fill-alpha   = 0.08
-focus-border       = "#2d7fa1"
+focus-border       = "#cdcdcd"
 focus-border-width = 1
 focus-border-alpha = 0.35
 
 selected-color        = "#f0f0f0"
 selected-fill-alpha   = 0.18
-selected-border       = "#2d7fa1"
+selected-border       = "#cdcdcd"
 selected-border-width = 0
 selected-border-alpha = 1.0
 
@@ -45,50 +45,50 @@ selection-fill-alpha = 0.35
 background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
-border           = "#2d7fa1"
+border           = "#cdcdcd"
 border-alpha     = 1.0
 
 [tooltip]
 background       = "#1e1e20"
 background-alpha = 0.97
 text             = "#f0f0f0"
-border           = "#2d7fa1"
+border           = "#cdcdcd"
 border-alpha     = 1.0
 
 [notifications]
 background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
-border           = "#2d7fa1"
+border           = "#cdcdcd"
 border-alpha     = 1.0
-countdown        = "#2d7fa1"
+countdown        = "#cdcdcd"
 
 [menu]
 background                = "#1e1e20"
 background-alpha          = 1.0
 text                      = "#f0f0f0"
-border                    = "#2d7fa1"
+border                    = "#cdcdcd"
 border-alpha              = 1.0
 scrim                     = "#1e1e20"
 scrim-alpha               = 0.5
-selected-background       = "#2d7fa1"
+selected-background       = "#cdcdcd"
 selected-background-alpha = 0.16
-selected-text             = "#6aaee8"
-selected-border           = "#2d7fa1"
+selected-text             = "#e8e8e8"
+selected-border           = "#cdcdcd"
 selected-border-alpha     = 0.25
 
 [launcher]
 background                = "#1e1e20"
 background-alpha          = 0.95
 text                      = "#f0f0f0"
-border                    = "#2d7fa1"
+border                    = "#cdcdcd"
 border-alpha              = 1.0
 scrim                     = "#1e1e20"
 scrim-alpha               = 0.5
-selected-background       = "#2d7fa1"
+selected-background       = "#cdcdcd"
 selected-background-alpha = 0.16
-selected-text             = "#6aaee8"
-selected-border           = "#2d7fa1"
+selected-text             = "#e8e8e8"
+selected-border           = "#cdcdcd"
 selected-border-alpha     = 0.25
 
 [polkit]
@@ -96,12 +96,12 @@ background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
 text-error       = "#e85a4a"
-border           = "#2d7fa1"
+border           = "#cdcdcd"
 border-error     = "#e85a4a"
 border-alpha     = 1.0
 scrim            = "#1e1e20"
 scrim-alpha      = 0.5
-accent           = "#2d7fa1"
+accent           = "#cdcdcd"
 
 [lock]
 background       = "#1e1e20"
@@ -109,18 +109,18 @@ background-alpha = 0.8
 text             = "#f0f0f0"
 placeholder      = "#a0a0a8"
 text-error       = "#e85a4a"
-border           = "#2d7fa1"
-border-active    = "#2d7fa1"
+border           = "#cdcdcd"
+border-active    = "#cdcdcd"
 border-error     = "#e85a4a"
 border-alpha     = 1.0
-selection        = "#2d7fa1"
+selection        = "#cdcdcd"
 selection-alpha  = 0.45
 
 [image-picker]
 scrim                   = "#1e1e20"
 scrim-alpha             = 0.5
 text                    = "#f0f0f0"
-selected-border         = "#2d7fa1"
+selected-border         = "#cdcdcd"
 selected-border-alpha   = 1.0
 unselected-border       = "#f0f0f0"
 unselected-border-alpha = 0.28

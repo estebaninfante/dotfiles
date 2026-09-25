@@ -15,12 +15,10 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIVE="${OMARCHY_CONFIG_DIR:-$HOME/.config/omarchy}"
 SRC="$REPO/linux/config/omarchy"
+MACHINE="$(cat "${HOME}/.config/machine-type" 2>/dev/null || echo desktop)"
 
-# Archivos sueltos gestionados
 FILES=(shell.json shell.toml)
-# Directorios gestionados (se copian enteros, sin *.sample de Omarchy)
 DIRS=(bar branding extensions backgrounds hooks)
-# Hook que setup-omarchy.sh instala desde linux/bin/ (no duplicar en el repo)
 EXCLUDE_HOOK="theme-set.d/sync-wallpaper.sh"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -43,7 +41,12 @@ export_config() {
     local f d p id url
 
     for f in "${FILES[@]}"; do
-        [[ -f "$LIVE/$f" ]] && cp -f "$LIVE/$f" "$SRC/$f"
+        [[ -f "$LIVE/$f" ]] || continue
+        if [[ "$f" = "shell.json" && -f "$SRC/shell.${MACHINE}.json" ]]; then
+            cp -f "$LIVE/$f" "$SRC/shell.${MACHINE}.json"
+        else
+            cp -f "$LIVE/$f" "$SRC/$f"
+        fi
     done
 
     for d in "${DIRS[@]}"; do
@@ -94,7 +97,18 @@ import_config() {
     local f d id url
 
     for f in "${FILES[@]}"; do
-        [[ -f "$SRC/$f" ]] && cp -f "$SRC/$f" "$LIVE/$f"
+        [[ -f "$SRC/$f" ]] || continue
+        if [[ "$f" = "shell.json" ]]; then
+            local cand="$SRC/$f"
+            [[ -f "$SRC/shell.${MACHINE}.json" ]] && cand="$SRC/shell.${MACHINE}.json"
+            if ! jq -e . "$cand" >/dev/null 2>&1; then
+                warn "shell.json invalido, omitido: $cand"
+                continue
+            fi
+            cp -f "$cand" "$LIVE/$f"
+        else
+            cp -f "$SRC/$f" "$LIVE/$f"
+        fi
     done
 
     for d in "${DIRS[@]}"; do
@@ -150,8 +164,53 @@ import_config() {
     ok "Config Omarchy importada a ~/.config/omarchy"
 }
 
+status_config() {
+    local drift=0 f d rel
+    for f in "${FILES[@]}"; do
+        local base="$SRC/$f"
+        [[ "$f" = "shell.json" && -f "$SRC/shell.${MACHINE}.json" ]] && base="$SRC/shell.${MACHINE}.json"
+        if [[ -f "$base" ]] && ! cmp -s "$base" "$LIVE/$f"; then
+            echo "DRIFT $f"
+            drift=$((drift+1))
+        fi
+    done
+    for d in "${DIRS[@]}"; do
+        [[ -d "$SRC/$d" ]] || continue
+        while IFS= read -r -d '' rel; do
+            case "$rel" in "./$EXCLUDE_HOOK") continue ;; esac
+            if ! cmp -s "$SRC/$d/$rel" "$LIVE/$d/$rel"; then
+                echo "DRIFT $d/$rel"
+                drift=$((drift+1))
+            fi
+        done < <(cd "$SRC/$d" && find . -type f ! -name '*.sample' -print0)
+    done
+    if [[ -d "$SRC/plugins" ]]; then
+        while IFS= read -r -d '' rel; do
+            if ! cmp -s "$SRC/plugins/$rel" "$LIVE/plugins/$rel"; then
+                echo "DRIFT plugins/$rel"
+                drift=$((drift+1))
+            fi
+        done < <(cd "$SRC/plugins" && find . -type f -print0)
+    fi
+    if [[ -d "$SRC/themes" ]]; then
+        while IFS= read -r -d '' rel; do
+            if ! cmp -s "$SRC/themes/$rel" "$LIVE/themes/$rel"; then
+                echo "DRIFT themes/$rel"
+                drift=$((drift+1))
+            fi
+        done < <(cd "$SRC/themes" && find . -type f -print0)
+    fi
+    if [[ "$drift" -eq 0 ]]; then
+        ok "sin drift (live == repo)"
+    else
+        warn "$drift archivo(s) con drift; corre: omarchy-sync.sh import"
+        return 1
+    fi
+}
+
 case "${1:-}" in
     export) export_config ;;
     import) import_config ;;
-    *) echo "Uso: $(basename "$0") export|import"; exit 1 ;;
+    status) status_config ;;
+    *) echo "Uso: $(basename "$0") export|import|status"; exit 1 ;;
 esac

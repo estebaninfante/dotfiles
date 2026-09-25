@@ -32,7 +32,8 @@ BarWidget {
     : "Fecha invalida: " + targetRaw
 
   readonly property real labelWidth: measureLabel.implicitWidth
-  readonly property real fixedWidth: labelWidth + 16
+  readonly property real hPad: Style.spaceReal(8.75)
+  readonly property real fixedWidth: labelWidth + hPad * 2
 
   SystemClock {
     id: clock

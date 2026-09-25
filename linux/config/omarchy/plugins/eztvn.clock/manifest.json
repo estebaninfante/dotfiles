@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.clock",
+  "name": "Dashboard Clock",
+  "version": "2.0.0",
+  "author": "Omarchy",
+  "description": "Date/time label with a paged dashboard popup (calendar, system, media, notifications, toggles)",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Dashboard Clock",
+    "description": "Date/time label with a paged dashboard popup",
+    "category": "Time",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.clock"
+  }
+}
