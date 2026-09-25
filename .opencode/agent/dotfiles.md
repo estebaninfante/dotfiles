@@ -86,6 +86,7 @@ Si un trabajo es repetitivo y acotado, crea un subagente en `~/dotfiles/.opencod
 4. **Para quickshell**: llamar al subagente `quickshell`
 5. **Auto-mejora**: SIEMPRE que detectes un patron repetitivo, crea skill/script/subagente
 6. **Publicar tras cambios significativos**: `bash ~/dotfiles/scripts/publish.sh`
+7. **Hyprland / hyprland.lua / plugins (hyprpm)**: usa la skill `hyprland-plugin-safety` (en `.opencode/skills/`). Regla clave: NUNCA compilar/reemplazar el `.so` de un plugin hyprpm desde un commit distinto al pinneado en su `hyprpm.toml` — crashea Hyprland a safe-mode.
 
 ## Comandos útiles
 

@@ -14,6 +14,12 @@ local f = io.open(os.getenv("HOME") .. "/.config/machine-type", "r")
 local machine = f and f:read("*a"):match("^%s*(.-)%s*$") or "laptop"
 if f then f:close() end
 
+-- La grilla 3D/fisheye de hyprexpo es un parche LOCAL del plugin que solo vive
+-- en el desktop. En laptop se usa el plugin stock (grilla plana, sin peek ni
+-- claves 3D). Este flag gatea todo lo experimental a desktop; laptop queda con
+-- el overview basico.
+local EXPO_3D = (machine == "desktop")
+
 -- Tema global (canonico: active-theme.conf de kitty, symlink al repo).
 -- Devuelve "light"|"dark"; default dark si no se puede leer.
 local function theme_mode()
@@ -135,8 +141,8 @@ end
 -- ========================
 hl.config({
     general = {
-        gaps_in        = 8,
-        gaps_out       = 12,
+        gaps_in        = 10,
+        gaps_out       = 10,
         border_size    = 0,
         ["col.active_border"]   = "rgba(255, 0, 0, 0.5)",
         ["col.inactive_border"] = "rgba(00000000)"
@@ -152,21 +158,20 @@ hl.config({
 })
 
 -- ========================
--- GAPS DINAMICOS POR Nº DE VENTANAS
+-- GAPS DINAMICOS POR Nº DE VENTANAS (SIMETRICOS)
 -- ========================
--- A menos ventanas en el workspace activo, mas aire; a mas ventanas, menos,
--- con caida tipo polinomio: gap(n) = MIN + (MAX - MIN) / n^DECAY.
--- Tunear aqui:
-local GAP_IN_MAX,  GAP_IN_MIN  = 16, 4    -- separacion entre tiles
-local GAP_OUT_MAX, GAP_OUT_MIN = 44, 8    -- margen alrededor de la grilla
-local GAP_DECAY                = 2        -- exponente: mayor = cae mas rapido
+-- Un unico valor para gaps_in y gaps_out en cada momento: las cuatro gaps
+-- (barra, bordes de pantalla y entre ventanas) miden siempre lo mismo. El
+-- valor baja a medida que hay mas ventanas en el workspace.
+local GAP_MAX   = 18   -- pocas ventanas
+local GAP_MIN   = 8    -- muchas ventanas
+local GAP_DECAY = 2    -- exponente: mayor = cae mas rapido
 
 local function gaps_for(n)
     n = math.max(1, n)
     local inv = 1 / (n ^ GAP_DECAY)
-    local gi  = math.floor(GAP_IN_MIN  + (GAP_IN_MAX  - GAP_IN_MIN)  * inv + 0.5)
-    local go  = math.floor(GAP_OUT_MIN + (GAP_OUT_MAX - GAP_OUT_MIN) * inv + 0.5)
-    return gi, go
+    local g   = math.floor(GAP_MIN + (GAP_MAX - GAP_MIN) * inv + 0.5)
+    return g, g
 end
 
 local last_gi, last_go = -1, -1
@@ -226,6 +231,16 @@ hl.layer_rule({
 hl.window_rule({ match = { class = "swappy" }, no_anim = true })
 
 -- Omarchy shell blur (handled by omarchy's own shell config)
+-- Launcher (omarchy-menu): blur tras el fondo semitransparente del menu
+-- (shell.toml [menu] background-alpha). Sin esta regla solo se ve "fantasma".
+-- no_anim: el fade lo maneja el propio menu en QML (eztvn.menu, 140ms);
+-- el popin del compositor + blur rompe el fade-out de capas (issue 875).
+hl.layer_rule({
+    match = { namespace = "omarchy-menu" },
+    blur = true,
+    no_anim = true,
+    animation = "none"
+})
 
 -- ========================
 -- CURSOR
@@ -266,13 +281,13 @@ hl.animation({
     bezier = "default"
 })
 
--- windowsMove: glide suave al mover flotantes por teclado Y el morph 3D de la
--- grilla expo (abrir/cerrar = zoom). Curva sin rebote y mas lento para que el
--- viaje se sienta tridimensional y no un parpadeo.
+-- windowsMove: glide suave al mover flotantes por teclado Y el morph de la
+-- grilla expo (abrir/cerrar = zoom, y el salto entre workspaces con SUPER+n).
+-- Curva sin rebote; velocidad mas corta = saltos entre workspaces mas agiles.
 hl.animation({
     leaf = "windowsMove",
     enabled = true,
-    speed = 8,
+    speed = 4,
     bezier = "expoSmooth"
 })
 
@@ -290,15 +305,16 @@ hl.config({
 })
 
 
--- Carrusel de workspaces: al saltar ws1→ws5 desliza por los intermedios.
--- slidefade = deslizamiento + fundido: se nota menos el corte que el slide puro
--- (mas suave, menos brusco). El % es cuanto funde.
+-- Carrusel de workspaces: slide puro para que las ventanas se "empujen" y el
+-- cambio se sienta continuo (un mismo espacio, sin salto/fundido). El viaje por
+-- desktops intermedios lo maneja ws_travel (seccion WORKSPACE TRAVEL), que
+-- ademas cambia el estilo a vertical segun la direccion del grid.
 hl.animation({
     leaf = "workspaces",
     enabled = true,
-    speed = 10,
+    speed = 4,
     bezier = "expoSmooth",
-    style = "slidefade 20%"
+    style = "slide"
 })
 
 -- Apertura "TV viejo": bloom casi instantaneo desde 10% (snap on).
@@ -319,14 +335,41 @@ hl.animation({
     style = "slide"
 })
 
--- Layers (waybar, swaync, omarchy shell): apertura con popin
--- rápido. Rofi es un layer → sin esto abre instantáneo sin animación.
+-- Layers (waybar, swaync, omarchy shell): popin + fade simetricos in/out.
+-- speed 1 hacia atras era lentisima (in tardaba) y layersOut heredaba estilo
+-- vacio → el cierre desaparecia sin animacion. In/Out y fade explicitos.
 hl.animation({
     leaf = "layers",
     enabled = true,
-    speed = 1,
+    speed = 6,
     bezier = "default",
     style = "popin"
+})
+hl.animation({
+    leaf = "layersIn",
+    enabled = true,
+    speed = 6,
+    bezier = "default",
+    style = "popin"
+})
+hl.animation({
+    leaf = "layersOut",
+    enabled = true,
+    speed = 6,
+    bezier = "default",
+    style = "popin"
+})
+hl.animation({
+    leaf = "fadeLayersIn",
+    enabled = true,
+    speed = 6,
+    bezier = "default"
+})
+hl.animation({
+    leaf = "fadeLayersOut",
+    enabled = true,
+    speed = 6,
+    bezier = "default"
 })
 
 -- ========================
@@ -415,41 +458,92 @@ hl.plugin.load("/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so")
 -- Los colores salen del tema Omarchy activo (colors.toml); al cambiar de tema
 -- se refrescan solos porque omarchy-theme-set recarga Hyprland.
 local expo_style = {
-    gaps_in       = 0,        -- separacion entre tiles (0 = pegados)
-    gaps_out      = 0,        -- margen alrededor de la grilla (0 = sin margen)
-    border_width  = 0,        -- grosor del borde de cada tile (0 = sin borde)
-    tile_rounding = 0,        -- esquinas redondeadas de los tiles (0 = cuadradas)
+    gaps_in       = 0,        -- separacion entre tiles (flotantes)
+    gaps_out      = 22,       -- margen alrededor de la grilla
+    border_width  = 2,        -- grosor del borde de cada tile (glass fino)
+    tile_rounding = 12,       -- esquinas redondeadas de los tiles (glass)
     bg_col         = theme_color("darker_background", "#0e160e"),
-    border_current = theme_color("accent", "#7aba7c"),
-    border_focus   = theme_color("cyan", "#6aca9a"),
-    border_hover   = theme_color("muted", "#6a8a6c"),
+    -- Borde glass fino: blanco/accent semitransparente para no cortar el fondo.
+    border_current = "rgba(ffffff60)",
+    border_focus   = "rgba(ffe9a960)",
+    border_hover   = "rgba(ffffff35)",
+    -- Fondo detras de los escritorios flotantes (imagen). Vacio = color bg_col.
+    background_image = "/home/eztvn/.config/hypr/wallpapers/gradient_blackred_simple_1440p.jpg",
+    background_dim   = 0,     -- oscurecer la imagen (0-100)
+    -- Grilla en perspectiva 3D (experimental). threed_enable=0 la deja plana.
+    threed_enable   = 1,      -- 1 = grilla inclinada en perspectiva (selector 3D)
+    threed_tilt     = 42,     -- inclinacion en grados (0 = sin perspectiva)
+    threed_yaw      = 0,      -- giro horizontal en grados
+    threed_distance = 1.6,    -- distancia de camara (alturas de monitor)
+    threed_radius   = 0.04,   -- redondeo de esquinas en 3D (fraccion, glass look)
+    threed_flip_v   = 0,      -- voltear verticalmente las texturas (0/1)
+    -- Lente ojo de pez: curva los bordes de la grilla (0 = sin distorsion).
+    threed_fisheye  = 0.28,   -- fuerza del barrel fisheye
+    threed_fisheye_pow = 2,   -- exponente del radial
+    -- Estetica neon/glass: bloom alrededor de los tiles.
+    glass_glow_enable = 1,    -- 1 = glow neon activo
+    glass_glow      = 0.7,    -- intensidad del bloom
+    hover_scale     = 1.05,   -- escala del tile al pasar el mouse (1 = sin zoom)
+    -- Slide direccional del cierre: la grilla se corre hacia el tile destino y
+    -- vuelve (out/in), en la direccion del movimiento (horizontal o vertical).
+    slide_enable    = 0,      -- 0 = zoom simple y limpio (sin reajuste)
+    slide_amount    = 0.16,   -- corrimiento como fraccion del monitor
 }
 
+-- Laptop: sin parche local -> grilla plana y limpia. Estos valores tambien se
+-- omiten al configurar el plugin (mas abajo) para no mandar claves que el
+-- plugin stock no conoce.
+if not EXPO_3D then
+    expo_style.threed_enable     = 0
+    expo_style.threed_fisheye    = 0
+    expo_style.glass_glow_enable = 0
+    expo_style.hover_scale       = 1.0
+    expo_style.slide_enable      = 0
+    expo_style.background_image  = ""
+end
+
 if hl.plugin.hyprexpo ~= nil then
-    hl.config({
-        plugin = {
-            hyprexpo = {
-                columns = 3,
-                rows = 3,
-                dynamic_grid = 0,
-                skip_empty = 0,
-                max_workspace = 9,
-                reverse_rows = 1,
-                gaps_in = expo_style.gaps_in,
-                gaps_out = expo_style.gaps_out,
-                bg_col = expo_style.bg_col,
-                border_width = expo_style.border_width,
-                border_color_current = expo_style.border_current,
-                border_color_focus = expo_style.border_focus,
-                border_color_hover = expo_style.border_hover,
-                tile_rounding = expo_style.tile_rounding,
-                workspace_method = "first 1",
-                label_enable = 0,
-                show_workspace_numbers = 0,
-                keynav_enable = 1,
-            },
-        },
-    })
+    -- Claves base: las entienden tanto el plugin stock (laptop) como el parcheado.
+    local expo_cfg = {
+        columns = 3,
+        rows = 3,
+        dynamic_grid = 0,
+        skip_empty = 0,
+        max_workspace = 9,
+        gaps_in = expo_style.gaps_in,
+        gaps_out = expo_style.gaps_out,
+        bg_col = expo_style.bg_col,
+        border_width = expo_style.border_width,
+        border_color_current = expo_style.border_current,
+        border_color_focus = expo_style.border_focus,
+        border_color_hover = expo_style.border_hover,
+        tile_rounding = expo_style.tile_rounding,
+        workspace_method = "first 1",
+        label_enable = 0,
+        show_workspace_numbers = 0,
+        keynav_enable = 1,
+    }
+    -- Claves del parche local (3D/fisheye/glass/reverse_rows). Solo desktop: el
+    -- plugin stock no las reconoce.
+    if EXPO_3D then
+        expo_cfg.reverse_rows = 1
+        expo_cfg.background_image = expo_style.background_image
+        expo_cfg.background_dim = expo_style.background_dim
+        expo_cfg.threed_enable = expo_style.threed_enable
+        expo_cfg.threed_tilt = expo_style.threed_tilt
+        expo_cfg.threed_yaw = expo_style.threed_yaw
+        expo_cfg.threed_distance = expo_style.threed_distance
+        expo_cfg.threed_radius = expo_style.threed_radius
+        expo_cfg.threed_flip_v = expo_style.threed_flip_v
+        expo_cfg.threed_fisheye = expo_style.threed_fisheye
+        expo_cfg.threed_fisheye_pow = expo_style.threed_fisheye_pow
+        expo_cfg.glass_glow_enable = expo_style.glass_glow_enable
+        expo_cfg.glass_glow = expo_style.glass_glow
+        expo_cfg.hover_scale = expo_style.hover_scale
+        expo_cfg.slide_enable = expo_style.slide_enable
+        expo_cfg.slide_amount = expo_style.slide_amount
+    end
+    hl.config({ plugin = { hyprexpo = expo_cfg } })
 end
 
 -- expo_focus / expo_ui_toggle se definen mas abajo (seccion fly-through).
@@ -477,14 +571,26 @@ if hl.plugin.hyprexpo ~= nil then
         -- dos veces para cerrar la grilla.
         hl.bind(mainMod .. " + Y", function() expo_ui_toggle() end)
         -- Replica de los binds globales SUPER+<ws>: con la grilla abierta,
-        -- SUPER+<n> salta al desktop n (fly-through).
-        local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
-        for i = 1, 10 do
-            hl.bind(mainMod .. " + " .. ws_keys[i], function() expo_focus(i) end)
+        -- SUPER+<n> salta al desktop n (fly-through). Solo desktop: en laptop el
+        -- plugin stock no tiene peek/retarget y la navegacion queda con flechas
+        -- y Enter (keynav nativo).
+        if EXPO_3D then
+            local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
+            for i = 1, 10 do
+                hl.bind(mainMod .. " + " .. ws_keys[i], function() expo_focus(i) end)
+                hl.bind(ws_keys[i], function() expo_focus(i) end)
+                hl.bind(string.lower(ws_keys[i]), function() expo_focus(i) end)
+            end
         end
         hl.bind("catchall", function() hl.dispatch(hl.dsp.submap("reset")) end)
     end)
 end
+
+-- Deja el leaf workspaces en horizontal (definida abajo, junto a set_ws_style).
+-- El fly-through y el long-press la usan antes de su definicion.
+local reset_ws_style
+-- Estado del fly-through (definido abajo); el long-press lo usa antes de su def.
+local expo_fly
 
 -- ========================
 -- EXPO: LONG-PRESS SUPER
@@ -521,6 +627,7 @@ local function expo_hold_close()
     expo_hold_cancel_timer()
     if expo_hold.open then
         expo_hold.open = false
+        if expo_fly then expo_fly.deliberate = false end
         if hl.plugin.hyprexpo ~= nil then
             hl.plugin.hyprexpo.expo("cancel")
         end
@@ -535,7 +642,10 @@ local function expo_hold_arm()
     expo_hold.timer = hl.timer(function()
         expo_hold.timer = nil
         if expo_hold.super_down and not expo_hold.suppressed and not expo_hold.open then
+            reset_ws_style()
             expo_hold.open = true
+            -- Long-press: grilla deliberada -> el commit espera al release.
+            if expo_fly then expo_fly.deliberate = true end
             hl.plugin.hyprexpo.expo("on")
         end
     end, { timeout = EXPO_HOLD_MS, type = "oneshot" })
@@ -573,8 +683,9 @@ if hl.plugin.hyprexpo ~= nil then
     -- submap sale de "hyprexpo": sincronizamos el estado para no cancelar de mas
     -- al soltar SUPER.
     hl.on("keybinds.submap", function(name)
-        if name ~= "hyprexpo" and expo_hold.open then
-            expo_hold.open = false
+        if name ~= "hyprexpo" then
+            if expo_hold.open then expo_hold.open = false end
+            if expo_fly and expo_fly.deliberate then expo_fly.deliberate = false end
         end
     end)
 end
@@ -582,7 +693,11 @@ end
 -- ========================
 -- WINDOW RULES
 -- ========================
+-- Tiled no enfocadas: mas transparencia. Especificas despues (ganan), flotantes al final (opacas).
+hl.window_rule({ match = { class = ".*" }, opacity = "0.95 0.75" })
 hl.window_rule({ match = { class = "kitty" }, opacity = "0.90" })
+hl.window_rule({ match = { class = "brave-browser" }, opacity = "0.88 0.82" })
+hl.window_rule({ match = { float = true }, opacity = "1.0 1.0" })
 hl.window_rule({ match = { class = "com.stremio.Stremio" }, idle_inhibit = "always" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, workspace = "10" })
 hl.window_rule({ match = { class = "com.moonlight_stream.Moonlight" }, fullscreen = 1 })
@@ -639,6 +754,38 @@ local function focus_under_cursor()
         hl.dispatch(hl.dsp.focus({ window = "address:" .. best.address }))
     end
 end
+
+-- ========================
+-- FOCO POR WORKSPACE (memoria gana)
+-- follow_mouse sigue activo para el dia a dia, pero al cambiar de workspace
+-- se restaura la ultima ventana usada en ese ws (mayor especificidad).
+-- ========================
+local ws_last_win = {}
+
+hl.on("window.active", function()
+    local w = hl.get_active_window()
+    local ws = hl.get_active_workspace()
+    if w and w.address and ws and ws.id then
+        ws_last_win[ws.id] = w.address
+    end
+end)
+
+hl.on("workspace.active", function()
+    local ws = hl.get_active_workspace()
+    if not ws or not ws.id then return end
+    local addr = ws_last_win[ws.id]
+    if not addr then return end
+    local act = hl.get_active_window()
+    if act and act.address == addr then return end
+    -- Verificar que la ventana siga viva en ese ws antes de enfocar.
+    for _, w in ipairs(hl.get_windows({ mapped = true })) do
+        if w.address == addr and w.workspace and w.workspace.id == ws.id then
+            hl.dispatch(hl.dsp.focus({ window = "address:" .. addr }))
+            return
+        end
+    end
+    ws_last_win[ws.id] = nil
+end)
 
 local function count_floats_on_ws(ws_id)
     local n = 0
@@ -837,9 +984,10 @@ hl.bind(mainMod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative = 
 -- Key-to-workspace mapping (DVORAK-PROG layout)
 local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
 
--- Fly-through: SUPER+# abre la grilla y hace zoom al desktop #, para que el
--- cambio de desktop se sienta tridimensional (morph abrir grilla -> entrar al tile).
--- Solo para tiles visibles (grilla 3x3 = 1..9); ws 10 cae a focus normal.
+-- Fly-through (DENTRO de la grilla): con la grilla ABIERTA (SUPER+Y o
+-- long-press SUPER), SUPER+# mueve el foco al tile # y hace zoom al desktop.
+-- Fuera de la grilla, SUPER+# usa ws_travel (deslizamiento continuo, seccion
+-- WORKSPACE TRAVEL), no esto. Solo tiles visibles (grilla 3x3 = 1..9).
 -- Estado del fly-through. Guardamos aca las "posiciones": si la grilla esta
 -- abierta (open), que tile tiene el foco (sel, indice de grilla 1..9 numpad) y
 -- cual es el ultimo destino pedido (want). Mientras encadenas SUPER+# mantenemos
@@ -847,27 +995,34 @@ local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
 -- es instantaneo y no se corta ninguna animacion.
 --
 -- Modos (EXPO_MODE):
---   "always3d" (default) SIEMPRE morpha 3D: cada press abre la grilla y hace zoom
+--   "always3d" SIEMPRE morpha 3D: cada press abre la grilla y hace zoom
 --              al tile. Si encadenas rapido, cada press espera a que termine el
 --              morph anterior y reabre (cola) -> todo 3D, nunca un corte directo.
 --   "hybrid"   como always3d, pero si encadenas durante el cierre cambia de
 --              desktop al toque (corta el morph, maxima respuesta).
---   "release"  el commit sucede al SOLTAR SUPER: encadenas en 3D sin cortar y al
---              soltar cae al ultimo tile. EXPO_IDLE_MS es red de seguridad por si
---              se pierde el evento de release.
-local EXPO_MODE        = "always3d"
+--   "release" (ACTIVO) el commit sucede al SOLTAR SUPER en las aperturas
+--              DELIBERADAS (SUPER+Y / long-press / encadenar): mantienes SUPER,
+--              la grilla queda abierta y cada SUPER+# re-apunta al instante;
+--              al soltar cae al ultimo tile con un solo morph. Un SUPER+# DIRECTO
+--              (grilla cerrada) aterriza rapido a EXPO_FLY_MS aunque sostengas SUPER.
+--              EXPO_IDLE_MS es red de seguridad por si se pierde el release.
+local EXPO_MODE        = "release"
 local EXPO_POLL_MS     = 25
-local EXPO_FLY_MS      = 90  -- hybrid: grilla abierta antes de confirmar (da el 3D)
-local EXPO_IDLE_MS     = 700 -- release: red de seguridad si se pierde el release
-local EXPO_CLOSE_TICKS = 34  -- ~850ms: morph de cierre (windowsMove=8) a esperar antes de reabrir
-local expo_fly = {
-    open    = false, -- grilla abierta y navegable por nosotros
-    sel     = nil,   -- tile con el foco actual (indice de grilla 1..9, numpad)
-    want    = nil,   -- ultimo desktop pedido
-    pending = false, -- hay un want esperando a que termine el cierre anterior
-    busy    = 0,     -- ticks restantes del morph de cierre
-    poll    = nil,   -- timer de poll (solo corre si busy>0 o pending)
-    commit  = nil,   -- oneshot de confirmacion por inactividad
+local EXPO_FLY_MS      = 90  -- grilla abierta antes de confirmar (da el 3D)
+local EXPO_PEEK_ZOOM   = 2.65 -- zoom-out sutil: 1.0=grilla completa, 3.0=un tile ocupa todo (2.65 ~ deja ver bordes vecinos)
+local EXPO_IDLE_MS     = 1200 -- release: red de seguridad si se pierde el release (alto para no aterrizar mientras sostienes SUPER)
+local EXPO_CLOSE_TICKS = 17  -- ~425ms: morph de cierre (windowsMove=4) a esperar antes de reabrir
+expo_fly = {
+    open       = false, -- grilla abierta y navegable por nosotros
+    sel        = nil,   -- tile con el foco actual (indice de grilla 1..9, numpad)
+    want       = nil,   -- ultimo desktop pedido
+    pending    = false, -- hay un want esperando a que termine el cierre anterior
+    busy       = 0,     -- ticks restantes del morph de cierre
+    poll       = nil,   -- timer de poll (solo corre si busy>0 o pending)
+    commit     = nil,   -- oneshot de confirmacion por inactividad
+    deliberate = false, -- grilla abierta a proposito (SUPER+Y / long-press / encadenado)
+                        -- -> el commit espera al release; si es false (SUPER+# directo)
+                        -- -> aterriza rapido aunque sostengas SUPER.
 }
 
 -- Indice del desktop n dentro de la grilla visible (top-left = 0).
@@ -907,15 +1062,19 @@ fly_commit_now = function()
     else
         hl.plugin.hyprexpo.kb_confirm()
     end
-    expo_fly.open = false
-    expo_fly.sel  = nil
-    expo_fly.busy = EXPO_CLOSE_TICKS
+    expo_fly.open       = false
+    expo_fly.sel        = nil
+    expo_fly.busy       = EXPO_CLOSE_TICKS
+    expo_fly.deliberate = false
     ensure_poll()
 end
 
 fly_schedule_commit = function()
     if expo_fly.commit then expo_fly.commit:set_enabled(false) end
-    local delay = (EXPO_MODE == "release") and EXPO_IDLE_MS or EXPO_FLY_MS
+    -- Aterriza rapido SIEMPRE (aunque sostengas SUPER): el zoom-out del peek no
+    -- debe quedarse pegado mientras cambias de desktop. Encadenar re-apunta el
+    -- morph en vuelo (ver expo_focus), asi que no hace falta esperar al release.
+    local delay = EXPO_FLY_MS
     expo_fly.commit = hl.timer(function()
         expo_fly.commit = nil
         fly_commit_now()
@@ -925,9 +1084,8 @@ end
 -- Modo "release": al soltar SUPER confirmamos de inmediato. En "hybrid" el commit
 -- ya lo dispara EXPO_FLY_MS, asi que soltar SUPER no hace nada.
 expo_fly_super_up = function()
-    if EXPO_MODE == "release" then
-        fly_commit_now()
-    end
+    -- Al soltar SUPER confirmamos lo que este pendiente (no-op si ya aterrizo).
+    fly_commit_now()
 end
 
 ensure_poll = function()
@@ -955,7 +1113,11 @@ end
 -- Abre la grilla y navega al destino n. El foco arranca en el desktop actual.
 fly_open_and_go = function(n)
     local cur = hl.get_active_workspace()
-    hl.plugin.hyprexpo.expo("on")
+    if hl.plugin.hyprexpo.peek then
+        hl.plugin.hyprexpo.peek(EXPO_PEEK_ZOOM)
+    else
+        hl.plugin.hyprexpo.expo("on")
+    end
     expo_fly.open = true
     expo_fly.sel  = cur and ws_grid_index(cur.id) or nil
     expo_fly.want = n
@@ -966,8 +1128,9 @@ end
 -- Cancela el fly-through y deja la grilla cerrandose (si estaba abierta).
 fly_abort = function()
     if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
-    expo_fly.pending = false
-    expo_fly.want    = nil
+    expo_fly.pending    = false
+    expo_fly.want       = nil
+    expo_fly.deliberate = false
     if expo_fly.open then
         hl.plugin.hyprexpo.expo("cancel")
         expo_fly.open = false
@@ -981,6 +1144,18 @@ end
 -- si la cerras a mano en medio de un viaje) y luego togglea la grilla. No usamos
 -- fly_abort() porque dispararia "cancel" y el "toggle" la reabriria.
 expo_ui_toggle = function()
+    reset_ws_style()
+    -- Pin del long-press: si la grilla la abrio mantener-SUPER y se pulsa
+    -- SUPER+Y, transferir propiedad (no togglear, no cerrar al soltar).
+    if expo_hold.open then
+        expo_hold.open = false
+        expo_hold.suppressed = true
+        expo_hold_cancel_timer()
+        expo_fly.deliberate = true
+        return
+    end
+    -- SUPER+Y es una apertura deliberada de la grilla -> commit al release.
+    expo_fly.deliberate = true
     local was_open = expo_fly.open
     if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
     expo_fly.open    = false
@@ -994,6 +1169,11 @@ expo_ui_toggle = function()
     end
 end
 
+-- Expuesto a la barra de Omarchy (widget eztvn.grid): el boton llama
+-- `hyprctl eval 'expo_ui_toggle()'`. Como expo_ui_toggle es un local del archivo,
+-- publicamos una copia global para que el chunk de eval la alcance.
+_G.expo_ui_toggle = expo_ui_toggle
+
 -- Memoria de "desktop anterior" propia. Hyprland NO expone el previous en Lua y
 -- el "previous" nativo no sirve: el fly-through hace un cambio interno (grilla ->
 -- tile) que dejaria el destino como anterior, y changeWorkspace() fija el activo
@@ -1001,11 +1181,17 @@ end
 -- el ultimo desktop DISTINTO al actual.
 local cur_ws_id  = nil
 local last_ws_id = nil
+-- Mientras un viaje continuo (ws_travel) pasa por desktops intermedios, el evento
+-- workspace.active dispara por CADA tramo. Si dejaramos que note_ws corra, el
+-- "desktop anterior" quedaria apuntando al ULTIMO intermedio y volver con la misma
+-- tecla caeria en un desktop de paso (se perdia el camino). El viaje fija el
+-- anterior en su ORIGEN (ver travel_stop).
+local ws_travel_guard = false
 local function note_ws()
     local w = hl.get_active_workspace()
     if not w then return end
     if w.id ~= cur_ws_id then
-        if cur_ws_id ~= nil then
+        if cur_ws_id ~= nil and not ws_travel_guard then
             last_ws_id = cur_ws_id
         end
         cur_ws_id = w.id
@@ -1021,8 +1207,21 @@ local function expo_fly_back()
 end
 
 expo_focus = function(i)
+    -- El zoom/peek convive con el leaf workspaces: lo dejamos SIEMPRE en horizontal
+    -- para que el cambio de desktop interno del plugin (al cerrar) no herede un
+    -- slidevert pegado de un viaje vertical anterior (se veia slide vertical
+    -- donde debia ir el zoom horizontal).
+    reset_ws_style()
     local has_expo = hl.plugin.hyprexpo ~= nil
     local cur      = hl.get_active_workspace()
+
+    -- Laptop (plugin stock, sin parche): sin fly-through ni peek. Salto directo
+    -- al desktop destino (o al anterior si pides el actual).
+    if not EXPO_3D then
+        local same = cur and cur.id == i
+        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
+        return
+    end
 
     if not has_expo or i > 9 then
         fly_abort()
@@ -1039,39 +1238,230 @@ expo_focus = function(i)
         return
     end
 
+    -- Cierre en curso (morph en vuelo). Va ANTES del chequeo "mismo desktop"
+    -- porque changeWorkspace() del plugin es SINCRONO: al confirmar, el desktop
+    -- activo ya cambio aunque el morph siga volando. Sin esto, pulsar el numero
+    -- del desktop al que estamos yendo caeria en expo_fly_back (salto erratico).
+    --   always3d -> retarget instantaneo: el plugin re-apunta la animacion al
+    --               nuevo tile en caliente (kb_selectn sin guard de closing).
+    --   hybrid   -> cambio directo (corta el morph: maxima respuesta).
+    --   release  -> encola y reabre cuando termina.
+    if expo_fly.busy > 0 then
+        if cur and cur.id == i then
+            return -- ya vamos a ese desktop; dejamos terminar el morph
+        end
+        -- El morph de cierre anterior esta en vuelo: lo REAPUNTAMOS al nuevo tile
+        -- (retarget instantaneo del plugin) en vez de encolar una reapertura. Asi
+        -- cambiar de desktop en rapido redirige el vuelo sin reabrir el zoom.
+        -- Si el cierre ya termino (busy desfasado), peek reabre la grilla y el
+        -- commit (EXPO_FLY_MS) confirma el destino.
+        expo_fly.want = i
+        expo_fly.open = true
+        if hl.plugin.hyprexpo.peek then hl.plugin.hyprexpo.peek(EXPO_PEEK_ZOOM) end
+        hl.plugin.hyprexpo.kb_selectn(i)
+        expo_fly.busy = EXPO_CLOSE_TICKS
+        fly_schedule_commit()
+        ensure_poll()
+        return
+    end
+
     -- Grilla cerrada, mismo desktop: ir al anterior (si hay historial).
     if not expo_fly.pending and cur and cur.id == i then
         expo_fly_back()
         return
     end
 
-    -- Cierre en curso (morph en vuelo):
-    --   always3d -> retarget instantaneo: el plugin re-apunta la animacion al
-    --               nuevo tile en caliente (kb_selectn sin guard de closing).
-    --   hybrid   -> cambio directo (corta el morph: maxima respuesta).
-    --   release  -> encola y reabre cuando termina.
-    if expo_fly.busy > 0 then
-        if EXPO_MODE == "always3d" then
-            expo_fly.want = i
-            hl.plugin.hyprexpo.kb_selectn(i)
-            expo_fly.busy = EXPO_CLOSE_TICKS
-            ensure_poll()
-        elseif EXPO_MODE == "hybrid" then
-            local same = cur and cur.id == i
-            hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
-        else
-            expo_fly.want    = i
-            expo_fly.pending = true
-            ensure_poll()
-        end
-        return
-    end
-
     fly_open_and_go(i)
 end
 
+-- ========================
+-- WORKSPACE TRAVEL (continuo, sin saltos)
+-- ========================
+-- SUPER+# NO abre la grilla en los movimientos de un solo eje: cambia de desktop
+-- con un deslizamiento nativo (slidefade) para que las ventanas se "empujen" y se
+-- sienta como un mismo espacio continuo. Si el destino esta lejos en el mismo eje,
+-- se pasa por los desktops intermedios del grid 3x3 para que se vean las pantallas
+-- de en medio. Los movimientos DIAGONALES (cambian de fila Y columna) si abren el
+-- fly-through/overview del hyprexpo (el morfo de zoom "3D"), igual que SUPER+Y /
+-- long-press SUPER.
+local TRAVEL_SPEED = 4 -- duracion horizontal en decisegundos (4 = 400ms); el vertical se ajusta por aspecto
+local TRAVEL_FADE_PCT = 100 -- recorrido del slidefade (100 = slide completo + fade)
+
+local function ws_id_for_index(idx)
+    idx = ((idx % 9) + 9) % 9
+    local col             = idx % 3
+    local row_from_top    = math.floor(idx / 3)
+    local row_from_bottom = 2 - row_from_top
+    return row_from_bottom * 3 + col + 1
+end
+
+-- Cambia el estilo del leaf workspaces segun la direccion del tramo.
+-- Horizontal: "slide" (la direccion auto por id ya coincide con el grid).
+-- Vertical: "slidevert" + token explicito, porque el id del grid crece hacia
+-- ARRIBA (fila superior = 7,8,9), al reves que el eje Y de Hyprland. Sin el
+-- token, subir se ve como bajar. `up` = el destino esta arriba del actual:
+--   up   -> new entra desde arriba (left=false) -> "slidevert top"
+--   down -> new entra desde abajo (left=true)  -> "slidevert bottom"
+-- `linear` = tramo intermedio de un viaje largo: sin ease-out, para que la
+-- velocidad sea constante y el intermedio se cruce "de largo" sin frenar.
+local function set_ws_style(vertical, up, linear)
+    -- slide + fade: el slide solo "empujaba" (se sentia brusco). slidefade desvanece
+    -- el desktop saliente mientras entra el nuevo. TRAVEL_FADE_PCT controla cuanto
+    -- se desliza (100 = slide completo con fade; menos = mas crossfade).
+    local pct   = TRAVEL_FADE_PCT .. "%"
+    local style = "slidefade " .. pct
+    local speed = TRAVEL_SPEED
+    if vertical then
+        style = up and ("slidefadevert top " .. pct) or ("slidefadevert bottom " .. pct)
+        -- Igualar la velocidad percibida (px/ms): el recorrido vertical es mas
+        -- corto (alto < ancho), asi que dura menos para sentirse igual que el
+        -- horizontal. speed = TRAVEL_SPEED * alto/ancho  (ej. 4*1440/2560 ~ 2.25)
+        local mon = hl.get_active_monitor()
+        if mon and mon.width and mon.width > 0 and mon.height then
+            speed = TRAVEL_SPEED * (mon.height / mon.width)
+        end
+    end
+    hl.animation({
+        leaf    = "workspaces",
+        enabled = true,
+        speed   = speed,
+        bezier  = linear and "linear" or "expoSmooth",
+        style   = style,
+    })
+    return math.floor(speed * 100) -- duracion del tramo en ms
+end
+
+-- Vuelve el leaf workspaces al estilo horizontal por defecto (el de la config).
+-- Clave: set_ws_style muta un leaf GLOBAL que persiste. Si un tramo vertical lo
+-- deja en slidevert, el SIGUIENTE cambio que no fije estilo (el close interno del
+-- hyprexpo, grid-move, un click en la barra) hereda ese slidevert y se ve un slide
+-- vertical donde deberia ir horizontal/zoom. Por eso lo restauramos siempre.
+reset_ws_style = function()
+    set_ws_style(false, false, false)
+end
+
+-- Revert diferido: deja correr la animacion del tramo (ya creada con su estilo) y
+-- despues restaura el horizontal. Un solo timer; cada llamada reemplaza al previo.
+local ws_style_timer = nil
+local function ws_style_revert_after(ms)
+    if ws_style_timer then ws_style_timer:set_enabled(false) end
+    ws_style_timer = hl.timer(function()
+        ws_style_timer = nil
+        reset_ws_style()
+    end, { timeout = ms, type = "oneshot" })
+end
+
+local travel = { steps = {}, timer = nil, linear = false, origin = nil }
+
+-- Termina/reinicia un viaje. Fija el "desktop anterior" en el ORIGEN del viaje
+-- (donde arranco), no en el ultimo intermedio: asi volver con la misma tecla
+-- retrace el camino en vez de saltar a un desktop de paso.
+local function travel_stop()
+    if travel.timer then
+        travel.timer:set_enabled(false)
+        travel.timer = nil
+    end
+    travel.steps = {}
+    if travel.origin ~= nil then
+        last_ws_id = travel.origin
+        travel.origin = nil
+    end
+    ws_travel_guard = false
+end
+
+local function travel_step()
+    local nxt = table.remove(travel.steps, 1)
+    if not nxt then
+        travel_stop()
+        return
+    end
+    local isLast = (#travel.steps == 0)
+    local cur    = hl.get_active_workspace()
+    local up     = (cur == nil) or (nxt.id > cur.id)
+    -- intermedios: velocidad constante (linear); ultimo: ease-out para aterrizar
+    local dur    = set_ws_style(nxt.vertical, up, travel.linear and not isLast)
+    hl.dispatch(hl.dsp.focus({ workspace = tostring(nxt.id) }))
+    -- La animacion ya quedo creada con su estilo; restaura el horizontal cuando el
+    -- tramo termine (cubre tambien el ultimo). El siguiente tramo reemplaza el timer.
+    ws_style_revert_after(dur + 20)
+    if isLast then
+        travel_stop()
+        return
+    end
+    -- Re-arma el siguiente tramo a mitad de vuelo del actual, con el intervalo
+    -- ajustado a la duracion de ESTE eje (el vertical es mas corto).
+    travel.timer = hl.timer(function()
+        travel.timer = nil
+        travel_step()
+    end, { timeout = math.max(80, math.floor(dur * 0.5)), type = "oneshot" })
+end
+
+local function ws_travel(i)
+    local cur = hl.get_active_workspace()
+
+    -- Volver al desktop anterior: pedir el MISMO desktop en el que ya estas elige
+    -- el ultimo desktop distinto (last_ws_id) como destino real. Lo tratamos como
+    -- un viaje normal para que retrace el camino con la orientacion correcta (antes
+    -- era un dispatch pelado: perdia el camino y, si venia de un tramo vertical,
+    -- heredaba el slide horizontal -> direccion equivocada).
+    if cur and i >= 1 and i <= 9 and cur.id == i and last_ws_id and last_ws_id ~= i then
+        i = last_ws_id
+    end
+
+    if not cur or i > 9 or i < 1 then
+        travel_stop()
+        local same = cur and cur.id == i
+        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
+        return
+    end
+    if cur.id == i then
+        travel_stop()
+        return
+    end
+
+    -- Reconstruye el camino desde el desktop REAL actual (soporta encadenar).
+    -- Si ya hay un viaje en curso, conservamos su ORIGEN para que "volver" apunte
+    -- al primer desktop del viaje y no a un intermedio.
+    local was_traveling = (travel.timer ~= nil) or (#travel.steps > 0)
+    local keep_origin   = travel.origin
+    travel_stop()
+    local ci     = ws_grid_index(cur.id)
+    local ti     = ws_grid_index(i)
+    local c, r   = ci % 3, math.floor(ci / 3)
+    local tc, tr = ti % 3, math.floor(ti / 3)
+
+    -- Movimiento DIAGONAL: no es un tramo recto, asi que en vez del slide cae al
+    -- fly-through/overview del hyprexpo (el morfo de zoom "3D" entre tiles no
+    -- contiguos). Los movimientos de un solo eje (laterales) siguen con slidefade.
+    if tc ~= c and tr ~= r then
+        travel_stop() -- corta cualquier viaje en curso para que no compita con el morfo
+        expo_focus(i)
+        return
+    end
+
+    local steps  = {}
+    while c ~= tc do
+        c = c + (tc > c and 1 or -1)
+        steps[#steps + 1] = { id = ws_id_for_index(r * 3 + c), vertical = false }
+    end
+    while r ~= tr do
+        r = r + (tr > r and 1 or -1)
+        steps[#steps + 1] = { id = ws_id_for_index(r * 3 + c), vertical = true }
+    end
+    if #steps == 0 then return end
+
+    -- Viaje por slide nativo (sin hyprexpo/overview) para los tramos de un solo eje.
+    -- Las diagonales ya retornaron arriba (expo_focus). Aqui solo quedan rectos:
+    -- adyacente = 1 tramo; lejano = intermedios con velocidad constante.
+    travel.steps  = steps
+    travel.linear = #steps > 1 -- viaje largo: intermedios a velocidad constante
+    travel.origin = (was_traveling and keep_origin) or cur.id
+    ws_travel_guard = true
+    travel_step() -- primer tramo inmediato (responsividad); re-arma los siguientes
+end
+
 for i = 1, 10 do
-    hl.bind(mainMod .. " + " .. ws_keys[i], function() expo_focus(i) end)
+    hl.bind(mainMod .. " + " .. ws_keys[i], function() ws_travel(i) end)
     hl.bind(mainMod .. " + SHIFT + " .. ws_keys[i], hl.dsp.window.move({ workspace = tostring(i) }))
 end
 
@@ -1089,7 +1479,21 @@ local function grid_travel(dir)
     if not cur or cur.id < 1 or cur.id > 9 then return end
     local target = grid_dir[dir] and grid_dir[dir](cur.id)
     if target then
+        -- grid-move no fija estilo: lo hereda del leaf. Lo ponemos segun la
+        -- direccion del vecino (arriba/abajo = slidevert) y lo restauramos despues
+        -- para no dejar el slidevert pegado al siguiente cambio. Cortamos cualquier
+        -- fly-through/viaje en curso para que no compitan.
+        fly_abort()
+        travel_stop()
+        if dir == "up" then
+            set_ws_style(true, true, false)
+        elseif dir == "down" then
+            set_ws_style(true, false, false)
+        else
+            set_ws_style(false, false, false)
+        end
         hl.dispatch(hl.dsp.exec_cmd("~/.local/bin/grid-move " .. target))
+        ws_style_revert_after(800)
     end
 end
 hl.bind(mainMod .. " + ALT + left",  function() grid_travel("left")  end)

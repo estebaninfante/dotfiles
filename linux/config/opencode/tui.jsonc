@@ -1,0 +1,15 @@
+{
+  "plugin": [
+    "./herdr-tui-session.js",
+    [
+      "./state-theme.js",
+      {
+        "themes": {
+          "thinking": "tokyonight",
+          "permission": "gruvbox",
+          "error": "matrix"
+        }
+      }
+    ]
+  ]
+}

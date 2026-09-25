@@ -1,0 +1,1674 @@
+diff --git c/Dispatchers.cpp i/Dispatchers.cpp
+index f8c4571..8398868 100644
+--- c/Dispatchers.cpp
++++ i/Dispatchers.cpp
+@@ -424,6 +424,17 @@ static int luaExpo(lua_State* L) {
+     return luaDispatchResult(L, "hyprexpo.expo", onExpoDispatcher(luaStringArg(L, 1, "hyprexpo.expo", "toggle")));
+ }
+ 
++// Open the overview in "peek" mode: scale >= 1.0 makes the grid open slightly
++// larger than the monitor (subtle zoom-out of the current desktop). Used by the
++// fly-through so ~near~ workspace changes get a slide + a touch of zoom.
++static int luaPeek(lua_State* L) {
++    const float scale = (float)luaL_optnumber(L, 1, 1.0);
++    g_peekScale       = scale;
++    if (!overviewOpen())
++        return luaDispatchResult(L, "hyprexpo.peek", openOverviews(false));
++    return luaDispatchResult(L, "hyprexpo.peek", {});
++}
++
+ static int luaKbFocus(lua_State* L) {
+     return luaDispatchResult(L, "hyprexpo.kb_focus", onKbFocusDispatcher(luaStringArg(L, 1, "hyprexpo.kb_focus")));
+ }
+@@ -755,7 +766,29 @@ bool isRenderingOverview() {
+     return renderingOverview;
+ }
+ 
++static SDispatchResult onPeekDispatcher(std::string arg) {
++    arg = trimString(arg);
++
++    float scale = 1.0F;
++    if (!arg.empty()) {
++        try {
++            size_t used = 0;
++            scale       = std::stof(arg, &used);
++            if (used != arg.size())
++                return {.success = false, .error = "invalid scale"};
++        } catch (...) { return {.success = false, .error = "invalid scale"}; }
++    }
++
++    g_peekScale = scale;
++
++    if (!overviewOpen())
++        return openOverviews(false);
++
++    return {};
++}
++
+ void registerHyprexpoDispatchers() {
++    HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:peek", onPeekDispatcher);
+     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:expo", onExpoDispatcher);
+     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:kb_focus", onKbFocusDispatcher);
+     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:kb_confirm", onKbConfirmDispatcher);
+@@ -768,6 +801,7 @@ void registerHyprexpoDispatchers() {
+     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:scrolling_mutation_test", onScrollingMutationTestDispatcher);
+ 
+     HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "expo", luaExpo);
++    HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "peek", luaPeek);
+     HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_focus", luaKbFocus);
+     HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_confirm", luaKbConfirm);
+     HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_selectn", luaKbSelectNumber);
+diff --git c/HyprexpoConfig.hpp i/HyprexpoConfig.hpp
+index 5e59ba2..abf6fea 100644
+--- c/HyprexpoConfig.hpp
++++ i/HyprexpoConfig.hpp
+@@ -18,6 +18,12 @@ inline constexpr int         LEGACY_ENABLE_KEYBOARD_NAV_DEFAULT  = 1;
+ inline constexpr int         LEGACY_ENABLE_DRAG_MOVE_DEFAULT     = 0;
+ inline constexpr int         LEGACY_ANIMATE_ENTRY_DEFAULT        = 0;
+ inline constexpr int         WALLPAPER_BG_DEFAULT                = 0;
++inline constexpr int         TILE_TRANSPARENT_DEFAULT            = 1;
++inline constexpr float       THREED_FISHEYE_DEFAULT              = 0.0f;
++inline constexpr float       THREED_FISHEYE_POW_DEFAULT          = 2.0f;
++inline constexpr int         GLASS_GLOW_ENABLE_DEFAULT          = 0;
++inline constexpr float       GLASS_GLOW_DEFAULT                 = 0.6f;
++inline constexpr float       HOVER_SCALE_DEFAULT                = 1.0f;
+ inline constexpr std::size_t DYNAMIC_GRID_MAX_TILES              = 64;
+ 
+ inline constexpr int         COLUMNS_DEFAULT                 = 3;
+diff --git c/Makefile i/Makefile
+index 14b2c3f..79efb6b 100644
+--- c/Makefile
++++ i/Makefile
+@@ -20,10 +20,10 @@ LUA_PKG_CONFIG ?= $(shell if pkg-config --exists lua5.4; then printf 'lua5.4'; e
+ PKG_CONFIG_DEPS = pixman-1 libdrm hyprland pangocairo libinput libudev wayland-server xkbcommon $(LUA_PKG_CONFIG)
+ LINK_DEPS = pangocairo xkbcommon $(LUA_PKG_CONFIG)
+ INCLUDES = $(shell pkg-config --cflags $(PKG_CONFIG_DEPS))
+-LIBS = $(shell pkg-config --libs $(LINK_DEPS))
++LIBS = $(shell pkg-config --libs $(LINK_DEPS)) -lGLESv2 -lEGL
+ 
+-SRC = main.cpp Dispatchers.cpp PluginConfig.cpp IOverviewSession.cpp Overview.cpp OverviewInteraction.cpp OverviewRender.cpp OverviewCapture.cpp ScrollingOverview.cpp ScrollingInputState.cpp ExpoGesture.cpp OverviewPassElement.cpp HyprexpoLogic.cpp ScrollingOverviewLogic.cpp ScrollingMutationTransaction.cpp ScrollingLayoutAdapter.cpp ScrollingDiagnostics.cpp
+-HEADERS = globals.hpp Dispatchers.hpp PluginConfig.hpp HyprlandConfigCompat.hpp IOverviewSession.hpp Overview.hpp OverviewInternal.hpp OverviewCapture.hpp ScrollingOverview.hpp ScrollingInputState.hpp ScrollingRequestId.hpp ExpoGesture.hpp OverviewPassElement.hpp HyprexpoConfig.hpp HyprexpoLogic.hpp ScrollingOverviewLogic.hpp ScrollingMutationTransaction.hpp ScrollingLayoutAdapter.hpp ScrollingDiagnostics.hpp
++SRC = main.cpp Dispatchers.cpp PluginConfig.cpp IOverviewSession.cpp Overview.cpp OverviewInteraction.cpp OverviewRender.cpp OverviewCapture.cpp ScrollingOverview.cpp ScrollingInputState.cpp ExpoGesture.cpp OverviewPassElement.cpp HyprexpoLogic.cpp ScrollingOverviewLogic.cpp ScrollingMutationTransaction.cpp ScrollingLayoutAdapter.cpp ScrollingDiagnostics.cpp Overview3D.cpp
++HEADERS = globals.hpp Dispatchers.hpp PluginConfig.hpp HyprlandConfigCompat.hpp IOverviewSession.hpp Overview.hpp OverviewInternal.hpp OverviewCapture.hpp ScrollingOverview.hpp ScrollingInputState.hpp ScrollingRequestId.hpp ExpoGesture.hpp OverviewPassElement.hpp HyprexpoConfig.hpp HyprexpoLogic.hpp ScrollingOverviewLogic.hpp ScrollingMutationTransaction.hpp ScrollingLayoutAdapter.hpp ScrollingDiagnostics.hpp Overview3D.hpp
+ TARGET = hyprexpo.so
+ TEST_TARGET = HyprexpoLogicTests
+ SOURCE_TEST_TARGET = OverviewSourceTests
+diff --git c/Overview.cpp i/Overview.cpp
+index 5581411..00f257a 100644
+--- c/Overview.cpp
++++ i/Overview.cpp
+@@ -365,6 +365,45 @@ SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprCol
+     return tex;
+ }
+ 
++// Loads a user-chosen background image (any format cairo can read) and caches
++// the resulting GL texture per path, so reopening the overview doesn't re-decode.
++SP<Render::ITexture> loadBackgroundImage(const std::string& path) {
++    static std::string          cachedPath;
++    static SP<Render::ITexture> cachedTex;
++    static std::string          failedPath;
++
++    if (path.empty())
++        return nullptr;
++    if (path == cachedPath && cachedTex)
++        return cachedTex;
++    if (path == failedPath)
++        return nullptr; // already reported; don't spam the log every frame
++
++    const auto SURFACE = cairo_image_surface_create_from_png(path.c_str());
++    if (cairo_surface_status(SURFACE) != CAIRO_STATUS_SUCCESS) {
++        Log::logger->log(Log::ERR, "[hyprexpo] could not load background_image: {}", path);
++        cairo_surface_destroy(SURFACE);
++        failedPath = path;
++        cachedPath.clear();
++        cachedTex = nullptr;
++        return nullptr;
++    }
++
++    auto tex = g_pHyprRenderer->createTexture(SURFACE);
++    cairo_surface_destroy(SURFACE);
++
++    if (tex) {
++        tex->setTexParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
++        tex->setTexParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
++        Log::logger->log(Log::WARN, "[hyprexpo] background_image loaded: {} ({}x{})", path, (int)tex->m_size.x, (int)tex->m_size.y);
++    }
++
++    cachedTex  = tex;
++    cachedPath = path;
++    failedPath.clear();
++    return cachedTex;
++}
++
+ static void damageMonitor(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr) {
+     if (auto* const OV = overviewForAnimVar(thisptr))
+         OV->damage();
+@@ -1327,12 +1366,31 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
+     Animation::mgr()->createAnimation(initSize, size, Config::animationTree()->getAnimationPropertyConfig("windowsMove"), AVARDAMAGE_NONE);
+     Animation::mgr()->createAnimation(-(tilePosForID(currentid, initSize, 0.0) * pMonitor->m_scale), pos, Config::animationTree()->getAnimationPropertyConfig("windowsMove"), AVARDAMAGE_NONE);
+ 
++    // 3D tilt unfolds from flat: animate 0 -> configured tilt on open so the
++    // perspective eases in instead of snapping on the first frame.
++    static auto* const* P3DEN_T  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_enable")->getDataStaticPtr();
++    static auto* const* P3TILT_T = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_tilt")->getDataStaticPtr();
++    const float startTilt = **P3DEN_T != 0 ? (float)**P3TILT_T : 0.0f;
++    Animation::mgr()->createAnimation(startTilt, tiltAnim, Config::animationTree()->getAnimationPropertyConfig("windowsMove"), AVARDAMAGE_NONE);
++    tiltAnim->setUpdateCallback(damageMonitor);
++
+     size->setUpdateCallback(damageMonitor);
+     pos->setUpdateCallback(damageMonitor);
+ 
+     if (!swipe) {
+-        *size = pMonitor->m_size;
+-        *pos  = {0, 0};
++        const float peek = g_peekScale;
++        if (peek > 1.0001f) {
++            // Peek mode: open the grid a bit larger than the monitor so the
++            // current desktop appears to pull back slightly (subtle zoom-out),
++            // keeping the current tile centered.
++            const Vector2D peekSize = pMonitor->m_size * peek;
++            *size = peekSize;
++            *pos  = -(tilePosForID(currentid, peekSize, 0.0) * pMonitor->m_scale);
++        } else {
++            *size = pMonitor->m_size;
++            *pos  = {0, 0};
++        }
++        g_peekScale = 1.0f;
+ 
+         size->setCallbackOnEnd([this](auto) { redrawAll(true); });
+     }
+diff --git c/Overview.hpp i/Overview.hpp
+index 5b7d8e4..2259e0d 100644
+--- c/Overview.hpp
++++ i/Overview.hpp
+@@ -112,6 +112,7 @@ class COverview final : public IOverviewSession {
+   private:
+     void       redrawID(int id, bool forcelowres = false);
+     void       redrawAll(bool forcelowres = false);
++    void       applyCloseTarget(int safeID, bool switchToSelection);
+     void       onWorkspaceChange();
+     void       fullRender() override;
+     Hyprexpo::SGridShape currentGridShape() const;
+@@ -173,6 +174,9 @@ class COverview final : public IOverviewSession {
+ 
+     PHLANIMVAR<Vector2D>         size;
+     PHLANIMVAR<Vector2D>         pos;
++    // Animated 3D tilt (degrees). Ramps 0 -> configured tilt as the grid opens
++    // and back to 0 as it closes, so the perspective unfolds instead of snapping.
++    PHLANIMVAR<float>            tiltAnim;
+ 
+     bool                         closing = false;
+     bool                         m_closeCommitted = false;
+diff --git c/Overview3D.cpp i/Overview3D.cpp
+new file mode 100644
+index 0000000..276e506
+--- /dev/null
++++ i/Overview3D.cpp
+@@ -0,0 +1,477 @@
++#include "Overview3D.hpp"
++
++#include <hyprland/src/render/OpenGL.hpp>
++#include <hyprland/src/debug/log/Logger.hpp>
++
++#include <cmath>
++#include <cstdio>
++
++using namespace Hyprutils::Math;
++
++namespace Hyprexpo3D {
++
++    static GLuint g_prog    = 0;
++    static GLuint g_vao     = 0;
++    static GLuint g_vbo     = 0;
++    static GLint  g_uH3     = -1;
++    static GLint  g_uTex    = -1;
++    static GLint  g_uAlpha  = -1;
++    static GLint  g_uRadius = -1;
++    static GLint  g_uRPow   = -1;
++    static GLint  g_uFlipV  = -1;
++    static GLint  g_uMode   = -1;
++    static GLint  g_uColor  = -1;
++    static GLint  g_uThick  = -1;
++    static GLint  g_uFisheye = -1;
++    static GLint  g_uFishPow = -1;
++    static GLint  g_uAspect  = -1;
++    static GLint  g_uGlow    = -1;
++    static GLint  g_uGlowUV  = -1;
++    static GLint  g_uFogNear = -1;
++    static GLint  g_uFogFar  = -1;
++    static GLint  g_uFogStr  = -1;
++    static GLint  g_uScreen  = -1;
++    static GLint  g_uVignette = -1;
++    static int    g_vertCount = 0;
++    static bool   g_ok      = false;
++    static bool   g_inited  = false;
++
++    // Per-frame lens state, applied uniformly to every warped quad (tiles,
++    // borders, fills). k = 0 disables the distortion entirely.
++    static float g_fisheye = 0.f;
++    static float g_fishPow = 2.f;
++    static float g_aspectX = 1.f;
++
++    // Per-frame depth fog (camera-space depth range near..far, strength 0..1).
++    static float g_fogNear = 0.f;
++    static float g_fogFar  = 0.f;
++    static float g_fogStr  = 0.f;
++
++    // Per-frame screen-space vignette (strength 0..1) and the monitor size it
++    // is measured against.
++    static float g_vignette = 0.f;
++    static float g_screenX  = 1.f;
++    static float g_screenY  = 1.f;
++
++    static const char* VERT_SRC = R"#(#version 300 es
++precision highp float;
++uniform mat3  uH3;
++uniform float uFisheye;   // barrel strength (0 = off)
++uniform float uFishPow;   // radial falloff exponent
++uniform float uAspect;    // width/height, keeps the lens circular
++in vec2 pos;
++in vec2 texcoord;
++out vec2 v_texcoord;
++out float v_depth;
++void main() {
++    vec3 q = uH3 * vec3(pos, 1.0);
++    vec2 ndc = q.xy / q.z;
++    // Radial lens distortion in screen space: bends the grid toward/away from
++    // the centre like a fisheye, leaving the (separately drawn) background flat.
++    float r = length(vec2(ndc.x * uAspect, ndc.y));
++    float f = 1.0 + uFisheye * pow(r, uFishPow);
++    ndc *= f;
++    gl_Position = vec4(ndc * q.z, 0.0, q.z);
++    v_texcoord = texcoord;
++    // Homogeneous camera depth (the vertex shader's w): used by the fragment
++    // stage for depth fog. Native Hyprland quads can't do this (they force w=1).
++    v_depth = q.z;
++}
++)#";
++
++    static const char* FRAG_SRC = R"#(#version 300 es
++precision highp float;
++uniform sampler2D uTex;
++uniform float uAlpha;
++uniform float uRadius;
++uniform float uRPow;
++uniform float uFlipV;
++uniform int   uMode;   // 0 = texture, 1 = border ring, 2 = solid fill
++uniform vec4  uColor;  // rgba for border/solid
++uniform float uThick;  // border thickness in unit-square fractions
++uniform float uGlow;   // outer neon bloom strength (0 = off)
++uniform float uGlowUV; // bloom falloff width in unit-square fractions
++uniform float uFogNear;   // camera-space depth where fog starts
++uniform float uFogFar;    // camera-space depth where fog is full
++uniform float uFogStrength; // 0 = no fog
++uniform vec2  uScreen;      // monitor size in px (for the screen-space vignette)
++uniform float uVignette;    // 0 = off; darkens the screen corners
++in vec2 v_texcoord;
++in float v_depth;
++out vec4 fragColor;
++void main() {
++    vec2 uv = v_texcoord;
++
++    float fogMul = 1.0;
++    if (uFogStrength > 0.0) {
++        float fog = clamp((v_depth - uFogNear) / max(1.0, uFogFar - uFogNear), 0.0, 1.0) * uFogStrength;
++        fogMul = 1.0 - fog;
++    }
++    // Screen-space vignette: a pure function of gl_FragCoord, so every quad
++    // (tiles, borders, backdrop) darkens by the same amount and the corners meet
++    // seamlessly. Focuses the eye and adds a lens-like depth falloff.
++    if (uVignette > 0.0) {
++        vec2  vc = gl_FragCoord.xy / max(uScreen, vec2(1.0));
++        vec2  vd = vc * 2.0 - 1.0;
++        float vr = length(vd) * 0.70710678;
++        fogMul *= 1.0 - uVignette * smoothstep(0.25, 1.0, vr);
++    }
++
++    if (uMode == 1) {
++        // Border ring: keep only a band near the quad's UV edges. Warps with
++        // the tile so the outline follows the perspective correctly. A glow
++        // spreads an additive bloom outward from the ring.
++        vec2  e    = min(uv, vec2(1.0) - uv);
++        float edge = min(e.x, e.y);
++        if (edge > uThick + uGlowUV)
++            discard;
++        float ring = 1.0 - smoothstep(uThick * 0.55, uThick, edge);
++        float halo = 1.0 - smoothstep(uThick, uThick + max(uGlowUV, 0.0001), edge);
++        float a    = uColor.a * uAlpha * ring;
++        float g    = uColor.a * uAlpha * halo * uGlow;
++        vec3  rgb  = uColor.rgb * (a + g * 1.6);
++        fragColor  = vec4(rgb * fogMul, a + g);
++        return;
++    }
++
++    if (uMode == 2) {
++        vec4 c = uColor;
++        if (uRadius > 0.0) {
++            vec2  r = vec2(uRadius);
++            vec2  q = abs(uv - vec2(0.5)) - (vec2(0.5) - r);
++            float d = length(max(q, vec2(0.0))) - r.x;
++            c.a *= 1.0 - smoothstep(0.0, max(fwidth(d), 0.0001), d);
++        }
++        c.a *= uAlpha;
++        c.rgb *= c.a;
++        c.rgb *= fogMul;
++        fragColor = c;
++        return;
++    }
++
++    if (uFlipV > 0.5)
++        uv.y = 1.0 - uv.y;
++    vec4 c = texture(uTex, uv);
++    float cov = 1.0;
++    if (uRadius > 0.0) {
++        vec2  r = vec2(uRadius);
++        vec2  q = abs(uv - vec2(0.5)) - (vec2(0.5) - r);
++        float d = length(max(q, vec2(0.0))) - r.x;
++        cov = 1.0 - smoothstep(0.0, max(fwidth(d), 0.0001), d);
++    }
++    // Outer neon bloom: a soft halo living just outside the rounded tile. Layered
++    // under the tile so it reads as light spilling around a glass surface.
++    float glow = 0.0;
++    if (uGlow > 0.0 && uGlowUV > 0.0) {
++        vec2  r2 = vec2(uRadius + uGlowUV);
++        vec2  q2 = abs(uv - vec2(0.5)) - (vec2(0.5) - r2);
++        float d2 = length(max(q2, vec2(0.0))) - r2.x;
++        glow = (1.0 - smoothstep(0.0, uGlowUV, d2)) * uGlow;
++    }
++    vec3 lit = c.rgb * c.a + c.rgb * glow * 1.5;
++    float outA = clamp(c.a * cov * uAlpha + glow * 0.85, 0.0, 1.0);
++    fragColor  = vec4(lit * uAlpha * fogMul, outA);
++}
++)#";
++
++    static GLuint compile(GLenum type, const char* src) {
++        GLuint s = glCreateShader(type);
++        glShaderSource(s, 1, &src, nullptr);
++        glCompileShader(s);
++        GLint ok = 0;
++        glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
++        if (!ok) {
++            char log[2048] = {0};
++            glGetShaderInfoLog(s, sizeof(log) - 1, nullptr, log);
++            Log::logger->log(Log::ERR, "[hyprexpo:3d] shader compile failed: {}", log);
++            glDeleteShader(s);
++            return 0;
++        }
++        return s;
++    }
++
++    bool ensureInit() {
++        if (g_inited)
++            return g_ok;
++        g_inited = true;
++
++        GLuint vs = compile(GL_VERTEX_SHADER, VERT_SRC);
++        GLuint fs = compile(GL_FRAGMENT_SHADER, FRAG_SRC);
++        if (!vs || !fs) {
++            g_ok = false;
++            return false;
++        }
++
++        GLuint prog = glCreateProgram();
++        glAttachShader(prog, vs);
++        glAttachShader(prog, fs);
++        glBindAttribLocation(prog, 0, "pos");
++        glBindAttribLocation(prog, 1, "texcoord");
++        glLinkProgram(prog);
++        glDeleteShader(vs);
++        glDeleteShader(fs);
++
++        GLint linked = 0;
++        glGetProgramiv(prog, GL_LINK_STATUS, &linked);
++        if (!linked) {
++            char log[2048] = {0};
++            glGetProgramInfoLog(prog, sizeof(log) - 1, nullptr, log);
++            Log::logger->log(Log::ERR, "[hyprexpo:3d] program link failed: {}", log);
++            glDeleteProgram(prog);
++            g_ok = false;
++            return false;
++        }
++
++        g_prog    = prog;
++        g_uH3     = glGetUniformLocation(prog, "uH3");
++        g_uTex    = glGetUniformLocation(prog, "uTex");
++        g_uAlpha  = glGetUniformLocation(prog, "uAlpha");
++        g_uRadius = glGetUniformLocation(prog, "uRadius");
++        g_uRPow   = glGetUniformLocation(prog, "uRPow");
++        g_uFlipV  = glGetUniformLocation(prog, "uFlipV");
++        g_uMode   = glGetUniformLocation(prog, "uMode");
++        g_uColor  = glGetUniformLocation(prog, "uColor");
++        g_uThick  = glGetUniformLocation(prog, "uThick");
++        g_uFisheye = glGetUniformLocation(prog, "uFisheye");
++        g_uFishPow = glGetUniformLocation(prog, "uFishPow");
++        g_uAspect  = glGetUniformLocation(prog, "uAspect");
++        g_uGlow    = glGetUniformLocation(prog, "uGlow");
++        g_uGlowUV  = glGetUniformLocation(prog, "uGlowUV");
++        g_uFogNear = glGetUniformLocation(prog, "uFogNear");
++        g_uFogFar  = glGetUniformLocation(prog, "uFogFar");
++        g_uFogStr  = glGetUniformLocation(prog, "uFogStrength");
++        g_uScreen  = glGetUniformLocation(prog, "uScreen");
++        g_uVignette = glGetUniformLocation(prog, "uVignette");
++
++        glGenVertexArrays(1, &g_vao);
++        glGenBuffers(1, &g_vbo);
++        glBindVertexArray(g_vao);
++        glBindBuffer(GL_ARRAY_BUFFER, g_vbo);
++
++        // Subdivided unit-square mesh (N x N quads -> two triangles each). A dense
++        // mesh lets the fisheye/perspective warp curve smoothly instead of only
++        // displacing the four corners.
++        constexpr int        N = 24;
++        std::vector<float>   verts;
++        verts.reserve((size_t)N * N * 6 * 4);
++        auto put = [&](float px, float py) {
++            verts.push_back(px);
++            verts.push_back(py);
++            verts.push_back(px);
++            verts.push_back(py);
++        };
++        for (int j = 0; j < N; ++j) {
++            for (int i = 0; i < N; ++i) {
++                const float x0 = (float)i / N, x1 = (float)(i + 1) / N;
++                const float y0 = (float)j / N, y1 = (float)(j + 1) / N;
++                put(x0, y0);
++                put(x1, y0);
++                put(x0, y1);
++                put(x1, y0);
++                put(x1, y1);
++                put(x0, y1);
++            }
++        }
++        g_vertCount = (int)(verts.size() / 4);
++        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(verts.size() * sizeof(float)), verts.data(), GL_STATIC_DRAW);
++        glEnableVertexAttribArray(0);
++        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
++        glEnableVertexAttribArray(1);
++        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
++        glBindVertexArray(0);
++        glBindBuffer(GL_ARRAY_BUFFER, 0);
++
++        g_ok = true;
++        Log::logger->log(Log::WARN, "[hyprexpo:3d] perspective shader ready");
++        return true;
++    }
++
++    void teardown() {
++        if (g_vbo)
++            glDeleteBuffers(1, &g_vbo);
++        if (g_vao)
++            glDeleteVertexArrays(1, &g_vao);
++        if (g_prog)
++            glDeleteProgram(g_prog);
++        g_vbo = g_vao = g_prog = 0;
++        g_ok = g_inited = false;
++    }
++
++    static std::array<float, 9> matMul(const std::array<float, 9>& A, const std::array<float, 9>& B) {
++        std::array<float, 9> R{};
++        for (int i = 0; i < 3; ++i)
++            for (int j = 0; j < 3; ++j) {
++                float s = 0.f;
++                for (int k = 0; k < 3; ++k)
++                    s += A[i * 3 + k] * B[k * 3 + j];
++                R[i * 3 + j] = s;
++            }
++        return R;
++    }
++
++    std::array<float, 9> buildTileH3(const Vector2D& monSize, const std::array<float, 9>& proj, float bx, float by, float bw, float bh,
++                                     const SWarpParams& p) {
++        // Pivot/camera defaults: the monitor centre and a camera distance in
++        // monitor heights. A caller can override both (centerX/Y + gridHeight)
++        // so the whole animated grid keeps one stable perspective even while it
++        // is many monitors wide during the open/close zoom.
++        const bool  useGrid = p.centerX >= 0.f && p.centerY >= 0.f && p.gridHeight > 0.f;
++        const float Mx  = useGrid ? p.centerX : (float)monSize.x * 0.5f;
++        const float My  = useGrid ? p.centerY : (float)monSize.y * 0.5f;
++        const float cam = std::max(1.0f, p.distance * (float)(useGrid ? p.gridHeight : monSize.y));
++        // A soft near plane (5% of the camera distance) instead of a hard clamp
++        // at 1px: geometry that would cross the camera is pushed just in front
++        // of it, so the projection stays finite and self-similar under zoom.
++        const float nearPlane = std::max(1.0f, cam * 0.05f);
++
++        const float th = p.tiltDeg * (float)M_PI / 180.f;
++        const float ph = p.yawDeg * (float)M_PI / 180.f;
++        const float ct = std::cos(th), st = std::sin(th);
++        const float cp = std::cos(ph), sp = std::sin(ph);
++
++        auto world = [&](float px, float py, float& X, float& Y, float& W) {
++            const float dx = px - Mx, dy = py - My;
++            const float x1 = dx, y1 = dy * ct, z1 = dy * st;
++            const float x2 = x1 * cp + z1 * sp;
++            const float y2 = y1;
++            const float z2 = -x1 * sp + z1 * cp;
++            float       D  = cam - z2;
++            if (D < nearPlane)
++                D = nearPlane;
++            const float scale = cam / D;
++            const float sx    = Mx + x2 * scale;
++            const float sy    = My + y2 * scale;
++            X = sx * D;
++            Y = sy * D;
++            W = D;
++        };
++
++        float X0, Y0, W0, Xx, Yx, Wx, Xy, Yy, Wy;
++        world(0.f, 0.f, X0, Y0, W0);
++        world(1.f, 0.f, Xx, Yx, Wx);
++        world(0.f, 1.f, Xy, Yy, Wy);
++
++        const float dXx = Xx - X0, dXy = Xy - X0;
++        const float dYx = Yx - Y0, dYy = Yy - Y0;
++        const float dWx = Wx - W0, dWy = Wy - W0;
++
++        const std::array<float, 9> G = {
++            dXx * bw, dXy * bh, X0 + dXx * bx + dXy * by, //
++            dYx * bw, dYy * bh, Y0 + dYx * bx + dYy * by, //
++            dWx * bw, dWy * bh, W0 + dWx * bx + dWy * by, //
++        };
++
++        return matMul(proj, G);
++    }
++
++    void renderQuad(const SP<Render::ITexture>& tex, const SQuadDraw& d) {
++        if (!ensureInit())
++            return;
++
++        GLint prevProg = 0, prevVAO = 0, prevActive = 0, prevTex = 0;
++        glGetIntegerv(GL_CURRENT_PROGRAM, &prevProg);
++        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVAO);
++        glGetIntegerv(GL_ACTIVE_TEXTURE, &prevActive);
++        glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
++        const GLboolean prevBlend = glIsEnabled(GL_BLEND);
++
++        glUseProgram(g_prog);
++        glUniformMatrix3fv(g_uH3, 1, GL_TRUE, d.h3.data());
++        glUniform1f(g_uAlpha, d.alpha);
++        glUniform1f(g_uRadius, d.radiusUV);
++        glUniform1f(g_uRPow, d.roundPow);
++        glUniform1f(g_uFlipV, d.flipV ? 1.f : 0.f);
++        glUniform1i(g_uMode, (int)d.mode);
++        glUniform4f(g_uColor, d.color[0], d.color[1], d.color[2], d.color[3]);
++        glUniform1f(g_uThick, d.thickUV);
++        glUniform1f(g_uFisheye, g_fisheye);
++        glUniform1f(g_uFishPow, g_fishPow);
++        glUniform1f(g_uAspect, g_aspectX);
++        glUniform1f(g_uGlow, d.glow);
++        glUniform1f(g_uGlowUV, d.glowUV);
++        glUniform1f(g_uFogNear, g_fogNear);
++        glUniform1f(g_uFogFar, g_fogFar);
++        glUniform1f(g_uFogStr, g_fogStr);
++        glUniform2f(g_uScreen, g_screenX, g_screenY);
++        glUniform1f(g_uVignette, g_vignette);
++
++        glActiveTexture(GL_TEXTURE0);
++        glBindTexture(GL_TEXTURE_2D, tex ? tex->m_texID : 0);
++        glUniform1i(g_uTex, 0);
++
++        glEnable(GL_BLEND);
++        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
++
++        glBindVertexArray(g_vao);
++        glDrawArrays(GL_TRIANGLES, 0, g_vertCount);
++        glBindVertexArray(prevVAO);
++        glBindBuffer(GL_ARRAY_BUFFER, 0);
++
++        glActiveTexture((GLenum)prevActive);
++        glBindTexture(GL_TEXTURE_2D, (GLuint)prevTex);
++        glUseProgram((GLuint)prevProg);
++        if (!prevBlend)
++            glDisable(GL_BLEND);
++    }
++
++    void setLens(float fisheye, float fishPow, float aspect) {
++        g_fisheye = fisheye;
++        g_fishPow = fishPow < 0.5f ? 0.5f : fishPow;
++        g_aspectX = aspect <= 0.f ? 1.f : aspect;
++    }
++
++    void setFog(float depthNear, float depthFar, float strength) {
++        g_fogStr = std::clamp(strength, 0.0f, 1.0f);
++        if (g_fogStr <= 0.0f) {
++            g_fogNear = g_fogFar = 0.f;
++            return;
++        }
++        if (depthFar <= depthNear)
++            depthFar = depthNear + 1.f;
++        g_fogNear = depthNear;
++        g_fogFar  = depthFar;
++    }
++
++    void setVignette(float strength, float screenW, float screenH) {
++        g_vignette = std::clamp(strength, 0.0f, 1.0f);
++        g_screenX  = screenW > 0.f ? screenW : 1.f;
++        g_screenY  = screenH > 0.f ? screenH : 1.f;
++    }
++
++    void renderWarped(const SP<Render::ITexture>& tex, const std::array<float, 9>& h3RowMajor, float alpha, float radiusUV, float roundPow, bool flipV, float glow) {        SQuadDraw d;        d.h3       = h3RowMajor;
++        d.alpha    = alpha;
++        d.radiusUV = radiusUV;
++        d.roundPow = roundPow;
++        d.flipV    = flipV;
++        d.mode     = EMode::Texture;
++        d.glow     = glow;
++        renderQuad(tex, d);
++    }
++
++    void renderBorder(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float thicknessUV, float glow) {
++        SQuadDraw d;
++        d.h3      = h3RowMajor;
++        d.mode    = EMode::Border;
++        d.color[0] = r;
++        d.color[1] = g;
++        d.color[2] = b;
++        d.color[3] = a;
++        d.thickUV = thicknessUV;
++        d.glow    = glow;
++        renderQuad(nullptr, d);
++    }
++
++    void renderSolid(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float radiusUV, float roundPow) {
++        SQuadDraw d;
++        d.h3       = h3RowMajor;
++        d.mode     = EMode::Solid;
++        d.color[0] = r;
++        d.color[1] = g;
++        d.color[2] = b;
++        d.color[3] = a;
++        d.radiusUV = radiusUV;
++        d.roundPow = roundPow;
++        renderQuad(nullptr, d);
++    }
++
++} // namespace Hyprexpo3D
+diff --git c/Overview3D.hpp i/Overview3D.hpp
+new file mode 100644
+index 0000000..21884a5
+--- /dev/null
++++ i/Overview3D.hpp
+@@ -0,0 +1,98 @@
++#pragma once
++
++#include <hyprland/src/render/Texture.hpp>
++#include <hyprland/src/helpers/math/Math.hpp>
++#include <array>
++#include <vector>
++
++// Optional true-perspective warping of the overview grid.
++//
++// The native Hyprland vertex shader forces gl_Position.w = 1.0, so it can only
++// ever produce 2D affine transforms (no perspective divide). To get real 3D we
++// render each tile ourselves with a small custom GL program whose vertex shader
++// keeps w = depth, so the GPU does a genuine perspective-correct divide.
++//
++// Every tile is mapped by a 3x3 homography (row-major) from its unit square
++// (u, v) to clip-space homogeneous (x, y, w). The homography is the composition
++// of the monitor projection with the plane->screen map of the tilted grid.
++namespace Hyprexpo3D {
++
++    struct SWarpParams {
++        float tiltDeg  = 0.0f; // pitch about the horizontal axis (top recedes when > 0)
++        float yawDeg   = 0.0f; // yaw about the vertical axis
++        float distance = 1.6f; // camera distance in monitor heights
++        // Optional pivot override: when gridHeight > 0 the perspective pivots on
++        // (centerX, centerY) with a camera distance of distance*gridHeight,
++        // instead of the monitor centre/height. The animated grid can be several
++        // monitors wide during open/close, so anchoring the camera to the grid
++        // itself (not the monitor) keeps the perspective self-similar instead of
++        // exploding at the near plane.
++        float centerX    = -1.0f;
++        float centerY    = -1.0f;
++        float gridHeight = 0.0f;
++    };
++
++    // What the warped quad draws: a texture, a solid fill, or a border ring.
++    enum class EMode : int {
++        Texture = 0,
++        Border  = 1,
++        Solid   = 2,
++    };
++
++    // Everything needed to draw one warped quad.
++    struct SQuadDraw {
++        std::array<float, 9> h3{};         // row-major homography (unit square -> clip xy + w)
++        float                alpha    = 1.f;
++        float                radiusUV = 0.f; // corner radius in unit-square fractions (texture/solid)
++        float                roundPow = 2.f;
++        bool                 flipV    = false;
++        EMode                mode     = EMode::Texture;
++        float                color[4] = {1.f, 1.f, 1.f, 1.f}; // rgba (border/solid)
++        float                thickUV  = 0.02f;                 // border thickness in unit-square fractions
++        float                glow     = 0.f;                   // outer neon bloom strength (0 = off)
++        float                glowUV   = 0.06f;                 // bloom falloff width in unit-square fractions
++    };
++
++    // Build the per-tile homography. `proj` is the monitor projection matrix in
++    // row-major order (Mat3x3::outputProjection(...).getMatrix()). The tile rect
++    // (bx, by, bw, bh) must be in the same (transformed) pixel space the
++    // projection expects.
++    std::array<float, 9> buildTileH3(const Vector2D& monSize, const std::array<float, 9>& proj, float bx, float by, float bw, float bh,
++                                     const SWarpParams& params);
++
++    // Draw a warped quad. `tex` may be null for Border/Solid modes.
++    void renderQuad(const SP<Render::ITexture>& tex, const SQuadDraw& d);
++
++    // Set the per-frame lens distortion applied to every warped quad. `fisheye`
++    // is the barrel strength (0 disables it), `fishPow` the radial falloff
++    // exponent, and `aspect` the monitor width/height so the lens stays round.
++    void setLens(float fisheye, float fishPow, float aspect);
++
++    // Depth fog: darkens quads as they recede toward the far plane, giving the
++    // tilted grid a sense of depth instead of a flat sheet of tiles. `depthNear`
++    // and `depthFar` are in the shader's camera-depth units (see buildTileH3);
++    // `strength` 0 disables it.
++    void setFog(float depthNear, float depthFar, float strength);
++
++    // Screen-space vignette (strength 0..1) applied uniformly to every warped
++    // quad, so the corners meet seamlessly. Darkens the screen edges to focus
++    // the view. Pass the monitor size in px it is measured against.
++    void setVignette(float strength, float screenW, float screenH);
++
++    // Convenience: a perspective-warped textual/matte texture. `glow` (> 0)
++    // adds an outer neon bloom around the rounded tile in the sampled colours.
++    void renderWarped(const SP<Render::ITexture>& tex, const std::array<float, 9>& h3RowMajor, float alpha, float radiusUV, float roundPow, bool flipV, float glow = 0.f);
++
++    // Convenience: a perspective-warped border ring in the given rgba colour.
++    void renderBorder(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float thicknessUV, float glow = 0.f);
++
++    // Convenience: a perspective-warped solid-filled (optionally rounded) quad.
++    void renderSolid(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float radiusUV, float roundPow);
++
++    // Compile the shader / allocate GL objects. Safe to call repeatedly.
++    bool ensureInit();
++
++    // Drop GL objects (call from plugin teardown if desired).
++    void teardown();
++
++} // namespace Hyprexpo3D
+diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
+index cb18d2f..ffa6985 100644
+--- c/OverviewCapture.cpp
++++ i/OverviewCapture.cpp
+@@ -4,9 +4,14 @@
+ #include "HyprlandConfigCompat.hpp"
+ #include "HyprexpoConfig.hpp"
+ 
++#include <hyprland/src/plugins/PluginAPI.hpp>
++#include <hyprland/protocols/wlr-layer-shell-unstable-v1.hpp>
++
+ #define private   public
+ #define protected public
+ #include <hyprland/src/animation/WorkspaceAnimationController.hpp>
++#include <hyprland/src/desktop/view/Window.hpp>
++#include <hyprland/src/desktop/state/WindowState.hpp>
+ #include <hyprland/src/helpers/time/Time.hpp>
+ #include <hyprutils/utils/ScopeGuard.hpp>
+ #include <hyprland/src/render/OpenGL.hpp>
+@@ -123,6 +128,103 @@ class CMonitorStateGuard {
+     bool                m_restored         = false;
+ };
+ 
++// Makes an offscreen workspace capture transparent so the shared overview
++// background (background_image) shows through: the tile holds only windows.
++// The live wallpaper/bar layer surfaces are detached and Hyprland's opaque
++// background clear + splash are neutralized for the duration of the render,
++// then everything is restored.
++class CTransparentTileGuard {
++  public:
++    explicit CTransparentTileGuard(PHLMONITOR monitor) : m_monitor(monitor) {
++        if (!m_monitor)
++            return;
++
++        if (CompatHyprlandAPI::intValue("plugin:hyprexpo:tile_transparent") == 0)
++            return;
++        if (CompatHyprlandAPI::stringValue("plugin:hyprexpo:background_image").empty())
++            return;
++
++        try {
++            // CompatHyprlandAPI::getDataStaticPtr() returns the config's
++            // "T* const*" storage pointer (pointer-to-the-static-pointer), NOT a
++            // direct T*. Writing through it as a plain T* corrupts the pointer
++            // itself and crashes Hyprland later (renderBackground dereferences
++            // it). Always double-dereference.
++            auto* const bgColorPtr  = reinterpret_cast<Hyprlang::INT* const*>(CompatHyprlandAPI::getConfigValue(PHANDLE, "misc:background_color")->getDataStaticPtr());
++            auto* const noSplashPtr = reinterpret_cast<Hyprlang::INT* const*>(CompatHyprlandAPI::getConfigValue(PHANDLE, "misc:disable_splash_rendering")->getDataStaticPtr());
++            auto* const noLogoPtr   = reinterpret_cast<Hyprlang::INT* const*>(CompatHyprlandAPI::getConfigValue(PHANDLE, "misc:disable_hyprland_logo")->getDataStaticPtr());
++
++            m_bgLayers  = std::move(m_monitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND]);
++            m_topLayers = std::move(m_monitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_TOP]);
++            m_detached  = true;
++
++            m_bgColorPtr  = bgColorPtr;
++            m_noSplashPtr = noSplashPtr;
++            m_noLogoPtr   = noLogoPtr;
++            if (m_bgColorPtr && *m_bgColorPtr) {
++                m_prevBgColor = **m_bgColorPtr;
++                **m_bgColorPtr = 0x00000000;
++            }
++            if (m_noSplashPtr && *m_noSplashPtr) {
++                m_prevNoSplash = **m_noSplashPtr;
++                **m_noSplashPtr = 1;
++            }
++            if (m_noLogoPtr && *m_noLogoPtr) {
++                m_prevNoLogo = **m_noLogoPtr;
++                **m_noLogoPtr = 1;
++            }
++            m_active = true;
++        } catch (...) {
++            // Leave whatever was already moved/detached pending; the destructor
++            // puts the layer surfaces (and any config tweaks) back.
++            m_active = false;
++        }
++    }
++
++    ~CTransparentTileGuard() {
++        if (m_detached && m_monitor) {
++            m_monitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND] = std::move(m_bgLayers);
++            m_monitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_TOP]        = std::move(m_topLayers);
++            m_detached = false;
++        }
++        restore();
++    }
++
++    bool active() const {
++        return m_active;
++    }
++
++    void restore() {
++        if (!m_active)
++            return;
++        m_active = false;
++        if (m_detached && m_monitor) {
++            m_monitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND] = std::move(m_bgLayers);
++            m_monitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_TOP]        = std::move(m_topLayers);
++            m_detached = false;
++        }
++        if (m_bgColorPtr && *m_bgColorPtr)
++            **m_bgColorPtr = m_prevBgColor;
++        if (m_noSplashPtr && *m_noSplashPtr)
++            **m_noSplashPtr = m_prevNoSplash;
++        if (m_noLogoPtr && *m_noLogoPtr)
++            **m_noLogoPtr = m_prevNoLogo;
++    }
++
++  private:
++    PHLMONITOR            m_monitor;
++    bool                  m_active   = false;
++    bool                  m_detached = false;
++    std::vector<PHLLSREF> m_bgLayers;
++    std::vector<PHLLSREF> m_topLayers;
++    Hyprlang::INT* const* m_bgColorPtr   = nullptr;
++    Hyprlang::INT* const* m_noSplashPtr  = nullptr;
++    Hyprlang::INT* const* m_noLogoPtr    = nullptr;
++    Hyprlang::INT         m_prevBgColor  = 0;
++    Hyprlang::INT         m_prevNoSplash = 0;
++    Hyprlang::INT         m_prevNoLogo   = 0;
++};
++
+ bool ensureFramebuffer(SP<Render::IFramebuffer>& framebuffer, const CBox& box, uint32_t drmFormat) {
+     if (!framebuffer)
+         framebuffer = g_pHyprRenderer->createFB("hyprexpo workspace preview");
+@@ -188,12 +290,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+             return false;
+         rendererState.begun();
+         g_pHyprRenderer->m_bBlockSurfaceFeedback = g_pHyprRenderer->m_bBlockSurfaceFeedback || request.blockSurfaceFeedback;
+-        clearWithColor(CHyprColor{0, 0, 0, 1.0});
++        CTransparentTileGuard transparentTileGuard{request.monitor};
++        clearWithColor(transparentTileGuard.active() ? CHyprColor{0, 0, 0, 0.0} : CHyprColor{0, 0, 0, 1.0});
+ 
+         if (request.workspace) {
+             PHLWORKSPACE previousWS;
+             std::vector<std::pair<PHLWORKSPACE, SWorkspacePreviewState>> previewStates;
+             std::vector<SWindowPreviewState> windowState;
++            std::vector<std::pair<PHLWINDOW, bool>> suspendedState;
+             bool activeChanged   = false;
+             bool previewApplied  = false;
+             bool windowApplied   = false;
+@@ -202,6 +306,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+                 if (temporaryRestored)
+                     return;
+                 try {
++                    for (const auto& [window, suspended] : suspendedState) {
++                        if (window)
++                            window->setSuspended(suspended);
++                    }
+                     if (windowApplied)
+                         restoreWorkspaceWindowGoalState(windowState);
+                     if (previewApplied)
+@@ -220,6 +328,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+                 windowApplied = true;
+             }
+ 
++            // Windows on non-visible workspaces carry XDG toplevel SUSPENDED, so
++            // their clients stop committing frames and the captured tile freezes
++            // (TUI apps like kitty honor this; GPU/media clients often do not).
++            // Clear it for the duration of the offscreen render so the client is
++            // nudged to produce a fresh frame, then restore the prior state.
++            for (const auto& window : Desktop::windowState()->windows()) {
++                if (!windowVisibleOnWorkspace(window, request.workspace))
++                    continue;
++                suspendedState.push_back({window, window->m_suspended});
++                if (window->m_suspended)
++                    window->setSuspended(false);
++            }
++
+             if (request.workspace == request.startedOn)
+                 request.monitor->m_activeSpecialWorkspace = monitorState.activeSpecialWorkspace();
+ 
+@@ -233,6 +354,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+             restoreActiveWorkspaceAfterPreview(request.monitor, previousWS);
+             temporaryRestored = true;
+ 
++            for (const auto& [window, suspended] : suspendedState) {
++                if (window)
++                    window->setSuspended(suspended);
++            }
++            suspendedState.clear();
++
+             if (request.workspace == request.startedOn)
+                 request.monitor->m_activeSpecialWorkspace.reset();
+         } else {
+@@ -240,6 +367,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+             g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
+         }
+ 
++        transparentTileGuard.restore();
++
+         g_pHyprRenderer->m_renderData.blockScreenShader = true;
+         rendererState.finish();
+         rendererState.restore();
+diff --git c/OverviewInteraction.cpp i/OverviewInteraction.cpp
+index 2eb5aa2..136200c 100644
+--- c/OverviewInteraction.cpp
++++ i/OverviewInteraction.cpp
+@@ -620,13 +620,19 @@ bool COverview::onKbConfirm() {
+ }
+ 
+ bool COverview::onKbSelectNumber(int num) {
+-    if (closing)
+-        return false;
+-
++    // No `closing` guard on purpose: called mid-close it re-targets the
++    // in-flight morph at this tile (instant redirect) instead of being dropped.
+     if (num == 0)
+         num = 10;
+ 
+-    return selectWorkspaceByID(num);
++    for (size_t i = 0; i < images.size(); ++i) {
++        if (images[i].workspaceID == num) {
++            closeOnID = i;
++            return true;
++        }
++    }
++
++    return false;
+ }
+ 
+ bool COverview::onKbSelectToken(int visibleIdx) {
+diff --git c/OverviewInternal.hpp i/OverviewInternal.hpp
+index 2c8a347..eec9d97 100644
+--- c/OverviewInternal.hpp
++++ i/OverviewInternal.hpp
+@@ -63,6 +63,7 @@ int fallbackTokenToVisibleIndex(const std::string& token);
+ SHyprGradientSpec parseGradientSpec(const std::string& inRaw);
+ bool isGradientBorderSpec(const std::string& borderSpec);
+ SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprColor& color, const Vector2D& bufferSize, float scale, int fontSize);
++SP<Render::ITexture> loadBackgroundImage(const std::string& path);
+ 
+ SWorkspacePreviewState applyWorkspacePreviewState(const PHLWORKSPACE& workspace);
+ void restoreWorkspacePreviewState(const PHLWORKSPACE& workspace, const SWorkspacePreviewState& state);
+diff --git c/OverviewRender.cpp i/OverviewRender.cpp
+index f8741ae..6a2a904 100644
+--- c/OverviewRender.cpp
++++ i/OverviewRender.cpp
+@@ -2,6 +2,7 @@
+ #define HyprlandAPI CompatHyprlandAPI
+ #include "OverviewInternal.hpp"
+ #include "OverviewCapture.hpp"
++#include "Overview3D.hpp"
+ #include "HyprexpoLogic.hpp"
+ #include "OverviewPassElement.hpp"
+ #define private   public
+@@ -122,38 +123,24 @@ void COverview::onDamageReported() {
+     MON->scheduleFrame();
+ }
+ 
+-void COverview::close(bool switchToSelection) {
+-    if (closing)
+-        return;
+-
+-    // The teardown animation is now committed; lock out further swipe input so a
+-    // re-grabbed gesture can't rewind it (issue #57 follow-up: close replay).
+-    m_closeCommitted = true;
+-
++// Re-aim the (possibly already in-flight) close morph at SAFEID and, if asked,
++// switch the active workspace to that tile. Shared by the first close and by
++// mid-flight redirects: assigning *size/*pos again retargets the running
++// animation from its current value to the new tile, so a rapid SUPER+<n>
++// re-directs the zoom instantly instead of being ignored/queued.
++void COverview::applyCloseTarget(int SAFEID, bool switchToSelection) {
+     const auto MON = pMonitor.lock();
+-    if (!MON) {
+-        closing = true;
+-        destroyOverview(this);
++    if (!MON)
+         return;
+-    }
+ 
+-    resetSubmapIfNeeded();
+-
+-    if (images.empty()) {
+-        destroyOverview(this);
+-        return;
+-    }
+-
+-    const int   ID = closeOnID == -1 ? openedID : closeOnID;
+-
+-    const int   SAFEID = std::clamp(ID, 0, (int)images.size() - 1);
+-    const auto& TILE   = images[SAFEID];
++    const auto& TILE = images[SAFEID];
+ 
+     const auto targetSize = zoomSizeForCurrentGrid(MON->m_size);
+     *size = targetSize;
+     *pos  = -(tilePosForID(SAFEID, targetSize, 0.0) * MON->m_scale);
+-
+-    closing = true;
++    // Flatten the perspective as it closes, matching the open ramp.
++    if (tiltAnim)
++        *tiltAnim = 0.0f;
+ 
+     redrawAll();
+ 
+@@ -212,6 +199,45 @@ void COverview::close(bool switchToSelection) {
+ 
+         startedOn = MON->m_activeWorkspace;
+     }
++}
++
++void COverview::close(bool switchToSelection) {
++    // Already closing: a NEW selection re-aims the in-flight morph at the new
++    // tile (instant redirect) instead of being ignored. No queue, no delay.
++    if (closing) {
++        const auto MON = pMonitor.lock();
++        if (!switchToSelection || !MON || images.empty())
++            return;
++        const int ID     = closeOnID == -1 ? openedID : closeOnID;
++        const int SAFEID = std::clamp(ID, 0, (int)images.size() - 1);
++        applyCloseTarget(SAFEID, true);
++        return;
++    }
++
++    // The teardown animation is now committed; lock out further swipe input so a
++    // re-grabbed gesture can't rewind it (issue #57 follow-up: close replay).
++    m_closeCommitted = true;
++
++    const auto MON = pMonitor.lock();
++    if (!MON) {
++        closing = true;
++        destroyOverview(this);
++        return;
++    }
++
++    resetSubmapIfNeeded();
++
++    if (images.empty()) {
++        destroyOverview(this);
++        return;
++    }
++
++    const int ID     = closeOnID == -1 ? openedID : closeOnID;
++    const int SAFEID = std::clamp(ID, 0, (int)images.size() - 1);
++
++    closing = true;
++
++    applyCloseTarget(SAFEID, switchToSelection);
+ 
+     size->setCallbackOnEnd(removeOverview);
+ }
+@@ -233,7 +259,7 @@ void COverview::startLiveRefresh() {
+         return;
+ 
+     liveRefreshTimer = makeShared<CEventLoopTimer>(
+-        120ms,
++        33ms,
+         [OVERVIEWKEY, GENERATION](SP<CEventLoopTimer> self, void*) {
+             auto* const OVERVIEW = dynamic_cast<COverview*>(overviewForSession(OVERVIEWKEY, GENERATION));
+             if (!OVERVIEW || OVERVIEW->liveRefreshTimer.get() != self.get()) {
+@@ -251,13 +277,14 @@ void COverview::startLiveRefresh() {
+ 
+             const auto TILE_COUNT = OVERVIEW->images.size();
+             if (TILE_COUNT == 0) {
+-                self->updateTimeout(120ms);
++                self->updateTimeout(33ms);
+                 return;
+             }
+ 
+-            // Stagger: re-capture only a couple of tiles per tick and rotate the
+-            // cursor, so we never pay for N full offscreen renders in one frame.
+-            constexpr size_t MAX_TILES_PER_TICK = 2;
++            // Stagger: re-capture a few tiles per tick and rotate the cursor, so
++            // the per-frame offscreen render cost stays bounded while every tile
++            // still gets refreshed several times per second.
++            constexpr size_t MAX_TILES_PER_TICK = 3;
+             OVERVIEW->liveRefreshActive = true;
+             size_t redrawn = 0;
+             for (size_t checked = 0; checked < TILE_COUNT && redrawn < MAX_TILES_PER_TICK; ++checked) {
+@@ -275,7 +302,7 @@ void COverview::startLiveRefresh() {
+                 MON->scheduleFrame();
+ 
+             // CEventLoopTimer fires once; re-arm so we keep refreshing.
+-            self->updateTimeout(120ms);
++            self->updateTimeout(33ms);
+         },
+         nullptr);
+     g_pEventLoopManager->addTimer(liveRefreshTimer);
+@@ -346,12 +373,6 @@ void COverview::fullRender() {
+     const auto SHAPE   = currentGridShape();
+ 
+     clearWithColor(BG_COLOR.stripA());
+-    if (wallpaperBg && MON->m_background) {
+-        CRegion backgroundDamage{0, 0, INT16_MAX, INT16_MAX};
+-        CBox    backgroundBox{{0, 0}, MON->m_transformedSize};
+-        Render::GL::g_pHyprOpenGL->renderTextureInternal(MON->m_background, backgroundBox, {.damage = &backgroundDamage, .a = 1.0f});
+-        Render::GL::g_pHyprOpenGL->renderRect(backgroundBox, CHyprColor{0x00000066}, {});
+-    }
+ 
+     static auto* const* PTILEROUND  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding")->getDataStaticPtr();
+     static auto* const* PTOUNDPWR   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding_power")->getDataStaticPtr();
+@@ -365,18 +386,162 @@ void COverview::fullRender() {
+     const int   HOVER_ROUND_SCALED   = **PTILEROUNDH >= 0 ? std::max(0, (int)std::lround((double)**PTILEROUNDH * MON->m_scale)) : BASE_ROUND_SCALED;
+     const float ROUND_PWR            = **PTOUNDPWR;
+ 
+-    std::vector<CBox> tileBoxes(images.size());
+-    const bool        entryAnimationActive = animateEntry && !closing;
++    std::vector<CBox>                 tileBoxes(images.size());
++    std::vector<std::array<float, 9>> tileH3s(images.size());
++    std::vector<float>                tileGlowVal(images.size(), 0.f);
++    const bool                        entryAnimationActive = animateEntry && !closing;
+     bool              entryAnimationPending = false;
+     const double      entryElapsed = entryAnimationActive ? std::chrono::duration<double>(std::chrono::steady_clock::now() - createdAt).count() : 0.0;
+ 
++    // Experimental 3D mode: replace the flat tile quads with perspective-warped
++    // ones. Gated behind a config flag; if the shader fails to build we quietly
++    // fall back to the native flat render so a bad GPU/driver can't break the
++    // overview.
++    static auto* const* P3DEN    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_enable")->getDataStaticPtr();
++    static auto* const* P3TILT  = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_tilt")->getDataStaticPtr();
++    static auto* const* P3YAW   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_yaw")->getDataStaticPtr();
++    static auto* const* P3DIST  = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_distance")->getDataStaticPtr();
++    static auto* const* P3RAD   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_radius")->getDataStaticPtr();
++    static auto* const* P3FLIPV = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_flip_v")->getDataStaticPtr();
++    static auto* const* P3FISH  = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_fisheye")->getDataStaticPtr();
++    static auto* const* P3FISHP = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_fisheye_pow")->getDataStaticPtr();
++    static auto* const* PGLOWEN  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:glass_glow_enable")->getDataStaticPtr();
++    static auto* const* PGLOWINT = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:glass_glow")->getDataStaticPtr();
++    static auto* const* PHOVERSC = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:hover_scale")->getDataStaticPtr();
++
++    static auto* const* PSLIDEEN  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:slide_enable")->getDataStaticPtr();
++    static auto* const* PSLIDEAMT = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:slide_amount")->getDataStaticPtr();
++
++    constexpr float PI_F    = 3.14159265358979f;
++    const bool      slideOn = closing && **PSLIDEEN != 0;
++    Vector2D        slideOffset;
++    if (slideOn && SHAPE.cols > 0) {
++        // Envelope sin(pi*t): the grid pushes toward the target tile and springs
++        // back, so it visually "overshoots and lands". Direction is derived from
++        // the grid-space delta between the opened tile and the close target, so
++        // horizontal moves slide sideways and vertical moves slide up/down.
++        const float env    = std::sin(PI_F * std::clamp((float)size->getPercent(), 0.0f, 1.0f));
++        const int   target = closeOnID == -1 ? openedID : closeOnID;
++        const int   oc     = openedID % SHAPE.cols;
++        const int   orow   = openedID / SHAPE.cols;
++        const int   tc     = target % SHAPE.cols;
++        const int   trow   = target / SHAPE.cols;
++        const double dx    = (double)(tc - oc);
++        const double dy    = (double)(trow - orow);
++        const Vector2D mon = MON->m_transformedSize;
++        const double ampX  = std::abs((double)**PSLIDEAMT) * mon.x;
++        const double ampY  = std::abs((double)**PSLIDEAMT) * mon.y;
++        slideOffset        = Vector2D{(dx == 0.0 ? 0.0 : (dx > 0.0 ? ampX : -ampX) * env), (dy == 0.0 ? 0.0 : (dy > 0.0 ? ampY : -ampY) * env)};
++    }
++
++    const bool use3D = **P3DEN != 0 && Hyprexpo3D::ensureInit();
++
++    std::array<float, 9>      proj3D{};
++    Hyprexpo3D::SWarpParams   warp3D{};
++    Hyprexpo3D::SWarpParams   warpBg{};
++    if (use3D) {
++        proj3D = Hyprutils::Math::Mat3x3::outputProjection(MON->m_transformedSize, Math::wlTransformToHyprutils(MON->m_transform)).getMatrix();
++        // Use the animated tilt so the perspective eases open/closed (falls back
++        // to the configured value if the animation var is unavailable).
++        const float tiltNow = tiltAnim ? tiltAnim->value() : (float)**P3TILT;
++        const float yaw     = (float)**P3YAW;
++        const float dist    = std::max(0.2f, (float)**P3DIST);
++
++        // Tiles pivot on the animated grid centre with a camera distance in grid
++        // heights. Because both the pivot and the camera scale with the grid,
++        // the perspective stays self-similar while the grid grows to ~3x the
++        // monitor during open/close, instead of exploding at the near plane.
++        const Vector2D pixGrid = SIZE * MON->m_scale;
++        const Vector2D pan     = pos->value() + slideOffset;
++        warp3D.tiltDeg    = tiltNow;
++        warp3D.yawDeg     = yaw;
++        warp3D.distance   = dist;
++        warp3D.centerX    = (float)(pixGrid.x * 0.5 + pan.x);
++        warp3D.centerY    = (float)(pixGrid.y * 0.5 + pan.y);
++        warp3D.gridHeight = (float)std::max(1.0, pixGrid.y);
++
++        // Background sheet: a flat, full-screen plane through the same shader
++        // (tilt 0), so it always fills the frame behind the receding grid and
++        // receives the same vignette/fog as the tiles (no black horizon, no
++        // seam at the edges). It reads as the far wall of the space.
++        warpBg = Hyprexpo3D::SWarpParams{0.f, 0.f, dist};
++
++        Hyprexpo3D::setLens((float)**P3FISH, (float)**P3FISHP, (float)(MON->m_transformedSize.x / std::max(1.0, MON->m_transformedSize.y)));
++
++        // Depth fog spanning the tiles' camera-depth range: near tiles stay
++        // crisp, far ones fade, which is the cue that makes the grid read as a
++        // receding floor instead of a flat sheet.
++        const float th   = tiltNow * PI_F / 180.f;
++        const float cam  = dist * warp3D.gridHeight;
++        const float maxZ = 0.5f * (warp3D.gridHeight * std::abs(std::sin(th)) + (float)pixGrid.x * std::abs(std::sin(yaw * PI_F / 180.f)));
++        Hyprexpo3D::setFog(std::max(1.0f, cam - maxZ), cam + maxZ, 0.5f);
++
++        // Screen-space vignette: focuses the eye and adds a lens falloff that
++        // reads as depth. Kept subtle so the corners stay usable.
++        Hyprexpo3D::setVignette(0.35f, (float)MON->m_transformedSize.x, (float)MON->m_transformedSize.y);
++    }
++
++    // Background (configured image, else the wallpaper): drawn before the tiles.
++    // Warped with the same camera when 3D is on so it participates in the space.
++    {
++        static auto const* PBGIMAGE = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:background_image")->getDataStaticPtr();
++        static auto* const* PBGDIM  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:background_dim")->getDataStaticPtr();
++        const std::string  bgImagePath{*PBGIMAGE};
++        const Vector2D     mon       = MON->m_transformedSize;
++        bool               drewImage = false;
++        if (!bgImagePath.empty()) {
++            if (auto bgTex = loadBackgroundImage(bgImagePath); bgTex && bgTex->m_size.x > 0 && bgTex->m_size.y > 0) {
++                CRegion   backgroundDamage{0, 0, INT16_MAX, INT16_MAX};
++                const int dim = std::clamp((int)**PBGDIM, 0, 100);
++                if (use3D) {
++                    const auto h3 = Hyprexpo3D::buildTileH3(mon, proj3D, 0.f, 0.f, (float)mon.x, (float)mon.y, warpBg);
++                    Hyprexpo3D::renderWarped(bgTex, h3, 1.0f, 0.0f, 2.0f, false);
++                    if (dim > 0)
++                        Hyprexpo3D::renderSolid(h3, 0.f, 0.f, 0.f, dim / 100.0f, 0.0f, 2.0f);
++                } else {
++                    const double   scale = std::min(mon.x / bgTex->m_size.x, mon.y / bgTex->m_size.y); // contain (nunca recorta)
++                    const Vector2D dest  = bgTex->m_size * scale;
++                    const CBox     box{(mon.x - dest.x) / 2.0, (mon.y - dest.y) / 2.0, dest.x, dest.y};
++                    Render::GL::g_pHyprOpenGL->renderTextureInternal(bgTex, box, {.damage = &backgroundDamage, .a = 1.0f});
++                    if (dim > 0)
++                        Render::GL::g_pHyprOpenGL->renderRect({{0, 0}, mon}, CHyprColor{0.0, 0.0, 0.0, dim / 100.0}, {});
++                }
++                drewImage = true;
++            }
++        }
++
++        if (!drewImage && wallpaperBg && MON->m_background) {
++            CRegion backgroundDamage{0, 0, INT16_MAX, INT16_MAX};
++            CBox    backgroundBox{{0, 0}, mon};
++            if (use3D) {
++                const auto h3 = Hyprexpo3D::buildTileH3(mon, proj3D, 0.f, 0.f, (float)mon.x, (float)mon.y, warpBg);
++                Hyprexpo3D::renderWarped(MON->m_background, h3, 1.0f, 0.0f, 2.0f, false);
++                Hyprexpo3D::renderSolid(h3, 0.f, 0.f, 0.f, 0.4f, 0.0f, 2.0f);
++            } else {
++                Render::GL::g_pHyprOpenGL->renderTextureInternal(MON->m_background, backgroundBox, {.damage = &backgroundDamage, .a = 1.0f});
++                Render::GL::g_pHyprOpenGL->renderRect(backgroundBox, CHyprColor{0x00000066}, {});
++            }
++        }
++    }
++
+     for (size_t y = 0; y < (size_t)SHAPE.rows; ++y) {
+         for (size_t x = 0; x < (size_t)SHAPE.cols; ++x) {
+             const int id = x + y * SHAPE.cols;
+             if (id < 0 || id >= (int)images.size())
+                 continue;
+             CBox texbox = tileBoxForIndex(id, SIZE, GAPSIZE, OUTER, true);
+-            texbox.scale(MON->m_scale).translate(pos->value());
++            texbox.scale(MON->m_scale).translate(pos->value() + slideOffset);
++            // Hover lift: gently grow the hovered tile so the selector feels alive
++            // (purely 2D, about the tile centre; keeps the shared bg untouched).
++            const double hoverScale = (int)id == hoveredID ? std::max(1.0, (double)**PHOVERSC) : 1.0;
++            if (hoverScale > 1.0) {
++                const double cx = texbox.x + texbox.w * 0.5;
++                const double cy = texbox.y + texbox.h * 0.5;
++                texbox.w *= hoverScale;
++                texbox.h *= hoverScale;
++                texbox.x = cx - texbox.w * 0.5;
++                texbox.y = cy - texbox.h * 0.5;
++            }
+             texbox.round();
+             tileBoxes[id] = texbox;
+ 
+@@ -401,7 +566,23 @@ void COverview::fullRender() {
+             }
+ 
+             CRegion damage{0, 0, INT16_MAX, INT16_MAX};
+-            Render::GL::g_pHyprOpenGL->renderTextureInternal(images[id].fb->getTexture(), texbox, {.damage = &damage, .a = alpha, .round = tileRound, .roundingPower = ROUND_PWR});
++            if (use3D) {
++                const float radiusUV = std::clamp((float)**P3RAD, 0.0f, 0.5f);
++                const bool  glowOn   = **PGLOWEN != 0;
++                float       tileGlow = glowOn ? std::max(0.0f, (float)**PGLOWINT) : 0.0f;
++                if ((int)id == hoveredID)
++                    tileGlow *= 1.8f;
++                else if ((int)id == kbFocusID)
++                    tileGlow *= 1.4f;
++                else if ((int)id == openedID)
++                    tileGlow *= 1.2f;
++                const auto  h3       = Hyprexpo3D::buildTileH3(MON->m_transformedSize, proj3D, (float)texbox.x, (float)texbox.y, (float)texbox.w, (float)texbox.h, warp3D);
++                tileH3s[id]          = h3;
++                tileGlowVal[id]      = tileGlow;
++                Hyprexpo3D::renderWarped(images[id].fb->getTexture(), h3, alpha, radiusUV, ROUND_PWR, **P3FLIPV != 0, tileGlow);
++            } else {
++                Render::GL::g_pHyprOpenGL->renderTextureInternal(images[id].fb->getTexture(), texbox, {.damage = &damage, .a = alpha, .round = tileRound, .roundingPower = ROUND_PWR});
++            }
+         }
+     }
+ 
+@@ -534,15 +715,29 @@ void COverview::fullRender() {
+                 bg.round();
+                 lb.round();
+             }
+-            Render::GL::g_pHyprOpenGL->renderRect(bg, CHyprColor{(uint64_t)**PLBGCOL}, {.round = roundPx});
+-            Render::GL::g_pHyprOpenGL->renderTexture(tex, lb, {.a = 1.0});
++            if (use3D) {
++                const CHyprColor bgc{(uint64_t)**PLBGCOL};
++                const float      radUV = roundPx > 0 ? std::clamp((float)roundPx / (float)std::max(1.0, std::min(bg.w, bg.h)), 0.0f, 0.5f) : 0.0f;
++                const auto       h3bg  = Hyprexpo3D::buildTileH3(MON->m_transformedSize, proj3D, (float)bg.x, (float)bg.y, (float)bg.w, (float)bg.h, warp3D);
++                Hyprexpo3D::renderSolid(h3bg, bgc.r, bgc.g, bgc.b, bgc.a, radUV, ROUND_PWR);
++                const auto h3lb = Hyprexpo3D::buildTileH3(MON->m_transformedSize, proj3D, (float)lb.x, (float)lb.y, (float)lb.w, (float)lb.h, warp3D);
++                Hyprexpo3D::renderWarped(tex, h3lb, 1.0f, 0.0f, ROUND_PWR, **P3FLIPV != 0);
++            } else {
++                Render::GL::g_pHyprOpenGL->renderRect(bg, CHyprColor{(uint64_t)**PLBGCOL}, {.round = roundPx});
++                Render::GL::g_pHyprOpenGL->renderTexture(tex, lb, {.a = 1.0});
++            }
+         };
+ 
+         auto drawNoBG = [&]() {
+             CBox lb = placeBox(tile, sz, anchor, offsetX, offsetY);
+             if (**PLPIXELSNAP)
+                 lb.round();
+-            Render::GL::g_pHyprOpenGL->renderTexture(tex, lb, {.a = 1.0});
++            if (use3D) {
++                const auto h3lb = Hyprexpo3D::buildTileH3(MON->m_transformedSize, proj3D, (float)lb.x, (float)lb.y, (float)lb.w, (float)lb.h, warp3D);
++                Hyprexpo3D::renderWarped(tex, h3lb, 1.0f, 0.0f, ROUND_PWR, **P3FLIPV != 0);
++            } else {
++                Render::GL::g_pHyprOpenGL->renderTexture(tex, lb, {.a = 1.0});
++            }
+         };
+ 
+         if (**PLBGEN)
+@@ -567,9 +762,23 @@ void COverview::fullRender() {
+ 
+         const std::string effectiveSpec = Hyprexpo::resolveBorderSpec(borderSpec, deprecatedGradSpec);
+ 
++        // 3D mode: draw the outline as a warped ring that follows the tile's
++        // perspective, instead of the flat axis-aligned native border.
++        auto drawWarpedRing = [&](float r, float g, float b, float a) -> bool {
++            if (!use3D || id < 0 || id >= (int)tileH3s.size() || tileH3s[id][8] == 0.0f)
++                return false;
++            const float thick = std::clamp((float)BWIDTH / (float)std::max(1.0, std::min(box.w, box.h)), 0.001f, 0.5f);
++            const float glow  = (id >= 0 && id < (int)tileGlowVal.size()) ? tileGlowVal[id] : 0.0f;
++            Hyprexpo3D::renderBorder(tileH3s[id], r, g, b, a, thick, glow);
++            return true;
++        };
++
+         if (isGradientBorderSpec(effectiveSpec)) {
+             const auto spec = parseGradientSpec(effectiveSpec);
+             if (spec.valid) {
++                if (drawWarpedRing(spec.c1.r, spec.c1.g, spec.c1.b, spec.c1.a))
++                    return;
++
+                 Config::CGradientValueData grad;
+                 grad.m_colors.clear();
+                 grad.m_colors.push_back(spec.c1);
+@@ -581,6 +790,9 @@ void COverview::fullRender() {
+         } else if (!effectiveSpec.empty()) {
+             Hyprexpo::SColorRGBA parsedColor;
+             if (Hyprexpo::parseSolidColorSpec(effectiveSpec, parsedColor)) {
++                if (drawWarpedRing(parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a))
++                    return;
++
+                 CHyprColor color{parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a};
+                 Render::GL::g_pHyprOpenGL->renderBorder(box, color, {.round = roundScaled, .roundingPower = ROUND_PWR, .borderSize = BWIDTH});
+             } else {
+diff --git c/PluginConfig.cpp i/PluginConfig.cpp
+index c04237a..5ef5a8b 100644
+--- c/PluginConfig.cpp
++++ i/PluginConfig.cpp
+@@ -42,6 +42,10 @@ void registerHyprexpoConfigValues() {
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:enable_drag_move", "legacy drag-move toggle", HyprexpoConfig::LEGACY_ENABLE_DRAG_MOVE_DEFAULT));
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:animate_entry", "legacy entry animation toggle", HyprexpoConfig::LEGACY_ANIMATE_ENTRY_DEFAULT));
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:wallpaper_bg", "draw the monitor wallpaper behind overview tiles", HyprexpoConfig::WALLPAPER_BG_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:tile_transparent", "capture tiles without wallpaper/bar so the shared background_image shows through", HyprexpoConfig::TILE_TRANSPARENT_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:background_image", "path to an image drawn behind the overview grid (empty = bg_col)", ""));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:background_dim", "darken the background image by this percent (0-100)", 0,
++                                                         Config::Values::SIntValueOptions{.min = 0, .max = 100}));
+ 
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
+@@ -53,6 +57,26 @@ void registerHyprexpoConfigValues() {
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:reverse_rows", "flip grid rows so the last row is on top (numpad order)", HyprexpoConfig::REVERSE_ROWS_DEFAULT));
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
+ 
++    // Experimental true-perspective grid (custom shader). Disabled by default so
++    // the live session is unaffected until explicitly enabled + tested.
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:threed_enable", "render the grid with a real 3D perspective warp", 0));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_tilt", "3D grid pitch in degrees (top recedes when > 0)", 20.0f));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_yaw", "3D grid yaw in degrees", 0.0f));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_distance", "3D camera distance in monitor heights", 1.6f));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_radius", "3D tile corner radius as a fraction of the short side", 0.06f));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:threed_flip_v", "flip the 3D tile texture vertically", 0));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_fisheye", "radial lens distortion strength on the 3D grid (0 = off, higher curves the edges)", HyprexpoConfig::THREED_FISHEYE_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_fisheye_pow", "radial falloff exponent for the fisheye distortion", HyprexpoConfig::THREED_FISHEYE_POW_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:glass_glow_enable", "draw a neon bloom around 3D tiles/borders", HyprexpoConfig::GLASS_GLOW_ENABLE_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:glass_glow", "neon bloom strength for 3D tiles (0 = off)", HyprexpoConfig::GLASS_GLOW_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:hover_scale", "grow the hovered tile by this factor (1 = off)", HyprexpoConfig::HOVER_SCALE_DEFAULT));
++
++    // Directional slide applied to the close morph. The grid overshoots toward
++    // the target tile and springs back (pure 2D translation, no tilt). 0 = the
++    // plain zoom (default).
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:slide_enable", "slide the grid toward the target on close", 0));
++    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:slide_amount", "slide overshoot as a fraction of the monitor size", 0.14f));
++
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
+     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
+                                                          Config::Values::SIntValueOptions{.min = 0, .max = 9}));
+diff --git c/globals.hpp i/globals.hpp
+index 66c4f04..7179ea5 100644
+--- c/globals.hpp
++++ i/globals.hpp
+@@ -3,3 +3,8 @@
+ #include <hyprland/src/plugins/PluginAPI.hpp>
+ 
+ inline HANDLE PHANDLE = nullptr;
++
++// Transient "peek" zoom (>=1.0) consumed by the next overview open: the grid is
++// opened slightly larger than the monitor so the current desktop pulls back a
++// little (subtle zoom-out) before flying into the target. 1.0 = normal open.
++inline float g_peekScale = 1.0f;
+diff --git c/scripts/run-nested.sh i/scripts/run-nested.sh
+index 98a8340..bee332d 100755
+--- c/scripts/run-nested.sh
++++ i/scripts/run-nested.sh
+@@ -109,6 +109,11 @@ $EXTRA_OUTPUTS
+ 
+ $LAYOUT_BLOCK
+ 
++animations {
++  enabled = yes
++  animation = windowsMove, 1, ${HYPREXPO_DEV_WINDOWSMOVE_SPEED:-8}, default
++}
++
+ debug {
+   disable_logs = false
+ }
+@@ -168,6 +173,27 @@ plugin {
+     # demo hyprland style gradient borders
+     border_grad_current = rgba(33ccffee) rgba(00ff99ee) 45deg
+     border_grad_focus   = rgba(ffdd44ee) rgba(22aaffee) 30deg
++
++    # experimental 3D grid (env-driven so the checked-in default stays off)
++    threed_enable   = ${HYPREXPO_DEV_3D:-0}
++    threed_tilt     = ${HYPREXPO_DEV_3D_TILT:-20}
++    threed_yaw      = ${HYPREXPO_DEV_3D_YAW:-0}
++    threed_distance = ${HYPREXPO_DEV_3D_DIST:-1.6}
++    threed_radius   = ${HYPREXPO_DEV_3D_RADIUS:-0.06}
++    threed_flip_v   = ${HYPREXPO_DEV_3D_FLIPV:-0}
++    threed_fisheye  = ${HYPREXPO_DEV_FISHEYE:-0}
++    threed_fisheye_pow = ${HYPREXPO_DEV_FISHEYE_POW:-2}
++    glass_glow_enable = ${HYPREXPO_DEV_GLOW_ENABLE:-0}
++    glass_glow      = ${HYPREXPO_DEV_GLOW:-0.6}
++    hover_scale     = ${HYPREXPO_DEV_HOVERSCALE:-1.0}
++
++    # custom background image behind the floating grid (env-driven)
++    background_image = ${HYPREXPO_DEV_BG:-}
++    background_dim   = ${HYPREXPO_DEV_BG_DIM:-0}
++
++    # directional slide morph on close (env-driven)
++    slide_enable = ${HYPREXPO_DEV_SLIDE:-0}
++    slide_amount = ${HYPREXPO_DEV_SLIDE_AMOUNT:-0.14}
+   }
+ }
+ 
+diff --git c/scripts/verify-3d.sh i/scripts/verify-3d.sh
+new file mode 100755
+index 0000000..0456292
+--- /dev/null
++++ i/scripts/verify-3d.sh
+@@ -0,0 +1,133 @@
++#!/usr/bin/env bash
++# verify-3d.sh - automated visual check of the hyprexpo 3D grid.
++#
++# Launches a nested Hyprland (never the live session), opens the overview,
++# screenshots the nested window and prints a compact SUMMARY plus the PNG path.
++# The caller (a human or an agent) can then just look at the PNG.
++#
++# Env knobs:
++#   HYPREXPO_DEV_MODE   nested output mode (default 900x600@60)
++#   HYPREXPO_DEV_3D     enable 3D (default 1)
++#   HYPREXPO_DEV_3D_TILT / _YAW / _DIST / _RADIUS / _FLIPV  warp params
++#   HYPREXPO_VERIFY_OUT output dir (default /tmp/opencode/hyprexpo-3d)
++set -uo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++OUT="${HYPREXPO_VERIFY_OUT:-/tmp/opencode/hyprexpo-3d}"
++LOG="$OUT/nested.log"
++PNG="$OUT/overview3d.png"
++MODE="${HYPREXPO_DEV_MODE:-900x600@60}"
++RT="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
++# The ambient HYPRLAND_INSTANCE_SIGNATURE can be stale (e.g. inside tmux after a
++# compositor restart), which makes bare `hyprctl` fail. Resolve the LIVE host
++# instance explicitly from `hyprctl instances` and use it for all host calls.
++SIG_HOST="$(hyprctl instances 2>/dev/null | sed -n 's/^instance \(.*\):$/\1/p' | head -1)"
++[ -n "$SIG_HOST" ] || SIG_HOST="${HYPRLAND_INSTANCE_SIGNATURE:-}"
++HYPR_DIR="$RT/hypr"
++SETTLE_MS="${HYPREXPO_VERIFY_SETTLE_MS:-1400}"
++
++mkdir -p "$OUT"
++
++# Prebuild so the nested launch is fast: a cold build is ~60s, longer than the
++# IPC wait below, which would otherwise fail with no-nested-ipc.
++echo "[verify-3d] prebuilding plugin (dev target)..."
++make -C "$REPO_ROOT" dev-build >/dev/null 2>&1 || { echo "SUMMARY: FAIL build"; exit 1; }
++
++nested_pid=""
++cleanup() {
++    [ -n "$nested_pid" ] && kill "$nested_pid" >/dev/null 2>&1 || true
++    pkill -f 'hyprexpo-dev.conf' >/dev/null 2>&1 || true
++}
++trap cleanup EXIT INT TERM
++cleanup
++sleep 0.3
++
++echo "[verify-3d] launching nested (mode=$MODE, 3D=${HYPREXPO_DEV_3D:-1})"
++HYPREXPO_DEV_3D="${HYPREXPO_DEV_3D:-1}" HYPREXPO_DEV_MODE="$MODE" \
++    setsid "$REPO_ROOT/scripts/run-nested.sh" >"$LOG" 2>&1 </dev/null &
++nested_pid=$!
++
++# --- wait for the nested IPC socket (confirmed by a version query) ----------
++SIG=""
++for _ in $(seq 1 240); do
++    for d in $(ls -t "$HYPR_DIR" 2>/dev/null); do
++        [ "$d" = "$SIG_HOST" ] && continue
++        if HYPRLAND_INSTANCE_SIGNATURE="$d" hyprctl -j version >/dev/null 2>&1; then
++            SIG="$d"; break
++        fi
++    done
++    [ -n "$SIG" ] && break
++    sleep 0.25
++done
++if [ -z "$SIG" ]; then
++    echo "SUMMARY: FAIL no-nested-ipc"
++    exit 1
++fi
++nested() { HYPRLAND_INSTANCE_SIGNATURE="$SIG" hyprctl "$@"; }
++host() { HYPRLAND_INSTANCE_SIGNATURE="$SIG_HOST" hyprctl "$@"; }
++
++plugin_line="$(nested -j plugin list 2>/dev/null | jq -r '.[0] | "\(.name) \(.version) loaded=\(.error)"' 2>/dev/null)"
++plugin_count="$(nested -j plugin list 2>/dev/null | jq 'length' 2>/dev/null)"
++opt3d="$(nested getoption plugin:hyprexpo:threed_enable 2>/dev/null | tr -d '\n')"
++opttilt="$(nested getoption plugin:hyprexpo:threed_tilt 2>/dev/null | tr -d '\n')"
++
++# --- wait for the host window that renders the nested compositor ------------
++addr=""; geom=""
++for _ in $(seq 1 240); do
++    addr=$(host -j clients | jq -r '[.[] | select((.class // "") | test("aquamarine|Hyprland"; "i"))][0].address' 2>/dev/null)
++    if [ -n "$addr" ] && [ "$addr" != "null" ]; then
++        geom=$(host -j clients | jq -r --arg a "$addr" '[.[] | select(.address==$a)][0] | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
++        break
++    fi
++    sleep 0.25
++done
++if [ -z "$addr" ] || [ "$addr" = "null" ]; then
++    echo "SUMMARY: FAIL no-host-window host_sig=$SIG_HOST clients=$(host -j clients 2>/dev/null | jq -r '[.[].class] | join(",")' 2>/dev/null)"
++    exit 1
++fi
++
++# Float + place it on screen so the capture is fully visible (best effort).
++host dispatch togglefloating "address:$addr" >/dev/null 2>&1 || true
++host dispatch resizewindowpixel "exact 880 560,address:$addr" >/dev/null 2>&1 || true
++host dispatch movewindowpixel  "exact 20 20,address:$addr"    >/dev/null 2>&1 || true
++sleep 0.4
++geom=$(host -j clients | jq -r --arg a "$addr" '[.[] | select(.address==$a)][0] | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
++read -r wx wy ww wh <<<"$geom"
++
++# --- open the overview and settle ------------------------------------------
++# HYPREXPO_VERIFY_PEEK=<scale> opens with the "peek" fly-through (subtle zoom)
++# instead of the full grid, e.g. HYPREXPO_VERIFY_PEEK=1.08.
++if [ -n "${HYPREXPO_VERIFY_PEEK:-}" ]; then
++    nested dispatch hyprexpo:peek "${HYPREXPO_VERIFY_PEEK}" >/dev/null 2>&1 || true
++else
++    nested dispatch hyprexpo:expo toggle >/dev/null 2>&1 || true
++fi
++sleep "$(awk -v ms="$SETTLE_MS" 'BEGIN{printf "%.2f", ms/1000}')"
++
++if ! grim -g "$wx,$wy ${ww}x${wh}" "$PNG" 2>"$OUT/grim.err"; then
++    echo "SUMMARY: FAIL grim: $(cat "$OUT/grim.err")"
++    exit 1
++fi
++
++# Optional: trigger a selection and capture the grid mid close-morph to inspect
++# the directional slide. Enable with HYPREXPO_VERIFY_SLIDE=1.
++slide_line=""
++if [ "${HYPREXPO_VERIFY_SLIDE:-0}" = "1" ]; then
++    PNG_SLIDE="$OUT/overview3d-slide.png"
++    MS="${HYPREXPO_VERIFY_SLIDE_MS:-120}"
++    nested dispatch "hyprexpo:kb_selectn" "${HYPREXPO_VERIFY_SLIDE_TARGET:-5}" >/dev/null 2>&1 || true
++    sleep "$(awk -v ms="$MS" 'BEGIN{printf "%.3f", ms/1000}')"
++    grim -g "$wx,$wy ${ww}x${wh}" "$PNG_SLIDE" 2>"$OUT/grim-slide.err" || true
++    slide_line="slide_png=$PNG_SLIDE"
++fi
++
++shader_ready="no"; grep -aq '\[hyprexpo:3d\] perspective shader ready' "$LOG" && shader_ready="yes"
++shader_errors="$(grep -ac '\[hyprexpo:3d\].*failed' "$LOG" 2>/dev/null || true)"; shader_errors="${shader_errors:-0}"
++alive="no"; kill -0 "$nested_pid" >/dev/null 2>&1 && alive="yes"
++
++echo "SUMMARY: nested_alive=$alive plugins=$plugin_count shader_ready=$shader_ready shader_errors=$shader_errors window=[$geom] png=$PNG $slide_line"
++[ -n "$plugin_line" ] && echo "PLUGIN: $plugin_line"
++echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
++exit 0

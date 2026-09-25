@@ -1,6 +1,9 @@
 *.swp
 *.swo
 *~
+*.bak
+*.bak.*
+*.live-refresh.*
 .DS_Store
 Thumbs.db
 result

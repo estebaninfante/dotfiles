@@ -50,6 +50,17 @@ else
     cd "$REPO" && git pull --ff-only 2>/dev/null || true
 fi
 
+# ── Detectar maquina por hardware (laptop|desktop) ─────────────
+# CRITICO: no confiar en el default ni en un archivo previo. En fresh install
+# `machine-type` no existe; usar "desktop" por defecto configuraria mal la
+# laptop (fue exactamente el bug que detect-machine.sh previene).
+if [[ -x "$REPO/scripts/detect-machine.sh" ]]; then
+    MACHINE=$(bash "$REPO/scripts/detect-machine.sh")
+else
+    MACHINE=$(cat "$HOME/.config/machine-type" 2>/dev/null || echo "desktop")
+fi
+info "Maquina detectada: ${BOLD}$MACHINE${NC}"
+
 # ══════════════════════════════════════════════════════════════
 # FASE 1: AUR helper (yay)
 # ══════════════════════════════════════════════════════════════
@@ -77,83 +88,98 @@ AUR_HELPER=$(command -v yay || command -v paru)
 # ══════════════════════════════════════════════════════════════
 header "Fase 2: Paquetes del sistema"
 
-# Paquetes core que Omarchy NO trae
+# Paquetes core que Omarchy NO trae. Los que ya vienen con Omarchy
+# (hyprland, uwsm, networkmanager, bluetooth base, etc.) se omiten.
 EXTRA_PKGS=(
-    # Hyprland extras
-    hyprpaper hypridle hyprlock hyprpolkitagent
+    # Hyprland
+    hyprpaper hypridle hyprlock hyprpolkitagent hyprpicker hyprsunset
     xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
 
     # Terminal & shell
-    kitty tmux starship zoxide fish
+    kitty foot tmux starship zoxide fish
 
-    # Utilities
-    fastfetch btop bat eza fd ripgrep fzf lazygit delta
-    yq ncdu duf htop socat evtest
-    unzip zip p7zip unrar rsync tldr tree
-    curl wget openssh jq
+    # CLI & utilities
+    fastfetch btop bat eza fd ripgrep fzf lazygit git-delta yq ncdu duf htop socat evtest
+    unzip zip p7zip unrar rsync tldr tree whois plocate
+    curl wget openssh jq gh imagemagick
 
     # Audio
-    pamixer playerctl brightnessctl libnotify
+    pamixer playerctl brightnessctl libnotify alsa-utils
 
-    # Network
-    network-manager network-manager-gnome
-    bluez blueman networkmanagerapplet
+    # Red / Bluetooth
+    network-manager-applet bluez bluez-utils blueman
 
     # Wayland
     wl-clipboard wtype grim slurp swappy dotool
 
+    # UI Omarchy (barra + widgets; la barra activa es la de Omarchy)
+    swaync swayosd mako avizo waybar
+
     # Fonts
-    noto-fonts noto-fonts-emoji ttf-font-awesome
+    noto-fonts noto-fonts-emoji noto-fonts-cjk woff2-font-awesome ttf-jetbrains-mono-nerd-basic
 
     # Apps
-    nautilus vlc mpv
+    nautilus dolphin gvfs-mtp gvfs-smb vlc mpv firefox tesseract tesseract-data-eng
+
+    # TTS (motor de fallback)
+    espeak-ng sox
 )
 
 TO_INSTALL=()
 for pkg in "${EXTRA_PKGS[@]}"; do
-    if ! pacman -Qi "$pkg" &>/dev/null 2>&1; then
-        TO_INSTALL+=("$pkg")
-    fi
+    pacman -Qi "$pkg" &>/dev/null 2>&1 || TO_INSTALL+=("$pkg")
 done
 
 if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
-    info "Instalando ${#TO_INSTALL[@]} paquetes..."
-    sudo pacman -S --needed --noconfirm "${TO_INSTALL[@]}"
-    ok "Paquetes base instalados"
+    info "Instalando ${#TO_INSTALL[@]} paquetes base..."
+    # Intento en bloque; si algun nombre no existe, reintenta uno por uno para
+    # no abortar todo el setup por un solo paquete.
+    sudo pacman -S --needed --noconfirm "${TO_INSTALL[@]}" \
+        || for pkg in "${TO_INSTALL[@]}"; do
+               sudo pacman -S --needed --noconfirm "$pkg" || warn "paquete no instalado: $pkg"
+           done
+    ok "Paquetes base procesados"
 else
     ok "Todos los paquetes base ya instalados"
 fi
 
-# Paquetes AUR
+# Paquetes AUR (el helper tambien resuelve paquetes de repo)
 AUR_PKGS=(
     keyd
     brave-bin
     discord
     telegram-desktop
     obsidian
-    lan-mouse-bin
+    qbittorrent
+    moonlight-qt
+    lan-mouse
     piper-tts-bin
     yt-dlp
     localsend-bin
-    qbittorrent
-    moonlight-qt
     opencode-bin
-    nerd-fonts-jetbrains-mono
+    mise-bin
+    handy-bin
+    wayfreeze
+    sunshine
 )
+
+# Gestos de touchpad (solo laptop)
+if [[ "$MACHINE" == "laptop" ]]; then
+    AUR_PKGS+=( libinput-gestures )
+fi
 
 AUR_TO_INSTALL=()
 for pkg in "${AUR_PKGS[@]}"; do
-    if ! pacman -Qi "$pkg" &>/dev/null 2>&1; then
-        AUR_TO_INSTALL+=("$pkg")
-    fi
+    pacman -Qi "$pkg" &>/dev/null 2>&1 || AUR_TO_INSTALL+=("$pkg")
 done
 
 if [[ ${#AUR_TO_INSTALL[@]} -gt 0 ]]; then
     info "Instalando ${#AUR_TO_INSTALL[@]} paquetes AUR..."
-    $AUR_HELPER -S --needed --noconfirm "${AUR_TO_INSTALL[@]}" || {
-        warn "Algunos paquetes AUR fallaron — instalar manualmente"
-    }
-    ok "Paquetes AUR instalados"
+    $AUR_HELPER -S --needed --noconfirm "${AUR_TO_INSTALL[@]}" \
+        || for pkg in "${AUR_TO_INSTALL[@]}"; do
+               $AUR_HELPER -S --needed --noconfirm "$pkg" || warn "AUR no instalado: $pkg"
+           done
+    ok "Paquetes AUR procesados"
 else
     ok "Todos los paquetes AUR ya instalados"
 fi
@@ -170,58 +196,31 @@ mkdir -p "$HOME/.config/hypr"
 ok "Hyprland config (symlink en Fase 5)"
 
 # ══════════════════════════════════════════════════════════════
-# FASE 4: Quickshell custom (reemplaza omarchy-shell)
+# FASE 4: Omarchy shell (barra activa)
 # ══════════════════════════════════════════════════════════════
-header "Fase 4: Quickshell custom"
+header "Fase 4: Omarchy shell"
 
-# Deshabilitar omarchy-shell si existe
-if systemctl --user is-enabled omarchy-shell.service &>/dev/null 2>&1; then
-    systemctl --user stop omarchy-shell.service 2>/dev/null || true
-    systemctl --user disable omarchy-shell.service 2>/dev/null || true
-    ok "omarchy-shell deshabilitado"
+# IMPORTANTE: la barra que se usa es la de OMARCHY, no el quickshell custom de
+# los dotfiles. hyprland.lua la lanza con `omarchy-launch-shell`. NO se
+# deshabilita omarchy-shell ni se habilita un quickshell.service propio (eso
+# fue un enfoque viejo que dejaba dos barras peleando).
+#
+# El quickshell del repo se mantiene symlinkeado (link-dotfiles.sh) como
+# referencia/backup, pero sin servicio systemd que lo arranque.
+if [[ ! -d /usr/share/omarchy/shell ]]; then
+    warn "Omarchy shell no encontrado en /usr/share/omarchy/shell"
+    warn "Verifica la instalacion de Omarchy (omarchy-launch-shell)."
 fi
 
-# Quitar omarchy-shell del autostart si esta
-if [[ -f "$HOME/.config/hypr/autostart.lua" ]]; then
-    if grep -q "omarchy" "$HOME/.config/hypr/autostart.lua" 2>/dev/null; then
-        cp "$HOME/.config/hypr/autostart.lua" "$HOME/.config/hypr/autostart.lua.bak"
-        sed -i '/omarchy-shell/d' "$HOME/.config/hypr/autostart.lua"
-        ok "omarchy-shell removido del autostart"
-    fi
+# Asegurar que servicios viejos de quickshell no queden habilitados.
+if systemctl --user is-enabled quickshell.service &>/dev/null 2>&1; then
+    systemctl --user stop quickshell.service 2>/dev/null || true
+    systemctl --user disable quickshell.service 2>/dev/null || true
+    ok "quickshell.service (viejo) deshabilitado"
 fi
+rm -f "$HOME/.config/systemd/user/quickshell.service" 2>/dev/null || true
 
-# Symlink nuestro quickshell
-rm -rf "$HOME/.config/quickshell" 2>/dev/null || true
-ln -sf "$DOTFILES_CONFIG/quickshell" "$HOME/.config/quickshell"
-ok "~/.config/quickshell → symlink al repo"
-
-# Systemd service para quickshell
-mkdir -p "$HOME/.config/systemd/user"
-
-cat > "$HOME/.config/systemd/user/quickshell.service" << 'QSEOF'
-[Unit]
-Description=Quickshell panel (custom QML bar)
-After=graphical-session.target
-PartOf=graphical-session.target
-
-[Service]
-Type=simple
-ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do [ -S "/run/user/%U/wayland-1" ] && exit 0; sleep 0.5; done; exit 0'
-ExecStart=quickshell --no-duplicate
-Environment=WAYLAND_DISPLAY=wayland-1
-Environment=XDG_RUNTIME_DIR=/run/user/%U
-Environment=XDG_CURRENT_DESKTOP=Hyprland
-Environment=QT_SCALE_FACTOR=1
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=graphical-session.target
-QSEOF
-
-systemctl --user daemon-reload
-systemctl --user enable quickshell.service
-ok "quickshell.service habilitado"
+ok "Omarchy shell activo (via omarchy-launch-shell en autostart de Hyprland)"
 
 # ══════════════════════════════════════════════════════════════
 # FASE 5: Configs (symlink al repo)
@@ -246,7 +245,6 @@ header "Fase 6: Scripts"
 
 # Todos los scripts de linux/bin ya quedaron enlazados en Fase 5
 # via link-dotfiles.sh (no clobbea archivos reales de Omarchy).
-MACHINE=$(cat "$HOME/.config/machine-type" 2>/dev/null || echo "desktop")
 ok "Scripts enlazados (inventario completo via link-dotfiles.sh)"
 
 # ══════════════════════════════════════════════════════════════
@@ -338,9 +336,9 @@ Environment=PULSE_SERVER=unix:/run/user/%U/pulse/native
 WantedBy=graphical-session.target
 EOF
 
-# Enable services
+# Enable services (sin quickshell: la barra es la de Omarchy)
 systemctl --user daemon-reload
-for svc in quickshell lan-mouse hyprpolkitagent voice-daemon; do
+for svc in lan-mouse hyprpolkitagent voice-daemon; do
     systemctl --user enable "$svc" 2>/dev/null && ok "$svc habilitado" || warn "$svc no pudo habilitarse"
 done
 
@@ -403,7 +401,7 @@ header "Fase 12: Verificación"
 
 CHECKS=(
     "hyprland:Hyprland"
-    "quickshell:Quickshell"
+    "quickshell:Quickshell (barra Omarchy)"
     "keyd:keyd"
     "systemctl:systemd"
     "brightnessctl:Brightness"
@@ -428,12 +426,11 @@ for check in "${CHECKS[@]}"; do
     fi
 done
 
-# Quickshell config check
-if [[ -L "$HOME/.config/quickshell" ]] && [[ -f "$HOME/.config/quickshell/shell.qml" ]]; then
-    ok "Quickshell config"
+# Omarchy shell check
+if [[ -d /usr/share/omarchy/shell ]]; then
+    ok "Omarchy shell (barra activa)"
 else
-    err "Quickshell config NO configurado"
-    ALL_OK=false
+    warn "Omarchy shell no detectado en /usr/share/omarchy/shell"
 fi
 
 # Hyprland config check
@@ -442,6 +439,18 @@ if [[ -f "$HOME/.config/hypr/hyprland.lua" ]]; then
 else
     err "Hyprland Lua config NO encontrado"
     ALL_OK=false
+fi
+
+# Parche local de hyprexpo (SOLO desktop: grilla 3D/fisheye). Laptop corre el
+# plugin stock; saltar si no es desktop.
+if [[ "$MACHINE" == "desktop" ]]; then
+    if [[ -f "$HOME/.config/hypr/hyprland.lua" ]] && command -v hyprctl &>/dev/null; then
+        if hyprctl plugin list 2>/dev/null | grep -qi "hyprexpo"; then
+            ok "hyprexpo cargado (parche 3D desktop)"
+        else
+            warn "hyprexpo no cargado — correr: ~/.local/bin/hyprexpo-rebuild.sh"
+        fi
+    fi
 fi
 
 echo ""
@@ -457,7 +466,11 @@ info "  1. Reiniciar (para keyd + servicios)"
 info "  2. Copiar secrets: bash ~/dotfiles/scripts/setup-secrets.sh"
 info "  3. Probar Hyprland: login desde SDDM"
 echo ""
-info "Quickshell se lanza automaticamente via systemd."
-info "Omarchy shell deshabilitado. Usa tu quickshell custom."
-info "Para restaurar omarchy-shell: systemctl --user enable --now omarchy-shell"
+info "La barra es la de Omarchy (omarchy-launch-shell, en el autostart)."
+info "Maquina: ${MACHINE} (machine-type escrito en ~/.config/machine-type)."
+if [[ "$MACHINE" == "laptop" ]]; then
+    info "Laptop: hyprexpo stock (grilla plana, sin parche 3D/fisheye)."
+else
+    info "Desktop: parche local hyprexpo (grilla 3D/fisheye). Rebuild: ~/.local/bin/hyprexpo-rebuild.sh"
+fi
 echo ""

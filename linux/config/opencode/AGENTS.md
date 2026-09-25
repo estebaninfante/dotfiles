@@ -37,3 +37,18 @@ dependen del toggle.
 Ejemplo:
 `notify_user({ message: "Refactorice el plugin de voz a modo eventos y verifique el flujo.", title: "opencode", priority: 3 })`
 
+## Shell / barra activa (IMPORTANTE)
+
+Hay DOS quickshell en esta maquina. La barra que el usuario ve y usa es la de **Omarchy**,
+NO la de los dotfiles.
+
+- **ACTIVA**: Omarchy shell. Fuente en `/usr/share/omarchy/shell/` (SOLO LECTURA, es del
+  paquete; se sobrescribe en updates). Se lanza con `omarchy-launch-shell` y se configura
+  desde `~/.config/omarchy/shell.json` (+ plugins en `~/.config/omarchy/plugins/`).
+  Ver el skill `omarchy` (plugins.md) antes de tocarla.
+- **NO USAR**: `~/.config/quickshell/` (symlink a los dotfiles). Aunque tenga su propio
+  AGENTS.md, NO es la barra activa; no editarla para cambios de UI/barra salvo que el
+  usuario lo pida explicitamente.
+
+Regla: ante cualquier pedido sobre "mi barra" / shell, aplicar SIEMPRE en Omarchy.
+
