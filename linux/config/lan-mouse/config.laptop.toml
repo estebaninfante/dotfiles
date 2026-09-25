@@ -8,7 +8,7 @@ release_bind = [
 [[clients]]
 hostname = "192.168.1.241"
 ips = ["192.168.1.241"]
-position = "right"
+position = "top"
 activate_on_startup = true
 
 [authorized_fingerprints]
