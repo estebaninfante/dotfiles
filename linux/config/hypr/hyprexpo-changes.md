@@ -47,6 +47,19 @@ Tras probarlo en vivo: **más margen entre tiles** y algo **menos de inclinació
 
 Estado: aplicado con `hyprctl reload` → ok (`gaps_in=16`, `threed_tilt=15`).
 
+#### Centrado vertical (margen simétrico arriba/abajo)
+Motivo: con perspectiva, las pantallas quedaban **más pegadas abajo** que arriba
+(el hueco alrededor del cubo no era simétrico). Causa: en el warp 3D el plano
+cercano se agranda más de lo que se encoge el lejano (`D = cam - z`), así que la
+caja proyectada de la grilla se corría hacia el espectador y el borde inferior
+salía de pantalla.
+
+Cambio (`Overview3D.cpp`, `buildTileH3`): se calcula la proyección del borde
+superior e inferior de la columna central de la grilla y se traslada cada vértice
+`vOffset = -½(sTop + sBot)` para que su punto medio caiga en el pivote → márgenes
+simétricos. `vOffset` depende solo de tilt/cámara (igual para todos los tiles) y
+es 0 con `threed_tilt = 0`. Aplicar con rebuild + reinicio.
+
 ### Revertir
 `border_default = ""`, `animation = "windowsMove"` (o quitar en el bloque 3D),
 `gaps_in = 0`, `threed_tilt = 22` + `hyprctl reload`. Para los fixes del `.so`,

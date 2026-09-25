@@ -239,10 +239,10 @@ index 5b7d8e4..2259e0d 100644
      bool                         m_closeCommitted = false;
 diff --git i/Overview3D.cpp w/Overview3D.cpp
 new file mode 100644
-index 0000000..8c0821d
+index 0000000..429abc0
 --- /dev/null
 +++ w/Overview3D.cpp
-@@ -0,0 +1,484 @@
+@@ -0,0 +1,502 @@
 +#include "Overview3D.hpp"
 +
 +#include <hyprland/src/render/OpenGL.hpp>
@@ -581,6 +581,24 @@ index 0000000..8c0821d
 +        const float ct = std::cos(th), st = std::sin(th);
 +        const float cp = std::cos(ph), sp = std::sin(ph);
 +
++        // Vertical recentring: with a tilt the near half of the grid is scaled up
++        // more than the far half is scaled down (D = cam - z), so the projected
++        // bounding box drifts toward the viewer and the top/bottom margins come
++        // out asymmetric (the grid hugs one edge). Compute the projected top and
++        // bottom of the grid's centre column and shift every vertex so their
++        // midpoint lands on the pivot My again. Depends only on the tilt/camera
++        // so all tiles receive the same offset and the grid stays coherent.
++        const float halfG = (useGrid ? p.gridHeight : (float)monSize.y) * 0.5f;
++        float       Dtop  = cam - (-halfG * st);
++        float       Dbot  = cam - (halfG * st);
++        if (Dtop < nearPlane)
++            Dtop = nearPlane;
++        if (Dbot < nearPlane)
++            Dbot = nearPlane;
++        const float sTop    = -halfG * ct * (cam / Dtop);
++        const float sBot    = halfG * ct * (cam / Dbot);
++        const float vOffset = -0.5f * (sTop + sBot);
++
 +        auto world = [&](float px, float py, float& X, float& Y, float& W) {
 +            const float dx = px - Mx, dy = py - My;
 +            const float x1 = dx, y1 = dy * ct, z1 = dy * st;
@@ -592,7 +610,7 @@ index 0000000..8c0821d
 +                D = nearPlane;
 +            const float scale = cam / D;
 +            const float sx    = Mx + x2 * scale;
-+            const float sy    = My + y2 * scale;
++            const float sy    = My + y2 * scale + vOffset;
 +            X = sx * D;
 +            Y = sy * D;
 +            W = D;
