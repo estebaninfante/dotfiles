@@ -68,13 +68,22 @@ export_config() {
         url="$(git -C "$p" remote get-url origin 2>/dev/null || true)"
         [[ -n "$url" ]] && printf '%s %s\n' "$id" "$url" >> "$SRC/plugins-git.txt"
     done
+    # Temas: los locales (sin .git) se copian; los git se restauran por url.
     : > "$SRC/themes-git.txt"
+    rm -rf "$SRC/themes"
     for p in "$LIVE"/themes/*/; do
-        [[ -d "$p/.git" ]] || continue
+        [[ -d "$p" ]] || continue
         id="$(basename "$p")"
-        url="$(git -C "$p" remote get-url origin 2>/dev/null || true)"
-        [[ -n "$url" ]] && printf '%s %s\n' "$id" "$url" >> "$SRC/themes-git.txt"
+        if [[ -d "$p/.git" ]]; then
+            url="$(git -C "$p" remote get-url origin 2>/dev/null || true)"
+            [[ -n "$url" ]] && printf '%s %s\n' "$id" "$url" >> "$SRC/themes-git.txt"
+        else
+            copy_tree "$p" "$SRC/themes/$id"
+        fi
     done
+
+    # Tema activo (para que la laptop aplique el mismo al importar)
+    cat "$HOME/.local/state/omarchy/current/theme.name" > "$SRC/theme-current.txt" 2>/dev/null || true
 
     ok "Config Omarchy exportada a linux/config/omarchy"
 }
@@ -95,6 +104,7 @@ import_config() {
     done
 
     [[ -d "$SRC/plugins" ]] && copy_tree "$SRC/plugins" "$LIVE/plugins"
+    [[ -d "$SRC/themes" ]]  && copy_tree "$SRC/themes"  "$LIVE/themes"
 
     if command -v omarchy &>/dev/null; then
         if [[ -f "$SRC/plugins-git.txt" ]]; then
@@ -120,6 +130,20 @@ import_config() {
             done < "$SRC/themes-git.txt"
         fi
         omarchy bar use eztvn.bar >/dev/null 2>&1 && ok "Barra activa: eztvn.bar" || true
+
+        # Aplicar el tema activo del export, solo si difiere del actual (asi no
+        # resetea el fondo elegido en la maquina ya configurada).
+        if [[ -f "$SRC/theme-current.txt" ]]; then
+            tname="$(cat "$SRC/theme-current.txt")"
+            if [[ -n "$tname" && -d "$LIVE/themes/$tname" ]]; then
+                cur="$(basename "$(readlink -f "$HOME/.local/state/omarchy/current/theme" 2>/dev/null)" 2>/dev/null)"
+                if [[ "$cur" != "$tname" ]]; then
+                    omarchy theme set "$tname" >/dev/null 2>&1 \
+                        && ok "Tema aplicado: $tname" || warn "No se pudo aplicar el tema: $tname"
+                fi
+            fi
+        fi
+
         command -v omarchy-restart-shell >/dev/null 2>&1 && omarchy-restart-shell >/dev/null 2>&1 || true
     fi
 
