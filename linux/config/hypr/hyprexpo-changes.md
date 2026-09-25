@@ -280,6 +280,18 @@ tiles) se descarto — esa funcion upstream no existe en `5891014c` (ni en el
 `master` actual). La expo vuelve a snapshots al abrir + refresh por damage,
 como el plugin stock. 3D, instant-retarget y tiles transparentes intactos.
 
+## Cambio 2026-09-25 — `reverse_rows` implementado de verdad
+
+`hyprland.lua` seteaba `plugin:hyprexpo:reverse_rows=1` (orden numpad 789/456/123)
+pero la clave NO existia en ningun parche commiteado: venia de un arbol sucio del
+desktop, nunca foldeada al patch. Resultado: `configerrors` con unknown key y orden
+stock. Implementado en el fork: default `REVERSE_ROWS_DEFAULT=0`,
+flag `reverseRows` en `computeTileLayout`/`tileIndexAtPoint` (fila visual =
+`occupiedRows-1-fila logica`), cableado en `tileLayoutForIndex`/`tileIndexAtPoint`
+( TODA la geometria pasa por ahi: render, hit-test, hover, drag, nav). Test
+headless `/tmp/revtest.cpp`: 9/9 asserts (numpad, hit-test, parciales, stock
+intacto). Parche v2 regenerado (18 archivos). Instalar + reloguear para cargar.
+
 ## Backups (en este mismo directorio)
 
 - `hyprland.lua.bak.1790228045` — estado **antes** del cambio de hyprexpo

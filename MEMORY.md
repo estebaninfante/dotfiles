@@ -35,6 +35,8 @@ _(agregar aqui pendientes activos)_
 - **setup-secrets.sh**: peer se elegía por `hostname` (laptopmarchy → peer erróneo "laptop"). Ahora usa `~/.config/machine-type` con fallback a hostname.
 - **Paquetes**: tailscale + syncthing NO estaban en setup-omarchy (FASE 9 los esperaba). Instalados vía pacman+pkexec, servicios habilitados (`tailscaled` activo; `syncthing@eztvn` habilitado, arranque manual descartado por usuario). Agregados a EXTRA_PKGS del setup para futuros installs.
 - **SSH**: key `ed25519` creada en laptop (`eztvn@laptopmarchy`). Falta: autorizarla en desktop + `tailscale up --authkey` + `gh auth login` + copiar secrets/sunshine-pass (desktop offline durante la sesión).
+- **`reverse_rows`**: `hyprland.lua` lo seteaba pero la clave no existía en ningún parche (venía de árbol sucio del desktop). Implementado en el fork (flag en computeTileLayout/tileIndexAtPoint, default 0), test headless 9/9, parche v2 (18 archivos). `.so` con reverse compilado en `~/.cache/hyprexpo-src/` — falta `sudo install` (polkit bloqueado con pantalla lockeada) + relogin.
+- **Ojo**: `pkill -f <patrón>` se suicida si el patrón aparece en tu propio comando. Matar nested solo por PID. Los `make test` del plugin tienen 4 FAILs preexistentes de selección (no-layout) en este pin.
 
 ### Sesión 2026-09-15: Migración NixOS → Omarchy (Arch)
 - **Qué se hizo**: Eliminado todo el legacy NixOS/Ubuntu (nixos/, flake.nix/lock, setup-nixos.sh, setup-ubuntu.sh, migrate-to-ubuntu.sh, cuda-*, refind-check.sh, rebuild/sync*, auto-sync.sh, linux/bin/cuda-build-notify.sh, gdm/black.png). Repo remoto corregido a `github.com/estebaninfante/dotfiles.git`.
