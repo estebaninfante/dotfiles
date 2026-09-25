@@ -31,7 +31,7 @@ if [ ! -d "$SRC/.git" ]; then
 fi
 
 git -C "$SRC" fetch --all --tags --quiet
-git -C "$SRC" checkout --quiet "$PIN"
+git -C "$SRC" checkout -f --quiet "$PIN"
 git -C "$SRC" reset --hard --quiet "$PIN"
 git -C "$SRC" clean -fdq
 git -C "$SRC" apply "$PATCH"
