@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync dotfiles cada 5 min (y al arrancar la sesion)
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

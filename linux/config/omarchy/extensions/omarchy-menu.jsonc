@@ -27,4 +27,9 @@
   // Example: replace the default About action by reusing the same id. Existing
   // fields are kept unless overridden.
   // "about": {"icon":"","label":"About","action":"omarchy-launch-or-focus-tui \"zsh -c 'fastfetch; read -k 1'\""},
+
+  // Dotfiles sync (scripts/dotfiles-sync.sh + timer systemd-user cada 5 min)
+  "sync": {"icon":"󰓦","label":"Dotfiles sync"},
+  "sync.now": {"icon":"󰐯","label":"Sincronizar ahora","description":"git pull --rebase --autostash","action":"~/dotfiles/scripts/dotfiles-sync.sh --force"},
+  "sync.auto": {"icon":"󰔣","label":"Auto-sync","description":"Pull cada 5 min (timer systemd)","action":"~/dotfiles/scripts/dotfiles-sync.sh --toggle","checked":"test ! -f ~/.config/dotfiles-autosync.off"}
 }

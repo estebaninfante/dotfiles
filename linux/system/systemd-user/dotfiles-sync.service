@@ -1,0 +1,7 @@
+[Unit]
+Description=Sync dotfiles (git pull --rebase --autostash)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/dotfiles/scripts/dotfiles-sync.sh
