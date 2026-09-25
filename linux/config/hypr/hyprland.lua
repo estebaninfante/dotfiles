@@ -767,7 +767,17 @@ if hl.plugin.hyprexpo ~= nil then
     hl.on("keybinds.submap", function(name)
         if name ~= "hyprexpo" then
             if expo_hold.open then expo_hold.open = false end
-            if expo_fly and expo_fly.deliberate then expo_fly.deliberate = false end
+            -- Cierre por click en tile / Esc / kb_confirm: el plugin sale del
+            -- submap sin pasar por nuestros commits. Sincronizar o expo_fly.open
+            -- queda trabado en true y el hot corner no vuelve a disparar.
+            if expo_fly then
+                if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
+                expo_fly.open = false
+                expo_fly.sel = nil
+                expo_fly.want = nil
+                expo_fly.pending = false
+                expo_fly.deliberate = false
+            end
         end
     end)
 end
@@ -1610,6 +1620,38 @@ hl.define_submap("passthrough", function()
     hl.bind("CTRL + Delete", hl.dsp.exec_cmd("~/.local/bin/toggle_moonlight.sh"), { locked = true, submap_universal = true })
     hl.bind("catchall", hl.dsp.submap("reset"))
 end)
+
+-- ========================
+-- HOT CORNER (arriba-izquierda -> grilla, estilo GNOME)
+-- Poll del cursor: si toca la esquina (x<=3, y<=3) abre la grilla.
+-- Re-arme: exige salir de la zona (margen 60px) antes de redisparar,
+-- asi no reabre al cerrar la grilla con el mouse ahi mismo.
+-- ========================
+local HOT_SIZE = 3
+local HOT_REARM = 60
+local HOT_POLL_MS = 120
+local hot_armed = true
+
+if hl.plugin.hyprexpo ~= nil then
+    hl.timer(function()
+        local ok, p = pcall(hl.get_cursor_pos)
+        if not ok or not p or not p.x or not p.y then return end
+        if p.x <= HOT_SIZE and p.y <= HOT_SIZE then
+            if hot_armed and not expo_fly.open and not expo_hold.open and expo_fly.busy == 0 then
+                hot_armed = false
+                reset_ws_style()
+                expo_fly.deliberate = true
+                hl.plugin.hyprexpo.expo("on")
+                expo_fly.open = true
+                local cur = hl.get_active_workspace()
+                expo_fly.sel = cur and ws_grid_index(cur.id) or nil
+                expo_fly.want = nil
+            end
+        elseif p.x > HOT_REARM or p.y > HOT_REARM then
+            hot_armed = true
+        end
+    end, { timeout = HOT_POLL_MS, type = "repeat" })
+end
 
 -- Lock animation (slide windows off-screen on lock)
 require("lock_anim")
