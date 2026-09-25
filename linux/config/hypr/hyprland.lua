@@ -137,18 +137,58 @@ if machine == "laptop" then
 end
 
 -- ========================
+-- BORDE DE VENTANA ACTIVA = COLOR DEL WALLPAPER
+-- ========================
+-- Toma el fondo actual de Omarchy (~/.local/state/omarchy/current/background,
+-- symlink), muestrea su pixel mas brillante con ImageMagick y lo re-escala a
+-- una intensidad visible: los wallpapers gradiente casi-negro -> rojo quedarian
+-- invisibles como borde de 2px. Se conserva el tono (mismos ratios RGB).
+-- Cache por proceso: cambiar de fondo exige hyprctl reload.
+local active_border_cache
+local function active_border(fallback)
+    if active_border_cache then return active_border_cache end
+    local home = os.getenv("HOME") or ""
+    local p = io.popen("readlink -f '" .. home .. "/.local/state/omarchy/current/background' 2>/dev/null")
+    local img = p and p:read("*l") or nil
+    if p then p:close() end
+    if img and #img > 0 then
+        local prog = '{ if (match($0,/\\(([0-9]+),([0-9]+),([0-9]+)/,m)) { r=m[1]+0; g=m[2]+0; b=m[3]+0; l=0.299*r+0.587*g+0.114*b; if (l>ml) { ml=l; br=r; bg=g; bb=b } } } END { printf "%d %d %d", br, bg, bb }'
+        local cmd = "magick '" .. img .. "' -depth 8 -resize 64x64 txt:- 2>/dev/null | sed 1d | awk '" .. prog .. "' 2>/dev/null"
+        local q = io.popen(cmd)
+        if q then
+            local r, g, b = q:read("*a"):match("(%d+)%s+(%d+)%s+(%d+)")
+            q:close()
+            if r then
+                r, g, b = tonumber(r), tonumber(g), tonumber(b)
+                local mx = math.max(r, g, b)
+                if mx > 0 then
+                    local k = (mx < 205) and (205 / mx) or 1
+                    active_border_cache = string.format("rgba(%02x%02x%02xf2)",
+                        math.min(255, math.floor(r * k + 0.5)),
+                        math.min(255, math.floor(g * k + 0.5)),
+                        math.min(255, math.floor(b * k + 0.5)))
+                    return active_border_cache
+                end
+            end
+        end
+    end
+    active_border_cache = fallback
+    return fallback
+end
+
+-- ========================
 -- APPEARANCE (LOOK & FEEL)
 -- ========================
 hl.config({
     general = {
         gaps_in        = 10,
         gaps_out       = 10,
-        border_size    = 0,
-        ["col.active_border"]   = "rgba(255, 0, 0, 0.5)",
+        border_size    = 2,
+        ["col.active_border"]   = active_border("rgba(e0413bff)"),
         ["col.inactive_border"] = "rgba(00000000)"
     },
     decoration = {
-        rounding = 10,
+        rounding = 3,
         blur = {
             enabled = true,
             size   = 8,
@@ -472,13 +512,13 @@ local expo_style = {
     background_dim   = 0,     -- oscurecer la imagen (0-100)
     -- Grilla en perspectiva 3D (experimental). threed_enable=0 la deja plana.
     threed_enable   = 1,      -- 1 = grilla inclinada en perspectiva (selector 3D)
-    threed_tilt     = 42,     -- inclinacion en grados (0 = sin perspectiva)
+    threed_tilt     = 50,     -- inclinacion en grados (0 = sin perspectiva)
     threed_yaw      = 0,      -- giro horizontal en grados
-    threed_distance = 1.6,    -- distancia de camara (alturas de monitor)
+    threed_distance = 1.3,    -- distancia de camara (alturas de monitor)
     threed_radius   = 0.04,   -- redondeo de esquinas en 3D (fraccion, glass look)
     threed_flip_v   = 0,      -- voltear verticalmente las texturas (0/1)
     -- Lente ojo de pez: curva los bordes de la grilla (0 = sin distorsion).
-    threed_fisheye  = 0.28,   -- fuerza del barrel fisheye
+    threed_fisheye  = 0.18,   -- fuerza del barrel fisheye (comprime bordes, no magnifica)
     threed_fisheye_pow = 2,   -- exponente del radial
     -- Estetica neon/glass: bloom alrededor de los tiles.
     glass_glow_enable = 1,    -- 1 = glow neon activo
