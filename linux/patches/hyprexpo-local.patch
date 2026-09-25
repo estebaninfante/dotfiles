@@ -1,8 +1,8 @@
 diff --git i/Dispatchers.cpp w/Dispatchers.cpp
-index f8c4571..8398868 100644
+index f8c4571..5dafa5c 100644
 --- i/Dispatchers.cpp
 +++ w/Dispatchers.cpp
-@@ -424,6 +424,17 @@ static int luaExpo(lua_State* L) {
+@@ -424,6 +424,23 @@ static int luaExpo(lua_State* L) {
      return luaDispatchResult(L, "hyprexpo.expo", onExpoDispatcher(luaStringArg(L, 1, "hyprexpo.expo", "toggle")));
  }
  
@@ -11,16 +11,22 @@ index f8c4571..8398868 100644
 +// fly-through so ~near~ workspace changes get a slide + a touch of zoom.
 +static int luaPeek(lua_State* L) {
 +    const float scale = (float)luaL_optnumber(L, 1, 1.0);
-+    g_peekScale       = scale;
-+    if (!overviewOpen())
++    // Only arm the peek scale when we are actually about to open. Setting it
++    // while an overview is already open (including one still closing) used to
++    // leak the scale into the next real open, making the grid open in peek mode
++    // and appear stuck unexpanded.
++    if (!overviewOpen()) {
++        g_peekScale = scale;
 +        return luaDispatchResult(L, "hyprexpo.peek", openOverviews(false));
++    }
++    g_peekScale = 1.0f;
 +    return luaDispatchResult(L, "hyprexpo.peek", {});
 +}
 +
  static int luaKbFocus(lua_State* L) {
      return luaDispatchResult(L, "hyprexpo.kb_focus", onKbFocusDispatcher(luaStringArg(L, 1, "hyprexpo.kb_focus")));
  }
-@@ -755,7 +766,29 @@ bool isRenderingOverview() {
+@@ -755,7 +772,30 @@ bool isRenderingOverview() {
      return renderingOverview;
  }
  
@@ -37,11 +43,12 @@ index f8c4571..8398868 100644
 +        } catch (...) { return {.success = false, .error = "invalid scale"}; }
 +    }
 +
-+    g_peekScale = scale;
-+
-+    if (!overviewOpen())
++    if (!overviewOpen()) {
++        g_peekScale = scale;
 +        return openOverviews(false);
++    }
 +
++    g_peekScale = 1.0f;
 +    return {};
 +}
 +
@@ -50,7 +57,7 @@ index f8c4571..8398868 100644
      HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:expo", onExpoDispatcher);
      HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:kb_focus", onKbFocusDispatcher);
      HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:kb_confirm", onKbConfirmDispatcher);
-@@ -768,6 +801,7 @@ void registerHyprexpoDispatchers() {
+@@ -768,6 +808,7 @@ void registerHyprexpoDispatchers() {
      HyprlandAPI::addDispatcherV2(PHANDLE, "hyprexpo:scrolling_mutation_test", onScrollingMutationTestDispatcher);
  
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "expo", luaExpo);
@@ -102,7 +109,7 @@ index 14b2c3f..79efb6b 100644
  TEST_TARGET = HyprexpoLogicTests
  SOURCE_TEST_TARGET = OverviewSourceTests
 diff --git i/Overview.cpp w/Overview.cpp
-index 5581411..941c167 100644
+index 5581411..37631ac 100644
 --- i/Overview.cpp
 +++ w/Overview.cpp
 @@ -45,6 +45,7 @@
@@ -167,7 +174,7 @@ index 5581411..941c167 100644
          }, image.fb);
  
          image.box = tileBoxForIndex((int)i, pMonitor->m_size, GAP_WIDTH, 0.0, true);
-@@ -1323,16 +1364,43 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
+@@ -1323,16 +1364,49 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
      startedOn->m_visible               = true;
      Animation::Workspace::startAnimation(startedOn, Animation::Workspace::ANIMATION_TYPE_IN, true, true);
  
@@ -185,21 +192,28 @@ index 5581411..941c167 100644
 +    Animation::mgr()->createAnimation(initSize, size, Config::animationTree()->getAnimationPropertyConfig(animLeaf), AVARDAMAGE_NONE);
 +    Animation::mgr()->createAnimation(-(tilePosForID(currentid, initSize, 0.0) * pMonitor->m_scale), pos, Config::animationTree()->getAnimationPropertyConfig(animLeaf), AVARDAMAGE_NONE);
 +
-+    // 3D tilt unfolds from flat: animate 0 -> configured tilt on open so the
-+    // perspective eases in instead of snapping on the first frame.
-+    static auto* const* P3DEN_T  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_enable")->getDataStaticPtr();
-+    static auto* const* P3TILT_T = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_tilt")->getDataStaticPtr();
-+    const float startTilt = **P3DEN_T != 0 ? (float)**P3TILT_T : 0.0f;
-+    Animation::mgr()->createAnimation(startTilt, tiltAnim, Config::animationTree()->getAnimationPropertyConfig(animLeaf), AVARDAMAGE_NONE);
++    // 3D effect strength: 0 = flat, 1 = full perspective. The render scales
++    // tilt/yaw/fisheye/fog/vignette by this value, so animating 0 -> 1 on open
++    // eases the whole 3D effect in over the same duration as the zoom instead
++    // of snapping on the first frame (and back to 0 on close, see
++    // applyCloseTarget). tiltAnim holds the 0..1 strength, not degrees.
++    static auto* const* P3DEN_T = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_enable")->getDataStaticPtr();
++    Animation::mgr()->createAnimation(0.0f, tiltAnim, Config::animationTree()->getAnimationPropertyConfig(animLeaf), AVARDAMAGE_NONE);
 +    tiltAnim->setUpdateCallback(damageMonitor);
++    *tiltAnim = **P3DEN_T != 0 ? 1.0f : 0.0f;
  
      size->setUpdateCallback(damageMonitor);
      pos->setUpdateCallback(damageMonitor);
  
++    // Consume the pending peek request unconditionally so it can never leak
++    // into a later open (e.g. a peek issued while a close morph was still in
++    // flight). A regular swipe-open must not inherit a stale scale either.
++    const float peek = g_peekScale;
++    g_peekScale       = 1.0f;
++
      if (!swipe) {
 -        *size = pMonitor->m_size;
 -        *pos  = {0, 0};
-+        const float peek = g_peekScale;
 +        if (peek > 1.0001f) {
 +            // Peek mode: open the grid a bit larger than the monitor so the
 +            // current desktop appears to pull back slightly (subtle zoom-out),
@@ -211,7 +225,6 @@ index 5581411..941c167 100644
 +            *size = pMonitor->m_size;
 +            *pos  = {0, 0};
 +        }
-+        g_peekScale = 1.0f;
  
          size->setCallbackOnEnd([this](auto) { redrawAll(true); });
      }
@@ -1101,7 +1114,7 @@ index 2c8a347..eec9d97 100644
  SWorkspacePreviewState applyWorkspacePreviewState(const PHLWORKSPACE& workspace);
  void restoreWorkspacePreviewState(const PHLWORKSPACE& workspace, const SWorkspacePreviewState& state);
 diff --git i/OverviewRender.cpp w/OverviewRender.cpp
-index f8741ae..450105e 100644
+index f8741ae..ecd3e91 100644
 --- i/OverviewRender.cpp
 +++ w/OverviewRender.cpp
 @@ -2,6 +2,7 @@
@@ -1266,7 +1279,7 @@ index f8741ae..450105e 100644
  
      static auto* const* PTILEROUND  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding")->getDataStaticPtr();
      static auto* const* PTOUNDPWR   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding_power")->getDataStaticPtr();
-@@ -365,18 +387,172 @@ void COverview::fullRender() {
+@@ -365,18 +387,176 @@ void COverview::fullRender() {
      const int   HOVER_ROUND_SCALED   = **PTILEROUNDH >= 0 ? std::max(0, (int)std::lround((double)**PTILEROUNDH * MON->m_scale)) : BASE_ROUND_SCALED;
      const float ROUND_PWR            = **PTOUNDPWR;
  
@@ -1325,12 +1338,16 @@ index f8741ae..450105e 100644
 +    std::array<float, 9>      proj3D{};
 +    Hyprexpo3D::SWarpParams   warp3D{};
 +    Hyprexpo3D::SWarpParams   warpBg{};
++    // Animated 0..1 3D strength (see Overview.cpp): 0 = flat, 1 = full
++    // perspective. Every 3D term below is scaled by it so the whole effect eases
++    // in on open and out on close instead of snapping on one frame.
++    float warpAmt = 1.0f;
 +    if (use3D) {
 +        proj3D = Hyprutils::Math::Mat3x3::outputProjection(MON->m_transformedSize, Math::wlTransformToHyprutils(MON->m_transform)).getMatrix();
-+        // Use the animated tilt so the perspective eases open/closed (falls back
-+        // to the configured value if the animation var is unavailable).
-+        const float tiltNow = tiltAnim ? tiltAnim->value() : (float)**P3TILT;
-+        const float yaw     = (float)**P3YAW;
++        // Animated strength; falls back to full effect if the var is missing.
++        warpAmt = tiltAnim ? std::min(1.0f, std::max(0.0f, tiltAnim->value())) : 1.0f;
++        const float tiltNow = (float)**P3TILT * warpAmt;
++        const float yaw     = (float)**P3YAW * warpAmt;
 +        const float dist    = std::max(0.2f, (float)**P3DIST);
 +
 +        // Tiles pivot on the animated grid centre with a camera distance in grid
@@ -1352,7 +1369,7 @@ index f8741ae..450105e 100644
 +        // seam at the edges). It reads as the far wall of the space.
 +        warpBg = Hyprexpo3D::SWarpParams{0.f, 0.f, dist};
 +
-+        Hyprexpo3D::setLens((float)**P3FISH, (float)**P3FISHP, (float)(MON->m_transformedSize.x / std::max(1.0, MON->m_transformedSize.y)));
++        Hyprexpo3D::setLens((float)**P3FISH * warpAmt, (float)**P3FISHP, (float)(MON->m_transformedSize.x / std::max(1.0, MON->m_transformedSize.y)));
 +
 +        // Depth fog spanning the tiles' camera-depth range: near tiles stay
 +        // crisp, far ones fade, which is the cue that makes the grid read as a
@@ -1360,11 +1377,11 @@ index f8741ae..450105e 100644
 +        const float th   = tiltNow * PI_F / 180.f;
 +        const float cam  = dist * warp3D.gridHeight;
 +        const float maxZ = 0.5f * (warp3D.gridHeight * std::abs(std::sin(th)) + (float)pixGrid.x * std::abs(std::sin(yaw * PI_F / 180.f)));
-+        Hyprexpo3D::setFog(std::max(1.0f, cam - maxZ), cam + maxZ, 0.5f);
++        Hyprexpo3D::setFog(std::max(1.0f, cam - maxZ), cam + maxZ, 0.5f * warpAmt);
 +
 +        // Screen-space vignette: focuses the eye and adds a lens falloff that
 +        // reads as depth. Kept subtle so the corners stay usable.
-+        Hyprexpo3D::setVignette(0.35f, (float)MON->m_transformedSize.x, (float)MON->m_transformedSize.y);
++        Hyprexpo3D::setVignette(0.35f * warpAmt, (float)MON->m_transformedSize.x, (float)MON->m_transformedSize.y);
 +    }
 +
 +    // Background (configured image, else the wallpaper): drawn before the tiles.
@@ -1417,7 +1434,7 @@ index f8741ae..450105e 100644
 +        }
 +
 +        if (use3D)
-+            Hyprexpo3D::setLens((float)**P3FISH, (float)**P3FISHP, bgAspect);
++            Hyprexpo3D::setLens((float)**P3FISH * warpAmt, (float)**P3FISHP, bgAspect);
 +    }
 +
      for (size_t y = 0; y < (size_t)SHAPE.rows; ++y) {
@@ -1442,7 +1459,7 @@ index f8741ae..450105e 100644
              texbox.round();
              tileBoxes[id] = texbox;
  
-@@ -401,7 +577,23 @@ void COverview::fullRender() {
+@@ -401,7 +581,23 @@ void COverview::fullRender() {
              }
  
              CRegion damage{0, 0, INT16_MAX, INT16_MAX};
@@ -1467,7 +1484,7 @@ index f8741ae..450105e 100644
          }
      }
  
-@@ -435,6 +627,7 @@ void COverview::fullRender() {
+@@ -435,6 +631,7 @@ void COverview::fullRender() {
      static auto const*  PBCOLCUR    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_current")->getDataStaticPtr();
      static auto const*  PBCOLFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_focus")->getDataStaticPtr();
      static auto const*  PBCOLHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_hover")->getDataStaticPtr();
@@ -1475,7 +1492,7 @@ index f8741ae..450105e 100644
      static auto const*  PBGRCUR     = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_current")->getDataStaticPtr();
      static auto const*  PBGREFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_focus")->getDataStaticPtr();
      static auto const*  PBGREHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_hover")->getDataStaticPtr();
-@@ -534,15 +727,29 @@ void COverview::fullRender() {
+@@ -534,15 +731,29 @@ void COverview::fullRender() {
                  bg.round();
                  lb.round();
              }
@@ -1508,7 +1525,7 @@ index f8741ae..450105e 100644
          };
  
          if (**PLBGEN)
-@@ -567,9 +774,23 @@ void COverview::fullRender() {
+@@ -567,9 +778,23 @@ void COverview::fullRender() {
  
          const std::string effectiveSpec = Hyprexpo::resolveBorderSpec(borderSpec, deprecatedGradSpec);
  
@@ -1532,7 +1549,7 @@ index f8741ae..450105e 100644
                  Config::CGradientValueData grad;
                  grad.m_colors.clear();
                  grad.m_colors.push_back(spec.c1);
-@@ -581,6 +802,9 @@ void COverview::fullRender() {
+@@ -581,6 +806,9 @@ void COverview::fullRender() {
          } else if (!effectiveSpec.empty()) {
              Hyprexpo::SColorRGBA parsedColor;
              if (Hyprexpo::parseSolidColorSpec(effectiveSpec, parsedColor)) {
@@ -1542,7 +1559,7 @@ index f8741ae..450105e 100644
                  CHyprColor color{parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a};
                  Render::GL::g_pHyprOpenGL->renderBorder(box, color, {.round = roundScaled, .roundingPower = ROUND_PWR, .borderSize = BWIDTH});
              } else {
-@@ -720,6 +944,18 @@ void COverview::fullRender() {
+@@ -720,6 +948,18 @@ void COverview::fullRender() {
      const std::string currentFallback   = Hyprexpo::resolveBorderSpec(std::string{*PBGRCUR}, currentLegacySpec);
      const std::string hoverFallback     = Hyprexpo::resolveBorderSpec(std::string{*PBGREHOV}, hoverLegacySpec);
  

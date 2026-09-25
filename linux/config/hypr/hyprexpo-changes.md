@@ -11,6 +11,88 @@ Config del overview/grilla de workspaces (`SUPER + Y`). Todo vive en
   Omarchy activo via `theme_color(...)`.
 - Recarga: `hyprctl reload` (auto-reload al guardar, pero validar).
 
+## Cambio 2026-09-24f — el efecto 3D entra suave (no de golpe en un frame)
+
+Motivo: el morph de tamaño/posición ya animaba, pero el **efecto 3D** (tilt,
+yaw, fisheye, fog, vignette y la homografía por tile) se aplicaba **entero en el
+primer frame**. La transición quedaba: ventana plana → (1 frame) grilla ya
+inclinada/distorsionada/oscurecida. Eso es el "se pierden un montón de pasos
+intermedios" que reportó el usuario.
+
+Causa: en `Overview.cpp`, `tiltAnim` se creaba con
+`createAnimation(startTilt, ...)` donde `startTilt` = tilt configurado, y **nunca
+se le fijaba un goal**, así que valía constante (no había rampa). El comment
+"animate 0 -> configured tilt on open" era una edición a medio hacer.
+
+Fix (en el fork local, `~/dotfiles/linux/patches/hyprexpo-local.patch`; **requiere
+rebuild + logout/login**, `hyprctl reload` NO recarga el `.so`):
+
+- `tiltAnim` ahora guarda una **fuerza 0..1** (no grados). En `Overview.cpp` se
+  crea con `createAnimation(0.0f, tiltAnim, config(animLeaf))` y se le pone goal
+  `*tiltAnim = threed_enable ? 1.0 : 0.0` → anima 0→1 al abrir, con el mismo
+  `animLeaf`/curva que el zoom (`specialWorkspace` + `expoOpen`).
+- En `OverviewRender.cpp` (`fullRender`) se calcula
+  `warpAmt = clamp(tiltAnim->value(), 0, 1)` y se **escala por `warpAmt`** todo lo
+  3D: `tilt` (`**P3TILT * warpAmt`), `yaw`, `fisheye` (`setLens`), `fog`
+  (`0.5 * warpAmt`) y `vignette` (`0.35 * warpAmt`). El fondo sigue plano
+  (`setLens 0`).
+- El cierre ya hacía `*tiltAnim = 0` en `applyCloseTarget`, así que ahora aplana
+  1→0 simétricamente. Al abrir, el 3D "se despliega" desde plano en vez de saltar.
+
+Estado: aplicado con `hyprexpo-rebuild.sh` (instalado en
+`/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so`). **Pendiente logout/login** para
+que el proceso vivo cargue el `.so` nuevo.
+
+### Revertir
+En el patch/fork: volver `tiltAnim` a grados (`createAnimation(**P3TILT ...)`)
+quitando el goal, y quitar el factor `warpAmt` de `tiltNow`/`yaw`/`setLens`/
+`setFog`/`setVignette` en `OverviewRender.cpp`. Regenerar el patch, correr
+`~/dotfiles/linux/bin/hyprexpo-rebuild.sh` y logout/login.
+
+## Cambio 2026-09-24e — morph del fly-through (`SUPER+#`) + crash al cerrar sesión
+
+Motivo (2 reportes):
+1. Al pulsar `SUPER + <n>` (sobre todo diagonal) la transición de ventana a
+   overview y de vuelta **saltaba** directo a un tile casi a pantalla completa,
+   sin frames intermedios.
+2. Hyprland se caía (SIGSEGV) en **cada cierre de sesión**, y el watchdog lo
+   relanzaba en `--safe-mode`.
+
+Causa 1 (fly-through): `fly_open_and_go()` abría el overview con
+`peek(EXPO_PEEK_ZOOM)` = `2.65`. El plugin anima el *tamaño* de la grilla de
+`3.0` (un tile llena la pantalla) hacia el goal; con goal `2.65` el recorrido era
+casi nulo y, además, al soltar `SUPER` se llamaba a `fly_commit_now()` que
+revertía la animación en ~10 ms. Resultado: sin pasos visibles.
+
+Causa 2 (crash): en `hyprland.lua`, `apply_dynamic_gaps()` estaba suscrita a
+`window.destroy`. Ese evento se emite durante el `~CWindow` del teardown de la
+sesión; al ejecutarse la lógica Lua sobre estado ya liberado, el primer getter
+nativo (`hl.get_active_workspace()`) hacía SEGV. `pcall` no atrapa un SIGSEGV.
+
+Cambios en `hyprland.lua` (solo config, sin rebuild del `.so`):
+
+| Cambio | Antes | Despues |
+|--------|-------|---------|
+| `EXPO_FLY_MS` (~linea 1090) | `90` | `320` |
+| `fly_open_and_go()` | `peek(EXPO_PEEK_ZOOM)` | `expo("on")` (grilla completa) |
+| `expo_fly_super_up()` | confirma siempre al soltar | confirma solo si `expo_fly.deliberate`; el tap directo espera el timer de `EXPO_FLY_MS` |
+| suscripción de `apply_dynamic_gaps` (~linea 234) | incluye `"window.destroy"` | se quitó `"window.destroy"` |
+
+Con esto el tap directo de `SUPER+#` lanza la apertura completa (ventana→grilla),
+espera `EXPO_FLY_MS` y recién ahí hace `kb_selectn`, mostrando el morph. El
+`peek(2.65)` queda solo para el *retarget* en vuelo (`expo_fly.busy > 0`), donde
+sí se busca un salto instantáneo. `hyprctl configerrors` → vacío.
+
+Estado: aplicado con `hyprctl reload`. Verificado en vivo con ráfagas `grim`
+(`/tmp/opencode/fly/sheet.png`, `/tmp/opencode/fly2/sheet.png`): ventana→grilla 3D
+con frames intermedios. El `.so` instalado no cambia (fix Lua puro).
+
+### Revertir
+`EXPO_FLY_MS = 90`; `fly_open_and_go` volver a `peek(EXPO_PEEK_ZOOM)`; quitar la
+guarda `deliberate` en `expo_fly_super_up`; volver a incluir `"window.destroy"` en
+la lista de `hl.on` de `apply_dynamic_gaps` (esto último reintroduce el crash de
+logout). Luego `hyprctl reload`.
+
 ## Cambio 2026-09-24d — bordes, animación suave, esquinas y preview en vivo
 
 Motivo (4 reportes): (1) los workspaces inactivos no dibujaban borde; (2) la

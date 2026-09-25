@@ -231,7 +231,11 @@ local function apply_dynamic_gaps()
     end
 end
 
-for _, ev in ipairs({ "window.open", "window.close", "window.destroy",
+-- NOTE: "window.destroy" deliberately omitted. That signal fires while
+-- CWindow is being destructed during CCompositor::cleanup (session teardown);
+-- running this handler then dereferences half-freed state in the native getter
+-- -> SIGSEGV on every logout. "window.close" already covers normal closes.
+for _, ev in ipairs({ "window.open", "window.close",
                       "window.move_to_workspace", "window.fullscreen",
                       "window.active", "workspace.active" }) do
     hl.on(ev, apply_dynamic_gaps)
@@ -1084,8 +1088,11 @@ local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
 --              EXPO_IDLE_MS es red de seguridad por si se pierde el release.
 local EXPO_MODE        = "release"
 local EXPO_POLL_MS     = 25
-local EXPO_FLY_MS      = 90  -- grilla abierta antes de confirmar (da el 3D)
+local EXPO_FLY_MS      = 320 -- morfo de entrada: la grilla se abre (ventana->grilla)
+                             -- antes de confirmar; con el release diferido (ver
+                             -- expo_fly_super_up) esto garantiza frames intermedios.
 local EXPO_PEEK_ZOOM   = 2.65 -- zoom-out sutil: 1.0=grilla completa, 3.0=un tile ocupa todo (2.65 ~ deja ver bordes vecinos)
+                             -- solo se usa para REAPUNTAR un cierre en vuelo (grupo busy)
 local EXPO_IDLE_MS     = 1200 -- release: red de seguridad si se pierde el release (alto para no aterrizar mientras sostienes SUPER)
 local EXPO_CLOSE_TICKS = 17  -- ~425ms: morph de cierre (windowsMove=4) a esperar antes de reabrir
 expo_fly = {
@@ -1160,8 +1167,15 @@ end
 -- Modo "release": al soltar SUPER confirmamos de inmediato. En "hybrid" el commit
 -- ya lo dispara EXPO_FLY_MS, asi que soltar SUPER no hace nada.
 expo_fly_super_up = function()
-    -- Al soltar SUPER confirmamos lo que este pendiente (no-op si ya aterrizo).
-    fly_commit_now()
+    -- Apertura DELIBERADA (SUPER+Y / long-press / encadenado): al soltar, aterriza
+    -- a lo que este pendiente (no-op si ya aterrizo).
+    -- Apertura DIRECTA (SUPER+# rapido, deliberate=false): NO cortamos el morph al
+    -- soltar SUPER — eso revertia el zoom a los pocos ms y se saltaba todo el
+    -- morfo (saltaba directo al tile). Dejamos que EXPO_FLY_MS lo complete, asi se
+    -- ven los frames intermedios ventana -> grilla -> tile.
+    if expo_fly.deliberate then
+        fly_commit_now()
+    end
 end
 
 ensure_poll = function()
@@ -1189,11 +1203,11 @@ end
 -- Abre la grilla y navega al destino n. El foco arranca en el desktop actual.
 fly_open_and_go = function(n)
     local cur = hl.get_active_workspace()
-    if hl.plugin.hyprexpo.peek then
-        hl.plugin.hyprexpo.peek(EXPO_PEEK_ZOOM)
-    else
-        hl.plugin.hyprexpo.expo("on")
-    end
+    -- Abrimos la grilla COMPLETA (no un peek): asi el morph arranca en el tamano
+    -- real de la grilla y se ve la secuencia ventana -> grilla -> tile. Con
+    -- peek(2.65) el goal (2.65) estaba casi pegado al inicio (3.0), asi que el
+    -- commit inmediato lo revertia y no se veia ningun frame intermedio.
+    hl.plugin.hyprexpo.expo("on")
     expo_fly.open = true
     expo_fly.sel  = cur and ws_grid_index(cur.id) or nil
     expo_fly.want = n
