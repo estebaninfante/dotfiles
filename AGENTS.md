@@ -91,9 +91,23 @@ La barra activa es la de **Omarchy**, no la de dotfiles. Su config vive en
 + `.git`): sus id+url viven en `plugins-git.txt` / `themes-git.txt` y se
 reinstalan con `omarchy plugin add` / `omarchy theme install`.
 
-`scripts/omarchy-sync.sh export` (desktop, tras personalizar) y `import`
+`scripts/omarchy-sync.sh export` (maquina personalizada) y `import`
 (laptop/fresh) replican. `setup-omarchy.sh` Fase 10.5 corre `import`
 automaticamente. No symlinkear `~/.config/omarchy`: Omarchy escribe ahi en vivo.
+
+**Auto-sync (para que no se desincronice):** `scripts/dotfiles-sync.sh` (timer
+`dotfiles-sync.timer`, cada ~5 min en ambas maquinas) corre `git pull` y, tras
+un pull exitoso, `omarchy-sync.sh import`. Flujo:
+
+1. Personalizas en una maquina -> `omarchy-sync.sh export` (o `publish.sh`, que
+   exporta solo) -> commit + push.
+2. La otra maquina hace pull por el timer e **importa** la shell automaticamente.
+
+Al terminar de personalizar en cualquier maquina, **exporta antes de que el
+timer pise** tus cambios locales con el repo. Verificacion: `omarchy-sync.sh
+status` (o `verify auto ~/.config/omarchy/shell.json`) reporta `DRIFT` si el
+live difiere del repo. Machine-specific: `shell.<machine>.json` (laptop/desktop)
+gana sobre `shell.json` si existe; hoy no se usa (layout unico).
 
 ### Linux config — archivos sueltos
 

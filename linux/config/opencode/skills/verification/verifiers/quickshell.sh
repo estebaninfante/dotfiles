@@ -43,6 +43,18 @@ else
   skip "shell-ipc" "omarchy-shell ausente"
 fi
 
+sync_script="$HOME/dotfiles/scripts/omarchy-sync.sh"
+if [ -x "$sync_script" ]; then
+  drift_out=$(bash "$sync_script" status 2>&1)
+  if [ $? -eq 0 ]; then
+    ok "omarchy-drift" "live == repo"
+  else
+    fail "omarchy-drift" "$(printf '%s' "$drift_out" | grep '^DRIFT' | head -n3 | tr '\n' ' ')"
+  fi
+else
+  skip "omarchy-drift" "omarchy-sync.sh ausente"
+fi
+
 qml=()
 for target in "${targets[@]}"; do
   case "$target" in

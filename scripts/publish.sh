@@ -11,6 +11,12 @@ echo ""
 
 cd "$DOTFILES"
 
+if [ -x "$DOTFILES/scripts/omarchy-sync.sh" ]; then
+  echo "  ── Exportando config de Omarchy (~/.config/omarchy -> repo)..."
+  "$DOTFILES/scripts/omarchy-sync.sh" export || echo "  [WARN] export Omarchy fallo (sigo)"
+  echo ""
+fi
+
 if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   echo "  [ERROR] No es un repositorio Git."
   echo "  Inicializa con: git init && git add -A && git commit -m 'init'"
