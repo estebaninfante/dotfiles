@@ -53,7 +53,9 @@ MACHINE=desktop bash ~/dotfiles/scripts/setup-omarchy.sh
 ```
 
 El script instala paquetes (pacman + yay/AUR), aplica los symlinks, configura
-keyd, servicios systemd de usuario y verifica el resultado.
+keyd, servicios systemd de usuario, compila e instala el parche local de
+hyprexpo (grilla 3D) e instala el hook `theme-set` (sync del wallpaper), y
+verifica el resultado.
 
 ## Uso diario
 
@@ -81,6 +83,16 @@ bash ~/dotfiles/scripts/link-dotfiles.sh
 Las configs machine-specific (`hyprland.lua`, `hyprpaper-*.conf`) usan
 condicionales por machine type (`~/.config/machine-type`), detectado por
 **hardware** (DMI, batería, backlight) con `scripts/detect-machine.sh`.
+
+El **overview de workspaces (`SUPER+Y`) es idéntico en ambas máquinas**: la
+grilla 3D/fisheye de hyprexpo es un parche local del plugin que `setup-omarchy.sh`
+compila e instala en las dos (ver `linux/config/hypr/hyprexpo-changes.md`).
+
+El **fondo de pantalla tiene una sola fuente de verdad**: el symlink canónico de
+Omarchy (`~/.local/state/omarchy/current/background`, que escribe
+`omarchy theme bg set`). El hook `theme-set` (`linux/bin/sync-wallpaper.sh`)
+propaga ese archivo a `hyprpaper.conf` (persistencia) y recarga Hyprland, así el
+escritorio y la grilla de hyprexpo nunca quedan desincronizados.
 
 `~/developing` se sincroniza en tiempo real entre laptop y desktop mediante
 Syncthing (Tailscale fuera de casa). Ver `AGENTS.md` para el detalle.

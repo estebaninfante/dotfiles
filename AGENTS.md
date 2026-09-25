@@ -138,9 +138,24 @@ end
 -- Shared: keybinds, appearance, autostart, etc.
 ```
 
-**`hyprpaper`** tiene dos configs:
-- `hyprpaper-laptop.conf` -> monitor eDP-2
-- `hyprpaper-desktop.conf` -> monitor DP-1
+**`hyprpaper`** tiene dos configs (la ruta `path =` la reescribe
+`sync-wallpaper.sh`, no editarla a mano):
+- `hyprpaper.conf` -> monitor `DP-2` (desktop)
+- `hyprpaper-laptop.conf` -> monitor `eDP-1` (laptop)
+
+**hyprexpo (overview `SUPER+Y`)**: la grilla 3D/fisheye es un parche local del
+plugin (`linux/patches/hyprexpo-local.patch`) que **corre igual en laptop y
+desktop**. `setup-omarchy.sh` lo compila/instala con `linux/bin/hyprexpo-rebuild.sh`
+en `/var/cache/hyprpm/$USER/hyprexpo/hyprexpo.so`. `hyprland.lua` lo carga por
+`hl.plugin.load(...)`. Tras `hyprpm update` hay que re-ejecutar el rebuild.
+`EXPO_3D = true` en `hyprland.lua` (ver `linux/config/hypr/hyprexpo-changes.md`).
+
+**Wallpaper (una sola fuente)**: el fondo canónico vive en el symlink de Omarchy
+`~/.local/state/omarchy/current/background` (lo escribe `omarchy theme bg set`).
+El hook `theme-set` -> `linux/bin/sync-wallpaper.sh` lo propaga a
+`hyprpaper.conf` + recarga Hyprland (refresca hyprexpo). **Nunca** setear el fondo
+con `hyprctl hyprpaper` directo: dejaría el symlink y la grilla desincronizados.
+`setup-omarchy.sh` instala el hook (`omarchy hook install theme-set ...`).
 
 ### IPs LAN estaticas (fuera del pool DHCP)
 

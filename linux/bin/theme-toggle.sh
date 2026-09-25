@@ -41,7 +41,7 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.interface color-scheme "$pref" 2>/dev/null || true
 fi
 
-# ── 3. Wallpaper (hyprpaper IPC; desktop con Wallpaper Engine lo pausa) ──
+# ── 3. Wallpaper (fuente unica: symlink Omarchy, propagado por sync-wallpaper.sh) ──
 apply_wallpaper() {
     local img
     if [ "$target" = "light" ]; then
@@ -57,16 +57,10 @@ apply_wallpaper() {
     if systemctl --user is-active --quiet linux-wallpaperengine.service 2>/dev/null; then
         systemctl --user stop linux-wallpaperengine.service 2>/dev/null || true
     fi
-    if ! pgrep -x hyprpaper >/dev/null 2>&1; then
-        setsid nohup hyprpaper --config "$HYPR_CONF" >/dev/null 2>&1 &
-        sleep 0.8
-    fi
-    local mon
-    mon="$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // empty' 2>/dev/null)"
-    [ -z "$mon" ] && mon="eDP-1"
-    # hyprpaper v0.8+: IPC string solo soporta `wallpaper <mon>,<path>`
-    # (reload/preload/unload eliminados). fit_mode default = cover (igual al config).
-    hyprctl hyprpaper wallpaper "$mon,$img" >/dev/null 2>&1 || true
+    # sync-wallpaper.sh escribe el symlink canonico, actualiza hyprpaper.conf,
+    # aplica por IPC y recarga Hyprland (refresca hyprexpo). No usar hyprctl
+    # directo aqui: dejaria el symlink y la grilla con el fondo anterior.
+    "$HOME/.local/bin/sync-wallpaper.sh" "$img"
 }
 apply_wallpaper
 

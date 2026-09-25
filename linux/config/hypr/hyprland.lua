@@ -14,11 +14,11 @@ local f = io.open(os.getenv("HOME") .. "/.config/machine-type", "r")
 local machine = f and f:read("*a"):match("^%s*(.-)%s*$") or "laptop"
 if f then f:close() end
 
--- La grilla 3D/fisheye de hyprexpo es un parche LOCAL del plugin que solo vive
--- en el desktop. En laptop se usa el plugin stock (grilla plana, sin peek ni
--- claves 3D). Este flag gatea todo lo experimental a desktop; laptop queda con
--- el overview basico.
-local EXPO_3D = (machine == "desktop")
+-- La grilla 3D/fisheye de hyprexpo es un parche LOCAL del plugin, compilado con
+-- hyprexpo-rebuild.sh e instalado en ambas maquinas (laptop y desktop corren el
+-- mismo .so). EXPO_3D queda en true: el flag se mantiene solo por claridad y
+-- para poder volver a la grilla plana si alguna maquina no trae el parche.
+local EXPO_3D = true
 
 -- Tema global (canonico: active-theme.conf de kitty, symlink al repo).
 -- Devuelve "light"|"dark"; default dark si no se puede leer.
@@ -53,6 +53,24 @@ local function theme_color(key, fallback)
 
     theme_color_cache[key] = val
     return val
+end
+
+-- Fondo canonico: symlink que Omarchy mantiene (`omarchy theme bg set`).
+-- Toda superficie (escritorio via shell/hyprpaper, grilla hyprexpo) deriva de
+-- aqui: asi es imposible que una cambie y la otra quede con el anterior.
+-- Se resuelve en cada reload, igual que theme_color().
+local function current_background(fallback)
+    local link = os.getenv("HOME") .. "/.local/state/omarchy/current/background"
+    local p = io.popen('realpath "' .. link .. '" 2>/dev/null')
+    if p then
+        local out = p:read("*l")
+        p:close()
+        if out and out ~= "" then
+            local f = io.open(out, "r")
+            if f then f:close() return out end
+        end
+    end
+    return fallback
 end
 
 -- ========================
@@ -512,7 +530,8 @@ end)
 -- Autocarga desde config (Hyprland >= 0.56, hl.plugin.load). Así el plugin
 -- queda cargado en cada arranque aunque hyprpm no se invoque al inicio.
 -- ========================
-hl.plugin.load("/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so")
+local hyprpm_user = os.getenv("USER") or "eztvn"
+hl.plugin.load("/var/cache/hyprpm/" .. hyprpm_user .. "/hyprexpo/hyprexpo.so")
 
 -- ========================
 -- HYPREXPO: ESTILO (editar aqui)
@@ -534,8 +553,10 @@ local expo_style = {
     -- Borde de los tiles inactivos (workspaces vacios / sin foco). Antes no
     -- dibujaban ninguno. Vacio = sin borde (comportamiento viejo).
     border_default = "rgba(ffffff26)",
-    -- Fondo detras de los escritorios flotantes (imagen). Vacio = color bg_col.
-    background_image = "/home/eztvn/.config/hypr/wallpapers/gradient_blackred_simple_1440p.jpg",
+    -- Fondo detras de los escritorios flotantes: deriva del fondo canonico de
+    -- Omarchy (current_background). Nada hardcodeado: cambiar el wallpaper con
+    -- `omarchy theme bg set` + `hyprctl reload` actualiza la grilla sola.
+    background_image = current_background(os.getenv("HOME") .. "/.config/hypr/wallpapers/space_real_1440p.jpg"),
     background_dim   = 0,     -- oscurecer la imagen (0-100)
     -- Grilla en perspectiva 3D (experimental). threed_enable=0 la deja plana.
     threed_enable   = 1,      -- 1 = grilla inclinada en perspectiva (selector 3D)
@@ -557,20 +578,8 @@ local expo_style = {
     slide_amount    = 0.16,   -- corrimiento como fraccion del monitor
 }
 
--- Laptop: sin parche local -> grilla plana y limpia. Estos valores tambien se
--- omiten al configurar el plugin (mas abajo) para no mandar claves que el
--- plugin stock no conoce.
-if not EXPO_3D then
-    expo_style.threed_enable     = 0
-    expo_style.threed_fisheye    = 0
-    expo_style.glass_glow_enable = 0
-    expo_style.hover_scale       = 1.0
-    expo_style.slide_enable      = 0
-    expo_style.background_image  = ""
-end
-
 if hl.plugin.hyprexpo ~= nil then
-    -- Claves base: las entienden tanto el plugin stock (laptop) como el parcheado.
+    -- Claves base (las entiende el plugin stock y el parcheado).
     local expo_cfg = {
         columns = 3,
         rows = 3,
@@ -594,8 +603,8 @@ if hl.plugin.hyprexpo ~= nil then
         show_workspace_numbers = 0,
         keynav_enable = 1,
     }
-    -- Claves del parche local (3D/fisheye/glass/reverse_rows). Solo desktop: el
-    -- plugin stock no las reconoce.
+    -- Claves del parche local (3D/fisheye/glass/reverse_rows). El plugin stock
+    -- no las reconoce; en ambas maquinas corre el .so parcheado.
     if EXPO_3D then
         expo_cfg.reverse_rows = 1
         expo_cfg.background_image = expo_style.background_image
@@ -644,9 +653,9 @@ if hl.plugin.hyprexpo ~= nil then
         -- dos veces para cerrar la grilla.
         hl.bind(mainMod .. " + Y", function() expo_ui_toggle() end)
         -- Replica de los binds globales SUPER+<ws>: con la grilla abierta,
-        -- SUPER+<n> salta al desktop n (fly-through). Solo desktop: en laptop el
-        -- plugin stock no tiene peek/retarget y la navegacion queda con flechas
-        -- y Enter (keynav nativo).
+        -- SUPER+<n> salta al desktop n (fly-through). Requiere el parche local
+        -- (peek/retarget); si EXPO_3D estuviera off, la navegacion seria con
+        -- flechas y Enter (keynav nativo).
         if EXPO_3D then
             local ws_keys = { "M", "W", "V", "H", "T", "N", "G", "C", "R", "S" }
             for i = 1, 10 do
@@ -1305,8 +1314,8 @@ expo_focus = function(i)
     local has_expo = hl.plugin.hyprexpo ~= nil
     local cur      = hl.get_active_workspace()
 
-    -- Laptop (plugin stock, sin parche): sin fly-through ni peek. Salto directo
-    -- al desktop destino (o al anterior si pides el actual).
+    -- Sin patch local (EXPO_3D off): sin fly-through ni peek. Salto directo al
+    -- desktop destino (o al anterior si pides el actual).
     if not EXPO_3D then
         local same = cur and cur.id == i
         hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))

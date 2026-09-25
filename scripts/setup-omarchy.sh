@@ -247,6 +247,21 @@ header "Fase 6: Scripts"
 # via link-dotfiles.sh (no clobbea archivos reales de Omarchy).
 ok "Scripts enlazados (inventario completo via link-dotfiles.sh)"
 
+# Parche local de hyprexpo (grilla 3D/fisheye): AMBAS maquinas corren el mismo
+# .so parcheado (laptop = desktop). El script clona el commit fijado, aplica
+# linux/patches/hyprexpo-local.patch y hace make. Necesita los headers de
+# hyprland (`pkg-config hyprland`), que ya trae el paquete hyprland.
+if [[ -x "$DOTFILES_BIN/hyprexpo-rebuild.sh" ]] && command -v make &>/dev/null; then
+    info "Compilando hyprexpo parcheado (grilla 3D/fisheye)..."
+    if bash "$DOTFILES_BIN/hyprexpo-rebuild.sh"; then
+        ok "hyprexpo parcheado instalado (/var/cache/hyprpm/$USER/hyprexpo/hyprexpo.so)"
+    else
+        warn "hyprexpo no compilo — reintentar: ~/.local/bin/hyprexpo-rebuild.sh"
+    fi
+else
+    warn "Falta make o hyprexpo-rebuild.sh — hyprexpo quedara stock"
+fi
+
 # ══════════════════════════════════════════════════════════════
 # FASE 7: keyd (teclado)
 # ══════════════════════════════════════════════════════════════
@@ -372,6 +387,29 @@ ok "Lan-mouse config copiada (machine: $MACHINE)"
 echo "$MACHINE" > "$HOME/.config/machine-type"
 ok "Machine type: $MACHINE"
 
+# Hook theme-set: unica fuente del fondo (symlink canonico de Omarchy) ->
+# hyprpaper.conf + recarga Hyprland (refresca hyprexpo). Sin esto, cambiar el
+# wallpaper con `omarchy theme bg set` deja hyprpaper/hyprexpo con el anterior.
+if command -v omarchy &>/dev/null && [[ -f "$DOTFILES_BIN/sync-wallpaper.sh" ]]; then
+    if omarchy hook install theme-set "$DOTFILES_BIN/sync-wallpaper.sh" >/dev/null 2>&1; then
+        ok "Hook theme-set instalado (sync-wallpaper.sh)"
+    else
+        warn "No se pudo instalar el hook theme-set"
+    fi
+else
+    warn "omarchy no disponible — hook theme-set no instalado"
+fi
+
+# Sincronizar el fondo una vez: deja hyprpaper.conf apuntando al fondo canonico
+# actual (hyprctl reload falla en silencio si Hyprland aun no corre en el setup).
+if [[ -x "$DOTFILES_BIN/sync-wallpaper.sh" ]]; then
+    if "$DOTFILES_BIN/sync-wallpaper.sh" >/dev/null 2>&1; then
+        ok "Wallpaper sincronizado al fondo canonico"
+    else
+        warn "No se pudo sincronizar el wallpaper (se hara al fijar un tema)"
+    fi
+fi
+
 # ══════════════════════════════════════════════════════════════
 # FASE 11: PATH
 # ══════════════════════════════════════════════════════════════
@@ -441,15 +479,13 @@ else
     ALL_OK=false
 fi
 
-# Parche local de hyprexpo (SOLO desktop: grilla 3D/fisheye). Laptop corre el
-# plugin stock; saltar si no es desktop.
-if [[ "$MACHINE" == "desktop" ]]; then
-    if [[ -f "$HOME/.config/hypr/hyprland.lua" ]] && command -v hyprctl &>/dev/null; then
-        if hyprctl plugin list 2>/dev/null | grep -qi "hyprexpo"; then
-            ok "hyprexpo cargado (parche 3D desktop)"
-        else
-            warn "hyprexpo no cargado — correr: ~/.local/bin/hyprexpo-rebuild.sh"
-        fi
+# Parche local de hyprexpo (grilla 3D/fisheye). AMBAS maquinas corren el mismo
+# .so parcheado instalado en /var/cache/hyprpm/$USER/hyprexpo/hyprexpo.so.
+if [[ -f "$HOME/.config/hypr/hyprland.lua" ]] && command -v hyprctl &>/dev/null; then
+    if hyprctl plugin list 2>/dev/null | grep -qi "hyprexpo"; then
+        ok "hyprexpo cargado (parche 3D/fisheye)"
+    else
+        warn "hyprexpo no cargado — correr: ~/.local/bin/hyprexpo-rebuild.sh + reiniciar Hyprland"
     fi
 fi
 
@@ -468,9 +504,5 @@ info "  3. Probar Hyprland: login desde SDDM"
 echo ""
 info "La barra es la de Omarchy (omarchy-launch-shell, en el autostart)."
 info "Maquina: ${MACHINE} (machine-type escrito en ~/.config/machine-type)."
-if [[ "$MACHINE" == "laptop" ]]; then
-    info "Laptop: hyprexpo stock (grilla plana, sin parche 3D/fisheye)."
-else
-    info "Desktop: parche local hyprexpo (grilla 3D/fisheye). Rebuild: ~/.local/bin/hyprexpo-rebuild.sh"
-fi
+info "hyprexpo: parche 3D/fisheye en ambas maquinas. Rebuild: ~/.local/bin/hyprexpo-rebuild.sh"
 echo ""

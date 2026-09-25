@@ -11,6 +11,25 @@ Config del overview/grilla de workspaces (`SUPER + Y`). Todo vive en
   Omarchy activo via `theme_color(...)`.
 - Recarga: `hyprctl reload` (auto-reload al guardar, pero validar).
 
+## Cambio 2026-09-24g — laptop = desktop (mismo `.so` parcheado)
+
+Antes `hyprland.lua` gateaba el 3D con `EXPO_3D = (machine == "desktop")`: la
+laptop corría el plugin stock (grilla plana). Ahora **ambas máquinas corren el
+mismo `.so` parcheado**.
+
+- `hyprland.lua`: `EXPO_3D = true` (flag conservado solo por claridad). Se quitó
+  el bloque que anulaba `threed_*`/`background_image` en laptop y se actualizaron
+  los comentarios que decían "solo desktop".
+- `hl.plugin.load(...)` ahora construye la ruta con `$USER` en vez de hardcodear
+  `eztvn` (portable entre cuentas).
+- `background_image` resuelve el fallback con `$HOME`, no con `/home/eztvn`.
+- `scripts/setup-omarchy.sh`: compila e instala el parche en **ambas** máquinas
+  (Fase 6, vía `hyprexpo-rebuild.sh`); antes solo se mencionaba para desktop.
+  La verificación (Fase 12) ya no está gateada a desktop.
+
+Aplicar: `bash scripts/setup-omarchy.sh` (o `~/.local/bin/hyprexpo-rebuild.sh` +
+reiniciar Hyprland). El `.so` es machine-agnostic: es el mismo parche.
+
 ## Cambio 2026-09-24f — el efecto 3D entra suave (no de golpe en un frame)
 
 Motivo: el morph de tamaño/posición ya animaba, pero el **efecto 3D** (tilt,
