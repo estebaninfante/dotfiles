@@ -9,6 +9,7 @@ DOTFILES_CONFIG="$REPO/linux/config"
 DOTFILES_BIN="$REPO/linux/bin"
 DOTFILES_HOME="$REPO/linux/home"
 DOTFILES_SYSTEM="$REPO/linux/system"
+DOTFILES_XKB="$REPO/linux/xkb"
 
 # ── Colores ────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -108,6 +109,9 @@ EXTRA_PKGS=(
 
     # Red / Bluetooth
     network-manager-applet bluez bluez-utils blueman
+
+    # Malla + sync entre maquinas (FASE 9 los habilita si existen)
+    tailscale syncthing
 
     # Wayland
     wl-clipboard wtype grim slurp swappy dotool
@@ -275,6 +279,21 @@ if command -v keyd &>/dev/null; then
     ok "keyd configurado y habilitado"
 else
     warn "keyd no encontrado — instalar con: yay -S keyd"
+fi
+
+# Layout XKB custom (dvk_prog): hyprland.lua lo usa como layout principal
+# (kb_layout = "dvk_prog,es,us"). Sin el archivo de simbolos instalado,
+# Hyprland cae a "us" (teclado roto tras fresh install).
+XKB_SYMBOLS="/usr/share/X11/xkb/symbols/dvk_prog"
+if [[ -f "$DOTFILES_XKB/dvk_prog" ]]; then
+    if [[ -f "$XKB_SYMBOLS" ]] && diff -q "$DOTFILES_XKB/dvk_prog" "$XKB_SYMBOLS" &>/dev/null; then
+        ok "XKB dvk_prog ya instalado"
+    else
+        sudo install -o root -g root -m 644 "$DOTFILES_XKB/dvk_prog" "$XKB_SYMBOLS"
+        ok "XKB dvk_prog instalado en /usr/share/X11/xkb/symbols/"
+    fi
+else
+    warn "Falta linux/xkb/dvk_prog — el layout custom no quedara disponible (hyprland cae a us)"
 fi
 
 # ══════════════════════════════════════════════════════════════

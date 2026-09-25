@@ -29,6 +29,13 @@ _(agregar aqui pendientes activos)_
 
 ## Historial de sesiones (últimas 5)
 
+### Sesión 2026-09-25: Terminar migración desktop → laptop (fresh install)
+- **hyprexpo**: upstream borró el pin `e95ef2e` (historial reescrito, 404 en GitHub) y `master` cambió a layout `src/`. Rebaseado a `5891014c` = pin oficial de `hyprpm.toml` para Hyprland 0.56.2. Parche regenerado (mismos 16 archivos), verificado en sesión anidada (grilla 3D OK en PNG). Hunk de live-refresh descartado (esa función upstream no existe en el nuevo pin; expo = snapshots + damage, como stock). `.so` instalado en `/var/cache/hyprpm/eztvn/hyprexpo/` vía pkexec; aplica al próximo login. PIN actualizado en `hyprexpo-rebuild.sh`, `hyprexpo-verify-3d.sh` y SKILL.md. Nota en `hyprexpo-changes.md`.
+- **Lección (skill hyprland-plugin-safety)**: ante pin muerto, leer `commit_pins` del `hyprpm.toml` upstream para la versión de Hyprland en ejecución, NO usar `HEAD`.
+- **setup-secrets.sh**: peer se elegía por `hostname` (laptopmarchy → peer erróneo "laptop"). Ahora usa `~/.config/machine-type` con fallback a hostname.
+- **Paquetes**: tailscale + syncthing NO estaban en setup-omarchy (FASE 9 los esperaba). Instalados vía pacman+pkexec, servicios habilitados (`tailscaled` activo; `syncthing@eztvn` habilitado, arranque manual descartado por usuario). Agregados a EXTRA_PKGS del setup para futuros installs.
+- **SSH**: key `ed25519` creada en laptop (`eztvn@laptopmarchy`). Falta: autorizarla en desktop + `tailscale up --authkey` + `gh auth login` + copiar secrets/sunshine-pass (desktop offline durante la sesión).
+
 ### Sesión 2026-09-15: Migración NixOS → Omarchy (Arch)
 - **Qué se hizo**: Eliminado todo el legacy NixOS/Ubuntu (nixos/, flake.nix/lock, setup-nixos.sh, setup-ubuntu.sh, migrate-to-ubuntu.sh, cuda-*, refind-check.sh, rebuild/sync*, auto-sync.sh, linux/bin/cuda-build-notify.sh, gdm/black.png). Repo remoto corregido a `github.com/estebaninfante/dotfiles.git`.
 - **Symlinks**: Nuevo `scripts/link-dotfiles.sh` idempotente (inventario CONFIG_DIRS/CONFIG_FILES/HOME_FILES + lan-mouse machine-specific + bin con clobber=false para no pisar stubs de Omarchy). `~/.config` ahora son symlinks al repo; hypr incluido. `hyprctl reload` OK.
@@ -43,4 +50,4 @@ _(agregar aqui pendientes activos)_
 - **Acción**: Revertí DashboardService.qml, Bar.qml, eliminé SystemBar.qml. Restauré omarchy-launch-shell.
 
 ---
-_Ultima actualización: 2026-09-15 (migración a Omarchy)_
+_Ultima actualización: 2026-09-25 (fin migración a laptop)_

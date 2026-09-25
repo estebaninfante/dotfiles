@@ -5,7 +5,8 @@ description: Verify and iterate the local hyprexpo 3D grid (perspective-warped w
 
 # hyprexpo 3D grid — verify & iterate
 
-Local fork of `sandwichfarm/hyprexpo` (pinned `e95ef2e`) patched with
+Local fork of `sandwichfarm/hyprexpo` (pinned `5891014c`, the official
+`hyprpm.toml` pin for Hyprland 0.56.2) patched with
 `~/dotfiles/linux/patches/hyprexpo-local.patch`. The patch adds:
 
 - **instant retarget**: `close()` re-targets the in-flight animation, `kb_selectn`

@@ -267,6 +267,19 @@ parche que se aplica con `~/dotfiles/linux/bin/hyprexpo-rebuild.sh`:
 Agregar en el bloque hyprexpo de `hyprland.lua`: `tile_transparent = 0`, luego
 `hyprctl reload`. (Requiere que el `.so` nuevo ya este cargado.)
 
+## Cambio 2026-09-25 — rebase del pin (upstream borro el commit viejo)
+
+Upstream reescribio su historial: el pin anterior (`e95ef2e`) ya no existe en
+GitHub (404) y `master` cambio de layout (`src/`). Nuevo pin: **`5891014c`**,
+que es el commit oficialmente pineado en `hyprpm.toml` para Hyprland 0.56.2
+(el que corre en ambas maquinas). `hyprexpo-local.patch` regenerado contra ese
+pin (mismos 16 archivos); verificado en sesion anidada (grilla 3D OK).
+
+Diferencia conocida: el hunk del live-refresh (timer 120ms→33ms, stagger 2→3
+tiles) se descarto — esa funcion upstream no existe en `5891014c` (ni en el
+`master` actual). La expo vuelve a snapshots al abrir + refresh por damage,
+como el plugin stock. 3D, instant-retarget y tiles transparentes intactos.
+
 ## Backups (en este mismo directorio)
 
 - `hyprland.lua.bak.1790228045` — estado **antes** del cambio de hyprexpo

@@ -17,7 +17,7 @@
 #   HYPREXPO_VERIFY_SETTLE_MS  settle before capture (default 1400)
 set -euo pipefail
 
-PIN=e95ef2e686fccda8e777727a8c41b8747bf18794
+PIN=5891014c611e1bd56d0121143f0221d46b5c0967
 REPO=https://github.com/sandwichfarm/hyprexpo
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"

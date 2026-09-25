@@ -46,7 +46,14 @@ else
 fi
 
 # ── SSH: host trust + conectividad bidireccional ────────────────
-peer="$([ "$(hostname)" = "laptop" ] && echo desktop || echo laptop)"
+# Peer por machine-type (autoritativo): hostname varia (laptopmarchy, etc.)
+# y no sirve para elegir el peer.
+me="$(cat "${HOME}/.config/machine-type" 2>/dev/null || echo "")"
+case "$me" in
+    laptop)  peer="desktop" ;;
+    desktop) peer="laptop" ;;
+    *) peer="$([ "$(hostname)" = "laptop" ] && echo desktop || echo laptop)" ;;
+esac
 peer_ip="$(tailscale ip -4 "$peer" 2>/dev/null)"
 if [ -n "$peer_ip" ]; then
     if ! ssh-keygen -F "$peer" >/dev/null 2>&1 && ! ssh-keygen -F "$peer_ip" >/dev/null 2>&1; then
