@@ -1377,11 +1377,11 @@ index f8741ae..ecd3e91 100644
 +        const float th   = tiltNow * PI_F / 180.f;
 +        const float cam  = dist * warp3D.gridHeight;
 +        const float maxZ = 0.5f * (warp3D.gridHeight * std::abs(std::sin(th)) + (float)pixGrid.x * std::abs(std::sin(yaw * PI_F / 180.f)));
-+        Hyprexpo3D::setFog(std::max(1.0f, cam - maxZ), cam + maxZ, 0.5f * warpAmt);
++        Hyprexpo3D::setFog(std::max(1.0f, cam - maxZ), cam + maxZ, 0.0f);
 +
 +        // Screen-space vignette: focuses the eye and adds a lens falloff that
 +        // reads as depth. Kept subtle so the corners stay usable.
-+        Hyprexpo3D::setVignette(0.35f * warpAmt, (float)MON->m_transformedSize.x, (float)MON->m_transformedSize.y);
++        Hyprexpo3D::setVignette(0.0f, (float)MON->m_transformedSize.x, (float)MON->m_transformedSize.y);
 +    }
 +
 +    // Background (configured image, else the wallpaper): drawn before the tiles.
