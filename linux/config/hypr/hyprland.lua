@@ -331,6 +331,26 @@ hl.animation({
     bezier = "expoSmooth"
 })
 
+-- Curva del zoom de la grilla expo: ease-out mas "plano" al principio que
+-- expoSmooth (que es casi easeOutExpo y llegaba al tamano final en el primer
+-- ~16% del tiempo, saltandose los frames intermedios). easeOutCubic muestra
+-- mas pasos: la grilla crece de forma visible en vez de aparecer ya llena.
+hl.curve("expoOpen", {
+    type = "bezier",
+    points = { { 0.22, 0.61 }, { 0.36, 1.0 } }
+})
+
+-- El parche local hace que abrir/cerrar la grilla siga esta leaf (en vez de
+-- windowsMove). specialWorkspace esta libre en este setup; solo aporta la curva,
+-- la grilla anima tamano/posicion/tilt por su cuenta. Nota: tambien cambia el
+-- deslizar de scratchpads especiales (antes heredaban "default").
+hl.animation({
+    leaf = "specialWorkspace",
+    enabled = true,
+    speed = 4,
+    bezier = "expoOpen"
+})
+
 -- windowsMove tambien anima los drags manuales (mouse) → se sienten
 -- lentos/trabados. Los drags del raton siguen instantaneos, solo el
 -- movimiento por teclado conserva el glide.
@@ -498,7 +518,7 @@ hl.plugin.load("/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so")
 -- Los colores salen del tema Omarchy activo (colors.toml); al cambiar de tema
 -- se refrescan solos porque omarchy-theme-set recarga Hyprland.
 local expo_style = {
-    gaps_in       = 0,        -- separacion entre tiles (flotantes)
+    gaps_in       = 16,       -- separacion entre tiles (flotantes)
     gaps_out      = 22,       -- margen alrededor de la grilla
     border_width  = 2,        -- grosor del borde de cada tile (glass fino)
     tile_rounding = 12,       -- esquinas redondeadas de los tiles (glass)
@@ -507,21 +527,24 @@ local expo_style = {
     border_current = "rgba(ffffff60)",
     border_focus   = "rgba(ffe9a960)",
     border_hover   = "rgba(ffffff35)",
+    -- Borde de los tiles inactivos (workspaces vacios / sin foco). Antes no
+    -- dibujaban ninguno. Vacio = sin borde (comportamiento viejo).
+    border_default = "rgba(ffffff26)",
     -- Fondo detras de los escritorios flotantes (imagen). Vacio = color bg_col.
     background_image = "/home/eztvn/.config/hypr/wallpapers/gradient_blackred_simple_1440p.jpg",
     background_dim   = 0,     -- oscurecer la imagen (0-100)
     -- Grilla en perspectiva 3D (experimental). threed_enable=0 la deja plana.
     threed_enable   = 1,      -- 1 = grilla inclinada en perspectiva (selector 3D)
-    threed_tilt     = 50,     -- inclinacion en grados (0 = sin perspectiva)
+    threed_tilt     = 15,     -- inclinacion en grados (0 = sin perspectiva)
     threed_yaw      = 0,      -- giro horizontal en grados
     threed_distance = 1.3,    -- distancia de camara (alturas de monitor)
     threed_radius   = 0.04,   -- redondeo de esquinas en 3D (fraccion, glass look)
     threed_flip_v   = 0,      -- voltear verticalmente las texturas (0/1)
     -- Lente ojo de pez: curva los bordes de la grilla (0 = sin distorsion).
-    threed_fisheye  = 0.18,   -- fuerza del barrel fisheye (comprime bordes, no magnifica)
+    threed_fisheye  = 0.1,    -- fuerza del barrel fisheye (comprime bordes, no magnifica)
     threed_fisheye_pow = 2,   -- exponente del radial
     -- Estetica neon/glass: bloom alrededor de los tiles.
-    glass_glow_enable = 1,    -- 1 = glow neon activo
+    glass_glow_enable = 0,    -- 1 = glow neon activo
     glass_glow      = 0.7,    -- intensidad del bloom
     hover_scale     = 1.05,   -- escala del tile al pasar el mouse (1 = sin zoom)
     -- Slide direccional del cierre: la grilla se corre hacia el tile destino y
@@ -553,7 +576,11 @@ if hl.plugin.hyprexpo ~= nil then
         gaps_in = expo_style.gaps_in,
         gaps_out = expo_style.gaps_out,
         bg_col = expo_style.bg_col,
+        -- Fallback: si background_image no carga, dibuja el wallpaper del monitor
+        -- detras de la grilla (asi el fondo nunca queda negro). Clave stock.
+        wallpaper_bg = 1,
         border_width = expo_style.border_width,
+        border_color = expo_style.border_default,
         border_color_current = expo_style.border_current,
         border_color_focus = expo_style.border_focus,
         border_color_hover = expo_style.border_hover,
@@ -582,6 +609,8 @@ if hl.plugin.hyprexpo ~= nil then
         expo_cfg.hover_scale = expo_style.hover_scale
         expo_cfg.slide_enable = expo_style.slide_enable
         expo_cfg.slide_amount = expo_style.slide_amount
+        -- Leaf de animacion del abrir/cerrar (clave solo del parche local).
+        expo_cfg.animation = "specialWorkspace"
     end
     hl.config({ plugin = { hyprexpo = expo_cfg } })
 end
@@ -974,8 +1003,15 @@ hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
 hl.bind("F11", hl.dsp.exec_cmd("~/.local/bin/theme-toggle.sh toggle"))
 
+-- F10: toggle de grabacion del escritorio completo con audio de escritorio.
+-- --fullscreen salta el picker de slurp (cero clicks); al parar sale la
+-- notificacion con preview y click para abrir el video.
 if machine == "laptop" then
     hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-lid.sh"))
+else
+    hl.bind("F10", hl.dsp.exec_cmd(
+        "omarchy-capture-screenrecording --stop-recording || omarchy-capture-screenrecording --fullscreen --with-desktop-audio"
+    ), { description = "Grabar escritorio (toggle)" })
 end
 
 -- ========================
