@@ -36,6 +36,17 @@ git -C "$SRC" reset --hard --quiet "$PIN"
 git -C "$SRC" clean -fdq
 git -C "$SRC" apply "$PATCH"
 
+# Guard anti-regresion: los previews en vivo de tiles en otros workspaces
+# dependen de COverview::startLiveRefresh (timer 33ms que recaptura tiles
+# ocultos; sin ella las terminales en otros espacios quedan congeladas en la
+# captura de apertura — regresion del rebase 77a961d). Si el patch llego a
+# perder ese hunk, fallar en vez de instalar un build roto.
+if ! grep -q "startLiveRefresh" "$SRC/OverviewInteraction.cpp"; then
+    echo "error: el patch perdio startLiveRefresh (preview en vivo de tiles ocultos)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
 make -C "$SRC" -j"$(nproc)"
 
 sudo install -Dm755 "$SRC/hyprexpo.so" "$INSTALL_SO"

@@ -351,9 +351,25 @@ hl.config({
 -- Interruptor maestro de animaciones. Con false, TODA animacion (incluido
 -- el leaf "workspaces") se fuerza a warp instantaneo, ignorando los leaves.
 -- Debe estar en true para que cualquier leaf animado funcione.
+--
+-- Estado persistido en ~/.local/state/omarchy/animations-enabled ("1"/"0"),
+-- que el widget de barra eztvn.animations escribe al alternarlo. Si el archivo
+-- no existe, el default son animaciones ENCENDIDAS. Ya no depende de la
+-- bateria: el usuario controla el interruptor desde la barra.
+local function animations_enabled()
+    local f = io.open(os.getenv("HOME") .. "/.local/state/omarchy/animations-enabled", "r")
+    if f then
+        local v = f:read("*l")
+        f:close()
+        if v == "0" then return false end
+        if v == "1" then return true end
+    end
+    return true
+end
+
 hl.config({
     animations = {
-        enabled = not low_power()
+        enabled = animations_enabled()
     }
 })
 
@@ -572,6 +588,9 @@ hl.plugin.load("/var/cache/hyprpm/" .. hyprpm_user .. "/hyprexpo/hyprexpo.so")
 -- Los colores salen del tema Omarchy activo (colors.toml); al cambiar de tema
 -- se refrescan solos porque omarchy-theme-set recarga Hyprland.
 local expo_style = {
+    hover_select_enable = 1,
+    hover_select_delay  = 350,
+    edge_passthrough    = 2,
     gaps_in       = 16,       -- separacion entre tiles (flotantes)
     gaps_out      = 22,       -- margen alrededor de la grilla
     border_width  = 2,        -- grosor del borde de cada tile (glass fino)
@@ -651,6 +670,9 @@ if hl.plugin.hyprexpo ~= nil then
         expo_cfg.glass_glow_enable = expo_style.glass_glow_enable
         expo_cfg.glass_glow = expo_style.glass_glow
         expo_cfg.hover_scale = expo_style.hover_scale
+        expo_cfg.hover_select_enable = expo_style.hover_select_enable
+        expo_cfg.hover_select_delay = expo_style.hover_select_delay
+        expo_cfg.edge_passthrough = expo_style.edge_passthrough
         expo_cfg.slide_enable = expo_style.slide_enable
         expo_cfg.slide_amount = expo_style.slide_amount
         -- Leaf de animacion del abrir/cerrar (clave solo del parche local).

@@ -36,4 +36,11 @@ git -C "$SRC" reset --hard --quiet "$PIN"
 git -C "$SRC" clean -fdq
 git -C "$SRC" apply "$PATCH"
 
+# Guard anti-regresion: sin startLiveRefresh los tiles de otros workspaces
+# quedan congelados (ver hyprexpo-rebuild.sh / hyprexpo-changes.md).
+if ! grep -q "startLiveRefresh" "$SRC/OverviewInteraction.cpp"; then
+    echo "SUMMARY: FAIL patch-sin-startLiveRefresh (preview en vivo perdido)" >&2
+    exit 1
+fi
+
 exec "$SRC/scripts/verify-3d.sh"

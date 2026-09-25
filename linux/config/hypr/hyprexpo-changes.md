@@ -279,6 +279,9 @@ Diferencia conocida: el hunk del live-refresh (timer 120ms→33ms, stagger 2→3
 tiles) se descarto — esa funcion upstream no existe en `5891014c` (ni en el
 `master` actual). La expo vuelve a snapshots al abrir + refresh por damage,
 como el plugin stock. 3D, instant-retarget y tiles transparentes intactos.
+**(Update: el live-refresh se restauro el mismo dia, ver "live-refresh
+restaurado" mas abajo — sin el, los previews de otros espacios quedan
+congelados.)**
 
 ## Cambio 2026-09-25 — `reverse_rows` implementado de verdad
 
@@ -291,6 +294,133 @@ flag `reverseRows` en `computeTileLayout`/`tileIndexAtPoint` (fila visual =
 ( TODA la geometria pasa por ahi: render, hit-test, hover, drag, nav). Test
 headless `/tmp/revtest.cpp`: 9/9 asserts (numpad, hit-test, parciales, stock
 intacto). Parche v2 regenerado (18 archivos). Instalar + reloguear para cargar.
+
+## Cambio 2026-09-25 — live-refresh restaurado (fin de previews congelados)
+
+**Sintoma**: al abrir el overview, las terminales en otros workspaces se
+mostraban congeladas en el estado del momento de apertura.
+
+**Causa**: el rebase al pin `5891014c` descarto el hunk de
+`COverview::startLiveRefresh()` ("upstream fn absent at new pin"), un timer
+que re-capturaba los tiles periodicamente. Sin el, los tiles de workspaces
+ocultos nunca se vuelven a capturar: sus ventanas no se renderizan → no emiten
+damage → ni el damage hook ni el capture-on-open los refrescan.
+
+**Fix (reimplementacion fresca en el fork)**:
+
+- `COverview::startLiveRefresh()` en `OverviewInteraction.cpp`: timer
+  `CEventLoopTimer` de **33ms** que recaptura **3 tiles rotativos por tick**
+  (`liveRefreshCursor`), salta el tile enfocado (ese si recibe damage) y los
+  invalidos, y hace `damage()` + `scheduleFrame()` por tick.
+- Se arma al final del constructor (`Overview.cpp`) y se cancela en el
+  destructor junto a `redrawSettleTimer`.
+- Miembros nuevos en `Overview.hpp`: `liveRefreshTimer`, `liveRefreshCursor`.
+
+**Anti-regresion**:
+
+- `hyprexpo-rebuild.sh` y `hyprexpo-verify-3d.sh` fallan si el patch aplicado
+  no contiene `startLiveRefresh` (grep tras `git apply`).
+- Test funcional anidado: `hyprexpo-verify-live.sh` — abre una terminal con
+  ticking en ws2, saca el overview y compara dos capturas ~1.5s aparte;
+  `diff_pixels>0` = vivo, `0` = congelado (exit 2).
+
+Verificado: build limpio desde el patch + harness anidado (grilla 3D OK) +
+`hyprexpo-verify-live.sh` → `verdict=live`. Instalar con `hyprexpo-rebuild.sh`
++ logout/login (el `.so` solo se carga al arrancar Hyprland).
+
+## Cambio 2026-09-25 — hover-select (caer en el workspace al reposar el mouse)
+
+**Motivo**: seleccionar un workspace exigía click. Ahora, con el overview
+abierto, basta **reposar el mouse** sobre un tile (dwell) para caer en ese
+workspace: se cierra la grilla y se cambia de espacio, sin click.
+
+**Comportamiento**:
+
+- Al mover el mouse, el tile bajo el puntero se marca como hovered; si el
+  puntero **permanece** sobre él `hover_select_delay` ms, se selecciona.
+- Moverse dentro del mismo tile **no reinicia** el dwell (acumula); salir del
+  tile o volver al workspace de origen cancela el timer.
+- El tile del workspace **de origen** (`openedID`) no dispara: evita cerrar por
+  abrir la grilla (el puntero arranca encima de ese tile).
+- No dispara mientras hay un **drag** activo.
+
+**Claves nuevas** (`plugin:hyprexpo:`, default apagado en el plugin):
+
+| Clave | Default `.so` | En `hyprland.lua` | Qué |
+|-------|---------------|-------------------|-----|
+| `hover_select_enable` | `0` | `1` | activa el hover-select |
+| `hover_select_delay`  | `400` | `350` | ms de reposo antes de seleccionar |
+
+Expuestas en `expo_style` y cableadas en el bloque `EXPO_3D` de
+`hyprland.lua` (`expo_cfg.hover_select_enable/delay`).
+
+**Implementación (fork local, `linux/patches/hyprexpo-local.patch`)**:
+
+- `HyprexpoConfig.hpp`: defaults `HOVER_SELECT_*`.
+- `PluginConfig.cpp`: registra las dos claves.
+- `Overview.hpp`: `void armHoverSelect();` + miembros `hoverSelectTileID`,
+  `hoverSelectTimer`.
+- `OverviewInteraction.cpp`: `COverview::armHoverSelect()` arma un
+  `CEventLoopTimer` atado a `(monitorKey, sessionGeneration)`;
+  al disparar revalida el tile y llama `selectHoveredWorkspace()` +
+  `closeOverviewsSelecting(this)`. Se re-arma/actualiza con `updateTimeout`.
+- `Overview.cpp`: `onCursorMove` llama `armHoverSelect()`; el destructor cancela
+  el timer.
+- Tests de fuente en `tests/OverviewSourceTests.cpp` (claves registradas,
+  función presente, usa `selectHoveredWorkspace`/`closeOverviewsSelecting`).
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` + **logout/login**
+(`hyprctl reload` NO recarga el `.so`; recargar antes de reloguear da
+unknown-key). Estado: build desde patch OK + instalado en
+`/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so`. Verificado funcionalmente en
+sesion anidada (`movecursor` a un tile distinto → reposo `delay` ms → cae en ese
+workspace y cierra la grilla; reparar sobre el tile de origen no dispara).
+**Pendiente logout/login** para que el proceso vivo cargue el `.so`.
+
+### Revertir
+En el bloque `EXPO_3D` de `hyprland.lua`: `expo_cfg.hover_select_enable = 0`
+(o quitar las dos claves), luego `hyprctl reload`. Para quitar el código,
+revertir el parche y `hyprexpo-rebuild.sh`.
+
+## Cambio 2026-09-25 — edge-passthrough (cruzar a la otra maquina con la grilla abierta)
+
+**Motivo**: con el overview abierto, `onCursorMove` cancelaba **todo** movimiento
+del puntero (`info.cancelled = true`), asi que el compositor nunca actualizaba el
+foco de puntero y la franja overlay de **lan-mouse** (1px, capa overlay
+"LAN Mouse Sharing") no recibia `wl_pointer.enter`. Resultado: no se podia cruzar
+a la otra maquina dejando un PC en modo grilla.
+
+**Comportamiento**:
+
+- Si el puntero esta a `edge_passthrough` px o menos de un borde del monitor, el
+  movimiento **no se consume**: pasa al compositor para que la superficie de borde
+  (lan-mouse) reciba foco de puntero.
+- Lejos de los bordes, el overview sigue consumiendo el movimiento como antes.
+- El hover-select se desarma mientras el puntero reposa en el borde (evita que el
+  dwell dispare y cierre la grilla justo al hacer el handoff).
+
+**Clave nueva** (`plugin:hyprexpo:`):
+
+| Clave | Default `.so` | En `hyprland.lua` | Que |
+|-------|---------------|-------------------|-----|
+| `edge_passthrough` | `2` | `2` | px desde el borde donde el movimiento pasa al cliente de borde (0 = off) |
+
+**Implementacion (fork local, `linux/patches/hyprexpo-local.patch`)**:
+
+- `HyprexpoConfig.hpp`: defaults `EDGE_PASSTHROUGH_*`.
+- `PluginConfig.cpp`: registra la clave.
+- `Overview.cpp`: helper `cursorAtMonitorEdge(monitor)`; `onCursorMove` solo marca
+  `info.cancelled = true` fuera del borde.
+- `OverviewInternal.hpp`: declara el helper.
+- `OverviewInteraction.cpp`: `armHoverSelect` no arma si el puntero esta en el borde.
+- Tests de fuente en `tests/OverviewSourceTests.cpp`.
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` + logout/login (igual que
+hover-select; `hyprctl reload` no recarga el `.so`).
+
+### Revertir
+`expo_cfg.edge_passthrough = 0` en `hyprland.lua` + `hyprctl reload` (o quitar la
+clave). Para quitar el codigo, revertir el parche y `hyprexpo-rebuild.sh`.
 
 ## Backups (en este mismo directorio)
 

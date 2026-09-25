@@ -1,7 +1,7 @@
-diff --git c/Dispatchers.cpp i/Dispatchers.cpp
+diff --git c/Dispatchers.cpp w/Dispatchers.cpp
 index f8c4571..5dafa5c 100644
 --- c/Dispatchers.cpp
-+++ i/Dispatchers.cpp
++++ w/Dispatchers.cpp
 @@ -424,6 +424,23 @@ static int luaExpo(lua_State* L) {
      return luaDispatchResult(L, "hyprexpo.expo", onExpoDispatcher(luaStringArg(L, 1, "hyprexpo.expo", "toggle")));
  }
@@ -65,11 +65,11 @@ index f8c4571..5dafa5c 100644
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_focus", luaKbFocus);
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_confirm", luaKbConfirm);
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_selectn", luaKbSelectNumber);
-diff --git c/HyprexpoConfig.hpp i/HyprexpoConfig.hpp
-index c3e70c9..b91f2fa 100644
+diff --git c/HyprexpoConfig.hpp w/HyprexpoConfig.hpp
+index c3e70c9..4bd3fe8 100644
 --- c/HyprexpoConfig.hpp
-+++ i/HyprexpoConfig.hpp
-@@ -18,6 +18,12 @@ inline constexpr int         LEGACY_ENABLE_KEYBOARD_NAV_DEFAULT  = 1;
++++ w/HyprexpoConfig.hpp
+@@ -18,6 +18,19 @@ inline constexpr int         LEGACY_ENABLE_KEYBOARD_NAV_DEFAULT  = 1;
  inline constexpr int         LEGACY_ENABLE_DRAG_MOVE_DEFAULT     = 0;
  inline constexpr int         LEGACY_ANIMATE_ENTRY_DEFAULT        = 0;
  inline constexpr int         WALLPAPER_BG_DEFAULT                = 0;
@@ -79,10 +79,17 @@ index c3e70c9..b91f2fa 100644
 +inline constexpr int         GLASS_GLOW_ENABLE_DEFAULT          = 0;
 +inline constexpr float       GLASS_GLOW_DEFAULT                 = 0.6f;
 +inline constexpr float       HOVER_SCALE_DEFAULT                = 1.0f;
++inline constexpr int         HOVER_SELECT_ENABLE_DEFAULT         = 0;
++inline constexpr int         HOVER_SELECT_DELAY_DEFAULT          = 400;
++inline constexpr int         HOVER_SELECT_DELAY_MIN              = 0;
++inline constexpr int         HOVER_SELECT_DELAY_MAX              = 3000;
++inline constexpr int         EDGE_PASSTHROUGH_DEFAULT           = 2;
++inline constexpr int         EDGE_PASSTHROUGH_MIN               = 0;
++inline constexpr int         EDGE_PASSTHROUGH_MAX               = 64;
  inline constexpr std::size_t DYNAMIC_GRID_MAX_TILES              = 64;
  
  inline constexpr int         COLUMNS_DEFAULT                 = 3;
-@@ -31,6 +37,7 @@ inline constexpr const char* WORKSPACE_METHOD_DEFAULT        = "center current";
+@@ -31,6 +44,7 @@ inline constexpr const char* WORKSPACE_METHOD_DEFAULT        = "center current";
  inline constexpr int         SKIP_EMPTY_DEFAULT              = 0;
  inline constexpr int         MAX_WORKSPACE_DEFAULT           = 0;
  inline constexpr int         SHOW_WORKSPACE_NUMBERS_DEFAULT  = 0;
@@ -90,7 +97,7 @@ index c3e70c9..b91f2fa 100644
  inline constexpr unsigned    WORKSPACE_NUMBER_COLOR_DEFAULT  = 0xFFFFFFFF;
  inline constexpr int         GESTURE_DISTANCE_DEFAULT        = 200;
  inline constexpr int         GESTURE_FINGERS_DEFAULT         = 0;
-@@ -50,6 +57,7 @@ inline constexpr int         KEYNAV_WRAP_V_DEFAULT           = 1;
+@@ -50,6 +64,7 @@ inline constexpr int         KEYNAV_WRAP_V_DEFAULT           = 1;
  inline constexpr int         KEYNAV_READING_ORDER_DEFAULT    = 0;
  inline constexpr int         BORDER_WIDTH_DEFAULT            = 2;
  inline constexpr const char* BORDER_COLOR_DEFAULT            = "";
@@ -98,10 +105,10 @@ index c3e70c9..b91f2fa 100644
  inline constexpr const char* BORDER_COLOR_CURRENT_DEFAULT    = "rgb(66ccff)";
  inline constexpr const char* BORDER_COLOR_FOCUS_DEFAULT      = "rgb(ffcc66)";
  inline constexpr const char* BORDER_COLOR_HOVER_DEFAULT      = "rgb(aabbcc)";
-diff --git c/HyprexpoLogic.cpp i/HyprexpoLogic.cpp
+diff --git c/HyprexpoLogic.cpp w/HyprexpoLogic.cpp
 index 08e3ea8..804c3c8 100644
 --- c/HyprexpoLogic.cpp
-+++ i/HyprexpoLogic.cpp
++++ w/HyprexpoLogic.cpp
 @@ -99,7 +99,7 @@ SSize aspectCorrectTileSize(double screenW, double screenH, int cols, int rows,
      return {maxTileW, maxTileW / monAspect};
  }
@@ -149,10 +156,10 @@ index 08e3ea8..804c3c8 100644
          if (x >= layout.box.x && x < layout.box.x + layout.box.w && y >= layout.box.y && y < layout.box.y + layout.box.h)
              return i;
      }
-diff --git c/HyprexpoLogic.hpp i/HyprexpoLogic.hpp
+diff --git c/HyprexpoLogic.hpp w/HyprexpoLogic.hpp
 index b65111d..8256a84 100644
 --- c/HyprexpoLogic.hpp
-+++ i/HyprexpoLogic.hpp
++++ w/HyprexpoLogic.hpp
 @@ -183,8 +183,8 @@ SGridShape               computeDynamicGridShape(int visibleCount);
  SGridShape               computeFixedGridShape(int64_t columns, int64_t rows);
  std::optional<std::vector<int64_t>> expandDynamicWorkspaceIDs(const std::vector<int64_t>& workspaceIDs, bool fillGaps, std::size_t maxExpandedWorkspaces);
@@ -164,10 +171,31 @@ index b65111d..8256a84 100644
  std::optional<STileTarget> selectDirectionalTile(const SRect& source, EDirection direction, const std::vector<SGlobalTile>& candidates);
  std::optional<STileHit>    hitTestGlobalTile(const SPoint& point, const std::vector<SGlobalTile>& tiles);
  SOverviewDragTransition    transitionOverviewDrag(const SOverviewDragState& state, const SOverviewDragEvent& event, const std::vector<uint64_t>& liveMonitorKeys);
-diff --git c/Makefile i/Makefile
+diff --git c/IOverviewSession.hpp w/IOverviewSession.hpp
+index ca7ba7c..59f35f5 100644
+--- c/IOverviewSession.hpp
++++ w/IOverviewSession.hpp
+@@ -56,10 +56,12 @@ class IOverviewSession {
+     virtual bool ownsTouchInput(int32_t touchId) const { return false; }
+ 
+     virtual bool blocksOverviewRendering() const = 0;
+-    virtual bool blocksDamageReporting() const = 0;
+-    virtual bool isSwiping() const = 0;
+-    virtual PHLMONITOR monitor() const = 0;
+-    virtual uint64_t sessionGeneration() const = 0;
++    virtual bool blocksDamageReporting() const   = 0;
++    virtual bool isSwiping() const               = 0;
++    virtual PHLMONITOR monitor() const           = 0;
++    virtual uint64_t sessionGeneration() const   = 0;
++    // Opacidad de las capas TOP (barra) durante el overview: 1 = sin fade.
++    virtual float topLayerFadeAlpha() const { return 1.F; }
+ };
+ 
+ // Registry ownership is removed before teardown callbacks can re-enter render/damage hooks.
+diff --git c/Makefile w/Makefile
 index 14b2c3f..79efb6b 100644
 --- c/Makefile
-+++ i/Makefile
++++ w/Makefile
 @@ -20,10 +20,10 @@ LUA_PKG_CONFIG ?= $(shell if pkg-config --exists lua5.4; then printf 'lua5.4'; e
  PKG_CONFIG_DEPS = pixman-1 libdrm hyprland pangocairo libinput libudev wayland-server xkbcommon $(LUA_PKG_CONFIG)
  LINK_DEPS = pangocairo xkbcommon $(LUA_PKG_CONFIG)
@@ -182,10 +210,10 @@ index 14b2c3f..79efb6b 100644
  TARGET = hyprexpo.so
  TEST_TARGET = HyprexpoLogicTests
  SOURCE_TEST_TARGET = OverviewSourceTests
-diff --git c/Overview.cpp i/Overview.cpp
-index 305fb1a..993e60b 100644
+diff --git c/Overview.cpp w/Overview.cpp
+index 305fb1a..e80b241 100644
 --- c/Overview.cpp
-+++ i/Overview.cpp
++++ w/Overview.cpp
 @@ -45,6 +45,7 @@
  #include <string>
  #include <vector>
@@ -240,7 +268,24 @@ index 305fb1a..993e60b 100644
  static void damageMonitor(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr) {
      if (auto* const OV = overviewForAnimVar(thisptr))
          OV->damage();
-@@ -1024,9 +1064,10 @@ double COverview::currentOuterInset() const {
+@@ -952,6 +992,16 @@ static void ensureOverviewCursorVisible(bool forceOverviewShape = false, bool re
+         g_pInputManager->simulateMouseMovement();
+ }
+ 
++bool cursorAtMonitorEdge(const PHLMONITOR& monitor) {
++    static auto* const* PEDGE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:edge_passthrough")->getDataStaticPtr();
++    const int THRESHOLD = std::max(0, (int)**PEDGE);
++    if (!monitor || THRESHOLD <= 0)
++        return false;
++
++    const auto LOCAL = g_pInputManager->getMouseCoordsInternal() - monitor->m_position;
++    return LOCAL.x <= THRESHOLD || LOCAL.y <= THRESHOLD || LOCAL.x >= monitor->m_size.x - 1 - THRESHOLD || LOCAL.y >= monitor->m_size.y - 1 - THRESHOLD;
++}
++
+ WORKSPACEID workspaceIDForMonitor(const PHLMONITOR& monitor, const std::string& selector) {
+     const auto FOCUS = Desktop::focusState();
+     if (!FOCUS || !monitor)
+@@ -1024,9 +1074,10 @@ double COverview::currentOuterInset() const {
  }
  
  Hyprexpo::STileLayout COverview::tileLayoutForIndex(int id, const Vector2D& totalSize, double gap, double outerInset, bool centerPartialRows) const {
@@ -252,7 +297,7 @@ index 305fb1a..993e60b 100644
      layout.box.x += outerInset;
      layout.box.y += outerInset;
      return layout;
-@@ -1038,9 +1079,10 @@ CBox COverview::tileBoxForIndex(int id, const Vector2D& totalSize, double gap, d
+@@ -1038,9 +1089,10 @@ CBox COverview::tileBoxForIndex(int id, const Vector2D& totalSize, double gap, d
  }
  
  int COverview::tileIndexAtPoint(const Vector2D& point, const Vector2D& totalSize, double gap, double outerInset, bool centerPartialRows) const {
@@ -264,7 +309,22 @@ index 305fb1a..993e60b 100644
  }
  
  Vector2D COverview::tilePosForID(int id, const Vector2D& totalSize, double gap, double outerInset, bool centerPartialRows) const {
-@@ -1287,6 +1329,7 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
+@@ -1062,6 +1114,14 @@ COverview::~COverview() {
+         redrawSettleTimer->cancel();
+         redrawSettleTimer.reset();
+     }
++    if (liveRefreshTimer) {
++        liveRefreshTimer->cancel();
++        liveRefreshTimer.reset();
++    }
++    if (hoverSelectTimer) {
++        hoverSelectTimer->cancel();
++        hoverSelectTimer.reset();
++    }
+     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+     images.clear(); // otherwise we get a vram leak
+     Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_UNKNOWN);
+@@ -1287,6 +1347,7 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
              .box                  = monbox,
              .showPinnedWindows    = showPinnedWindowsInPreview(),
              .blockSurfaceFeedback = true,
@@ -272,7 +332,7 @@ index 305fb1a..993e60b 100644
          }, image.fb);
  
          image.box = tileBoxForIndex((int)i, pMonitor->m_size, GAP_WIDTH, 0.0, true);
-@@ -1295,16 +1338,49 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
+@@ -1295,16 +1356,49 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
      startedOn->m_visible               = true;
      Animation::Workspace::startAnimation(startedOn, Animation::Workspace::ANIMATION_TYPE_IN, true, true);
  
@@ -326,11 +386,50 @@ index 305fb1a..993e60b 100644
  
          size->setCallbackOnEnd([this](auto) { redrawAll(true); });
      }
-diff --git c/Overview.hpp i/Overview.hpp
-index 4675867..856a7d5 100644
+@@ -1331,11 +1425,16 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
+                 continue;
+             OV->lastMousePosLocal = GLOBAL - MON->m_position;
+             OV->updateHoveredFromMouse();
++            OV->armHoverSelect();
+         }
+ 
+-        if (info.cancelled || !dynamic_cast<COverview*>(pointerOverview()))
++        auto* const PTR = dynamic_cast<COverview*>(pointerOverview());
++        if (info.cancelled || !PTR)
+             return;
+-        info.cancelled = true;
++
++        const auto CUROV = gridOverviewForGlobalPoint(g_pInputManager->getMouseCoordsInternal());
++        if (!cursorAtMonitorEdge(CUROV ? CUROV->monitor() : PTR->monitor()))
++            info.cancelled = true;
+         ensureOverviewCursorVisible();
+ 
+         if (auto* const SOURCE = gridOverviewForMonitorKey(g_overviewDrag.state.sourceMonitorKey))
+@@ -1414,5 +1513,7 @@ COverview::COverview(PHLWORKSPACE startedOn_, PHLMONITOR monitor_, bool swipe_,
+     });
+     workspaceMoveHook = Event::bus()->m_events.window.moveToWorkspace.listen([this](PHLWINDOW window, PHLWORKSPACE workspace) { onWindowMoveToWorkspace(window, workspace); });
+ 
++    startLiveRefresh();
++
+     enterSubmapIfEnabled();
+ }
+diff --git c/Overview.hpp w/Overview.hpp
+index 4675867..f62a224 100644
 --- c/Overview.hpp
-+++ i/Overview.hpp
-@@ -110,6 +110,7 @@ class COverview final : public IOverviewSession {
++++ w/Overview.hpp
+@@ -83,6 +83,11 @@ class COverview final : public IOverviewSession {
+     PHLMONITOR monitor() const override { return pMonitor.lock(); }
+     uint64_t sessionGeneration() const override { return m_sessionGeneration; }
+ 
++    // Opacidad para las capas TOP (barra) mientras el overview esta activo:
++    // 1 = escritorio normal, 0 = overview abierto. Sigue la animacion de
++    // apertura/cierre para que la barra se funda en vez de desaparecer de golpe.
++    float topLayerFadeAlpha() const override;
++
+     bool          blockOverviewRendering = false;
+     bool          blockDamageReporting   = false;
+ 
+@@ -110,6 +115,7 @@ class COverview final : public IOverviewSession {
    private:
      void       redrawID(int id, bool forcelowres = false);
      void       redrawAll(bool forcelowres = false);
@@ -338,7 +437,41 @@ index 4675867..856a7d5 100644
      void       onWorkspaceChange();
      void       fullRender() override;
      Hyprexpo::SGridShape currentGridShape() const;
-@@ -164,6 +165,9 @@ class COverview final : public IOverviewSession {
+@@ -120,6 +126,7 @@ class COverview final : public IOverviewSession {
+     Vector2D   tilePosForID(int id, const Vector2D& totalSize, double gap, double outerInset = 0.0, bool centerPartialRows = true) const;
+     Vector2D   zoomSizeForCurrentGrid(const Vector2D& monitorSize) const;
+     void       updateHoveredFromMouse();
++    void       armHoverSelect();
+     void       ensureKbFocusInitialized();
+     bool       isTileValid(int id) const;
+     bool       moveFocus(int dx, int dy);
+@@ -131,6 +138,7 @@ class COverview final : public IOverviewSession {
+     void       redrawDraggedWorkspace(int64_t workspaceID);
+     void       queueRedrawID(int id);
+     void       flushQueuedRedraws();
++    void       startLiveRefresh();
+     PHLWINDOW  windowAtTilePoint(int id, const Vector2D& localPoint) const;
+     Vector2D   tilePointToWorkspacePoint(int id, const Vector2D& localPoint) const;
+     PHLWORKSPACE ensureWorkspaceForTile(int id);
+@@ -152,11 +160,17 @@ class COverview final : public IOverviewSession {
+     int                          kbFocusID = -1;
+     int                          hoveredID = -1;
+     bool                         submapActive = false;
++    int                          hoverSelectTileID = -1;
++    SP<CEventLoopTimer>          hoverSelectTimer;
+ 
+     std::vector<int>             queuedRedrawIDs;
+     std::vector<int64_t>         settlingRedrawWorkspaceIDs;
+     int                          redrawSettleTicks = 0;
+     SP<CEventLoopTimer>          redrawSettleTimer;
++    // Periodic recapture of hidden-workspace tiles (they report no monitor
++    // damage, so nothing else refreshes them while the overview is open).
++    SP<CEventLoopTimer>          liveRefreshTimer;
++    size_t                       liveRefreshCursor = 0;
+ 
+     std::vector<SWorkspaceImage> images;
+ 
+@@ -164,6 +178,9 @@ class COverview final : public IOverviewSession {
  
      PHLANIMVAR<Vector2D>         size;
      PHLANIMVAR<Vector2D>         pos;
@@ -348,11 +481,11 @@ index 4675867..856a7d5 100644
  
      bool                         closing = false;
      bool                         m_closeCommitted = false;
-diff --git c/Overview3D.cpp i/Overview3D.cpp
+diff --git c/Overview3D.cpp w/Overview3D.cpp
 new file mode 100644
 index 0000000..429abc0
 --- /dev/null
-+++ i/Overview3D.cpp
++++ w/Overview3D.cpp
 @@ -0,0 +1,502 @@
 +#include "Overview3D.hpp"
 +
@@ -856,11 +989,11 @@ index 0000000..429abc0
 +    }
 +
 +} // namespace Hyprexpo3D
-diff --git c/Overview3D.hpp i/Overview3D.hpp
+diff --git c/Overview3D.hpp w/Overview3D.hpp
 new file mode 100644
 index 0000000..21884a5
 --- /dev/null
-+++ i/Overview3D.hpp
++++ w/Overview3D.hpp
 @@ -0,0 +1,98 @@
 +#pragma once
 +
@@ -960,10 +1093,10 @@ index 0000000..21884a5
 +    void teardown();
 +
 +} // namespace Hyprexpo3D
-diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
+diff --git c/OverviewCapture.cpp w/OverviewCapture.cpp
 index cb18d2f..8cd2ba9 100644
 --- c/OverviewCapture.cpp
-+++ i/OverviewCapture.cpp
++++ w/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
  #include "HyprlandConfigCompat.hpp"
  #include "HyprexpoConfig.hpp"
@@ -1154,10 +1287,10 @@ index cb18d2f..8cd2ba9 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-diff --git c/OverviewCapture.hpp i/OverviewCapture.hpp
+diff --git c/OverviewCapture.hpp w/OverviewCapture.hpp
 index fa06d24..c448235 100644
 --- c/OverviewCapture.hpp
-+++ i/OverviewCapture.hpp
++++ w/OverviewCapture.hpp
 @@ -18,6 +18,12 @@ struct SWorkspaceCaptureRequest {
      bool         showPinnedWindows      = false;
      bool         blockSurfaceFeedback   = false;
@@ -1171,11 +1304,148 @@ index fa06d24..c448235 100644
  };
  
  struct SWindowCaptureResult {
-diff --git c/OverviewInteraction.cpp i/OverviewInteraction.cpp
-index 30ab6ea..b8049db 100644
+diff --git c/OverviewInteraction.cpp w/OverviewInteraction.cpp
+index 30ab6ea..134ab29 100644
 --- c/OverviewInteraction.cpp
-+++ i/OverviewInteraction.cpp
-@@ -614,13 +614,19 @@ bool COverview::onKbConfirm() {
++++ w/OverviewInteraction.cpp
+@@ -1,5 +1,6 @@
+ #include "HyprlandConfigCompat.hpp"
+ #define HyprlandAPI CompatHyprlandAPI
++#include "HyprexpoConfig.hpp"
+ #include "OverviewInternal.hpp"
+ #include "HyprexpoLogic.hpp"
+ #include <hyprland/src/Compositor.hpp>
+@@ -83,6 +84,60 @@ void COverview::updateHoveredFromMouse() {
+     damage();
+ }
+ 
++void COverview::armHoverSelect() {
++    static auto* const* PHOVERSELEN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:hover_select_enable")->getDataStaticPtr();
++    static auto* const* PHOVERSELMS = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:hover_select_delay")->getDataStaticPtr();
++
++    const bool pointerHere = **PHOVERSELEN != 0 && !g_overviewDrag.state.active && gridOverviewForGlobalPoint(g_pInputManager->getMouseCoordsInternal()) == this &&
++        !cursorAtMonitorEdge(pMonitor.lock());
++    const int  target      = pointerHere && hoveredID != openedID ? hoveredID : -1;
++
++    if (target < 0) {
++        if (hoverSelectTimer) {
++            hoverSelectTimer->cancel();
++            hoverSelectTimer.reset();
++        }
++        hoverSelectTileID = -1;
++        return;
++    }
++
++    if (target == hoverSelectTileID && hoverSelectTimer)
++        return;
++
++    hoverSelectTileID = target;
++
++    const auto delay = std::chrono::milliseconds{std::clamp((int)**PHOVERSELMS, HyprexpoConfig::HOVER_SELECT_DELAY_MIN, HyprexpoConfig::HOVER_SELECT_DELAY_MAX)};
++    if (hoverSelectTimer) {
++        hoverSelectTimer->updateTimeout(delay);
++        return;
++    }
++
++    const auto OVERVIEWKEY = overviewMonitorKey(pMonitor.lock());
++    const auto GENERATION  = m_sessionGeneration;
++    if (OVERVIEWKEY == 0)
++        return;
++
++    hoverSelectTimer = makeShared<CEventLoopTimer>(
++        delay,
++        [OVERVIEWKEY, GENERATION](SP<CEventLoopTimer> self, void*) {
++            auto* const OVERVIEW = dynamic_cast<COverview*>(overviewForSession(OVERVIEWKEY, GENERATION));
++            if (!OVERVIEW || OVERVIEW->hoverSelectTimer.get() != self.get()) {
++                self->cancel();
++                return;
++            }
++
++            const int tile = OVERVIEW->hoverSelectTileID;
++            OVERVIEW->hoverSelectTimer.reset();
++            if (OVERVIEW->closing || tile != OVERVIEW->hoveredID || tile == OVERVIEW->openedID)
++                return;
++
++            if (OVERVIEW->selectHoveredWorkspace())
++                closeOverviewsSelecting(OVERVIEW);
++        },
++        nullptr);
++    g_pEventLoopManager->addTimer(hoverSelectTimer);
++}
++
+ void COverview::ensureKbFocusInitialized() {
+     if (kbFocusID != -1)
+         return;
+@@ -469,6 +524,68 @@ void COverview::flushQueuedRedraws() {
+         MON->scheduleFrame();
+ }
+ 
++// Periodic live refresh of the grid tiles. Windows on non-visible workspaces
++// are never rendered by the compositor, so they produce no monitor damage and
++// the damage-driven path can never recapture their tiles — without this timer
++// those previews stay frozen at the open-time capture. (Upstream had
++// startLiveRefresh until the 5891014 rebase dropped it; this is a fresh
++// re-implementation of the same idea.)
++void COverview::startLiveRefresh() {
++    if (liveRefreshTimer)
++        return;
++
++    const auto OVERVIEWKEY = overviewMonitorKey(pMonitor.lock());
++    const auto GENERATION  = m_sessionGeneration;
++    if (OVERVIEWKEY == 0)
++        return;
++
++    liveRefreshTimer = makeShared<CEventLoopTimer>(
++        33ms,
++        [OVERVIEWKEY, GENERATION](SP<CEventLoopTimer> self, void*) {
++            auto* const OVERVIEW = dynamic_cast<COverview*>(overviewForSession(OVERVIEWKEY, GENERATION));
++            if (!OVERVIEW || OVERVIEW->liveRefreshTimer.get() != self.get()) {
++                self->cancel();
++                return;
++            }
++
++            const auto MON = OVERVIEW->pMonitor.lock();
++            if (!MON || OVERVIEW->images.empty()) {
++                self->updateTimeout(33ms);
++                return;
++            }
++
++            // Stagger: recapture a rotating subset of tiles per tick so the
++            // offscreen render cost stays bounded while every hidden tile
++            // still refreshes several times per second.
++            constexpr size_t MAX_TILES_PER_TICK = 3;
++            const size_t     TILE_COUNT         = OVERVIEW->images.size();
++            size_t           redrawn            = 0;
++            for (size_t checked = 0; checked < TILE_COUNT && redrawn < MAX_TILES_PER_TICK; ++checked) {
++                const size_t idx = (OVERVIEW->liveRefreshCursor + checked) % TILE_COUNT;
++                if (!OVERVIEW->isTileValid((int)idx))
++                    continue;
++                // The focused tile belongs to the active workspace: its
++                // windows are rendered, so it already reports damage and is
++                // refreshed by onPreRender.
++                if ((int)idx == OVERVIEW->openedID)
++                    continue;
++                OVERVIEW->redrawID((int)idx);
++                ++redrawn;
++            }
++            OVERVIEW->liveRefreshCursor = (OVERVIEW->liveRefreshCursor + MAX_TILES_PER_TICK) % TILE_COUNT;
++
++            if (redrawn) {
++                OVERVIEW->damage();
++                MON->scheduleFrame();
++            }
++
++            // CEventLoopTimer fires once; re-arm so we keep refreshing.
++            self->updateTimeout(33ms);
++        },
++        nullptr);
++    g_pEventLoopManager->addTimer(liveRefreshTimer);
++}
++
+ bool COverview::selectVisibleToken(const std::string& token) {
+     if (closing)
+         return false;
+@@ -614,13 +731,19 @@ bool COverview::onKbConfirm() {
  }
  
  bool COverview::onKbSelectNumber(int num) {
@@ -1199,10 +1469,10 @@ index 30ab6ea..b8049db 100644
  }
  
  bool COverview::onKbSelectToken(int visibleIdx) {
-diff --git c/OverviewInternal.hpp i/OverviewInternal.hpp
-index 2c8a347..eec9d97 100644
+diff --git c/OverviewInternal.hpp w/OverviewInternal.hpp
+index 2c8a347..a15a58e 100644
 --- c/OverviewInternal.hpp
-+++ i/OverviewInternal.hpp
++++ w/OverviewInternal.hpp
 @@ -63,6 +63,7 @@ int fallbackTokenToVisibleIndex(const std::string& token);
  SHyprGradientSpec parseGradientSpec(const std::string& inRaw);
  bool isGradientBorderSpec(const std::string& borderSpec);
@@ -1211,10 +1481,36 @@ index 2c8a347..eec9d97 100644
  
  SWorkspacePreviewState applyWorkspacePreviewState(const PHLWORKSPACE& workspace);
  void restoreWorkspacePreviewState(const PHLWORKSPACE& workspace, const SWorkspacePreviewState& state);
-diff --git c/OverviewRender.cpp i/OverviewRender.cpp
-index e73c8f6..4379a22 100644
+@@ -81,3 +82,4 @@ void restoreWorkspaceWindowGoalState(const std::vector<SWindowPreviewState>& sta
+ PHLWORKSPACE activateWorkspaceForPreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace);
+ void restoreActiveWorkspaceAfterPreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace);
+ void removeOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr);
++bool cursorAtMonitorEdge(const PHLMONITOR& monitor);
+diff --git c/OverviewPassElement.cpp w/OverviewPassElement.cpp
+index 6984d59..a59e32b 100644
+--- c/OverviewPassElement.cpp
++++ w/OverviewPassElement.cpp
+@@ -33,11 +33,11 @@ std::optional<CBox> COverviewPassElement::boundingBox() {
+ }
+ 
+ CRegion COverviewPassElement::opaqueRegion() {
+-    const auto MON = m_monitor.lock();
+-    if (!overview() || !MON)
+-        return CRegion{};
+-
+-    return CBox{{}, MON->m_size};
++    // Región vacía a propósito: el pass descarta los elementos posteriores que
++    // queden dentro de una región opaca, y la barra (capa TOP) se añade justo
++    // después de este elemento. Anunciar el monitor entero como opaco la haría
++    // descartar y la barra no se pintaría durante el fade.
++    return CRegion{};
+ }
+ 
+ ePassElementType COverviewPassElement::type() {
+diff --git c/OverviewRender.cpp w/OverviewRender.cpp
+index e73c8f6..d7fef34 100644
 --- c/OverviewRender.cpp
-+++ i/OverviewRender.cpp
++++ w/OverviewRender.cpp
 @@ -2,6 +2,7 @@
  #define HyprlandAPI CompatHyprlandAPI
  #include "OverviewInternal.hpp"
@@ -1327,7 +1623,20 @@ index e73c8f6..4379a22 100644
  
      size->setCallbackOnEnd(removeOverview);
  }
-@@ -270,12 +297,6 @@ void COverview::fullRender() {
+@@ -253,6 +280,12 @@ bool COverview::shouldRenderOverviewForMonitor(const PHLMONITOR& monitor) const
+ }
+ 
+ 
++float COverview::topLayerFadeAlpha() const {
++    const double openness = closing ? (1.0 - size->getPercent()) : size->getPercent();
++    // *3: la barra se funde rápido al abrir/cerrar, sin tapar el morph.
++    return (float)std::clamp(1.0 - openness * 3.0, 0.0, 1.0);
++}
++
+ void COverview::fullRender() {
+     const auto MON = pMonitor.lock();
+     if (!MON)
+@@ -270,12 +303,6 @@ void COverview::fullRender() {
      const auto SHAPE   = currentGridShape();
  
      clearWithColor(BG_COLOR.stripA());
@@ -1340,7 +1649,7 @@ index e73c8f6..4379a22 100644
  
      static auto* const* PTILEROUND  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding")->getDataStaticPtr();
      static auto* const* PTOUNDPWR   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding_power")->getDataStaticPtr();
-@@ -289,18 +310,176 @@ void COverview::fullRender() {
+@@ -289,18 +316,180 @@ void COverview::fullRender() {
      const int   HOVER_ROUND_SCALED   = **PTILEROUNDH >= 0 ? std::max(0, (int)std::lround((double)**PTILEROUNDH * MON->m_scale)) : BASE_ROUND_SCALED;
      const float ROUND_PWR            = **PTOUNDPWR;
  
@@ -1438,11 +1747,11 @@ index e73c8f6..4379a22 100644
 +        const float th   = tiltNow * PI_F / 180.f;
 +        const float cam  = dist * warp3D.gridHeight;
 +        const float maxZ = 0.5f * (warp3D.gridHeight * std::abs(std::sin(th)) + (float)pixGrid.x * std::abs(std::sin(yaw * PI_F / 180.f)));
-+        Hyprexpo3D::setFog(std::max(1.0f, cam - maxZ), cam + maxZ, 0.0f);
++        Hyprexpo3D::setFog(std::max(1.0f, cam - maxZ), cam + maxZ, 0.5f * warpAmt);
 +
 +        // Screen-space vignette: focuses the eye and adds a lens falloff that
 +        // reads as depth. Kept subtle so the corners stay usable.
-+        Hyprexpo3D::setVignette(0.0f, (float)MON->m_transformedSize.x, (float)MON->m_transformedSize.y);
++        Hyprexpo3D::setVignette(0.35f * warpAmt, (float)MON->m_transformedSize.x, (float)MON->m_transformedSize.y);
 +    }
 +
 +    // Background (configured image, else the wallpaper): drawn before the tiles.
@@ -1464,16 +1773,18 @@ index e73c8f6..4379a22 100644
 +            if (auto bgTex = loadBackgroundImage(bgImagePath); bgTex && bgTex->m_size.x > 0 && bgTex->m_size.y > 0) {
 +                CRegion   backgroundDamage{0, 0, INT16_MAX, INT16_MAX};
 +                const int dim = std::clamp((int)**PBGDIM, 0, 100);
++                // cover: mismo encuadre que el wallpaper del escritorio (recorta,
++                // nunca letterbox) para que no haya salto al abrir el overview.
++                const double   bgScale = std::max(mon.x / std::max(1.0, bgTex->m_size.x), mon.y / std::max(1.0, bgTex->m_size.y));
++                const Vector2D bgDest  = bgTex->m_size * bgScale;
++                const CBox     bgBox{(mon.x - bgDest.x) / 2.0, (mon.y - bgDest.y) / 2.0, bgDest.x, bgDest.y};
 +                if (use3D) {
-+                    const auto h3 = Hyprexpo3D::buildTileH3(mon, proj3D, 0.f, 0.f, (float)mon.x, (float)mon.y, warpBg);
++                    const auto h3 = Hyprexpo3D::buildTileH3(mon, proj3D, bgBox.x, bgBox.y, bgBox.w, bgBox.h, warpBg);
 +                    Hyprexpo3D::renderWarped(bgTex, h3, 1.0f, 0.0f, 2.0f, false);
 +                    if (dim > 0)
 +                        Hyprexpo3D::renderSolid(h3, 0.f, 0.f, 0.f, dim / 100.0f, 0.0f, 2.0f);
 +                } else {
-+                    const double   scale = std::min(mon.x / bgTex->m_size.x, mon.y / bgTex->m_size.y); // contain (nunca recorta)
-+                    const Vector2D dest  = bgTex->m_size * scale;
-+                    const CBox     box{(mon.x - dest.x) / 2.0, (mon.y - dest.y) / 2.0, dest.x, dest.y};
-+                    Render::GL::g_pHyprOpenGL->renderTextureInternal(bgTex, box, {.damage = &backgroundDamage, .a = 1.0f});
++                    Render::GL::g_pHyprOpenGL->renderTextureInternal(bgTex, bgBox, {.damage = &backgroundDamage, .a = 1.0f});
 +                    if (dim > 0)
 +                        Render::GL::g_pHyprOpenGL->renderRect({{0, 0}, mon}, CHyprColor{0.0, 0.0, 0.0, dim / 100.0}, {});
 +                }
@@ -1483,14 +1794,16 @@ index e73c8f6..4379a22 100644
 +
 +        if (!drewImage && wallpaperBg && MON->m_background) {
 +            CRegion backgroundDamage{0, 0, INT16_MAX, INT16_MAX};
-+            CBox    backgroundBox{{0, 0}, mon};
++            const double   bgScale = std::max(mon.x / std::max(1.0, MON->m_background->m_size.x), mon.y / std::max(1.0, MON->m_background->m_size.y));
++            const Vector2D bgDest  = MON->m_background->m_size * bgScale;
++            const CBox     backgroundBox{(mon.x - bgDest.x) / 2.0, (mon.y - bgDest.y) / 2.0, bgDest.x, bgDest.y};
 +            if (use3D) {
-+                const auto h3 = Hyprexpo3D::buildTileH3(mon, proj3D, 0.f, 0.f, (float)mon.x, (float)mon.y, warpBg);
++                const auto h3 = Hyprexpo3D::buildTileH3(mon, proj3D, backgroundBox.x, backgroundBox.y, backgroundBox.w, backgroundBox.h, warpBg);
 +                Hyprexpo3D::renderWarped(MON->m_background, h3, 1.0f, 0.0f, 2.0f, false);
 +                Hyprexpo3D::renderSolid(h3, 0.f, 0.f, 0.f, 0.4f, 0.0f, 2.0f);
 +            } else {
 +                Render::GL::g_pHyprOpenGL->renderTextureInternal(MON->m_background, backgroundBox, {.damage = &backgroundDamage, .a = 1.0f});
-+                Render::GL::g_pHyprOpenGL->renderRect(backgroundBox, CHyprColor{0x00000066}, {});
++                Render::GL::g_pHyprOpenGL->renderRect({{0, 0}, mon}, CHyprColor{0x00000066}, {});
 +            }
 +        }
 +
@@ -1520,7 +1833,7 @@ index e73c8f6..4379a22 100644
              texbox.round();
              tileBoxes[id] = texbox;
  
-@@ -325,7 +504,23 @@ void COverview::fullRender() {
+@@ -325,7 +514,23 @@ void COverview::fullRender() {
              }
  
              CRegion damage{0, 0, INT16_MAX, INT16_MAX};
@@ -1545,7 +1858,7 @@ index e73c8f6..4379a22 100644
          }
      }
  
-@@ -359,6 +554,7 @@ void COverview::fullRender() {
+@@ -359,6 +564,7 @@ void COverview::fullRender() {
      static auto const*  PBCOLCUR    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_current")->getDataStaticPtr();
      static auto const*  PBCOLFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_focus")->getDataStaticPtr();
      static auto const*  PBCOLHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_hover")->getDataStaticPtr();
@@ -1553,7 +1866,7 @@ index e73c8f6..4379a22 100644
      static auto const*  PBGRCUR     = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_current")->getDataStaticPtr();
      static auto const*  PBGREFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_focus")->getDataStaticPtr();
      static auto const*  PBGREHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_hover")->getDataStaticPtr();
-@@ -458,15 +654,29 @@ void COverview::fullRender() {
+@@ -458,15 +664,29 @@ void COverview::fullRender() {
                  bg.round();
                  lb.round();
              }
@@ -1586,7 +1899,7 @@ index e73c8f6..4379a22 100644
          };
  
          if (**PLBGEN)
-@@ -491,9 +701,23 @@ void COverview::fullRender() {
+@@ -491,9 +711,23 @@ void COverview::fullRender() {
  
          const std::string effectiveSpec = Hyprexpo::resolveBorderSpec(borderSpec, deprecatedGradSpec);
  
@@ -1610,7 +1923,7 @@ index e73c8f6..4379a22 100644
                  Config::CGradientValueData grad;
                  grad.m_colors.clear();
                  grad.m_colors.push_back(spec.c1);
-@@ -505,6 +729,9 @@ void COverview::fullRender() {
+@@ -505,6 +739,9 @@ void COverview::fullRender() {
          } else if (!effectiveSpec.empty()) {
              Hyprexpo::SColorRGBA parsedColor;
              if (Hyprexpo::parseSolidColorSpec(effectiveSpec, parsedColor)) {
@@ -1620,7 +1933,7 @@ index e73c8f6..4379a22 100644
                  CHyprColor color{parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a};
                  Render::GL::g_pHyprOpenGL->renderBorder(box, color, {.round = roundScaled, .roundingPower = ROUND_PWR, .borderSize = BWIDTH});
              } else {
-@@ -644,6 +871,18 @@ void COverview::fullRender() {
+@@ -644,6 +881,18 @@ void COverview::fullRender() {
      const std::string currentFallback   = Hyprexpo::resolveBorderSpec(std::string{*PBGRCUR}, currentLegacySpec);
      const std::string hoverFallback     = Hyprexpo::resolveBorderSpec(std::string{*PBGREHOV}, hoverLegacySpec);
  
@@ -1639,10 +1952,10 @@ index e73c8f6..4379a22 100644
      if (hoveredID != -1 && hoveredID != openedID && hoveredID != kbFocusID)
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
-diff --git c/PluginConfig.cpp i/PluginConfig.cpp
-index af2b27a..0b885fb 100644
+diff --git c/PluginConfig.cpp w/PluginConfig.cpp
+index af2b27a..3f3de80 100644
 --- c/PluginConfig.cpp
-+++ i/PluginConfig.cpp
++++ w/PluginConfig.cpp
 @@ -42,6 +42,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:enable_drag_move", "legacy drag-move toggle", HyprexpoConfig::LEGACY_ENABLE_DRAG_MOVE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:animate_entry", "legacy entry animation toggle", HyprexpoConfig::LEGACY_ANIMATE_ENTRY_DEFAULT));
@@ -1654,7 +1967,7 @@ index af2b27a..0b885fb 100644
  
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
-@@ -52,6 +56,28 @@ void registerHyprexpoConfigValues() {
+@@ -52,6 +56,34 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
  
@@ -1673,6 +1986,12 @@ index af2b27a..0b885fb 100644
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:glass_glow_enable", "draw a neon bloom around 3D tiles/borders", HyprexpoConfig::GLASS_GLOW_ENABLE_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:glass_glow", "neon bloom strength for 3D tiles (0 = off)", HyprexpoConfig::GLASS_GLOW_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:hover_scale", "grow the hovered tile by this factor (1 = off)", HyprexpoConfig::HOVER_SCALE_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:hover_select_enable", "select the workspace under the pointer after a dwell instead of requiring a click", HyprexpoConfig::HOVER_SELECT_ENABLE_DEFAULT,
++                                                         Config::Values::SIntValueOptions{.min = 0, .max = 1}));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:hover_select_delay", "milliseconds the pointer must rest on a tile before hover-select triggers", HyprexpoConfig::HOVER_SELECT_DELAY_DEFAULT,
++                                                         Config::Values::SIntValueOptions{.min = HyprexpoConfig::HOVER_SELECT_DELAY_MIN, .max = HyprexpoConfig::HOVER_SELECT_DELAY_MAX}));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:edge_passthrough", "pixels from a monitor edge where mouse moves reach layer clients (e.g. lan-mouse) instead of being consumed by the overview", HyprexpoConfig::EDGE_PASSTHROUGH_DEFAULT,
++                                                         Config::Values::SIntValueOptions{.min = HyprexpoConfig::EDGE_PASSTHROUGH_MIN, .max = HyprexpoConfig::EDGE_PASSTHROUGH_MAX}));
 +
 +    // Directional slide applied to the close morph. The grid overshoots toward
 +    // the target tile and springs back (pure 2D translation, no tilt). 0 = the
@@ -1683,7 +2002,7 @@ index af2b27a..0b885fb 100644
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
                                                           Config::Values::SIntValueOptions{.min = 0, .max = 9}));
-@@ -80,6 +106,10 @@ void registerHyprexpoConfigValues() {
+@@ -80,6 +112,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_current", "current border color", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_focus", "focus border color", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_hover", "hover border color", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT));
@@ -1694,10 +2013,10 @@ index af2b27a..0b885fb 100644
      // Deprecated but supported for backwards compatibility
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_style", "border style", HyprexpoConfig::BORDER_STYLE_DEFAULT));     // ignored, auto-detected from format
  
-diff --git c/globals.hpp i/globals.hpp
+diff --git c/globals.hpp w/globals.hpp
 index 66c4f04..7179ea5 100644
 --- c/globals.hpp
-+++ i/globals.hpp
++++ w/globals.hpp
 @@ -3,3 +3,8 @@
  #include <hyprland/src/plugins/PluginAPI.hpp>
  
@@ -1707,10 +2026,89 @@ index 66c4f04..7179ea5 100644
 +// opened slightly larger than the monitor so the current desktop pulls back a
 +// little (subtle zoom-out) before flying into the target. 1.0 = normal open.
 +inline float g_peekScale = 1.0f;
-diff --git c/scripts/run-nested.sh i/scripts/run-nested.sh
+diff --git c/main.cpp w/main.cpp
+index 302ed07..c2c4b23 100644
+--- c/main.cpp
++++ w/main.cpp
+@@ -6,12 +6,15 @@
+ #include <hyprland/src/helpers/time/Time.hpp>
+ #include <hyprland/src/render/Renderer.hpp>
+ #include <hyprland/src/event/EventBus.hpp>
++#include <hyprland/src/desktop/view/LayerSurface.hpp>
++#include <hyprland/protocols/wlr-layer-shell-unstable-v1.hpp>
+ 
+ #include "Dispatchers.hpp"
+ #include "globals.hpp"
+ #include "IOverviewSession.hpp"
+ #include "OverviewCapture.hpp"
+ #include "PluginConfig.hpp"
++#include <algorithm>
+ #include <stdexcept>
+ #include <string>
+ 
+@@ -27,13 +30,55 @@ typedef void (*origRenderWorkspace)(void*, PHLMONITOR, PHLWORKSPACE, const Time:
+ typedef void (*origAddDamageA)(void*, const CBox&);
+ typedef void (*origAddDamageB)(void*, const pixman_region32_t*);
+ 
++// Capas TOP (barra) cuyo alpha atenuamos durante el overview. Hay que restaurarlas
++// al volver al escritorio (si no, un close a ~0.99 deja la barra invisible).
++inline std::vector<WP<Desktop::View::CLayerSurface>> g_topLayersFaded;
++
++// renderLayer() es protected en IHyprRenderer; este shim lo expone para poder
++// dibujar la barra por encima del elemento de overview.
++struct TLayerRenderAccess : public Render::IHyprRenderer {
++    using Render::IHyprRenderer::renderLayer;
++};
++
+ static void hkRenderWorkspace(void* thisptr, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspace, const Time::steady_tp& now, const CBox& geometry) {
+     auto* const OV = overviewForMonitor(pMonitor);
+ 
+-    if (!OV || isRenderingOverview() || OV->blocksOverviewRendering() || !OV->shouldRenderOverviewForMonitor(pMonitor))
++    if (!OV || isRenderingOverview() || OV->blocksOverviewRendering() || !OV->shouldRenderOverviewForMonitor(pMonitor)) {
+         ((origRenderWorkspace)(g_pRenderWorkspaceHook->m_original))(thisptr, pMonitor, pWorkspace, now, geometry);
+-    else
+-        OV->render();
++
++        // Escritorio normal: restaurar cualquier barra que dejáramos atenuada.
++        for (auto& w : g_topLayersFaded) {
++            if (const auto LS = w.lock())
++                LS->alpha()[Desktop::View::LS_ALPHA_FADE]->setValue(1.F);
++        }
++        g_topLayersFaded.clear();
++        return;
++    }
++
++    OV->render();
++
++    // Esta rama reemplaza a renderWorkspace, así que las capas TOP (barra omarchy)
++    // no se pintan. Las redibujamos encima del overview con un fade ligado a la
++    // animación de apertura/cierre: así se funde en vez de desaparecer de golpe.
++    const float fade        = OV->topLayerFadeAlpha();
++    auto* const RENDERER    = static_cast<TLayerRenderAccess*>(g_pHyprRenderer.get());
++
++    for (auto& w : pMonitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_TOP]) {
++        const auto LAYER = w.lock();
++        if (!LAYER)
++            continue;
++
++        LAYER->alpha()[Desktop::View::LS_ALPHA_FADE]->setValue(fade);
++
++        if (fade < 1.F) {
++            const bool tracked = std::find_if(g_topLayersFaded.begin(), g_topLayersFaded.end(), [&](const auto& TW) { return TW.lock() == LAYER; }) != g_topLayersFaded.end();
++            if (!tracked)
++                g_topLayersFaded.emplace_back(LAYER);
++        }
++
++        if (fade > 0.001F)
++            RENDERER->renderLayer(LAYER, pMonitor, now);
++    }
+ }
+ 
+ static void hkAddDamageA(void* thisptr, const CBox& box) {
+diff --git c/scripts/run-nested.sh w/scripts/run-nested.sh
 index 98a8340..27dc1ab 100755
 --- c/scripts/run-nested.sh
-+++ i/scripts/run-nested.sh
++++ w/scripts/run-nested.sh
 @@ -109,6 +109,13 @@ $EXTRA_OUTPUTS
  
  $LAYOUT_BLOCK
@@ -1765,11 +2163,11 @@ index 98a8340..27dc1ab 100755
    }
  }
  
-diff --git c/scripts/verify-3d.sh i/scripts/verify-3d.sh
+diff --git c/scripts/verify-3d.sh w/scripts/verify-3d.sh
 new file mode 100755
 index 0000000..0456292
 --- /dev/null
-+++ i/scripts/verify-3d.sh
++++ w/scripts/verify-3d.sh
 @@ -0,0 +1,133 @@
 +#!/usr/bin/env bash
 +# verify-3d.sh - automated visual check of the hyprexpo 3D grid.
@@ -1904,3 +2302,55 @@ index 0000000..0456292
 +[ -n "$plugin_line" ] && echo "PLUGIN: $plugin_line"
 +echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
 +exit 0
+diff --git c/tests/OverviewSourceTests.cpp w/tests/OverviewSourceTests.cpp
+index d2e7572..738f446 100644
+--- c/tests/OverviewSourceTests.cpp
++++ w/tests/OverviewSourceTests.cpp
+@@ -122,6 +122,37 @@ int main() {
+     expect(source.find("if (**PDRAGDROPENABLE && SOURCE)") != std::string::npos && source.find("SOURCE->finishWindowDrag()") != std::string::npos,
+            "drag/drop enable configuration gates drag completion");
+ 
++    const auto interactionSource = readFile("OverviewInteraction.cpp");
++    expect(!interactionSource.empty(), "OverviewInteraction.cpp can be read from repo root");
++    expect(configSource.find("plugin:hyprexpo:hover_select_enable") != std::string::npos,
++           "hover-select enable configuration is registered");
++    expect(configSource.find("plugin:hyprexpo:hover_select_delay") != std::string::npos,
++           "hover-select delay configuration is registered");
++    const auto armHoverSelect = extractFunction(interactionSource, "void COverview::armHoverSelect() {");
++    expect(!armHoverSelect.empty(), "hover-select arming function exists");
++    expect(armHoverSelect.find("hover_select_enable") != std::string::npos && armHoverSelect.find("hover_select_delay") != std::string::npos,
++           "hover-select arming reads both configuration values");
++    expect(armHoverSelect.find("gridOverviewForGlobalPoint(") != std::string::npos,
++           "hover-select only arms the overview under the pointer");
++    expect(armHoverSelect.find("selectHoveredWorkspace()") != std::string::npos && armHoverSelect.find("closeOverviewsSelecting(OVERVIEW)") != std::string::npos,
++           "hover-select commits the hovered workspace once the dwell elapses");
++    expect(armHoverSelect.find("tile == OVERVIEW->openedID") != std::string::npos,
++           "hover-select never auto-closes onto the workspace the overview opened on");
++    expect(source.find("OV->armHoverSelect();") != std::string::npos,
++           "cursor movement re-arms hover-select on every live overview");
++    expect(source.find("hoverSelectTimer->cancel();") != std::string::npos,
++           "overview teardown cancels a pending hover-select timer");
++    expect(configSource.find("plugin:hyprexpo:edge_passthrough") != std::string::npos,
++           "edge passthrough configuration is registered");
++    const auto edgeHelper = extractFunction(source, "bool cursorAtMonitorEdge(const PHLMONITOR& monitor) {");
++    expect(!edgeHelper.empty(), "edge passthrough helper exists");
++    expect(edgeHelper.find("edge_passthrough") != std::string::npos,
++           "edge passthrough helper reads its configuration value");
++    expect(source.find("cursorAtMonitorEdge(CUROV ? CUROV->monitor() : PTR->monitor())") != std::string::npos,
++           "cursor movement near a monitor edge keeps propagating to layer clients");
++    expect(armHoverSelect.find("cursorAtMonitorEdge(") != std::string::npos,
++           "hover-select stays disarmed while the pointer rests on a monitor edge");
++
+     const auto dispatchersSource = readFile("Dispatchers.cpp");
+     expect(!dispatchersSource.empty(), "Dispatchers.cpp can be read from repo root");
+     const auto gestureHeader = readFile("ExpoGesture.hpp");
+@@ -166,9 +197,6 @@ int main() {
+     expect(mainSource.find("if (shouldSelectWorkspaceFromKey(event))\n            info.cancelled = true;") != std::string::npos,
+            "raw key events are cancelled only when the mode-specific handler consumes them");
+ 
+-    const auto interactionSource = readFile("OverviewInteraction.cpp");
+-    expect(!interactionSource.empty(), "OverviewInteraction.cpp can be read from repo root");
+-
+     const auto enterSubmap = extractFunction(interactionSource, "void enterOverviewSubmap(bool& submapActive) {");
+     expect(!enterSubmap.empty(), "keyboard navigation submap entry function exists");
+     const auto captureSubmapPos = enterSubmap.find("g_previousSubmap = g_pKeybindManager->getCurrentSubmap().name;");
