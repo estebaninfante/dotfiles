@@ -1,0 +1,40 @@
+[
+  {
+    "backend": "stagehand",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1000,
+    "total_ms": 1334,
+    "roundtrips": 0,
+    "snapshot_chars": 931,
+    "est_tokens": 233,
+    "detail": "title=\"Example Domain\" textLen=917",
+    "data": {
+      "title": "Example Domain",
+      "textLen": 917
+    },
+    "error": null,
+    "ts": "2026-10-06T05:59:54.597Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 5832,
+    "total_ms": 5900,
+    "roundtrips": 0,
+    "snapshot_chars": 129,
+    "est_tokens": 33,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Is Beating Paid Mac Apps",
+        "The Open Source Internet Is Here",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ],
+      "url": "https://www.youtube.com/results?search_query=open+source"
+    },
+    "error": null,
+    "ts": "2026-10-06T06:00:08.422Z"
+  }
+]

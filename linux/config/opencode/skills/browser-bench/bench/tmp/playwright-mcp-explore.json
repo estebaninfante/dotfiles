@@ -1,0 +1,20 @@
+[
+  {
+    "backend": "playwright-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2777,
+    "total_ms": 2850,
+    "roundtrips": 2,
+    "snapshot_chars": 48454,
+    "est_tokens": 12114,
+    "detail": "620 items via snapshot snap_chars=48218",
+    "data": {
+      "items": 620,
+      "mode": "snapshot",
+      "snapshotChars": 48218
+    },
+    "error": null,
+    "ts": "2026-10-06T06:14:14.085Z"
+  }
+]

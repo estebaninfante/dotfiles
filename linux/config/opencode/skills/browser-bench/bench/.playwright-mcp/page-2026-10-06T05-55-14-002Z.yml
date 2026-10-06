@@ -1,0 +1,861 @@
+- generic [ref=e2]:
+  - generic [ref=e26]:
+    - banner [ref=e4]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - button "Guide" [active] [ref=e9] [cursor=pointer]
+          - generic [ref=e11]:
+            - link "YouTube Home" [ref=e36] [cursor=pointer]:
+              - /url: /
+            - generic [ref=e42]: CO
+          - button "Skip navigation" [ref=e46] [cursor=pointer]
+        - generic [ref=e12]:
+          - search [ref=e13]:
+            - generic [ref=e15]:
+              - generic [ref=e16]:
+                - combobox "Search" [expanded] [ref=e50]: open source
+                - button "Clear search query" [ref=e52] [cursor=pointer]
+              - button "Search" [ref=e19] [cursor=pointer]
+          - generic [ref=e62]:
+            - button "Search with your voice" [ref=e64] [cursor=pointer]
+            - tooltip "tooltip"
+        - generic [ref=e68]:
+          - button "Settings" [ref=e73] [cursor=pointer]
+          - link "Sign in" [ref=e79] [cursor=pointer]:
+            - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fresults%253Fsearch_query%253Dopen%252Bsource&hl=en&ec=65620
+    - navigation [ref=e27]:
+      - generic [ref=e83]:
+        - link "Home" [ref=e85] [cursor=pointer]:
+          - /url: /
+        - link "Shorts" [ref=e91] [cursor=pointer]:
+          - /url: /shorts/
+        - link "Subscriptions" [ref=e97] [cursor=pointer]:
+          - /url: /feed/subscriptions
+        - link "You" [ref=e103] [cursor=pointer]:
+          - /url: /feed/you
+    - generic [ref=e28]:
+      - main [ref=e108]:
+        - generic [ref=e109]:
+          - generic [ref=e111]:
+            - tablist [ref=e116]:
+              - tab "All" [selected] [ref=e119] [cursor=pointer]
+              - tab "Shorts" [ref=e124] [cursor=pointer]
+              - tab "Unwatched" [ref=e129] [cursor=pointer]
+              - tab "Videos" [ref=e134] [cursor=pointer]
+              - tab "Recently uploaded" [ref=e139] [cursor=pointer]
+              - tab "Live" [ref=e144] [cursor=pointer]
+            - generic [ref=e148]:
+              - button "Search filters" [ref=e150] [cursor=pointer]:
+                - generic: Filters
+              - tooltip "tooltip"
+          - generic [ref=e159]:
+            - generic [ref=e168] [cursor=pointer]:
+              - link [aria-hidden] [ref=e169]:
+                - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=Chm47O43EarzCHpL7v8IPy6eW8APxxsD8iQHamMu_xRawkB8QASAAYKuBgICsBoIBF2NhLXB1Yi02MjE5ODExNzQ3MDQ5MzcxoAGt6pm8AqgDBMgDCqoEnQJP0EVLohCX9m-3sIJxrnduRhuBE55npvNCec3BqfH-V0RG51CSfHCQxilnLUd5ffHuQGEPBd9axYgAMfcJUuwX00fCwaeXRjDqsWBVyzwmsTmN80idlipNpKJNqZV3eq2brOKknDeeZaXoszF_NlMtNeQWDFIvCOxu_LAct-oEn8A8x-G7b97K7e_hwALstjbiFq8UCj5w3-u7xHLeaiGGoQsboAKQkqXn80QoQdr_c7MkXSglZ8ENakbTHQAssoMbMCDT_B_RVdIfGkbbJba1BAkIoGo-kYnOyqO7wt3N2KBZNh0_9B74PxuzaQK3eJmBGDWj0UTEOumc60JG3cSgtPfSn0MRg7Dh4ZtPrnpIhDTZyuFFgnkrg6cOcj6IBaypjsVakgUICBN4r9yRxAGgBqEBgAe7lebDAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgH1c4bqAe-2bECqAerxRuoB5zcG6gHt6GxAqgH1amxAqgH59qxAqgH3rWxApIIC1hRY3ppY0tGNGlrqAgB0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJHmh0dHBzOi8vYm90LmFiYWN1cy5haS9nYWRzYm90M7EJzkEJn20eYaDICRfICY8ByAnCAcgJlwKYCwG6Cz0IAxAFGAQgBygBMBxAAUgAWH1gAGgAcAGIAQCYAQGiAQgKAKgCAdgCAqgBAdgBAYACAYgCBboDBXZpY2Jm0AsSogwMKgoKCJXisQKO37EC0gwCEAGaDQESqg0CQ0_IDQHSDUZodHRwczovL2JvdC5hYmFjdXMuYWkvZ2Fkc2JvdDM_Z2FkX3NvdXJjZT0yJmdhZF9jYW1wYWlnbmlkPTI0MzA0MTI5MTk2uBP___________8BsBQDwBWBgIBA0BUB2BUBmBYB4hYCCAGAFwGKFxgIAxgBIAEoATABOAFAAUgBUAFYAWACaAGgFwGpF7MgPj0uadsJuhcGKAAwADgB0BgB8BgBwhkCCAE&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYASAAEgJ4nvD_BwE&num=1&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&ad_cpn=%5BCPN%5D&sig=AOD64_1WNks-0i8TcLmL6A4T1gBOSzQueA&ctype=110&video_id=XQczicKF4ik&label=video_click_to_advertiser_site&ms=%5BCLICK_MS%5D&nb=21&nx=%5BNX%5D&ny=%5BNY%5D&dim=%5BDIM%5D
+                - button [aria-hidden] [ref=e175]
+              - generic [ref=e179]:
+                - generic [ref=e180]:
+                  - generic [ref=e181]:
+                    - link "Your free personal AI agent for WhatsApp, Telegram and Discord" [ref=e184]:
+                      - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=Chm47O43EarzCHpL7v8IPy6eW8APxxsD8iQHamMu_xRawkB8QASAAYKuBgICsBoIBF2NhLXB1Yi02MjE5ODExNzQ3MDQ5MzcxoAGt6pm8AqgDBMgDCqoEnQJP0EVLohCX9m-3sIJxrnduRhuBE55npvNCec3BqfH-V0RG51CSfHCQxilnLUd5ffHuQGEPBd9axYgAMfcJUuwX00fCwaeXRjDqsWBVyzwmsTmN80idlipNpKJNqZV3eq2brOKknDeeZaXoszF_NlMtNeQWDFIvCOxu_LAct-oEn8A8x-G7b97K7e_hwALstjbiFq8UCj5w3-u7xHLeaiGGoQsboAKQkqXn80QoQdr_c7MkXSglZ8ENakbTHQAssoMbMCDT_B_RVdIfGkbbJba1BAkIoGo-kYnOyqO7wt3N2KBZNh0_9B74PxuzaQK3eJmBGDWj0UTEOumc60JG3cSgtPfSn0MRg7Dh4ZtPrnpIhDTZyuFFgnkrg6cOcj6IBaypjsVakgUICBN4r9yRxAGgBqEBgAe7lebDAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgH1c4bqAe-2bECqAerxRuoB5zcG6gHt6GxAqgH1amxAqgH59qxAqgH3rWxApIIC1hRY3ppY0tGNGlrqAgB0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJHmh0dHBzOi8vYm90LmFiYWN1cy5haS9nYWRzYm90M7EJzkEJn20eYaDICRfICY8ByAnCAcgJlwKYCwG6Cz0IAxAFGAQgBygBMBxAAUgAWH1gAGgAcAGIAQCYAQGiAQgKAKgCAdgCAqgBAdgBAYACAYgCBboDBXZpY2Jm0AsSogwMKgoKCJXisQKO37EC0gwCEAGaDQESqg0CQ0_IDQHSDUZodHRwczovL2JvdC5hYmFjdXMuYWkvZ2Fkc2JvdDM_Z2FkX3NvdXJjZT0yJmdhZF9jYW1wYWlnbmlkPTI0MzA0MTI5MTk2uBP___________8BsBQDwBWBgIBA0BUB2BUBmBYB4hYCCAGAFwGKFxgIAxgBIAEoATABOAFAAUgBUAFYAWACaAGgFwGpF7MgPj0uadsJuhcGKAAwADgB0BgB8BgBwhkCCAE&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYASAAEgJ4nvD_BwE&num=1&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&ad_cpn=%5BCPN%5D&sig=AOD64_1WNks-0i8TcLmL6A4T1gBOSzQueA&ctype=110&video_id=XQczicKF4ik&label=video_click_to_advertiser_site&ms=%5BCLICK_MS%5D&nb=0&nx=%5BNX%5D&ny=%5BNY%5D&dim=%5BDIM%5D
+                    - link "Free, open-source personal AI agent. Works in WhatsApp, Telegram and Discord." [ref=e187]:
+                      - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=Chm47O43EarzCHpL7v8IPy6eW8APxxsD8iQHamMu_xRawkB8QASAAYKuBgICsBoIBF2NhLXB1Yi02MjE5ODExNzQ3MDQ5MzcxoAGt6pm8AqgDBMgDCqoEnQJP0EVLohCX9m-3sIJxrnduRhuBE55npvNCec3BqfH-V0RG51CSfHCQxilnLUd5ffHuQGEPBd9axYgAMfcJUuwX00fCwaeXRjDqsWBVyzwmsTmN80idlipNpKJNqZV3eq2brOKknDeeZaXoszF_NlMtNeQWDFIvCOxu_LAct-oEn8A8x-G7b97K7e_hwALstjbiFq8UCj5w3-u7xHLeaiGGoQsboAKQkqXn80QoQdr_c7MkXSglZ8ENakbTHQAssoMbMCDT_B_RVdIfGkbbJba1BAkIoGo-kYnOyqO7wt3N2KBZNh0_9B74PxuzaQK3eJmBGDWj0UTEOumc60JG3cSgtPfSn0MRg7Dh4ZtPrnpIhDTZyuFFgnkrg6cOcj6IBaypjsVakgUICBN4r9yRxAGgBqEBgAe7lebDAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgH1c4bqAe-2bECqAerxRuoB5zcG6gHt6GxAqgH1amxAqgH59qxAqgH3rWxApIIC1hRY3ppY0tGNGlrqAgB0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJHmh0dHBzOi8vYm90LmFiYWN1cy5haS9nYWRzYm90M7EJzkEJn20eYaDICRfICY8ByAnCAcgJlwKYCwG6Cz0IAxAFGAQgBygBMBxAAUgAWH1gAGgAcAGIAQCYAQGiAQgKAKgCAdgCAqgBAdgBAYACAYgCBboDBXZpY2Jm0AsSogwMKgoKCJXisQKO37EC0gwCEAGaDQESqg0CQ0_IDQHSDUZodHRwczovL2JvdC5hYmFjdXMuYWkvZ2Fkc2JvdDM_Z2FkX3NvdXJjZT0yJmdhZF9jYW1wYWlnbmlkPTI0MzA0MTI5MTk2uBP___________8BsBQDwBWBgIBA0BUB2BUBmBYB4hYCCAGAFwGKFxgIAxgBIAEoATABOAFAAUgBUAFYAWACaAGgFwGpF7MgPj0uadsJuhcGKAAwADgB0BgB8BgBwhkCCAE&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYASAAEgJ4nvD_BwE&num=1&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&ad_cpn=%5BCPN%5D&sig=AOD64_1WNks-0i8TcLmL6A4T1gBOSzQueA&ctype=110&video_id=XQczicKF4ik&label=video_click_to_advertiser_site&ms=%5BCLICK_MS%5D&nb=7&nx=%5BNX%5D&ny=%5BNY%5D&dim=%5BDIM%5D
+                    - generic [ref=e188]:
+                      - button "Abacus AI" [ref=e192]
+                      - generic [ref=e196]:
+                        - generic [ref=e197]: Sponsored
+                        - text: ·
+                      - generic [ref=e198]: Abacus AI
+                  - button "My Ad Center" [ref=e202]
+                - generic [ref=e208]:
+                  - link "Watch" [ref=e211]:
+                    - /url: /watch?v=XQczicKF4ik
+                  - link "Download" [ref=e217]:
+                    - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=Chm47O43EarzCHpL7v8IPy6eW8APxxsD8iQHamMu_xRawkB8QASAAYKuBgICsBoIBF2NhLXB1Yi02MjE5ODExNzQ3MDQ5MzcxoAGt6pm8AqgDBMgDCqoEnQJP0EVLohCX9m-3sIJxrnduRhuBE55npvNCec3BqfH-V0RG51CSfHCQxilnLUd5ffHuQGEPBd9axYgAMfcJUuwX00fCwaeXRjDqsWBVyzwmsTmN80idlipNpKJNqZV3eq2brOKknDeeZaXoszF_NlMtNeQWDFIvCOxu_LAct-oEn8A8x-G7b97K7e_hwALstjbiFq8UCj5w3-u7xHLeaiGGoQsboAKQkqXn80QoQdr_c7MkXSglZ8ENakbTHQAssoMbMCDT_B_RVdIfGkbbJba1BAkIoGo-kYnOyqO7wt3N2KBZNh0_9B74PxuzaQK3eJmBGDWj0UTEOumc60JG3cSgtPfSn0MRg7Dh4ZtPrnpIhDTZyuFFgnkrg6cOcj6IBaypjsVakgUICBN4r9yRxAGgBqEBgAe7lebDAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgH1c4bqAe-2bECqAerxRuoB5zcG6gHt6GxAqgH1amxAqgH59qxAqgH3rWxApIIC1hRY3ppY0tGNGlrqAgB0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJHmh0dHBzOi8vYm90LmFiYWN1cy5haS9nYWRzYm90M7EJzkEJn20eYaDICRfICY8ByAnCAcgJlwKYCwG6Cz0IAxAFGAQgBygBMBxAAUgAWH1gAGgAcAGIAQCYAQGiAQgKAKgCAdgCAqgBAdgBAYACAYgCBboDBXZpY2Jm0AsSogwMKgoKCJXisQKO37EC0gwCEAGaDQESqg0CQ0_IDQHSDUZodHRwczovL2JvdC5hYmFjdXMuYWkvZ2Fkc2JvdDM_Z2FkX3NvdXJjZT0yJmdhZF9jYW1wYWlnbmlkPTI0MzA0MTI5MTk2uBP___________8BsBQDwBWBgIBA0BUB2BUBmBYB4hYCCAGAFwGKFxgIAxgBIAEoATABOAFAAUgBUAFYAWACaAGgFwGpF7MgPj0uadsJuhcGKAAwADgB0BgB8BgBwhkCCAE&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYASAAEgJ4nvD_BwE&num=1&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&ad_cpn=%5BCPN%5D&sig=AOD64_1WNks-0i8TcLmL6A4T1gBOSzQueA&ctype=110&video_id=XQczicKF4ik&label=video_click_to_advertiser_site&ms=%5BCLICK_MS%5D&nb=8&nx=%5BNX%5D&ny=%5BNY%5D&dim=%5BDIM%5D
+            - generic [ref=e222]:
+              - link [aria-hidden] [ref=e224] [cursor=pointer]:
+                - /url: /watch?v=5vbl5FL-nsI&pp=ygULb3BlbiBzb3VyY2U%3D
+                - img [ref=e229]:
+                  - generic [aria-hidden] [ref=e230]: 59:02
+                - generic: Now playing
+              - generic [ref=e231] [cursor=pointer]:
+                - generic [ref=e232]:
+                  - generic [ref=e233]:
+                    - heading [level=3] [ref=e234]:
+                      - link "The Open Source Internet Is Here 59 minutes" [ref=e235]:
+                        - /url: /watch?v=5vbl5FL-nsI&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: The Open Source Internet Is Here
+                    - button "Action menu" [ref=e239]
+                  - generic [ref=e245]:
+                    - generic [ref=e246]: 2.3M
+                    - generic [ref=e247]: •2w ago
+                - generic [ref=e248]:
+                  - link "Go to channel Data Slayer" [ref=e249]:
+                    - /url: /@DataSlayerMedia
+                  - generic [ref=e251]:
+                    - link "Data Slayer" [ref=e255]:
+                      - /url: /@DataSlayerMedia
+                    - img "Verified" [ref=e260]
+                - generic [ref=e264]:
+                  - text: 1600 Miles with this... I spent three weeks trying to bridge Reticulum onto HF so two people could pass a real message hundreds ...
+                  - tooltip "tooltip"
+                - generic [ref=e266]:
+                  - img "1 product" [ref=e269]:
+                    - generic [aria-hidden] [ref=e273]: 1 product
+                  - img "4K" [ref=e276]:
+                    - generic [aria-hidden] [ref=e277]: 4K
+                - generic [ref=e280]:
+                  - generic [ref=e281]:
+                    - generic [ref=e282]: Summary
+                    - button "Data Slayer explores building a long-range, decentralized communication network by bridging digital data with amateur radio. Through open-source software and hardware, Data Slayer investigates how HF radio skywave propagation can connect communities across continents, bypassing traditional internet infrastructure while strictly adhering to amateur radio regulations and licensing requirements." [ref=e287]
+                    - text: ·
+                  - button "More" [ref=e292]
+            - generic [ref=e297]:
+              - link [aria-hidden] [ref=e299] [cursor=pointer]:
+                - /url: /watch?v=DXH7yLFN0yI&pp=ygULb3BlbiBzb3VyY2U%3D
+                - img [ref=e304]:
+                  - generic [aria-hidden] [ref=e305]: 32:14
+                - generic: Now playing
+              - generic [ref=e306] [cursor=pointer]:
+                - generic [ref=e307]:
+                  - generic [ref=e308]:
+                    - heading [level=3] [ref=e309]:
+                      - link "I used Open Source Apps for 200 days. Here are my favorites 32 minutes" [ref=e310]:
+                        - /url: /watch?v=DXH7yLFN0yI&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: I used Open Source Apps for 200 days. Here are my favorites
+                    - button "Action menu" [ref=e314]
+                  - generic [ref=e320]:
+                    - generic [ref=e321]: 692K
+                    - generic [ref=e322]: •4mo ago
+                - generic [ref=e323]:
+                  - link "Go to channel foci" [ref=e324]:
+                    - /url: /@focivideo
+                  - link "foci" [ref=e330]:
+                    - /url: /@focivideo
+                - generic [ref=e331]:
+                  - text: "Add Proton VPN to your privacy stack: https://protonvpn.com/foci My favorite keyboard (affiliate link): https://amzn.to/48rIcqD Join ..."
+                  - tooltip "tooltip"
+                - img "4K" [ref=e336]:
+                  - generic [aria-hidden] [ref=e337]: 4K
+                - generic [ref=e340]:
+                  - generic [ref=e341]:
+                    - generic [ref=e344]: 38 chapters
+                    - button "Intro | In this video | What does open source mean? | What is Linux? | Arch and CachyOS | Niri | Noctalia | Fuzzel | Ghostty | Zotero | Foliate | Helium | VSCodium | Proton VPN | Blanket | Excalidraw | Obsidian | LocalSend | AppFlowy | OnlyOffice and LibreOffice | Manim | Audacity | GIMP | MPV | Flameshot | Obfuscate | Curtail | Switcheroo | Handy | Kdenlive | Yazi | Croc | Caligula | Taskwarrior | rsvg-convert | top, htop and btop | Bonus section | Outro" [ref=e346]
+                  - button "More" [ref=e351]
+            - generic [ref=e369] [cursor=pointer]:
+              - generic [ref=e370]:
+                - link "Aprende IA en 10 semanas | UniSabana" [ref=e373]:
+                  - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=CSlXpO43EarzCHpL7v8IPy6eW8APVhsbViQHV5OuApBWwkB8QAiAAYKuBgICsBoIBF2NhLXB1Yi02MjE5ODExNzQ3MDQ5MzcxoAHnvNCRA6gDBMgDCqoEkQJP0EVLohCX9m-3sIJxrnduRhuBE55npvNCec3BqfH-V0RG51CSfHCQxilnLUd5ffHuQGEPBd9axYgAMfcJUuwX00fCwaeXRjDqsWBVyzwmsTmN80idlipNpKJNqZV3eq2brOKknDeeZaXoszF_NlMtNeQWDFIvCOxu_LAct-oEn8A8x-G7b97K7e_hwALstjbiFq8UCj5w3-u7xHLeaiGGoQsboAKQkqXn80QoQdr_c7MkXSglZ8ENakbTHQAssoMbMCDT_B_RVdIfGkbbJba1BAkIoGo-kZvOyqO7wt2Pn4oFNh0_pGenlcJ2Y5ws2a_f0q__4ZCltNgz82rBElc_iu_etCl-g7row5VXLKgk_8yIBbT06-RXkgUHCBN4_6XObqAGboAHgcOvbpAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgHvtmxAqgHq8UbqAe3obECqAfVqbECqAfn2rECqAfetbEC0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJTmh0dHBzOi8vdXZpcnR1YWwudW5pc2FiYW5hLmVkdS5jby9kaXBsb21hZG9zL25lZ29jaW9zL2ludGVsaWdlbmNpYS1hcnRpZmljaWFsL7EJwQ32sz2Th87ICQDICYoCmAsBugs9CAMQBRgEIAgoATAcQAFIAFhOYABoAHABiAEAmAEBogEICgCoAgHYAgKoAQHYAQGAAgGIAga6AwV2aWNiZtALEqIMDCoKCgiV4rECjt-xAtIMAhABmg0BEqoNAkNPyA0B0g3vAmh0dHBzOi8vdXZpcnR1YWwudW5pc2FiYW5hLmVkdS5jby9kaXBsb21hZG9zL25lZ29jaW9zL2ludGVsaWdlbmNpYS1hcnRpZmljaWFsLz91dG1fc291cmNlPWdvb2dsZSZ1dG1fbWVkaXVtPWNwYyZ1dG1fYWRncm91cD0xOTE3MDU3MjA1NjUmdXRtX2NhbXBhaWduPTIzNTY1MzY3ODYwJnV0bV9jb250ZW50PTc5NzUzNDU4NjM4NCZ1dG1fdGVybT0mdXRtX21hdGNodHlwZT0mdXRtX25ldHdvcms9JnV0bV9kZXZpY2U9YyZ1dG1fZGV2aWNlbW9kZWw9JnV0bV9wbGFjZW1lbnQ9JnV0bV90YXJnZXQ9JnV0bV9hZHBvc2l0aW9uPSZ1dG1fZmVlZGl0ZW1pZD0mdXRtX3RhcmdldGlkPSZnYWRfc291cmNlPTImZ2FkX2NhbXBhaWduaWQ9MjM1NjUzNjc4NjC4E____________wGIFAOwFAPAFYGAgEDQFQHYFQHiFgIIAYAXAYoXGAgDGAEgASgBMAE4AUABSAFQAVgBYAJoAaAXAakXAnMS4fDiffq6FwYoADAAOAHQGAHwGAHCGQIIAQ&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYAiAAEgLZn_D_BwE&num=2&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&sig=AOD64_1n2957hiQ3XYxrUirlazIojvHEfA&ms=%5BCLICK_MS%5D&nb=0&nx=%5BNX%5D&ny=%5BNY%5D&dim=%5BDIM%5D
+                - link "Aprende a usar la IA para mejorar la eficiencia y la rentabilidad de tu empresa" [ref=e376]:
+                  - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=CSlXpO43EarzCHpL7v8IPy6eW8APVhsbViQHV5OuApBWwkB8QAiAAYKuBgICsBoIBF2NhLXB1Yi02MjE5ODExNzQ3MDQ5MzcxoAHnvNCRA6gDBMgDCqoEkQJP0EVLohCX9m-3sIJxrnduRhuBE55npvNCec3BqfH-V0RG51CSfHCQxilnLUd5ffHuQGEPBd9axYgAMfcJUuwX00fCwaeXRjDqsWBVyzwmsTmN80idlipNpKJNqZV3eq2brOKknDeeZaXoszF_NlMtNeQWDFIvCOxu_LAct-oEn8A8x-G7b97K7e_hwALstjbiFq8UCj5w3-u7xHLeaiGGoQsboAKQkqXn80QoQdr_c7MkXSglZ8ENakbTHQAssoMbMCDT_B_RVdIfGkbbJba1BAkIoGo-kZvOyqO7wt2Pn4oFNh0_pGenlcJ2Y5ws2a_f0q__4ZCltNgz82rBElc_iu_etCl-g7row5VXLKgk_8yIBbT06-RXkgUHCBN4_6XObqAGboAHgcOvbpAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgHvtmxAqgHq8UbqAe3obECqAfVqbECqAfn2rECqAfetbEC0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJTmh0dHBzOi8vdXZpcnR1YWwudW5pc2FiYW5hLmVkdS5jby9kaXBsb21hZG9zL25lZ29jaW9zL2ludGVsaWdlbmNpYS1hcnRpZmljaWFsL7EJwQ32sz2Th87ICQDICYoCmAsBugs9CAMQBRgEIAgoATAcQAFIAFhOYABoAHABiAEAmAEBogEICgCoAgHYAgKoAQHYAQGAAgGIAga6AwV2aWNiZtALEqIMDCoKCgiV4rECjt-xAtIMAhABmg0BEqoNAkNPyA0B0g3vAmh0dHBzOi8vdXZpcnR1YWwudW5pc2FiYW5hLmVkdS5jby9kaXBsb21hZG9zL25lZ29jaW9zL2ludGVsaWdlbmNpYS1hcnRpZmljaWFsLz91dG1fc291cmNlPWdvb2dsZSZ1dG1fbWVkaXVtPWNwYyZ1dG1fYWRncm91cD0xOTE3MDU3MjA1NjUmdXRtX2NhbXBhaWduPTIzNTY1MzY3ODYwJnV0bV9jb250ZW50PTc5NzUzNDU4NjM4NCZ1dG1fdGVybT0mdXRtX21hdGNodHlwZT0mdXRtX25ldHdvcms9JnV0bV9kZXZpY2U9YyZ1dG1fZGV2aWNlbW9kZWw9JnV0bV9wbGFjZW1lbnQ9JnV0bV90YXJnZXQ9JnV0bV9hZHBvc2l0aW9uPSZ1dG1fZmVlZGl0ZW1pZD0mdXRtX3RhcmdldGlkPSZnYWRfc291cmNlPTImZ2FkX2NhbXBhaWduaWQ9MjM1NjUzNjc4NjC4E____________wGIFAOwFAPAFYGAgEDQFQHYFQHiFgIIAYAXAYoXGAgDGAEgASgBMAE4AUABSAFQAVgBYAJoAaAXAakXAnMS4fDiffq6FwYoADAAOAHQGAHwGAHCGQIIAQ&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYAiAAEgLZn_D_BwE&num=2&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&sig=AOD64_1n2957hiQ3XYxrUirlazIojvHEfA&ms=%5BCLICK_MS%5D&nb=7&nx=%5BNX%5D&ny=%5BNY%5D&dim=%5BDIM%5D
+                - generic [ref=e377]:
+                  - generic [ref=e379]:
+                    - generic [ref=e380]: Sponsored
+                    - text: ·
+                  - generic [ref=e381]: UniSabana
+              - button "My Ad Center" [ref=e385]
+            - generic [ref=e389]:
+              - heading "Shorts" [level=2] [ref=e399]
+              - generic [ref=e401]:
+                - generic [ref=e404]:
+                  - link [aria-hidden] [ref=e405] [cursor=pointer]:
+                    - /url: /shorts/Ya5xbfyp4Xs
+                  - generic [ref=e409] [cursor=pointer]:
+                    - generic [ref=e410]:
+                      - heading [level=3] [ref=e411]:
+                        - link "The *truth* about open source" [ref=e412]:
+                          - /url: /shorts/Ya5xbfyp4Xs
+                      - generic [ref=e413]: 3.1M views
+                    - button "More actions" [ref=e415]
+                - generic [ref=e421]:
+                  - link [aria-hidden] [ref=e422] [cursor=pointer]:
+                    - /url: /shorts/K1BlCAbG9-0
+                  - generic [ref=e426] [cursor=pointer]:
+                    - generic [ref=e427]:
+                      - heading [level=3] [ref=e428]:
+                        - 'link "Jensen Huang: Why Open Source Will Win the AI Race" [ref=e429]':
+                          - /url: /shorts/K1BlCAbG9-0
+                      - generic [ref=e430]: 41K views
+                    - button "More actions" [ref=e432]
+                - generic [ref=e438]:
+                  - link [aria-hidden] [ref=e439] [cursor=pointer]:
+                    - /url: /shorts/mtSsI7JSrZQ
+                  - generic [ref=e443] [cursor=pointer]:
+                    - generic [ref=e444]:
+                      - heading [level=3] [ref=e445]:
+                        - 'link "Free open source AI tool alternatives #freetools #developer #freesoftware #opensource #generativeai" [ref=e446]':
+                          - /url: /shorts/mtSsI7JSrZQ
+                      - generic [ref=e447]: 330K views
+                    - button "More actions" [ref=e449]
+                - generic [ref=e455]:
+                  - link [aria-hidden] [ref=e456] [cursor=pointer]:
+                    - /url: /shorts/9HbZVxeWy0Y
+                    - img [ref=e461]:
+                      - generic [aria-hidden] [ref=e462]: New
+                  - generic [ref=e463] [cursor=pointer]:
+                    - generic [ref=e464]:
+                      - heading [level=3] [ref=e465]:
+                        - 'link "An open-source alternative to AnyDesk and TeamViewer: the new USBridge mobile app! 📱 #RemoteDesktop" [ref=e466]':
+                          - /url: /shorts/9HbZVxeWy0Y
+                      - generic [ref=e467]: 876 views
+                    - button "More actions" [ref=e469]
+                - generic [ref=e475]:
+                  - link [aria-hidden] [ref=e476] [cursor=pointer]:
+                    - /url: /shorts/Nd6fDAU8YQE
+                    - img [ref=e481]:
+                      - generic [aria-hidden] [ref=e482]: New
+                  - generic [ref=e483] [cursor=pointer]:
+                    - generic [ref=e484]:
+                      - heading [level=3] [ref=e485]:
+                        - 'link "This Open-Source Tool Explains AI-Written Code #whiteboard #ai #programming" [ref=e486]':
+                          - /url: /shorts/Nd6fDAU8YQE
+                      - generic [ref=e487]: 28K views
+                    - button "More actions" [ref=e489]
+            - generic [ref=e494]:
+              - link [aria-hidden] [ref=e496] [cursor=pointer]:
+                - /url: /watch?v=PVD1LNDxOnc&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e498] [cursor=pointer]:
+                - generic [ref=e499]:
+                  - generic [ref=e500]:
+                    - heading [level=3] [ref=e501]:
+                      - link "Open Source Explained 6 minutes, 11 seconds" [ref=e502]:
+                        - /url: /watch?v=PVD1LNDxOnc&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: Open Source Explained
+                    - button "Action menu" [ref=e506]
+                  - generic [ref=e512]:
+                    - generic [ref=e513]: 136K
+                    - generic [ref=e514]: •4y ago
+                - generic [ref=e515]:
+                  - link "Go to channel IBM Technology" [ref=e516]:
+                    - /url: /@IBMTechnology
+                  - generic [ref=e517]:
+                    - link "IBM Technology" [ref=e521]:
+                      - /url: /@IBMTechnology
+                    - img "Verified" [ref=e526]
+                - generic [ref=e530]:
+                  - generic [ref=e531]: Check out the Open Source Incubator→ https://ibm.biz/BdP2iZ See Open Source Projects IBM is involved with→ ...
+                  - tooltip "tooltip"
+                - img "Closed captions" [ref=e536]:
+                  - generic [aria-hidden] [ref=e537]: CC
+            - generic [ref=e546] [cursor=pointer]:
+              - link [aria-hidden] [ref=e547]:
+                - /url: /watch?v=pbDXQpzhEVo
+                - img [ref=e552]:
+                  - generic [aria-hidden] [ref=e553]: 0:18
+              - generic [ref=e554]:
+                - generic [ref=e555]:
+                  - generic [ref=e556]:
+                    - link "Dile sí a los nuevos granos y semillas Tosh. Son ricos, fáciles de usar y de preparar" [ref=e559]:
+                      - /url: /watch?v=pbDXQpzhEVo
+                    - link "Prueba los nuevos granos y semillas Tosh y úsalos en todas tus recetas" [ref=e562]:
+                      - /url: /watch?v=pbDXQpzhEVo
+                    - generic [ref=e563]:
+                      - button "Tosh" [ref=e567]
+                      - generic [ref=e571]:
+                        - generic [ref=e572]: Sponsored
+                        - text: ·
+                      - generic [ref=e573]: Tosh
+                  - button "My Ad Center" [ref=e577]
+                - link "Pruébalos" [ref=e584]:
+                  - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=CME7VO43EarzCHpL7v8IPy6eW8APEze_HiQGLg8DDoRZkEAMgAGCrgYCArAaCARdjYS1wdWItNjIxOTgxMTc0NzA0OTM3MaABmJrDgESpAs7RvSIncfU9qAMEqgShAk_QRUuiEJf2b7ewgnGud25GG4ETnmem80J5zcGp8f5XREbnUJJ8cJDGKWctR3l98e5AYQ8F31rFiAAx9wlS7BfTR8LBp5dGMOqxYFXLPCaxOY3zSJ2WKk2kok2plXd6rZus4qScN55lpeizMX82Uy015BYMUi8I7G78sBy36gSfwDzH4btv3srt7-HAAuy2NuIWrxQKPnDf67vEct5qIYahCxugApCSpefzRChB2v9zsyRdKCVnwQ1qRtMdACyygxswINP8H9FV0h8aRtsltrUECQigaj6R-kItGbEGHzQS26KiNdnV4on9r_3tgDk2ryuvtB0AkF-4eldMSxYyfT9zRaqiuNNeRg4RqWfnQLQr8QMNccEQRRFBSpP140i0RaqIBcyXgKhakgUNCBIw2qKE56notdilAZIFCAgTeLWDjIYfoAZVgAeY0pPgHpAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgH1c4bqAe-2bECqAerxRuoB5zcG6gHt6GxAqgH1amxAqgH59qxAqgH3rWxApIIC3BiRFhRcHpoRVZvqAgB0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJJ2h0dHBzOi8vd3d3LnRpZW5kYW51dHJlc2FlbmNhc2EuY29tLzM1M7EJUAoiXLmQowvICRfICY8ByAnCAZgLAboLPQgDEAUYBiAHKAEwHEABSABYXWAAaABwAYgBAJgBAaIBCAoAqAIB2AICqAEB2AEBgAIBiAIHugMFdmljYmbQCxOiDAwqCgoIleKxAo7fsQLSDAIQAZoNAROqDQJDT8gNAdIN-AFodHRwczovL3d3dy50aWVuZGFudXRyZXNhZW5jYXNhLmNvbS8zNTM_bWFwPXByb2R1Y3RDbHVzdGVySWRzJnV0bV9pZD0yMzVkYyZ1dG1fc291cmNlPXlvdXR1YmUtbWF4LS0tbmFjaW9uYWwmdXRtX21lZGl1bT1jcG0mdXRtX2NhbXBhaWduPXRvc2hfZ3Jhbm9zLXktc2VtaWxsYXNfY2h-dmlkZW8mdXRtX3Rlcm09Y29taWRheWJlYmlkYV9pbi1zdHJlYW1feXQtbWF4JmdhZF9zb3VyY2U9MiZnYWRfY2FtcGFpZ25pZD0yNDI0MzA4MDE0MLgT____________AbAUA8AVgYCAQNAVAdgVAYAXAYoXGAgDGAEgASgBMAE4AUABSAFQAVgBYAJoAaAXAakXEyi0_T3jMiq6FwYoADAAOAHQGAHwGAHCGQIIAQ&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYAyAAEgLQ0vD_BwE&num=3&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&ad_cpn=%5BCPN%5D&sig=AOD64_0ebaA3tdVVAVD1e-RXFwfGQEKt4w&ctype=110&video_id=pbDXQpzhEVo&label=video_click_to_advertiser_site&ms=%5BCLICK_MS%5D
+            - generic [ref=e589]:
+              - link [aria-hidden] [ref=e591] [cursor=pointer]:
+                - /url: /watch?v=Aea2DUX4fsQ&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e593] [cursor=pointer]:
+                - generic [ref=e594]:
+                  - generic [ref=e595]:
+                    - heading [level=3] [ref=e596]:
+                      - link "Open Source Is Beating Paid Mac Apps 32 minutes" [ref=e597]:
+                        - /url: /watch?v=Aea2DUX4fsQ&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: Open Source Is Beating Paid Mac Apps
+                    - button "Action menu" [ref=e601]
+                  - generic [ref=e607]:
+                    - generic [ref=e608]: 443K
+                    - generic [ref=e609]: •4d ago
+                - generic [ref=e610]:
+                  - link "Go to channel Snazzy Labs" [ref=e611]:
+                    - /url: /@snazzy
+                  - generic [ref=e612]:
+                    - link "Snazzy Labs" [ref=e616]:
+                      - /url: /@snazzy
+                    - img "Verified" [ref=e621]
+                - generic [ref=e625]:
+                  - generic [ref=e626]: Not all open-source, free Mac apps are good… but these ones sure are! Try Maia by Make today with your first month free!
+                  - tooltip "tooltip"
+                - generic [ref=e628]:
+                  - img "New" [ref=e631]:
+                    - generic [aria-hidden] [ref=e632]: New
+                  - img "4K" [ref=e635]:
+                    - generic [aria-hidden] [ref=e636]: 4K
+                - generic [ref=e639]:
+                  - generic [ref=e640]:
+                    - generic [ref=e643]: 13 chapters
+                    - 'button "The silver lining of AI slop | MacPacker: zips all the way down | Vorssaint is 73 apps in a trench coat | Textream (and firing Austin Evans) | Maia by Make: Sponsor | Prefab ends folder chaos | Clop shrinks everything you copy | Mole patches every hole in your heart | macUSB is Rufus for the Mac | Handy, voice-to-text done right | Forel: no AI, still magic | MacTap: smack your MacBook | Headjust fixes your posture, then leaves" [ref=e645]'
+                  - button "More" [ref=e650]
+            - generic [ref=e655]:
+              - link [aria-hidden] [ref=e657] [cursor=pointer]:
+                - /url: /watch?v=e5dhaQm_J6U&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e659] [cursor=pointer]:
+                - generic [ref=e660]:
+                  - generic [ref=e661]:
+                    - heading [level=3] [ref=e662]:
+                      - link "Paying for software is stupid… 10 free and open-source SaaS replacements 6 minutes, 23 seconds" [ref=e663]:
+                        - /url: /watch?v=e5dhaQm_J6U&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: Paying for software is stupid… 10 free and open-source SaaS replacements
+                    - button "Action menu" [ref=e667]
+                  - generic [ref=e673]:
+                    - generic [ref=e674]: 1.5M
+                    - generic [ref=e675]: •2y ago
+                - generic [ref=e676]:
+                  - link "Go to channel Fireship" [ref=e677]:
+                    - /url: /@Fireship
+                  - generic [ref=e678]:
+                    - link "Fireship" [ref=e682]:
+                      - /url: /@Fireship
+                    - img "Verified" [ref=e687]
+                - generic [ref=e691]:
+                  - generic [ref=e692]: Find all the best dev content at https://daily.dev/fireship Remember, for every paid SaaS, there is a free open-source self-hosted ...
+                  - tooltip "tooltip"
+                - img "4K" [ref=e697]:
+                  - generic [aria-hidden] [ref=e698]: 4K
+                - generic [ref=e701]:
+                  - generic [ref=e702]:
+                    - generic [ref=e703]: Summary
+                    - button "Fireship outlines the shift from purchasing software to renting it through subscription models. Alternatives to popular tools like Microsoft Office, Salesforce, and Zoom are explored to help users reduce monthly expenses and regain data control." [ref=e708]
+                    - text: ·
+                  - button "More" [ref=e713]
+            - generic [ref=e717]:
+              - heading "Shorts" [level=2] [ref=e727]
+              - generic [ref=e728]:
+                - generic [ref=e729]:
+                  - generic [ref=e732]:
+                    - link [aria-hidden] [ref=e733] [cursor=pointer]:
+                      - /url: /shorts/E-QRGe_4dnk
+                      - img [ref=e738]:
+                        - generic [aria-hidden] [ref=e739]: New
+                    - generic [ref=e740] [cursor=pointer]:
+                      - generic [ref=e741]:
+                        - heading [level=3] [ref=e742]:
+                          - 'link "OpenDots: Free Open-Source Alternative to OpenAI Dots" [ref=e743]':
+                            - /url: /shorts/E-QRGe_4dnk
+                        - generic [ref=e744]: 79 views
+                      - button "More actions" [ref=e746]
+                  - generic [ref=e752]:
+                    - link [aria-hidden] [ref=e753] [cursor=pointer]:
+                      - /url: /shorts/Sg1E4ObIMjk
+                    - generic [ref=e757] [cursor=pointer]:
+                      - generic [ref=e758]:
+                        - heading [level=3] [ref=e759]:
+                          - 'link "oomwoo: an open-source robot vacuum you build yourself" [ref=e760]':
+                            - /url: /shorts/Sg1E4ObIMjk
+                        - generic [ref=e761]: 60K views
+                      - button "More actions" [ref=e763]
+                  - generic [ref=e769]:
+                    - link [aria-hidden] [ref=e770] [cursor=pointer]:
+                      - /url: /shorts/11K3tGgFnJs
+                    - generic [ref=e774] [cursor=pointer]:
+                      - generic [ref=e775]:
+                        - heading [level=3] [ref=e776]:
+                          - link "5 Interesting Open Source Projects" [ref=e777]:
+                            - /url: /shorts/11K3tGgFnJs
+                        - generic [ref=e778]: 301K views
+                      - button "More actions" [ref=e780]
+                  - generic [ref=e786]:
+                    - link [aria-hidden] [ref=e787] [cursor=pointer]:
+                      - /url: /shorts/qyH227i0gV4
+                    - generic [ref=e791] [cursor=pointer]:
+                      - generic [ref=e792]:
+                        - heading [level=3] [ref=e793]:
+                          - link "Expensive Equipment? Build Your Own! (via Open Source Ecology)" [ref=e794]:
+                            - /url: /shorts/qyH227i0gV4
+                        - generic [ref=e795]: 2.8M views
+                      - button "More actions" [ref=e797]
+                  - generic [ref=e803]:
+                    - link [aria-hidden] [ref=e804] [cursor=pointer]:
+                      - /url: /shorts/oqe2LpDyxyA
+                    - generic [ref=e808] [cursor=pointer]:
+                      - generic [ref=e809]:
+                        - heading [level=3] [ref=e810]:
+                          - link "3 Opensource AI Tools For 2026" [ref=e811]:
+                            - /url: /shorts/oqe2LpDyxyA
+                        - generic [ref=e812]: 35K views
+                      - button "More actions" [ref=e814]
+                - generic [ref=e818]:
+                  - generic [ref=e821]:
+                    - link [aria-hidden] [ref=e822] [cursor=pointer]:
+                      - /url: /shorts/9H2bYjsgxuQ
+                      - img [ref=e827]:
+                        - generic [aria-hidden] [ref=e828]: New
+                    - generic [ref=e829] [cursor=pointer]:
+                      - generic [ref=e830]:
+                        - heading [level=3] [ref=e831]:
+                          - link "Palmer Luckey on why Chinese open-source models are a non-starter for weapons systems" [ref=e832]:
+                            - /url: /shorts/9H2bYjsgxuQ
+                        - generic [ref=e833]: 80K views
+                      - button "More actions" [ref=e835]
+                  - generic [ref=e841]:
+                    - link [aria-hidden] [ref=e842] [cursor=pointer]:
+                      - /url: /shorts/FYIHGkJJqTI
+                    - generic [ref=e846] [cursor=pointer]:
+                      - generic [ref=e847]:
+                        - heading [level=3] [ref=e848]:
+                          - link "Open Source Printer" [ref=e849]:
+                            - /url: /shorts/FYIHGkJJqTI
+                        - generic [ref=e850]: 1M views
+                      - button "More actions" [ref=e852]
+                  - generic [ref=e858]:
+                    - link [aria-hidden] [ref=e859] [cursor=pointer]:
+                      - /url: /shorts/PQK6sujf198
+                    - generic [ref=e863] [cursor=pointer]:
+                      - generic [ref=e864]:
+                        - heading [level=3] [ref=e865]:
+                          - link "Free, Open-Source WhatsApp API (OpenWA)" [ref=e866]:
+                            - /url: /shorts/PQK6sujf198
+                        - generic [ref=e867]: 19K views
+                      - button "More actions" [ref=e869]
+                  - generic [ref=e875]:
+                    - link [aria-hidden] [ref=e876] [cursor=pointer]:
+                      - /url: /shorts/pdlkU3rDxq0
+                    - generic [ref=e880] [cursor=pointer]:
+                      - generic [ref=e881]:
+                        - heading [level=3] [ref=e882]:
+                          - 'link "Open Source VS Open Weight: What is the Difference?" [ref=e883]':
+                            - /url: /shorts/pdlkU3rDxq0
+                        - generic [ref=e884]: 14K views
+                      - button "More actions" [ref=e886]
+                  - generic [ref=e892]:
+                    - link [aria-hidden] [ref=e893] [cursor=pointer]:
+                      - /url: /shorts/S72ZRBSNHZc
+                    - generic [ref=e897] [cursor=pointer]:
+                      - generic [ref=e898]:
+                        - heading [level=3] [ref=e899]:
+                          - link "Dario Amodei on China's Open-Source AI and Looming Cyber Risks" [ref=e900]:
+                            - /url: /shorts/S72ZRBSNHZc
+                        - generic [ref=e901]: 192K views
+                      - button "More actions" [ref=e903]
+              - button "Show more" [ref=e910] [cursor=pointer]
+            - generic [ref=e915]:
+              - link [aria-hidden] [ref=e917] [cursor=pointer]:
+                - /url: /watch?v=RLNfakKG01I&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e919] [cursor=pointer]:
+                - generic [ref=e920]:
+                  - generic [ref=e921]:
+                    - heading [level=3] [ref=e922]:
+                      - link "This Is What Happens When Corporations Own Open Source 8 minutes, 29 seconds" [ref=e923]:
+                        - /url: /watch?v=RLNfakKG01I&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: This Is What Happens When Corporations Own Open Source
+                    - button "Action menu" [ref=e927]
+                  - generic [ref=e933]:
+                    - generic [ref=e934]: 120K
+                    - generic [ref=e935]: •3d ago
+                - generic [ref=e936]:
+                  - link "Go to channel SavvyNik" [ref=e937]:
+                    - /url: /@SavvyNik
+                  - generic [ref=e938]:
+                    - link "SavvyNik" [ref=e942]:
+                      - /url: /@SavvyNik
+                    - img "Verified" [ref=e947]
+                - generic [ref=e951]:
+                  - generic [ref=e952]: An open source project just got bought out and shut down. Siemens decided to shut down a github repo and didn't even bother ...
+                  - tooltip "tooltip"
+                - img "New" [ref=e957]:
+                  - generic [aria-hidden] [ref=e958]: New
+                - generic [ref=e961]:
+                  - generic [ref=e962]:
+                    - generic [ref=e963]: Summary
+                    - button "SavvyNik examines the abrupt removal of the Open Radios project from GitHub following its acquisition by Siemens. The discussion explores the risks associated with corporate-backed open-source software, highlighting how centralized control can fragment communities and jeopardize long-term accessibility, even when code remains governed by existing open-source licenses." [ref=e968]
+                    - text: ·
+                  - button "More" [ref=e973]
+            - generic [ref=e978]:
+              - link [aria-hidden] [ref=e980] [cursor=pointer]:
+                - /url: /watch?v=mklEhT_RLos&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e982] [cursor=pointer]:
+                - generic [ref=e983]:
+                  - generic [ref=e984]:
+                    - heading [level=3] [ref=e985]:
+                      - link "Contributing To Open Source – Beginner's Guide 2 hours, 29 minutes" [ref=e986]:
+                        - /url: /watch?v=mklEhT_RLos&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: Contributing To Open Source – Beginner's Guide
+                    - button "Action menu" [ref=e990]
+                  - generic [ref=e996]:
+                    - generic [ref=e997]: 208K
+                    - generic [ref=e998]: •1y ago
+                - generic [ref=e999]:
+                  - link "Go to channel freeCodeCamp.org" [ref=e1000]:
+                    - /url: /@freecodecamp
+                  - generic [ref=e1001]:
+                    - link "freeCodeCamp.org" [ref=e1005]:
+                      - /url: /@freecodecamp
+                    - img "Verified" [ref=e1010]
+                - generic [ref=e1014]:
+                  - generic [ref=e1015]: This course covers everything you need to contribute meaningfully to existing open-source software projects. This course is taught ...
+                  - tooltip "tooltip"
+                - generic [ref=e1018]:
+                  - generic [ref=e1019]:
+                    - generic [ref=e1022]: 22 chapters
+                    - 'button "Course Introduction | Instructor + Outcomes | What is Open Source? | Projects, Repos, Issues, Pull Requests | The Benefits Of Open Source | The Right Reason To Do Open Source | Improve Something You Use | Find Companies Active In Open Source | Choose The Right Project | Go With The Flow | Identify A First Task | Case Study: ReactJS Open Source Repo | Find The Project Community | Learning The Codebase | What Are The Most Important Modules? | What Opinions Do The Authors Have? | Share What You Learn | Start With Something Small | Good Practices When Making Commits | Be Like Water | Anticipate Common Pushback | Taking The Next Step" [ref=e1024]'
+                  - button "More" [ref=e1029]
+            - generic [ref=e1034]:
+              - link [aria-hidden] [ref=e1036] [cursor=pointer]:
+                - /url: /watch?v=4NdlRlie-A8&pp=ygULb3BlbiBzb3VyY2XSBwkJNQwBhyohjO8%3D
+              - generic [ref=e1038] [cursor=pointer]:
+                - generic [ref=e1039]:
+                  - generic [ref=e1040]:
+                    - heading [level=3] [ref=e1041]:
+                      - link "OPEN SOURCE alternatives for the MOST POPULAR productivity apps (2026 edition) 22 minutes" [ref=e1042]:
+                        - /url: /watch?v=4NdlRlie-A8&pp=ygULb3BlbiBzb3VyY2XSBwkJNQwBhyohjO8%3D
+                        - text: OPEN SOURCE alternatives for the MOST POPULAR productivity apps (2026 edition)
+                    - button "Action menu" [ref=e1046]
+                  - generic [ref=e1052]:
+                    - generic [ref=e1053]: 231K
+                    - generic [ref=e1054]: •5mo ago
+                - generic [ref=e1055]:
+                  - link "Go to channel The Linux Experiment" [ref=e1056]:
+                    - /url: /@TheLinuxEXP
+                  - generic [ref=e1057]:
+                    - link "The Linux Experiment" [ref=e1061]:
+                      - /url: /@TheLinuxEXP
+                    - img "Verified" [ref=e1066]
+                - generic [ref=e1070]:
+                  - text: Take a look at TuxCare's CVE tracker to identify where you're vulnerable, and how you can fix that!
+                  - tooltip "tooltip"
+                - generic [ref=e1073]:
+                  - generic [ref=e1074]:
+                    - generic [ref=e1077]: 12 chapters
+                    - 'button "Intro | Sponsor: TuxCare | Acrobat Pro & PDF editing | Omnifocus & Task Management | OneNote, Notion or Obsidian | Teams, Slack or Discord | Outlook & Email | Office 365 or Google Workspace | Office Online or Google Docs | Windows | Conclusion | Sponsor: Tuxedo Computers" [ref=e1079]'
+                  - button "More" [ref=e1084]
+            - generic [ref=e1089]:
+              - link [aria-hidden] [ref=e1091] [cursor=pointer]:
+                - /url: /watch?v=1uCE0uoKXL8&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1093] [cursor=pointer]:
+                - generic [ref=e1094]:
+                  - generic [ref=e1095]:
+                    - heading [level=3] [ref=e1096]:
+                      - link "Open Source AI In 17 Minutes 17 minutes" [ref=e1097]:
+                        - /url: /watch?v=1uCE0uoKXL8&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: Open Source AI In 17 Minutes
+                    - button "Action menu" [ref=e1101]
+                  - generic [ref=e1107]:
+                    - generic [ref=e1108]: 262K
+                    - generic [ref=e1109]: •7mo ago
+                - generic [ref=e1110]:
+                  - link "Go to channel Tina Huang" [ref=e1111]:
+                    - /url: /@TinaHuang1
+                  - generic [ref=e1112]:
+                    - link "Tina Huang" [ref=e1116]:
+                      - /url: /@TinaHuang1
+                    - img "Verified" [ref=e1121]
+                - generic [ref=e1125]:
+                  - text: Free resource to unlock the Claude Cowork Stack and replace a week of work https://clickhubspot.com/129e64 Free 28-Day ...
+                  - tooltip "tooltip"
+                - img "4K" [ref=e1130]:
+                  - generic [aria-hidden] [ref=e1131]: 4K
+                - generic [ref=e1134]:
+                  - generic [ref=e1135]:
+                    - generic [ref=e1138]: 7 chapters
+                    - 'button "Intro | Defining Open Source AI | Quiz 1 | Open Source AI Stack | No-Code Demo: Financial Document Analyzer (n8n + Ollama) | Code Demo: Email Agent Workflow (Python + Ollama + OpenAI Agent SDK) | Quiz 2" [ref=e1140]'
+                  - button "More" [ref=e1145]
+            - generic [ref=e1150]:
+              - link [aria-hidden] [ref=e1152] [cursor=pointer]:
+                - /url: /watch?v=nHQv4blla7g&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1154] [cursor=pointer]:
+                - generic [ref=e1155]:
+                  - generic [ref=e1156]:
+                    - heading [level=3] [ref=e1157]:
+                      - link "Why Are Open Source Alternatives So Bad? 13 minutes, 6 seconds" [ref=e1158]:
+                        - /url: /watch?v=nHQv4blla7g&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: Why Are Open Source Alternatives So Bad?
+                    - button "Action menu" [ref=e1162]
+                  - generic [ref=e1168]:
+                    - generic [ref=e1169]: 878K
+                    - generic [ref=e1170]: •2y ago
+                - generic [ref=e1171]:
+                  - link "Go to channel Eric Murphy" [ref=e1172]:
+                    - /url: /@EricMurphyxyz
+                  - link "Eric Murphy" [ref=e1177]:
+                    - /url: /@EricMurphyxyz
+                - generic [ref=e1178]:
+                  - generic [ref=e1179]: Want to switch to Linux or tired of paying ridiculous amounts of money for Adobe products? Just switch to these open source ...
+                  - tooltip "tooltip"
+                - generic [ref=e1182]:
+                  - generic [ref=e1183]:
+                    - generic [ref=e1186]: 7 chapters
+                    - button "The problem with open-source alternatives | Which open-source software are we talking about? | Where's the money? | Why is the UI so bad? | Software matters | Can open-source do better? | Conclusion" [ref=e1188]
+                  - button "More" [ref=e1193]
+            - generic [ref=e1198]:
+              - link [aria-hidden] [ref=e1200] [cursor=pointer]:
+                - /url: /watch?v=L-QcVyq2gQk&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1202] [cursor=pointer]:
+                - generic [ref=e1203]:
+                  - generic [ref=e1204]:
+                    - heading [level=3] [ref=e1205]:
+                      - link "I used Open Source Apps for 90 days. Here are my favorites 11 minutes, 9 seconds" [ref=e1206]:
+                        - /url: /watch?v=L-QcVyq2gQk&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: I used Open Source Apps for 90 days. Here are my favorites
+                    - button "Action menu" [ref=e1210]
+                  - generic [ref=e1216]:
+                    - generic [ref=e1217]: 331K
+                    - generic [ref=e1218]: •7mo ago
+                - generic [ref=e1219]:
+                  - link "Go to channel foci" [ref=e1220]:
+                    - /url: /@focivideo
+                  - link "foci" [ref=e1225]:
+                    - /url: /@focivideo
+                - generic [ref=e1226]:
+                  - generic [ref=e1227]: "Open-source, private cloud storage: https://internxt.com/foci Get 87% off the Lifetime Ultimate (5TB) plan — coupon FOCI already ..."
+                  - tooltip "tooltip"
+                - img "4K" [ref=e1232]:
+                  - generic [aria-hidden] [ref=e1233]: 4K
+                - generic [ref=e1236]:
+                  - generic [ref=e1237]:
+                    - generic [ref=e1238]: Summary
+                    - button "Foci shares their experience migrating to a Linux-based operating system for work and daily tasks. The overview covers specific open-source tools for browsing, file sharing, and productivity, alongside the challenges of transitioning from proprietary software for video editing and communication." [ref=e1243]
+                    - text: ·
+                  - button "More" [ref=e1248]
+            - generic [ref=e1253]:
+              - link [aria-hidden] [ref=e1255] [cursor=pointer]:
+                - /url: /watch?v=CML6vfKjQss&pp=ygULb3BlbiBzb3VyY2XSBwkJNQwBhyohjO8%3D
+              - generic [ref=e1257] [cursor=pointer]:
+                - generic [ref=e1258]:
+                  - generic [ref=e1259]:
+                    - heading [level=3] [ref=e1260]:
+                      - link "Contributing to Open Source Can Change Your Life - Here’s How to Do It 3 minutes, 18 seconds" [ref=e1261]:
+                        - /url: /watch?v=CML6vfKjQss&pp=ygULb3BlbiBzb3VyY2XSBwkJNQwBhyohjO8%3D
+                        - text: Contributing to Open Source Can Change Your Life - Here’s How to Do It
+                    - button "Action menu" [ref=e1265]
+                  - generic [ref=e1271]:
+                    - generic [ref=e1272]: 1.5M
+                    - generic [ref=e1273]: •4y ago
+                - generic [ref=e1274]:
+                  - link "Go to channel Learn Fast Make Things" [ref=e1275]:
+                    - /url: /@LearnFastMakeThings
+                  - link "Learn Fast Make Things" [ref=e1280]:
+                    - /url: /@LearnFastMakeThings
+                - generic [ref=e1281]:
+                  - generic [ref=e1282]: There are over 128000000 open source projects on GitHub and every single one of them has the potential to change your life ...
+                  - tooltip "tooltip"
+                - generic [ref=e1285]:
+                  - generic [ref=e1286]:
+                    - generic [ref=e1287]: Summary
+                    - button "Learn Fast Make Things outlines a simple seven-step system for identifying projects and submitting pull requests to boost professional portfolios. The guide emphasizes contributing to documentation or software already in use as a way to build valuable community collaboration skills." [ref=e1292]
+                    - text: ·
+                  - button "More" [ref=e1297]
+            - generic [ref=e1302]:
+              - link [ref=e1304] [cursor=pointer]:
+                - /url: /@AwesomeOpenSource
+              - generic [ref=e1307]:
+                - link "Awesome Open Source @AwesomeOpenSource•169K subscribers Open Source software is absolutely Awesome! I use it for as much as I can. This channel is here to introduce some of the amazing ..." [ref=e1308] [cursor=pointer]:
+                  - /url: /@AwesomeOpenSource
+                  - generic [ref=e1309]:
+                    - generic [ref=e1310]: Awesome Open Source
+                    - generic [ref=e1314]: "@AwesomeOpenSource•169K subscribers"
+                    - generic [ref=e1315]: Open Source software is absolutely Awesome! I use it for as much as I can. This channel is here to introduce some of the amazing ...
+                - link "Subscribe" [ref=e1320] [cursor=pointer]:
+                  - /url: https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fresults%253Fsearch_query%253Dopen%252Bsource%26continue_action%3DQUZZTVljSG1wZmJlOGZONzB4Y2p1VUxzUlplVHxBTl9pYzRkSWJLVDNqdEJjTWsxTnZQekNjbDkyRFQ4T3U0UWNjZS1vdi1YZGJGdE9KLWhvazdoQmxSV3IwNFZWRWkzNWl0eFR6X0QtcWliTndPalVwZ0owQW5EbHc4S0lGLTlEU1ByYzhUb3RlSDIweWFVOVNhd3BCMWZTLWpRdXQ0QndkMDRYZk85bDlfaUNlR1JKem1LUnNKN3VfWnVhYVlzajNMVUFhRnV2RXBMcXhfWVNXT0dKR3kw&hl=en
+            - generic [ref=e1325]:
+              - link [aria-hidden] [ref=e1327] [cursor=pointer]:
+                - /url: /watch?v=SpeDK1TPbew&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1329] [cursor=pointer]:
+                - generic [ref=e1330]:
+                  - generic [ref=e1331]:
+                    - heading [level=3] [ref=e1332]:
+                      - link "The Rise Of Open-Source Software 13 minutes, 51 seconds" [ref=e1333]:
+                        - /url: /watch?v=SpeDK1TPbew&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: The Rise Of Open-Source Software
+                    - button "Action menu" [ref=e1337]
+                  - generic [ref=e1343]:
+                    - generic [ref=e1344]: 2.5M
+                    - generic [ref=e1345]: •6y ago
+                - generic [ref=e1346]:
+                  - link "Go to channel CNBC" [ref=e1347]:
+                    - /url: /@CNBC
+                  - generic [ref=e1348]:
+                    - link "CNBC" [ref=e1352]:
+                      - /url: /@CNBC
+                    - img "Verified" [ref=e1357]
+                - generic [ref=e1361]:
+                  - generic [ref=e1362]: Open-source software powers nearly all the world's major companies. This software is freely available, and is developed ...
+                  - tooltip "tooltip"
+                - img "Closed captions" [ref=e1367]:
+                  - generic [aria-hidden] [ref=e1368]: CC
+            - generic [ref=e1370]:
+              - link [aria-hidden] [ref=e1372] [cursor=pointer]:
+                - /url: /watch?v=nFU5qimm2OY&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1374] [cursor=pointer]:
+                - generic [ref=e1375]:
+                  - generic [ref=e1376]:
+                    - heading [level=3] [ref=e1377]:
+                      - link "O software Open Source que virou a maior ameaça ao Google e à Microsoft 9 minutes, 49 seconds" [ref=e1378]:
+                        - /url: /watch?v=nFU5qimm2OY&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: O software Open Source que virou a maior ameaça ao Google e à Microsoft
+                    - button "Action menu" [ref=e1382]
+                  - generic [ref=e1388]:
+                    - generic [ref=e1389]: 7.2K
+                    - generic [ref=e1390]: •9h ago
+                - generic [ref=e1391]:
+                  - link "Go to channel Diolinux Labs" [ref=e1392]:
+                    - /url: /@Diolinuxlabs
+                  - link "Diolinux Labs" [ref=e1397]:
+                    - /url: /@Diolinuxlabs
+                - generic [ref=e1398]:
+                  - text: "Assista o episódio completo: https://www.youtube.com/watch?v=GliB9bTEphI Ouça o episódio completo: ..."
+                  - tooltip "tooltip"
+                - img "New" [ref=e1403]:
+                  - generic [aria-hidden] [ref=e1404]: New
+                - generic [ref=e1407]:
+                  - generic [ref=e1408]:
+                    - generic [ref=e1409]: Summary
+                    - button "Jos Poortvliet, um dos fundadores do Nextcloud, explora a importância de retomar o controlo dos dados pessoais através de soluções de código aberto. A conversa detalha a evolução do projeto, desde o seu início na comunidade KDE até à sua vasta oferta atual de ferramentas de colaboração que competem diretamente com os gigantes do setor tecnológico." [ref=e1414]
+                    - text: ·
+                  - button "More" [ref=e1419]
+            - generic [ref=e1424]:
+              - link [aria-hidden] [ref=e1426] [cursor=pointer]:
+                - /url: /watch?v=sVhBkC-VEFM&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1428] [cursor=pointer]:
+                - generic [ref=e1429]:
+                  - generic [ref=e1430]:
+                    - heading [level=3] [ref=e1431]:
+                      - link "What Is Open Source? 3 minutes, 14 seconds" [ref=e1432]:
+                        - /url: /watch?v=sVhBkC-VEFM&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: What Is Open Source?
+                    - button "Action menu" [ref=e1436]
+                  - generic [ref=e1442]:
+                    - generic [ref=e1443]: 57K
+                    - generic [ref=e1444]: •7y ago
+                - generic [ref=e1445]:
+                  - link "Go to channel Computer Hoy" [ref=e1446]:
+                    - /url: /@Computerhoycom
+                  - link "Computer Hoy" [ref=e1451]:
+                    - /url: /@Computerhoycom
+                - generic [ref=e1452]:
+                  - text: Whether you're viewing this from a computer or a mobile device, it's very likely you're using a system built on open-source ...
+                  - tooltip "tooltip"
+            - generic [ref=e1454]:
+              - link [aria-hidden] [ref=e1456] [cursor=pointer]:
+                - /url: /watch?v=Gj6HqWCdk3s&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1458] [cursor=pointer]:
+                - generic [ref=e1459]:
+                  - generic [ref=e1460]:
+                    - heading [level=3] [ref=e1461]:
+                      - link "the ultimate guide to an open source life, i spent 2 months on this, i hope you enjoy it!!! 13 minutes, 15 seconds" [ref=e1462]:
+                        - /url: /watch?v=Gj6HqWCdk3s&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: the ultimate guide to an open source life, i spent 2 months on this, i hope you enjoy it!!!
+                    - button "Action menu" [ref=e1466]
+                  - generic [ref=e1472]:
+                    - generic [ref=e1473]: 392K
+                    - generic [ref=e1474]: •1y ago
+                - generic [ref=e1475]:
+                  - link "Go to channel Louis Rossmann" [ref=e1476]:
+                    - /url: /@rossmanngroup
+                  - generic [ref=e1477]:
+                    - link "Louis Rossmann" [ref=e1481]:
+                      - /url: /@rossmanngroup
+                    - img "Verified" [ref=e1486]
+                - generic [ref=e1490]:
+                  - text: "Written guide: https://wiki.futo.org/ Video 1: https://www.youtube.com/watch?v=Et5PPMYuOc8 Video 2: ..."
+                  - tooltip "tooltip"
+                - generic [ref=e1493]:
+                  - generic [ref=e1494]:
+                    - generic [ref=e1495]: Summary
+                    - button "Louis Rossmann presents a comprehensive guide on building a sovereign cloud and self-managed infrastructure. Detailed documentation is provided for setting up servers, routers, and secure storage, aiming to reduce reliance on third-party services that track user data." [ref=e1500]
+                    - text: ·
+                  - button "More" [ref=e1505]
+            - generic [ref=e1510]:
+              - link [aria-hidden] [ref=e1512] [cursor=pointer]:
+                - /url: /watch?v=MLXKRJyxl2s&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1514] [cursor=pointer]:
+                - generic [ref=e1515]:
+                  - generic [ref=e1516]:
+                    - heading [level=3] [ref=e1517]:
+                      - link "What open-source intelligence tells us about the US bomber withdrawal from RAF Fairford 2 minutes, 2 seconds" [ref=e1518]:
+                        - /url: /watch?v=MLXKRJyxl2s&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: What open-source intelligence tells us about the US bomber withdrawal from RAF Fairford
+                    - button "Action menu" [ref=e1522]
+                  - generic [ref=e1528]:
+                    - generic [ref=e1529]: 14K
+                    - generic [ref=e1530]: •8h ago
+                - generic [ref=e1531]:
+                  - link "Go to channel Sky News" [ref=e1532]:
+                    - /url: /@SkyNews
+                  - generic [ref=e1533]:
+                    - link "Sky News" [ref=e1537]:
+                      - /url: /@SkyNews
+                    - img "Verified" [ref=e1542]
+                - generic [ref=e1546]:
+                  - text: Sky's data and forensics correspondent Tom Cheshire says plane spotters were quick to notice the US bombers leaving RAF ...
+                  - tooltip "tooltip"
+                - img "New" [ref=e1551]:
+                  - generic [aria-hidden] [ref=e1552]: New
+            - generic [ref=e1554]:
+              - link [aria-hidden] [ref=e1556] [cursor=pointer]:
+                - /url: /watch?v=x-WSSlHNcJQ&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1558] [cursor=pointer]:
+                - generic [ref=e1559]:
+                  - generic [ref=e1560]:
+                    - heading [level=3] [ref=e1561]:
+                      - link "New Open-Source AI Animation is Here! 13 minutes, 1 second" [ref=e1562]:
+                        - /url: /watch?v=x-WSSlHNcJQ&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: New Open-Source AI Animation is Here!
+                    - button "Action menu" [ref=e1566]
+                  - generic [ref=e1572]:
+                    - generic [ref=e1573]: 74K
+                    - generic [ref=e1574]: •1d ago
+                - generic [ref=e1575]:
+                  - button "Collaboration channels" [ref=e1577]
+                  - generic [ref=e1594]: PixelArtistry and Stefan 3D AI
+                - generic [ref=e1603]:
+                  - generic [ref=e1604]: I'm currently building a Trellis2 + Pixal3D Workflow Pack — an in-depth PDF guide + ComfyUI workflows for local, open-source 3D ...
+                  - tooltip "tooltip"
+                - generic [ref=e1606]:
+                  - img "New" [ref=e1609]:
+                    - generic [aria-hidden] [ref=e1610]: New
+                  - img "4K" [ref=e1613]:
+                    - generic [aria-hidden] [ref=e1614]: 4K
+                - generic [ref=e1617]:
+                  - generic [ref=e1618]:
+                    - generic [ref=e1621]: 15 chapters
+                    - button "Intro | Unimate — text-to-animation for any rigged character (open source) | Unimate capabilities (robots, creatures, birds, complex rigs) | Requirements (rigged character needed first) | Motion editing, in-betweening & motion expansion | Weights released + VisualBruno ComfyUI version coming soon | Licensing note — safe for education, hold for commercial use | Image to 3D Lab — Trellis 2 + Hunyuan3D on Mac | Opus 5.5, GPT-6.1 Sol & Gemini 4 — AI model roundup | Auto Unwrap — AI UV unwrapping Blender add-on ($15) | Smart Remesh — free AI retopology by same creator | Gemini 4 & Meta Horizon Create for AI game creation | BTC3D — detail enhancement for existing 3D models | Feeligree3D — new 3D paper | Outro" [ref=e1623]
+                  - button "More" [ref=e1628]
+            - generic [ref=e1633]:
+              - link [aria-hidden] [ref=e1635] [cursor=pointer]:
+                - /url: /watch?v=5QjPi6LxQXY&pp=ygULb3BlbiBzb3VyY2U%3D
+              - generic [ref=e1637] [cursor=pointer]:
+                - generic [ref=e1638]:
+                  - generic [ref=e1639]:
+                    - heading [level=3] [ref=e1640]:
+                      - link "8 open-source apps that replaced my subscriptions 13 minutes, 12 seconds" [ref=e1641]:
+                        - /url: /watch?v=5QjPi6LxQXY&pp=ygULb3BlbiBzb3VyY2U%3D
+                        - text: 8 open-source apps that replaced my subscriptions
+                    - button "Action menu" [ref=e1645]
+                  - generic [ref=e1651]:
+                    - generic [ref=e1652]: 390K
+                    - generic [ref=e1653]: •4mo ago
+                - generic [ref=e1654]:
+                  - link "Go to channel Reysu" [ref=e1655]:
+                    - /url: /@reysu
+                  - generic [ref=e1656]:
+                    - link "Reysu" [ref=e1660]:
+                      - /url: /@reysu
+                    - img "Verified" [ref=e1665]
+                - generic [ref=e1669]:
+                  - text: Some of you guys commented that I should make a video about my self hosting/homelab setup. If you're not familiar with it I also ...
+                  - tooltip "tooltip"
+                - generic [ref=e1672]:
+                  - generic [ref=e1673]:
+                    - generic [ref=e1676]: 12 chapters
+                    - 'button "This computer replaced my most annoying subscriptions | Self Hosting explained in 2 minutes | This app replaced Google/Apple Photos (Immich) | Hosted my own data instead of Google Drive/Dropbox | My own media server for home videos and content I own (Jellyfin) | My local and secure ChatGPT replacement | My local and secure Password Manager | This app saved me from hidden trackers and ads | This app tracks your location (for your own usage) | I replaced infinite scrolling feeds with this | my full home lab setup (75TB) | Warning: Main downsides of doing this (3 things)" [ref=e1678]'
+                  - button "More" [ref=e1683]
+      - text: •
+  - generic [ref=e1712]:
+    - link "YouTube Video Player":
+      - /url: https://www.googleadservices.com/pagead/aclk?sa=L&ai=Chm47O43EarzCHpL7v8IPy6eW8APxxsD8iQHamMu_xRawkB8QASAAYKuBgICsBoIBF2NhLXB1Yi02MjE5ODExNzQ3MDQ5MzcxoAGt6pm8AqgDBMgDCqoEnQJP0EVLohCX9m-3sIJxrnduRhuBE55npvNCec3BqfH-V0RG51CSfHCQxilnLUd5ffHuQGEPBd9axYgAMfcJUuwX00fCwaeXRjDqsWBVyzwmsTmN80idlipNpKJNqZV3eq2brOKknDeeZaXoszF_NlMtNeQWDFIvCOxu_LAct-oEn8A8x-G7b97K7e_hwALstjbiFq8UCj5w3-u7xHLeaiGGoQsboAKQkqXn80QoQdr_c7MkXSglZ8ENakbTHQAssoMbMCDT_B_RVdIfGkbbJba1BAkIoGo-kYnOyqO7wt3N2KBZNh0_9B74PxuzaQK3eJmBGDWj0UTEOumc60JG3cSgtPfSn0MRg7Dh4ZtPrnpIhDTZyuFFgnkrg6cOcj6IBaypjsVakgUICBN4r9yRxAGgBqEBgAe7lebDAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH-dOxAqgHydqxAqgHqeCxAqgHptSxAqgHqNIbqAex3BuoB7CbsQKoB66xsQKoB_2ysQKoB8jPsQKoB8nPsQKoB83HsQKoB_HRsQKoB_zVsQKoB_vVsQKoB4zWsQKoB4vWsQKoB5risQKoB5visQKoB53XsQKoB7zqsQKoB53UsQKoB4HGG6gH_K-xAqgH1c4bqAe-2bECqAerxRuoB5zcG6gHt6GxAqgH1amxAqgH59qxAqgH3rWxApIIC1hRY3ppY0tGNGlrqAgB0gguCIBBEAEYXjICggI6D4BCgMCAgICAgIACqoCAGEjZoNI1UBRYgO6joNqklwNgAZoJHmh0dHBzOi8vYm90LmFiYWN1cy5haS9nYWRzYm90M7EJzkEJn20eYaDICRfICY8ByAnCAcgJlwKYCwG6Cz0IAxAFGAQgBygBMBxAAUgAWH1gAGgAcAGIAQCYAQGiAQgKAKgCAdgCAqgBAdgBAYACAYgCBboDBXZpY2Jm0AsSogwMKgoKCJXisQKO37EC0gwCEAGaDQESqg0CQ0_IDQHSDUZodHRwczovL2JvdC5hYmFjdXMuYWkvZ2Fkc2JvdDM_Z2FkX3NvdXJjZT0yJmdhZF9jYW1wYWlnbmlkPTI0MzA0MTI5MTk2uBP___________8BsBQDwBWBgIBA0BUB2BUBmBYB4hYCCAGAFwGKFxgIAxgBIAEoATABOAFAAUgBUAFYAWACaAGgFwGpF7MgPj0uadsJuhcGKAAwADgB0BgB8BgBwhkCCAE&gclid=EAIaIQobChMI_MukoNqklwMVkv1PAh3LkwU-EAEYASAAEgJ4nvD_BwE&num=1&cid=CAASqwHkaHeiqfMQwCiq4UkhUGgfMIb4HtRKQFbnSHkTA31_ZGFhfKIh7Q_Y_f2pnY4m-PvlDdh6JCD2pf-3kbhBSILiRpVJ_38aoSdvvdQSWcB4Q_9V4JNwP1hSbTQt7yhwIIW5W7SA0yio-76Ew-tPeFfu2yKraxtRtZql7Ie2nAFmMHq40SbwB89waKqraunjcTXSwFhJCNbF-ov9qdYuNVJ7tpNwucv6iGYRW50&ad_cpn=%5BCPN%5D&sig=AOD64_1WNks-0i8TcLmL6A4T1gBOSzQueA&ctype=110&video_id=XQczicKF4ik&label=video_click_to_advertiser_site&ms=%5BCLICK_MS%5D&nb=21&nx=%5BNX%5D&ny=%5BNY%5D&dim=%5BDIM%5D
+      - generic "YouTube Video Player" [ref=e1717]
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic [ref=e1719]:
+              - button "Unmute" [ref=e1724] [cursor=pointer]
+              - button "Subtitles/CC turned on" [pressed] [ref=e1733] [cursor=pointer]
+            - generic:
+              - generic "Time elapsed 0:03": 0:32

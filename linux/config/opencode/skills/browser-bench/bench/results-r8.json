@@ -1,0 +1,2426 @@
+[
+  {
+    "backend": "agent-browser",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 3387,
+    "total_ms": 3548,
+    "roundtrips": 6,
+    "snapshot_chars": 172,
+    "est_tokens": 43,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:33:41.386Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 3737,
+    "total_ms": 3897,
+    "roundtrips": 6,
+    "snapshot_chars": 172,
+    "est_tokens": 43,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:33:45.284Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 3628,
+    "total_ms": 3792,
+    "roundtrips": 6,
+    "snapshot_chars": 172,
+    "est_tokens": 43,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:33:49.076Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8498,
+    "total_ms": 8711,
+    "roundtrips": 10,
+    "snapshot_chars": 737,
+    "est_tokens": 185,
+    "detail": "3 titulos ref=e12 url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "What Is Open Source?",
+        "Paying for software is stupid… 10 free and open-source SaaS replacements"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:33:57.787Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8881,
+    "total_ms": 9046,
+    "roundtrips": 10,
+    "snapshot_chars": 750,
+    "est_tokens": 188,
+    "detail": "3 titulos ref=e12 url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "Contributing To Open Source – Beginner's Guide",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:06.833Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 7939,
+    "total_ms": 8196,
+    "roundtrips": 10,
+    "snapshot_chars": 711,
+    "est_tokens": 178,
+    "detail": "3 titulos ref=e12 url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "What Is Open Source?",
+        "Open Source Explained",
+        "Contributing To Open Source – Beginner's Guide"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:15.029Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 3828,
+    "total_ms": 3992,
+    "roundtrips": 5,
+    "snapshot_chars": 13908,
+    "est_tokens": 3477,
+    "detail": "322 interactive refs",
+    "data": {
+      "count": 322
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:19.022Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 3724,
+    "total_ms": 3887,
+    "roundtrips": 5,
+    "snapshot_chars": 13908,
+    "est_tokens": 3477,
+    "detail": "322 interactive refs",
+    "data": {
+      "count": 322
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:22.909Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 3957,
+    "total_ms": 4124,
+    "roundtrips": 5,
+    "snapshot_chars": 13908,
+    "est_tokens": 3477,
+    "detail": "322 interactive refs",
+    "data": {
+      "count": 322
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:27.033Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 6021,
+    "total_ms": 6180,
+    "roundtrips": 5,
+    "snapshot_chars": 7104,
+    "est_tokens": 1776,
+    "detail": "129 interactive refs",
+    "data": {
+      "count": 129
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:33.212Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 4383,
+    "total_ms": 4544,
+    "roundtrips": 5,
+    "snapshot_chars": 7193,
+    "est_tokens": 1799,
+    "detail": "131 interactive refs",
+    "data": {
+      "count": 131
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:37.757Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 4233,
+    "total_ms": 4341,
+    "roundtrips": 5,
+    "snapshot_chars": 7193,
+    "est_tokens": 1799,
+    "detail": "131 interactive refs",
+    "data": {
+      "count": 131
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:42.098Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 616,
+    "roundtrips": 2,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "excepcion: Invalid URL",
+    "data": null,
+    "error": "Invalid URL",
+    "ts": "2026-10-06T14:34:42.713Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 610,
+    "roundtrips": 2,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "excepcion: Invalid URL",
+    "data": null,
+    "error": "Invalid URL",
+    "ts": "2026-10-06T14:34:43.323Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 579,
+    "roundtrips": 2,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "excepcion: Invalid URL",
+    "data": null,
+    "error": "Invalid URL",
+    "ts": "2026-10-06T14:34:43.901Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 3413,
+    "total_ms": 3573,
+    "roundtrips": 9,
+    "snapshot_chars": 248,
+    "est_tokens": 62,
+    "detail": "6 items ref=e2",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:47.474Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 3710,
+    "total_ms": 3872,
+    "roundtrips": 9,
+    "snapshot_chars": 248,
+    "est_tokens": 62,
+    "detail": "6 items ref=e2",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:51.346Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 3702,
+    "total_ms": 3865,
+    "roundtrips": 9,
+    "snapshot_chars": 248,
+    "est_tokens": 62,
+    "detail": "6 items ref=e2",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:34:55.212Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 9400,
+    "total_ms": 9400,
+    "roundtrips": 1,
+    "snapshot_chars": 559,
+    "est_tokens": 140,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain",
+      "hasDoc": true
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:04.612Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 2149,
+    "total_ms": 2149,
+    "roundtrips": 1,
+    "snapshot_chars": 559,
+    "est_tokens": 140,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain",
+      "hasDoc": true
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:06.761Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1204,
+    "total_ms": 1204,
+    "roundtrips": 1,
+    "snapshot_chars": 559,
+    "est_tokens": 140,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain",
+      "hasDoc": true
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:07.965Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 5868,
+    "roundtrips": 1,
+    "snapshot_chars": 2731,
+    "est_tokens": 683,
+    "detail": "2 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Watch",
+        "32:14\\n"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:13.834Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 5220,
+    "roundtrips": 1,
+    "snapshot_chars": 2391,
+    "est_tokens": 598,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:19.053Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 6063,
+    "roundtrips": 1,
+    "snapshot_chars": 2391,
+    "est_tokens": 598,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:25.117Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2889,
+    "total_ms": 2889,
+    "roundtrips": 1,
+    "snapshot_chars": 1418,
+    "est_tokens": 355,
+    "detail": "17 items",
+    "data": {
+      "count": 17
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:28.006Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2484,
+    "total_ms": 2484,
+    "roundtrips": 1,
+    "snapshot_chars": 1418,
+    "est_tokens": 355,
+    "detail": "17 items",
+    "data": {
+      "count": 17
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:30.490Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2464,
+    "total_ms": 2464,
+    "roundtrips": 1,
+    "snapshot_chars": 1418,
+    "est_tokens": 355,
+    "detail": "17 items",
+    "data": {
+      "count": 17
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:32.954Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 3461,
+    "total_ms": 3461,
+    "roundtrips": 1,
+    "snapshot_chars": 2074,
+    "est_tokens": 519,
+    "detail": "31 items",
+    "data": {
+      "count": 31
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:36.416Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 3113,
+    "total_ms": 3113,
+    "roundtrips": 1,
+    "snapshot_chars": 2074,
+    "est_tokens": 519,
+    "detail": "31 items",
+    "data": {
+      "count": 31
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:39.529Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2898,
+    "total_ms": 2898,
+    "roundtrips": 1,
+    "snapshot_chars": 2074,
+    "est_tokens": 519,
+    "detail": "31 items",
+    "data": {
+      "count": 31
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:42.427Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "auth_roundtrip",
+    "success": true,
+    "t_first_useful_ms": 2348,
+    "total_ms": 2348,
+    "roundtrips": 3,
+    "snapshot_chars": 1438,
+    "est_tokens": 360,
+    "detail": "login=true persist_tras_reinicio=true",
+    "data": {
+      "aOk": true,
+      "bOk": true
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:44.775Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "auth_roundtrip",
+    "success": true,
+    "t_first_useful_ms": 2345,
+    "total_ms": 2345,
+    "roundtrips": 3,
+    "snapshot_chars": 1293,
+    "est_tokens": 324,
+    "detail": "login=true persist_tras_reinicio=true",
+    "data": {
+      "aOk": true,
+      "bOk": true
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:47.119Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "auth_roundtrip",
+    "success": true,
+    "t_first_useful_ms": 2330,
+    "total_ms": 2330,
+    "roundtrips": 3,
+    "snapshot_chars": 1293,
+    "est_tokens": 324,
+    "detail": "login=true persist_tras_reinicio=true",
+    "data": {
+      "aOk": true,
+      "bOk": true
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:49.449Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2082,
+    "total_ms": 2082,
+    "roundtrips": 1,
+    "snapshot_chars": 664,
+    "est_tokens": 166,
+    "detail": "6 items url=http://127.0.0.1:38543/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:51.532Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2092,
+    "total_ms": 2092,
+    "roundtrips": 1,
+    "snapshot_chars": 664,
+    "est_tokens": 166,
+    "detail": "6 items url=http://127.0.0.1:38543/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:53.624Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2815,
+    "total_ms": 2815,
+    "roundtrips": 1,
+    "snapshot_chars": 664,
+    "est_tokens": 166,
+    "detail": "6 items url=http://127.0.0.1:38543/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:56.439Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 2020,
+    "total_ms": 2104,
+    "roundtrips": 4,
+    "snapshot_chars": 2373,
+    "est_tokens": 594,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T14:35:58.543Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1511,
+    "total_ms": 1600,
+    "roundtrips": 4,
+    "snapshot_chars": 2373,
+    "est_tokens": 594,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:00.142Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1558,
+    "total_ms": 1639,
+    "roundtrips": 4,
+    "snapshot_chars": 2373,
+    "est_tokens": 594,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:01.782Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8936,
+    "total_ms": 9061,
+    "roundtrips": 6,
+    "snapshot_chars": 5388,
+    "est_tokens": 1347,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "The Open Source Internet Is Here",
+        "DITCH Big Tech? The 50 BEST Open Source Apps (Windows/MacOS/Linux)"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:10.843Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8580,
+    "total_ms": 8722,
+    "roundtrips": 6,
+    "snapshot_chars": 5515,
+    "est_tokens": 1379,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "Contributing To Open Source – Beginner's Guide",
+        "Open Source Explained",
+        "The Open Source Internet Is Here"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:19.564Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 12904,
+    "total_ms": 13097,
+    "roundtrips": 6,
+    "snapshot_chars": 5535,
+    "est_tokens": 1384,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "Open Source Explained",
+        "DITCH Big Tech? The 50 BEST Open Source Apps (Windows/MacOS/Linux)"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:32.662Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2016,
+    "total_ms": 2103,
+    "roundtrips": 3,
+    "snapshot_chars": 39364,
+    "est_tokens": 9841,
+    "detail": "752 items snapshot_chars=39272",
+    "data": {
+      "items": 752,
+      "snapshot_chars": 39272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:34.765Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 1833,
+    "total_ms": 1916,
+    "roundtrips": 3,
+    "snapshot_chars": 39364,
+    "est_tokens": 9841,
+    "detail": "752 items snapshot_chars=39272",
+    "data": {
+      "items": 752,
+      "snapshot_chars": 39272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:36.681Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2120,
+    "total_ms": 2235,
+    "roundtrips": 3,
+    "snapshot_chars": 39364,
+    "est_tokens": 9841,
+    "detail": "752 items snapshot_chars=39272",
+    "data": {
+      "items": 752,
+      "snapshot_chars": 39272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:38.916Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 4142,
+    "total_ms": 4304,
+    "roundtrips": 3,
+    "snapshot_chars": 60285,
+    "est_tokens": 15072,
+    "detail": "1366 items snapshot_chars=60198",
+    "data": {
+      "items": 1366,
+      "snapshot_chars": 60198
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:43.221Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 3699,
+    "total_ms": 3838,
+    "roundtrips": 3,
+    "snapshot_chars": 59660,
+    "est_tokens": 14915,
+    "detail": "1361 items snapshot_chars=59573",
+    "data": {
+      "items": 1361,
+      "snapshot_chars": 59573
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:47.059Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 3621,
+    "total_ms": 3763,
+    "roundtrips": 3,
+    "snapshot_chars": 59660,
+    "est_tokens": 14915,
+    "detail": "1361 items snapshot_chars=59573",
+    "data": {
+      "items": 1361,
+      "snapshot_chars": 59573
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:50.822Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1123,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:36:51.945Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 894,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:36:52.840Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 622,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:36:53.462Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2534,
+    "total_ms": 2649,
+    "roundtrips": 5,
+    "snapshot_chars": 517,
+    "est_tokens": 130,
+    "detail": "6 items uid=1_2",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:56.111Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 3538,
+    "total_ms": 3665,
+    "roundtrips": 5,
+    "snapshot_chars": 517,
+    "est_tokens": 130,
+    "detail": "6 items uid=1_2",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:36:59.776Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 3507,
+    "total_ms": 3637,
+    "roundtrips": 5,
+    "snapshot_chars": 517,
+    "est_tokens": 130,
+    "detail": "6 items uid=1_2",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:03.413Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 2932,
+    "total_ms": 3011,
+    "roundtrips": 3,
+    "snapshot_chars": 2793,
+    "est_tokens": 699,
+    "detail": "title=\"Example Domain\" eval_chars=1150 snap_chars=1272",
+    "data": {
+      "title": "Example Domain",
+      "text": "This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\n\nهذا النطاق مُخصص للاستخدام في أمثلة التوثي",
+      "snapshotChars": 1272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:06.424Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1945,
+    "total_ms": 1995,
+    "roundtrips": 3,
+    "snapshot_chars": 2793,
+    "est_tokens": 699,
+    "detail": "title=\"Example Domain\" eval_chars=1150 snap_chars=1272",
+    "data": {
+      "title": "Example Domain",
+      "text": "This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\n\nهذا النطاق مُخصص للاستخدام في أمثلة التوثي",
+      "snapshotChars": 1272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:08.419Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1711,
+    "total_ms": 1768,
+    "roundtrips": 3,
+    "snapshot_chars": 2793,
+    "est_tokens": 699,
+    "detail": "title=\"Example Domain\" eval_chars=1150 snap_chars=1272",
+    "data": {
+      "title": "Example Domain",
+      "text": "This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\n\nهذا النطاق مُخصص للاستخدام في أمثلة التوثي",
+      "snapshotChars": 1272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:10.187Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 14585,
+    "total_ms": 14666,
+    "roundtrips": 5,
+    "snapshot_chars": 2025,
+    "est_tokens": 507,
+    "detail": "3 titulos ref=e18",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "Open Source Explained",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:24.853Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 13571,
+    "total_ms": 13711,
+    "roundtrips": 5,
+    "snapshot_chars": 3392,
+    "est_tokens": 848,
+    "detail": "3 titulos ref=e34",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "I used Open Source Apps for 200 days. Here are my favorites",
+        "Open Source Explained"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:38.564Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 11823,
+    "total_ms": 11961,
+    "roundtrips": 5,
+    "snapshot_chars": 3130,
+    "est_tokens": 783,
+    "detail": "3 titulos ref=e45",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "I used Open Source Apps for 200 days. Here are my favorites",
+        "Contributing To Open Source – Beginner's Guide"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:50.525Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 3014,
+    "total_ms": 3100,
+    "roundtrips": 2,
+    "snapshot_chars": 48422,
+    "est_tokens": 12106,
+    "detail": "620 items via snapshot snap_chars=48146",
+    "data": {
+      "items": 620,
+      "mode": "snapshot",
+      "snapshotChars": 48146
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:53.625Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2995,
+    "total_ms": 3079,
+    "roundtrips": 2,
+    "snapshot_chars": 48422,
+    "est_tokens": 12106,
+    "detail": "620 items via snapshot snap_chars=48146",
+    "data": {
+      "items": 620,
+      "mode": "snapshot",
+      "snapshotChars": 48146
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:56.704Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2317,
+    "total_ms": 2386,
+    "roundtrips": 2,
+    "snapshot_chars": 48422,
+    "est_tokens": 12106,
+    "detail": "620 items via snapshot snap_chars=48146",
+    "data": {
+      "items": 620,
+      "mode": "snapshot",
+      "snapshotChars": 48146
+    },
+    "error": null,
+    "ts": "2026-10-06T14:37:59.090Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 3024,
+    "total_ms": 3089,
+    "roundtrips": 2,
+    "snapshot_chars": 47457,
+    "est_tokens": 11865,
+    "detail": "525 items via snapshot snap_chars=47189",
+    "data": {
+      "items": 525,
+      "mode": "snapshot",
+      "snapshotChars": 47189
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:02.180Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2298,
+    "total_ms": 2357,
+    "roundtrips": 2,
+    "snapshot_chars": 47457,
+    "est_tokens": 11865,
+    "detail": "525 items via snapshot snap_chars=47189",
+    "data": {
+      "items": 525,
+      "mode": "snapshot",
+      "snapshotChars": 47189
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:04.537Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2331,
+    "total_ms": 2392,
+    "roundtrips": 2,
+    "snapshot_chars": 47457,
+    "est_tokens": 11865,
+    "detail": "525 items via snapshot snap_chars=47189",
+    "data": {
+      "items": 525,
+      "mode": "snapshot",
+      "snapshotChars": 47189
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:06.929Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 803,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:38:07.732Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 805,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:38:08.537Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 793,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:38:09.330Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 3314,
+    "total_ms": 3390,
+    "roundtrips": 5,
+    "snapshot_chars": 1266,
+    "est_tokens": 317,
+    "detail": "6 items ref=e3",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:12.721Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 4237,
+    "total_ms": 4316,
+    "roundtrips": 5,
+    "snapshot_chars": 1266,
+    "est_tokens": 317,
+    "detail": "6 items ref=e3",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:17.037Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 3996,
+    "total_ms": 4076,
+    "roundtrips": 5,
+    "snapshot_chars": 1266,
+    "est_tokens": 317,
+    "detail": "6 items ref=e3",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:21.113Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 2510,
+    "total_ms": 2650,
+    "roundtrips": 4,
+    "snapshot_chars": 2607,
+    "est_tokens": 652,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:23.763Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1887,
+    "total_ms": 1988,
+    "roundtrips": 4,
+    "snapshot_chars": 2607,
+    "est_tokens": 652,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:25.750Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1483,
+    "total_ms": 1573,
+    "roundtrips": 4,
+    "snapshot_chars": 2607,
+    "est_tokens": 652,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:27.323Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8680,
+    "total_ms": 8795,
+    "roundtrips": 6,
+    "snapshot_chars": 5655,
+    "est_tokens": 1414,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "Open Source Explained",
+        "DigitalOcean Ends the Open Source Credits Program"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:36.118Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8880,
+    "total_ms": 9007,
+    "roundtrips": 6,
+    "snapshot_chars": 5812,
+    "est_tokens": 1453,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "Open Source Explained",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:45.125Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8417,
+    "total_ms": 8526,
+    "roundtrips": 6,
+    "snapshot_chars": 5789,
+    "est_tokens": 1448,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "Open Source Is Beating Paid Mac Apps",
+        "Open Source Explained"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:53.651Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2021,
+    "total_ms": 2135,
+    "roundtrips": 3,
+    "snapshot_chars": 39520,
+    "est_tokens": 9880,
+    "detail": "230 items snapshot_chars=39272",
+    "data": {
+      "items": 230,
+      "snapshot_chars": 39272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:55.786Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2111,
+    "total_ms": 2201,
+    "roundtrips": 3,
+    "snapshot_chars": 39520,
+    "est_tokens": 9880,
+    "detail": "230 items snapshot_chars=39272",
+    "data": {
+      "items": 230,
+      "snapshot_chars": 39272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:38:57.987Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 1928,
+    "total_ms": 2033,
+    "roundtrips": 3,
+    "snapshot_chars": 39520,
+    "est_tokens": 9880,
+    "detail": "230 items snapshot_chars=39272",
+    "data": {
+      "items": 230,
+      "snapshot_chars": 39272
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:00.020Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2667,
+    "total_ms": 2767,
+    "roundtrips": 3,
+    "snapshot_chars": 60438,
+    "est_tokens": 15110,
+    "detail": "92 items snapshot_chars=60198",
+    "data": {
+      "items": 92,
+      "snapshot_chars": 60198
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:02.787Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2533,
+    "total_ms": 2633,
+    "roundtrips": 3,
+    "snapshot_chars": 60438,
+    "est_tokens": 15110,
+    "detail": "92 items snapshot_chars=60198",
+    "data": {
+      "items": 92,
+      "snapshot_chars": 60198
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:05.420Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2493,
+    "total_ms": 2590,
+    "roundtrips": 3,
+    "snapshot_chars": 60438,
+    "est_tokens": 15110,
+    "detail": "92 items snapshot_chars=60198",
+    "data": {
+      "items": 92,
+      "snapshot_chars": 60198
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:08.010Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 550,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:39:08.560Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 560,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:39:09.120Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 547,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:39:09.667Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2540,
+    "total_ms": 2621,
+    "roundtrips": 5,
+    "snapshot_chars": 691,
+    "est_tokens": 173,
+    "detail": "6 items",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:12.288Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2823,
+    "total_ms": 2925,
+    "roundtrips": 5,
+    "snapshot_chars": 691,
+    "est_tokens": 173,
+    "detail": "6 items",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:15.213Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2746,
+    "total_ms": 2833,
+    "roundtrips": 5,
+    "snapshot_chars": 691,
+    "est_tokens": 173,
+    "detail": "6 items",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:18.046Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1316,
+    "total_ms": 1701,
+    "roundtrips": 0,
+    "snapshot_chars": 983,
+    "est_tokens": 246,
+    "detail": "title=\"Example Domain\" textLen=917",
+    "data": {
+      "title": "Example Domain",
+      "textLen": 917
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:19.747Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1218,
+    "total_ms": 1582,
+    "roundtrips": 0,
+    "snapshot_chars": 983,
+    "est_tokens": 246,
+    "detail": "title=\"Example Domain\" textLen=917",
+    "data": {
+      "title": "Example Domain",
+      "textLen": 917
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:21.329Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1013,
+    "total_ms": 1367,
+    "roundtrips": 0,
+    "snapshot_chars": 983,
+    "est_tokens": 246,
+    "detail": "title=\"Example Domain\" textLen=917",
+    "data": {
+      "title": "Example Domain",
+      "textLen": 917
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:22.696Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 5106,
+    "total_ms": 5155,
+    "roundtrips": 0,
+    "snapshot_chars": 272,
+    "est_tokens": 68,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "The Open Source Internet Is Here",
+        "What Is Open Source?"
+      ],
+      "url": "https://www.youtube.com/results?search_query=open+source"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:27.851Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 3841,
+    "total_ms": 3883,
+    "roundtrips": 0,
+    "snapshot_chars": 307,
+    "est_tokens": 77,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "The Best Open Source Tools for Developers",
+        "Contributing To Open Source – Beginner's Guide"
+      ],
+      "url": "https://www.youtube.com/results?search_query=open+source"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:31.734Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 4827,
+    "total_ms": 4877,
+    "roundtrips": 0,
+    "snapshot_chars": 298,
+    "est_tokens": 75,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "Contributing To Open Source – Beginner's Guide",
+        "The Open Source Internet Is Here"
+      ],
+      "url": "https://www.youtube.com/results?search_query=open+source"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:36.612Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2645,
+    "total_ms": 2778,
+    "roundtrips": 0,
+    "snapshot_chars": 2390,
+    "est_tokens": 598,
+    "detail": "80 items (min 12)",
+    "data": {
+      "items": [
+        "Hacker News",
+        "new",
+        "past",
+        "comments",
+        "ask",
+        "show",
+        "jobs",
+        "submit",
+        "login",
+        "Mistral Large 4",
+        "mistral.ai",
+        "Philpax",
+        "1 hour ago",
+        "hide",
+        "243 comments",
+        "Mistral Large 4: \"Le Chonk\"",
+        "j-bu",
+        "25 comments",
+        "Release of Polars 2.0",
+        "pola.rs",
+        "simicd",
+        "2 hours ago",
+        "22 comments",
+        "Nobel Prize in Physics goes to Francis Halzen",
+        "nobelprize.org",
+        "solarist",
+        "4 hours ago",
+        "77 comments",
+        "Tapo (Rust/Python library) now speaks TP-Link's TPAP protocol",
+        "dinculescu.dev",
+        "faithraven",
+        "43 minutes ago",
+        "2 comments",
+        "JetBrains reported a net financial loss first time in its tracked history",
+        "helgilibrary.com",
+        "thw_9a83c",
+        "278 comments",
+        "Show HN: Parseable, an open observability datalake, handles 100M time-series/min",
+        "parseable.com",
+        "yashdotrv",
+        "Meta's Muse Is an Adorable Privacy and Security Dumpster Fire",
+        "techdirt.com",
+        "beardyw",
+        "33 comments",
+        "Mathematics of Geothermal Energy",
+        "ebsco.com",
+        "srameshc",
+        "5 comments",
+        "Gleam doesn't compile to Erlang source anymore",
+        "gleam.run",
+        "ingve",
+        "6 hours ago",
+        "44 comments",
+        "Benchmark in Milliseconds",
+        "matklad.github.io",
+        "surprisetalk",
+        "discuss",
+        "Show HN: Jotbus – a shared encrypted scratchpad for coding agents",
+        "jotbus.com",
+        "shake-n-fries",
+        "54 minutes ago",
+        "3 comments",
+        "Nature's capacity to 'bounce back' when species are lost is vastly overestimated",
+        "phys.org",
+        "pseudolus",
+        "3 hours ago",
+        "53 comments",
+        "Beam: Reflection's 501B open-weight model",
+        "reflection.ai",
+        "19 hours ago",
+        "160 comments",
+        "World's First enhanced geothermal power plant completed in just 23 months",
+        "techcrunch.com",
+        "hochmartinez",
+        "13 comments",
+        "Find the flattest route between any two points in SF",
+        "flattensf.com",
+        "ishan0102",
+        "16 hours ago",
+        "87 comments"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:39.389Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 3092,
+    "total_ms": 3244,
+    "roundtrips": 0,
+    "snapshot_chars": 2390,
+    "est_tokens": 598,
+    "detail": "80 items (min 12)",
+    "data": {
+      "items": [
+        "Hacker News",
+        "new",
+        "past",
+        "comments",
+        "ask",
+        "show",
+        "jobs",
+        "submit",
+        "login",
+        "Mistral Large 4",
+        "mistral.ai",
+        "Philpax",
+        "1 hour ago",
+        "hide",
+        "243 comments",
+        "Mistral Large 4: \"Le Chonk\"",
+        "j-bu",
+        "25 comments",
+        "Release of Polars 2.0",
+        "pola.rs",
+        "simicd",
+        "2 hours ago",
+        "22 comments",
+        "Nobel Prize in Physics goes to Francis Halzen",
+        "nobelprize.org",
+        "solarist",
+        "4 hours ago",
+        "77 comments",
+        "Tapo (Rust/Python library) now speaks TP-Link's TPAP protocol",
+        "dinculescu.dev",
+        "faithraven",
+        "43 minutes ago",
+        "2 comments",
+        "JetBrains reported a net financial loss first time in its tracked history",
+        "helgilibrary.com",
+        "thw_9a83c",
+        "278 comments",
+        "Show HN: Parseable, an open observability datalake, handles 100M time-series/min",
+        "parseable.com",
+        "yashdotrv",
+        "Meta's Muse Is an Adorable Privacy and Security Dumpster Fire",
+        "techdirt.com",
+        "beardyw",
+        "33 comments",
+        "Mathematics of Geothermal Energy",
+        "ebsco.com",
+        "srameshc",
+        "5 comments",
+        "Gleam doesn't compile to Erlang source anymore",
+        "gleam.run",
+        "ingve",
+        "6 hours ago",
+        "44 comments",
+        "Benchmark in Milliseconds",
+        "matklad.github.io",
+        "surprisetalk",
+        "discuss",
+        "Show HN: Jotbus – a shared encrypted scratchpad for coding agents",
+        "jotbus.com",
+        "shake-n-fries",
+        "54 minutes ago",
+        "3 comments",
+        "Nature's capacity to 'bounce back' when species are lost is vastly overestimated",
+        "phys.org",
+        "pseudolus",
+        "3 hours ago",
+        "53 comments",
+        "Beam: Reflection's 501B open-weight model",
+        "reflection.ai",
+        "19 hours ago",
+        "160 comments",
+        "World's First enhanced geothermal power plant completed in just 23 months",
+        "techcrunch.com",
+        "hochmartinez",
+        "13 comments",
+        "Find the flattest route between any two points in SF",
+        "flattensf.com",
+        "ishan0102",
+        "16 hours ago",
+        "87 comments"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:42.633Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 3260,
+    "total_ms": 3401,
+    "roundtrips": 0,
+    "snapshot_chars": 2390,
+    "est_tokens": 598,
+    "detail": "80 items (min 12)",
+    "data": {
+      "items": [
+        "Hacker News",
+        "new",
+        "past",
+        "comments",
+        "ask",
+        "show",
+        "jobs",
+        "submit",
+        "login",
+        "Mistral Large 4",
+        "mistral.ai",
+        "Philpax",
+        "1 hour ago",
+        "hide",
+        "243 comments",
+        "Mistral Large 4: \"Le Chonk\"",
+        "j-bu",
+        "25 comments",
+        "Release of Polars 2.0",
+        "pola.rs",
+        "simicd",
+        "2 hours ago",
+        "22 comments",
+        "Nobel Prize in Physics goes to Francis Halzen",
+        "nobelprize.org",
+        "solarist",
+        "4 hours ago",
+        "77 comments",
+        "Tapo (Rust/Python library) now speaks TP-Link's TPAP protocol",
+        "dinculescu.dev",
+        "faithraven",
+        "43 minutes ago",
+        "2 comments",
+        "JetBrains reported a net financial loss first time in its tracked history",
+        "helgilibrary.com",
+        "thw_9a83c",
+        "278 comments",
+        "Show HN: Parseable, an open observability datalake, handles 100M time-series/min",
+        "parseable.com",
+        "yashdotrv",
+        "Meta's Muse Is an Adorable Privacy and Security Dumpster Fire",
+        "techdirt.com",
+        "beardyw",
+        "33 comments",
+        "Mathematics of Geothermal Energy",
+        "ebsco.com",
+        "srameshc",
+        "5 comments",
+        "Gleam doesn't compile to Erlang source anymore",
+        "gleam.run",
+        "ingve",
+        "6 hours ago",
+        "44 comments",
+        "Benchmark in Milliseconds",
+        "matklad.github.io",
+        "surprisetalk",
+        "discuss",
+        "Show HN: Jotbus – a shared encrypted scratchpad for coding agents",
+        "jotbus.com",
+        "shake-n-fries",
+        "54 minutes ago",
+        "3 comments",
+        "Nature's capacity to 'bounce back' when species are lost is vastly overestimated",
+        "phys.org",
+        "pseudolus",
+        "3 hours ago",
+        "53 comments",
+        "Beam: Reflection's 501B open-weight model",
+        "reflection.ai",
+        "19 hours ago",
+        "160 comments",
+        "World's First enhanced geothermal power plant completed in just 23 months",
+        "techcrunch.com",
+        "hochmartinez",
+        "13 comments",
+        "Find the flattest route between any two points in SF",
+        "flattensf.com",
+        "ishan0102",
+        "16 hours ago",
+        "87 comments"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:46.034Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 3262,
+    "total_ms": 3382,
+    "roundtrips": 0,
+    "snapshot_chars": 2185,
+    "est_tokens": 547,
+    "detail": "80 items (min 12)",
+    "data": {
+      "items": [
+        "React",
+        "v19.3",
+        "Search⌘CtrlK",
+        "Learn",
+        "Reference",
+        "Community",
+        "Blog",
+        "Use Light Mode",
+        "Translations",
+        "Open on GitHub",
+        "GET STARTED",
+        "Quick Start",
+        "Tutorial: Tic-Tac-Toe",
+        "Thinking in React",
+        "Installation",
+        "Setup",
+        "React Compiler",
+        "LEARN REACT",
+        "Describing the UI",
+        "Adding Interactivity",
+        "Managing State",
+        "Escape Hatches",
+        "Learn React",
+        "Copy pageCopy",
+        "You will learn",
+        "Creating and nesting components",
+        "Link for Creating and nesting components",
+        "App.js",
+        "Download",
+        "Reload",
+        "Clear",
+        "Fork",
+        "Show more",
+        "MDN",
+        "javascript.info",
+        "Writing markup with JSX",
+        "Link for Writing markup with JSX",
+        "tools we recommend for local development",
+        "online converter.",
+        "Adding styles",
+        "Link for Adding styles",
+        "class",
+        "<link>",
+        "Displaying data",
+        "Link for Displaying data",
+        "string concatenation",
+        "Conditional rendering",
+        "Link for Conditional rendering",
+        "if",
+        "conditional ? operator.",
+        "logical && syntax",
+        "Rendering lists",
+        "Link for Rendering lists",
+        "for loop",
+        "array map() function",
+        "Responding to events",
+        "Link for Responding to events",
+        "Updating the screen",
+        "Link for Updating the screen",
+        "useState",
+        "Using Hooks",
+        "Link for Using Hooks",
+        "API reference.",
+        "Sharing data between components",
+        "Link for Sharing data between components",
+        "Next Steps",
+        "Link for Next Steps",
+        "Tutorial",
+        "NextTutorial: Tic-Tac-Toe",
+        "Meta Open Source",
+        "API Reference",
+        "React APIs",
+        "React DOM APIs",
+        "Code of Conduct",
+        "Meet the Team",
+        "Docs Contributors",
+        "Acknowledgements",
+        "React Native",
+        "Privacy",
+        "Terms"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:49.416Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2471,
+    "total_ms": 2528,
+    "roundtrips": 0,
+    "snapshot_chars": 2185,
+    "est_tokens": 547,
+    "detail": "80 items (min 12)",
+    "data": {
+      "items": [
+        "React",
+        "v19.3",
+        "Search⌘CtrlK",
+        "Learn",
+        "Reference",
+        "Community",
+        "Blog",
+        "Use Light Mode",
+        "Translations",
+        "Open on GitHub",
+        "GET STARTED",
+        "Quick Start",
+        "Tutorial: Tic-Tac-Toe",
+        "Thinking in React",
+        "Installation",
+        "Setup",
+        "React Compiler",
+        "LEARN REACT",
+        "Describing the UI",
+        "Adding Interactivity",
+        "Managing State",
+        "Escape Hatches",
+        "Learn React",
+        "Copy pageCopy",
+        "You will learn",
+        "Creating and nesting components",
+        "Link for Creating and nesting components",
+        "App.js",
+        "Download",
+        "Reload",
+        "Clear",
+        "Fork",
+        "Show more",
+        "MDN",
+        "javascript.info",
+        "Writing markup with JSX",
+        "Link for Writing markup with JSX",
+        "tools we recommend for local development",
+        "online converter.",
+        "Adding styles",
+        "Link for Adding styles",
+        "class",
+        "<link>",
+        "Displaying data",
+        "Link for Displaying data",
+        "string concatenation",
+        "Conditional rendering",
+        "Link for Conditional rendering",
+        "if",
+        "conditional ? operator.",
+        "logical && syntax",
+        "Rendering lists",
+        "Link for Rendering lists",
+        "for loop",
+        "array map() function",
+        "Responding to events",
+        "Link for Responding to events",
+        "Updating the screen",
+        "Link for Updating the screen",
+        "useState",
+        "Using Hooks",
+        "Link for Using Hooks",
+        "API reference.",
+        "Sharing data between components",
+        "Link for Sharing data between components",
+        "Next Steps",
+        "Link for Next Steps",
+        "Tutorial",
+        "NextTutorial: Tic-Tac-Toe",
+        "Meta Open Source",
+        "API Reference",
+        "React APIs",
+        "React DOM APIs",
+        "Code of Conduct",
+        "Meet the Team",
+        "Docs Contributors",
+        "Acknowledgements",
+        "React Native",
+        "Privacy",
+        "Terms"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:51.944Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 2416,
+    "total_ms": 2555,
+    "roundtrips": 0,
+    "snapshot_chars": 2185,
+    "est_tokens": 547,
+    "detail": "80 items (min 12)",
+    "data": {
+      "items": [
+        "React",
+        "v19.3",
+        "Search⌘CtrlK",
+        "Learn",
+        "Reference",
+        "Community",
+        "Blog",
+        "Use Light Mode",
+        "Translations",
+        "Open on GitHub",
+        "GET STARTED",
+        "Quick Start",
+        "Tutorial: Tic-Tac-Toe",
+        "Thinking in React",
+        "Installation",
+        "Setup",
+        "React Compiler",
+        "LEARN REACT",
+        "Describing the UI",
+        "Adding Interactivity",
+        "Managing State",
+        "Escape Hatches",
+        "Learn React",
+        "Copy pageCopy",
+        "You will learn",
+        "Creating and nesting components",
+        "Link for Creating and nesting components",
+        "App.js",
+        "Download",
+        "Reload",
+        "Clear",
+        "Fork",
+        "Show more",
+        "MDN",
+        "javascript.info",
+        "Writing markup with JSX",
+        "Link for Writing markup with JSX",
+        "tools we recommend for local development",
+        "online converter.",
+        "Adding styles",
+        "Link for Adding styles",
+        "class",
+        "<link>",
+        "Displaying data",
+        "Link for Displaying data",
+        "string concatenation",
+        "Conditional rendering",
+        "Link for Conditional rendering",
+        "if",
+        "conditional ? operator.",
+        "logical && syntax",
+        "Rendering lists",
+        "Link for Rendering lists",
+        "for loop",
+        "array map() function",
+        "Responding to events",
+        "Link for Responding to events",
+        "Updating the screen",
+        "Link for Updating the screen",
+        "useState",
+        "Using Hooks",
+        "Link for Using Hooks",
+        "API reference.",
+        "Sharing data between components",
+        "Link for Sharing data between components",
+        "Next Steps",
+        "Link for Next Steps",
+        "Tutorial",
+        "NextTutorial: Tic-Tac-Toe",
+        "Meta Open Source",
+        "API Reference",
+        "React APIs",
+        "React DOM APIs",
+        "Code of Conduct",
+        "Meet the Team",
+        "Docs Contributors",
+        "Acknowledgements",
+        "React Native",
+        "Privacy",
+        "Terms"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:54.499Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1359,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:39:55.858Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1074,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:39:56.932Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "auth_roundtrip",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 916,
+    "roundtrips": 0,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T14:39:57.848Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 1338,
+    "total_ms": 1466,
+    "roundtrips": 0,
+    "snapshot_chars": 178,
+    "est_tokens": 45,
+    "detail": "6 items (min 5) url=http://127.0.0.1:38543/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ],
+      "url": "http://127.0.0.1:38543/app"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:39:59.314Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 1405,
+    "total_ms": 1568,
+    "roundtrips": 0,
+    "snapshot_chars": 178,
+    "est_tokens": 45,
+    "detail": "6 items (min 5) url=http://127.0.0.1:38543/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ],
+      "url": "http://127.0.0.1:38543/app"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:40:00.882Z"
+  },
+  {
+    "backend": "stagehand",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 1738,
+    "total_ms": 1871,
+    "roundtrips": 0,
+    "snapshot_chars": 178,
+    "est_tokens": 45,
+    "detail": "6 items (min 5) url=http://127.0.0.1:38543/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ],
+      "url": "http://127.0.0.1:38543/app"
+    },
+    "error": null,
+    "ts": "2026-10-06T14:40:02.754Z"
+  }
+]

@@ -1,0 +1,332 @@
+[
+  {
+    "backend": "agent-browser",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 2073,
+    "total_ms": 2073,
+    "roundtrips": 6,
+    "snapshot_chars": 172,
+    "est_tokens": 43,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T05:08:04.698Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 3147,
+    "roundtrips": 5,
+    "snapshot_chars": 145,
+    "est_tokens": 37,
+    "detail": "sin ref de busqueda",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T05:08:07.845Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 13079,
+    "roundtrips": 28,
+    "snapshot_chars": 502,
+    "est_tokens": 126,
+    "detail": "0 titulos",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T05:08:24.514Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 3709,
+    "total_ms": 3709,
+    "roundtrips": 7,
+    "snapshot_chars": 172,
+    "est_tokens": 43,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T05:09:09.922Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 14928,
+    "roundtrips": 21,
+    "snapshot_chars": 487,
+    "est_tokens": 122,
+    "detail": "0 titulos",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T05:09:24.850Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 14925,
+    "roundtrips": 21,
+    "snapshot_chars": 487,
+    "est_tokens": 122,
+    "detail": "0 titulos",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T05:09:42.878Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 14340,
+    "roundtrips": 22,
+    "snapshot_chars": 487,
+    "est_tokens": 122,
+    "detail": "0 titulos ref=e12 url=about:blank",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T05:10:19.167Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 3656,
+    "total_ms": 3656,
+    "roundtrips": 6,
+    "snapshot_chars": 172,
+    "est_tokens": 43,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T05:13:00.214Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 14594,
+    "roundtrips": 21,
+    "snapshot_chars": 487,
+    "est_tokens": 122,
+    "detail": "0 titulos ref=e12 url=about:blank",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T05:13:14.809Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 14533,
+    "roundtrips": 21,
+    "snapshot_chars": 487,
+    "est_tokens": 122,
+    "detail": "0 titulos ref=e12 url=about:blank",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T05:13:34.423Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 3503,
+    "total_ms": 3660,
+    "roundtrips": 6,
+    "snapshot_chars": 172,
+    "est_tokens": 43,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T05:15:03.835Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8639,
+    "total_ms": 8828,
+    "roundtrips": 10,
+    "snapshot_chars": 602,
+    "est_tokens": 151,
+    "detail": "3 titulos ref=e12 url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "Open Source Explained",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T05:15:12.663Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1405,
+    "roundtrips": 1,
+    "snapshot_chars": 40,
+    "est_tokens": 10,
+    "detail": "title=\"\"",
+    "data": {
+      "title": ""
+    },
+    "error": null,
+    "ts": "2026-10-06T05:41:37.214Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1015,
+    "roundtrips": 1,
+    "snapshot_chars": 40,
+    "est_tokens": 10,
+    "detail": "0 titulos url=",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T05:41:38.229Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1564,
+    "roundtrips": 1,
+    "snapshot_chars": 620,
+    "est_tokens": 155,
+    "detail": "title=\"\"",
+    "data": {
+      "title": ""
+    },
+    "error": null,
+    "ts": "2026-10-06T05:41:54.329Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 7023,
+    "roundtrips": 1,
+    "snapshot_chars": 1617,
+    "est_tokens": 405,
+    "detail": "2 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T05:42:01.352Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1665,
+    "total_ms": 1665,
+    "roundtrips": 1,
+    "snapshot_chars": 1219,
+    "est_tokens": 305,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain"
+    },
+    "error": null,
+    "ts": "2026-10-06T05:42:22.153Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 7560,
+    "total_ms": 7560,
+    "roundtrips": 1,
+    "snapshot_chars": 1294,
+    "est_tokens": 324,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "The Open Source Internet Is Here",
+        "Open Source Is Beating Paid Mac Apps"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T05:42:29.713Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "auth_roundtrip",
+    "success": true,
+    "t_first_useful_ms": 2761,
+    "total_ms": 2761,
+    "roundtrips": 3,
+    "snapshot_chars": 23,
+    "est_tokens": 6,
+    "detail": "login=true persist_tras_reinicio=true",
+    "data": {
+      "aOk": true,
+      "bOk": true
+    },
+    "error": null,
+    "ts": "2026-10-06T06:22:09.186Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "explore2",
+    "success": true,
+    "t_first_useful_ms": 4174,
+    "total_ms": 4174,
+    "roundtrips": 1,
+    "snapshot_chars": 509,
+    "est_tokens": 128,
+    "detail": "31 items",
+    "data": {
+      "count": 31
+    },
+    "error": null,
+    "ts": "2026-10-06T06:22:23.382Z"
+  }
+]

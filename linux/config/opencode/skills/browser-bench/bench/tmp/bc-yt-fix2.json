@@ -1,0 +1,130 @@
+[
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 3413,
+    "roundtrips": 1,
+    "snapshot_chars": 894,
+    "est_tokens": 224,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T06:55:41.701Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 3691,
+    "roundtrips": 1,
+    "snapshot_chars": 894,
+    "est_tokens": 224,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T06:55:45.393Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 3480,
+    "roundtrips": 1,
+    "snapshot_chars": 894,
+    "est_tokens": 224,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T06:55:48.873Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1276,
+    "roundtrips": 1,
+    "snapshot_chars": 758,
+    "est_tokens": 190,
+    "detail": "0 titulos url=",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:38.002Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1210,
+    "roundtrips": 1,
+    "snapshot_chars": 758,
+    "est_tokens": 190,
+    "detail": "0 titulos url=",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:39.212Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1154,
+    "roundtrips": 1,
+    "snapshot_chars": 758,
+    "est_tokens": 190,
+    "detail": "0 titulos url=",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:40.366Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1200,
+    "roundtrips": 1,
+    "snapshot_chars": 758,
+    "est_tokens": 190,
+    "detail": "0 titulos url=",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:41.566Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1267,
+    "roundtrips": 1,
+    "snapshot_chars": 758,
+    "est_tokens": 190,
+    "detail": "0 titulos url=",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:42.833Z"
+  }
+]

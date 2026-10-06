@@ -4,7 +4,8 @@ description: >
   Read-only code locator. Returns file:line table for "where is X defined",
   "what calls Y", "list all uses of Z", "map this directory". Output is
   caveman-compressed so the main thread eats ~60% fewer tokens than
-  vanilla Explore. Refuses to suggest fixes.
+  vanilla Explore. Refuses to suggest fixes. Triggers: where is X defined,
+  find definition, callers, usages, map directory, locate code, trace symbol.
 model: opencode/mimo-v2.5-free
 ---
 

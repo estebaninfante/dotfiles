@@ -1,0 +1,61 @@
+[
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 4245,
+    "total_ms": 4245,
+    "roundtrips": 1,
+    "snapshot_chars": 1154,
+    "est_tokens": 289,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source dbg={\"len\":2486,\"watch\":28,\"ytd\":4,\"title\":\"open source - YouTube\"}",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "The Rise Of Open-Source Software",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ],
+      "dbg": "{\"len\":2486,\"watch\":28,\"ytd\":4,\"title\":\"open source - YouTube\"}"
+    },
+    "error": null,
+    "ts": "2026-10-06T07:08:57.454Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 6323,
+    "total_ms": 6323,
+    "roundtrips": 1,
+    "snapshot_chars": 1154,
+    "est_tokens": 289,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source dbg={\"len\":1609,\"watch\":12,\"ytd\":3,\"title\":\"open source - YouTube\"}",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "The Rise Of Open-Source Software",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ],
+      "dbg": "{\"len\":1609,\"watch\":12,\"ytd\":3,\"title\":\"open source - YouTube\"}"
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:03.777Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 2841,
+    "roundtrips": 1,
+    "snapshot_chars": 1154,
+    "est_tokens": 289,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source dbg={\"len\":2486,\"watch\":28,\"ytd\":4,\"title\":\"open source - YouTube\"}",
+    "data": {
+      "titles": [],
+      "dbg": "{\"len\":2486,\"watch\":28,\"ytd\":4,\"title\":\"open source - YouTube\"}"
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:06.619Z"
+  }
+]

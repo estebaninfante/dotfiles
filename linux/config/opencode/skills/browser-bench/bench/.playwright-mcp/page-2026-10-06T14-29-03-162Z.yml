@@ -1,0 +1,10 @@
+- generic [ref=e1]:
+  - heading "Demo App" [level=1] [ref=e2]
+  - button "Load items" [active] [ref=e3]
+  - list [ref=e4]:
+    - listitem [ref=e5]: alpha
+    - listitem [ref=e6]: bravo
+    - listitem [ref=e7]: charlie
+    - listitem [ref=e8]: delta
+    - listitem [ref=e9]: echo
+    - listitem [ref=e10]: foxtrot

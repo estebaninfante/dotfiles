@@ -1,0 +1,18 @@
+[
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 1141,
+    "roundtrips": 1,
+    "snapshot_chars": 758,
+    "est_tokens": 190,
+    "detail": "0 titulos url=",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T07:09:54.644Z"
+  }
+]

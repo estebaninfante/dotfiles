@@ -4,11 +4,12 @@ description: >
   Experto y dueño exclusivo de Hyprland (config Lua >=0.55) y sus plugins,
   especialmente hyprexpo (grilla/overview 3D). Toca keybinds, monitores, input,
   animaciones, window/layer rules, autostart, hyprpaper, hypridle y el patch
-  local de hyprexpo. Usa cuando el usuario pida "hyprland", "mi compositor",
-  keybinds, monitores, gaps, bordes, blur, overview/grilla, SUPER+Y, hyprexpo,
-  hyprpm, safe-mode o cualquier cosa en ~/.config/hypr/. Triggers: hyprland.lua,
-  bindings.lua, monitors.lua, hyprexpo, expo, overview 3D, hyprctl, hyprpm,
-  hyprpaper, hypridle, hyprlock.
+  local de hyprexpo y de hypr3d. Usa cuando el usuario pida "hyprland", "mi
+  compositor", keybinds, monitores, gaps, bordes, blur, overview/grilla,
+  SUPER+Y, hyprexpo, hypr3d, espacio 3D, hyprpm, safe-mode o cualquier cosa en
+  ~/.config/hypr/. Triggers: hyprland.lua, bindings.lua, monitors.lua,
+  hyprexpo, expo, overview 3D, hypr3d, Hypr3D, 3D, hyprctl, hyprpm, hyprpaper,
+  hypridle, hyprlock.
 mode: all
 permission:
   bash: allow
@@ -59,19 +60,61 @@ Hacer que la config de Hyprland sea **extremadamente agent-friendly**:
 | Ruta | Que es | Notas |
 |------|--------|-------|
 | `~/dotfiles/linux/config/hypr/` | **Fuente de verdad** (`~/.config/hypr` es symlink aqui) | Edita SIEMPRE aqui |
-| `hyprland.lua` | Config principal (72k, keybinds, appearance, autostart, blobs machine-specific) | Editar con precision |
-| `bindings.lua`, `monitors.lua`, `input.lua`, `looknfeel.lua`, `autostart.lua`, `lock_anim.lua` | Modulos requeridos | Editar |
+| `hyprland.lua` | **Entrypoint delgado**: solo `require()` de modulos en orden | No poner logica aqui |
+| `base/variables.lua`, `base/power.lua`, `base/theme.lua` | Estado compartido: `main_mod`/`machine`/`workspace_keys`, `low_power()`, colores/fondo del tema | `require` re-evalua en cada reload |
+| `monitors.lua`, `input.lua`, `looknfeel.lua`, `env.lua`, `gaps.lua`, `layerrules.lua`, `animations.lua`, `autostart.lua`, `windowrules.lua`, `windowhelpers.lua`, `bindings.lua`, `navigation.lua`, `moonlight.lua`, `lock_anim.lua` | Un dominio por archivo | Estos 5 primeros son tambien los stubs que edita el menu Omarchy (fuente unica) |
+| `plugins/hyprexpo.lua` | Carga del `.so` + `expo_style`/config del plugin | `navigation.lua` consume su API (submap, fly-through, long-press, grid) |
 | `hyprexpo-changes.md` | Bitacora de los patches locales de hyprexpo | Mantener al dia |
 | `SKILL.md` | Guia migracion 0.54 -> 0.55 (referencia exhaustiva) | Leer si dudas de sintaxis |
 | `~/dotfiles/linux/patches/hyprexpo-local.patch` | Patch local del plugin hyprexpo | Fuente de verdad del patch |
 | `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` | Compila+instala el `.so` parcheado | No unload/load en vivo |
 | `~/dotfiles/linux/bin/hyprexpo-verify-3d.sh` | Verifica 3D en Hyprland ANIDADO | Seguro |
 | `/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so` | Plugin instalado (root) | Se sobreescribe con hyprpm update |
+| `~/dotfiles/linux/bin/wallpaper-switch.sh` | Fuente del fondo: `use video|static` | Ver abajo |
+| `~/.config/wallpaper-source` | Fuente activa (`video`/`static`) | Lo lee el autostart y el overview transparente |
+| `~/dotfiles/linux/system/systemd-user/linux-wallpaperengine.service` | Unit del video | `setup-omarchy.sh` Fase 8 la instala |
 
-Configs machine-specific: `hyprland.lua` tiene bloques
-`if machine == "laptop"` / `"desktop"` (lee `~/.config/machine-type`). **Nunca**
-edites un bloque machine-specific sin preguntar. Los compartidos (keybinds,
-appearance, animations, window rules) son libres.
+Configs machine-specific: cada modulo con logica por maquina usa
+`base.variables.machine` (lee `~/.config/machine-type`): `monitors.lua`, `input.lua`,
+`env.lua`, `windowrules.lua`, `autostart.lua`, `bindings.lua`. **Nunca** edites un
+bloque `if machine == "laptop"` / `"desktop"` sin preguntar. Los compartidos
+(keybinds, appearance, animations, window rules) son libres.
+
+## Arquitectura modular (invariantes)
+
+- **Orden de carga = comportamiento.** `hyprland.lua` requiere en este orden:
+  `env`, `monitors`, `input`, `looknfeel`, `gaps`, `layerrules`, `animations`,
+  `autostart`, `plugins.hyprexpo`, `navigation`, `windowrules`, `windowhelpers`,
+  `bindings`, `moonlight`, `lock_anim`. `require()` NO cachea entre `hyprctl reload`
+  (Hyprland recarga los modulos), asi que los valores dinamicos (power, tema) se
+  re-evaluan. No reordenes sin motivo.
+- **Un dominio, un archivo.** Nada de logica en `hyprland.lua`; el estado
+  compartido vive en `base/`.
+- **`gaps.lua`: NUNCA registrar `window.destroy`.** Ese evento dispara durante
+  `CCompositor::cleanup` y el getter nativo toca `CWindow` a medio liberar ->
+  SIGSEGV en cada logout. `window.close` ya cubre el caso normal.
+- **`navigation.lua`:** `reset_ws_style()` restaura el leaf `workspaces` (global,
+  persistente) tras un tramo vertical/grid; saltarlo deja un `slidevert` pegado.
+  La grilla/overview (submap `hyprexpo`, long-press, fly-through, hot corner) vive
+  aqui; `SUPER+Y`, `SUPER+<ws>` y `SUPER+ALT+flechas` se bindean aqui.
+- **`moonlight.lua` (toggle PC remoto):** `SUPER+S` (== `workspace_keys[10]`)
+  hace `hl.dsp.workspace.toggle_special("moonlight")` — un scratchpad, sin mover
+  monitores ni guardar workspace (Hyprland restaura el ws previo solo). Moonlight
+  entra al special por la unica regla en `windowrules.lua`
+  (`workspace = "special:moonlight"`, sin ws10 ni fullscreen forzados). El submap
+  `moonlight` + `lan-mouse-capture.sh` + `disable_keybind_grabbing` se mantienen
+  (se activan cuando Moonlight tiene foco, via `sync`). `navigation.lua` **salta**
+  el bind generico de `ws_travel` para `i == 10` (si no, quedan dos binds globales
+  en SUPER+S y Hyprland ejecuta el ws_travel viejo). La transicion es **seca**: en
+  `animations.lua` las hojas `specialWorkspace`, `specialWorkspaceIn` y
+  `specialWorkspaceOut` van `enabled = false`.
+- **`plugins/hyprexpo.lua`:** `background_transparent` solo se cablea si
+  `hl.get_config("plugin:hyprexpo:background_transparent") ~= nil` (clave del
+  parche local); si no, ensucia `configerrors`.
+- **Verificacion:** `verify run hyprland` valida `hyprctl` vivo, `configerrors`
+  vacio, `luac -p` de los 19 modulos (`lua-modules`) y que todo `require()` resuelva
+  (`require-resolve`). `verify auto <archivo>` usa el mismo dominio.
+
 
 ## Flujo obligatorio
 
@@ -141,6 +184,49 @@ Secuencia "abrir app en workspace N": `exec` -> `sleep 2` -> `clients <class>` -
   `threed_distance`, `threed_radius`, `threed_flip_v`.
 - Trampa: captura (`grim`) durante la animacion de cierre puede tirar SIGSEGV
   (use-after-free del pass element). No capturar en plena transicion.
+
+## hypr3d (espacio 3D caminable, plugin separado)
+
+- Fork `samine825/Hypr3D`, version `0.5.0`; fuente viva en
+  `~/.local/share/hypr3d-src` (el `.so` que carga la sesion es
+  `build/hypr3d.so`, via `~/.local/bin/hypr3d-load.sh`). Patch local versionado:
+  `~/dotfiles/linux/patches/hypr3d-local.patch` — regenerar con
+  `git -C ~/.local/share/hypr3d-src diff --src-prefix=i/ --dst-prefix=w/`.
+  Config via `~/.local/bin/hypr3d-setup.sh` (panorama/mapa en
+  `~/.local/share/hypr3d/`).
+- Verificacion: `verify run hypr3d` (build CMake + tests de logica + guard
+  `super-gate`). No hay harness anidado para este plugin: el `.so` nuevo aplica
+  al **reiniciar Hyprland**; NUNCA `plugin unload/load` en vivo.
+- Invariante **gestos**: mover, redimensionar, zoom y rotar una ventana exigen
+  Super **fisico**. El gate usa `IKeyboard::getModifiers()` (bit
+  `HL_MODIFIER_META`), no el cache de eventos; `syncHeldModifiers()` reconcilia
+  ese cache por frame. `updateAimFocus` no debe volver a gatear con
+  `g_superHeld` (el verifier `super-gate` lo detecta).
+- Invariante **teclado automatico**: modo `Auto` por defecto — con una ventana
+  enfocada (aim + dwell) WASD/Space/Shift/Ctrl se entregan a la ventana (typing);
+  al mirar afuera vuelven a la camara. En modo `Window` ninguna tecla de
+  movimiento se consume. Overrides: `F12` cicla Auto/Space/Window, `Super+'`
+  alterna, `Super+LeftAlt` cicla.
+
+## Fondo de pantalla (video vs estatico)
+
+Fuente unica y conmutable con `wallpaper-switch.sh`:
+
+```bash
+wallpaper-switch.sh use video    # linux-wallpaperengine (systemd user service, layer BOTTOM)
+wallpaper-switch.sh use static   # hyprpaper sobre el fondo canonico de Omarchy (layer BACKGROUND)
+wallpaper-switch.sh list         # lista wallpapers de video descargados
+```
+
+- Estado en `~/.config/wallpaper-source` (`video`/`static`); `hyprland.lua` lo lee
+  en el autostart. `use video` para hyprpaper y arranca el servicio; `use static`
+  detiene el servicio y arranca hyprpaper.
+- `hyprexpo:background_transparent=1` hace que el overview NO pinte backdrop y
+  repinte las layers `BACKGROUND` + `BOTTOM` debajo (asi se ve el video o el
+  estatico). Detalle en `hyprexpo-changes.md`.
+- `linux-wallpaperengine` (AUR `linux-wallpaperengine-git`) usa el monitor
+  enfocado resuelto por `hyprctl`; assets de Steam en
+  `~/.local/share/Steam/steamapps/common/wallpaper_engine/assets`.
 
 ## Skills a cargar
 

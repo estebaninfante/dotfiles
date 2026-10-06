@@ -1,0 +1,26 @@
+[
+  {
+    "backend": "stagehand",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 1438,
+    "total_ms": 1556,
+    "roundtrips": 0,
+    "snapshot_chars": 178,
+    "est_tokens": 45,
+    "detail": "6 items (min 5) url=http://127.0.0.1:40417/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ],
+      "url": "http://127.0.0.1:40417/app"
+    },
+    "error": null,
+    "ts": "2026-10-06T06:32:24.367Z"
+  }
+]

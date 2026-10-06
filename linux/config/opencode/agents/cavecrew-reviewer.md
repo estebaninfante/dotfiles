@@ -4,7 +4,8 @@ description: >
   Diff/branch/file reviewer. One line per finding, severity-tagged, no praise,
   no scope creep. Output format `path:line: <emoji> <severity>: <problem>. <fix>.`
   Use for "review this PR", "review my diff", "audit this file". Skips
-  formatting nits unless they change meaning.
+  formatting nits unless they change meaning. Triggers: review PR, review
+  diff, audit file, code review, findings.
 model: haiku
 ---
 

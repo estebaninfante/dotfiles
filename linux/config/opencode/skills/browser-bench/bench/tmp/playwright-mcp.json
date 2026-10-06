@@ -1,0 +1,40 @@
+[
+  {
+    "backend": "playwright-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 2325,
+    "total_ms": 2397,
+    "roundtrips": 3,
+    "snapshot_chars": 2643,
+    "est_tokens": 661,
+    "detail": "title=\"Example Domain\" eval_chars=1150 snap_chars=1272",
+    "data": {
+      "title": "Example Domain",
+      "text": "This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\n\nهذا النطاق مُخصص للاستخدام في أمثلة التوثي",
+      "snapshotChars": 1272
+    },
+    "error": null,
+    "ts": "2026-10-06T05:57:15.405Z"
+  },
+  {
+    "backend": "playwright-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 9323,
+    "total_ms": 9429,
+    "roundtrips": 5,
+    "snapshot_chars": 1776,
+    "est_tokens": 444,
+    "detail": "3 titulos ref=e18",
+    "data": {
+      "titles": [
+        "I used Open Source Apps for 200 days. Here are my favorites",
+        "The Open Source Internet Is Here",
+        "Open Source Explained"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T05:57:32.414Z"
+  }
+]

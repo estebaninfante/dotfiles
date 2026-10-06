@@ -77,6 +77,7 @@ for root in "${unique_roots[@]}"; do
     }
     has_script lint && step "lint:$tag" npm --prefix "$root" run --silent lint
     has_script typecheck && step "typecheck:$tag" npm --prefix "$root" run --silent typecheck
+    has_script check && step "check:$tag" npm --prefix "$root" run --silent check
     has_script test && step "test:$tag" npm --prefix "$root" run --silent test
   fi
 

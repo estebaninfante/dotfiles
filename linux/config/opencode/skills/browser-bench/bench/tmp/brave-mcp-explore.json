@@ -1,0 +1,19 @@
+[
+  {
+    "backend": "brave-mcp",
+    "scenario": "explore",
+    "success": true,
+    "t_first_useful_ms": 2034,
+    "total_ms": 2119,
+    "roundtrips": 3,
+    "snapshot_chars": 39240,
+    "est_tokens": 9810,
+    "detail": "752 items snapshot_chars=39240",
+    "data": {
+      "items": 752,
+      "snapshot_chars": 39240
+    },
+    "error": null,
+    "ts": "2026-10-06T06:14:19.176Z"
+  }
+]

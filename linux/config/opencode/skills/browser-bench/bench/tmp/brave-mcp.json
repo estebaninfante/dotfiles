@@ -1,0 +1,39 @@
+[
+  {
+    "backend": "brave-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1648,
+    "total_ms": 1741,
+    "roundtrips": 4,
+    "snapshot_chars": 2152,
+    "est_tokens": 538,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T06:03:28.430Z"
+  },
+  {
+    "backend": "brave-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 9019,
+    "total_ms": 9151,
+    "roundtrips": 6,
+    "snapshot_chars": 5152,
+    "est_tokens": 1288,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "The Open Source Internet Is Here",
+        "Open Source Explained",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T06:03:44.162Z"
+  }
+]

@@ -2,12 +2,14 @@
   "domains": {
     "quickshell": {
       "script": "quickshell.sh",
-      "desc": "QML y shell.json de Omarchy / quickshell",
+      "desc": "QML, shell.json y watchdog de la shell de Omarchy",
       "priority": 20,
       "globs": [
         "~/.config/omarchy/**/*.qml",
         "~/.config/quickshell/**/*.qml",
-        "~/.config/omarchy/shell.json"
+        "~/.config/omarchy/shell.json",
+        "~/.local/bin/omarchy-launch-shell",
+        "~/dotfiles/linux/bin/omarchy-launch-shell"
       ]
     },
     "hyprland": {
@@ -15,8 +17,23 @@
       "desc": "config Lua/conf de Hyprland",
       "priority": 20,
       "globs": [
+        "~/.config/hypr/*.lua",
+        "~/.config/hypr/*.conf",
         "~/.config/hypr/**/*.lua",
         "~/.config/hypr/**/*.conf"
+      ]
+    },
+    "hypr3d": {
+      "script": "hypr3d.sh",
+      "desc": "plugin 3D de ventanas de Hyprland (fuente, tests, build)",
+      "priority": 15,
+      "globs": [
+        "~/.local/share/hypr3d-src/src/**/*.cpp",
+        "~/.local/share/hypr3d-src/src/**/*.hpp",
+        "~/.local/share/hypr3d-src/tests/**/*.cpp",
+        "~/.local/bin/hypr3d-load.sh",
+        "~/.local/bin/hypr3d-setup.sh",
+        "~/dotfiles/linux/bin/hypr3d-toggle.sh"
       ]
     },
     "systemd": {
@@ -24,9 +41,19 @@
       "desc": "units de usuario systemd",
       "priority": 20,
       "globs": [
+        "~/.config/systemd/user/*.service",
+        "~/.config/systemd/user/*.timer",
+        "~/.config/systemd/user/*.socket",
         "~/.config/systemd/user/**/*.service",
         "~/.config/systemd/user/**/*.timer",
-        "~/.config/systemd/user/**/*.socket"
+        "~/.config/systemd/user/**/*.socket",
+        "~/.config/systemd/user/*.path",
+        "~/.config/systemd/user/**/*.path",
+        "~/dotfiles/linux/system/systemd-user/*.service",
+        "~/dotfiles/linux/system/systemd-user/*.timer",
+        "~/dotfiles/linux/system/systemd-user/*.path",
+        "~/dotfiles/linux/bin/tmux-reap.sh",
+        "~/.local/bin/tmux-reap.sh"
       ]
     },
     "code": {
@@ -37,7 +64,11 @@
         "**/package.json",
         "**/pyproject.toml",
         "**/Cargo.toml",
-        "**/go.mod"
+        "**/go.mod",
+        "~/developing/**/*.js",
+        "~/developing/**/*.jsx",
+        "~/developing/**/*.ts",
+        "~/developing/**/*.tsx"
       ]
     },
     "syntax": {
@@ -51,7 +82,82 @@
         "**/*.yml",
         "**/*.sh",
         "**/*.py",
-        "**/*.toml"
+        "**/*.toml",
+        "~/.bashrc",
+        "~/dotfiles/linux/home/.bashrc",
+        "~/dotfiles/linux/bin/ssh-desktop",
+        "~/.local/bin/ssh-desktop"
+      ]
+    },
+    "audio": {
+      "script": "audio.sh",
+      "desc": "ducking por voz (pw-duck / PipeWire) y config de audio",
+      "priority": 5,
+      "globs": [
+        "~/.config/pw-duck/**"
+      ]
+    },
+    "packages": {
+      "script": "packages.sh",
+      "desc": "paquetes AUR fuera de repos oficiales (stremio-bin y deps qt5/openssl-1.1)",
+      "priority": 5,
+      "globs": [
+        "~/.cache/yay/stremio-bin/PKGBUILD",
+        "~/dotfiles/linux/config/opencode/skills/verification/verifiers/packages.sh"
+      ]
+    },
+    "obsidian": {
+      "script": "obsidian.sh",
+      "desc": "braindump vault alicia (obsidian-note + vault)",
+      "priority": 5,
+      "globs": [
+        "~/dotfiles/linux/bin/obsidian-note"
+      ]
+    },
+    "tauri": {
+      "script": "tauri.sh",
+      "desc": "toolchain Rust + deps de sistema para app Tauri 2 (Arch)",
+      "priority": 12,
+      "globs": [
+        "~/Projects/noteriv/src-tauri/Cargo.toml"
+      ]
+    },
+    "browser": {
+      "script": "browser.sh",
+      "desc": "browser-pilot: selectors, playbooks y runs (memoria del browser agent)",
+      "priority": 13,
+      "globs": [
+        "~/dotfiles/linux/config/opencode/skills/browser-pilot/**",
+        "~/.config/opencode/skills/browser-pilot/**",
+        "~/dotfiles/linux/config/opencode/skills/verification/verifiers/browser.sh"
+      ]
+    },
+    "ai-chats": {
+      "script": "ai-chats.sh",
+      "desc": "pipeline ai-chats (ingest/embed/search/MCP + units user + staging)",
+      "priority": 15,
+      "globs": [
+        "~/dotfiles/linux/ai-chats/**",
+        "~/.local/bin/ai-chats-*",
+        "~/dotfiles/linux/bin/ai-chats-*"
+      ]
+    },
+    "uiux": {
+      "script": "uiux.sh",
+      "desc": "verificador uiux",
+      "priority": 5,
+      "globs": [
+        "~/.config/opencode/skills/ui-ux-scorer/**"
+      ]
+    },
+    "agents": {
+      "script": "agents.sh",
+      "desc": "agentes de opencode: spec minimo, presupuesto de contexto y frescura del registry",
+      "priority": 14,
+      "globs": [
+        "~/.config/opencode/agents/*.md",
+        "~/dotfiles/linux/config/opencode/agents/*.md",
+        "~/dotfiles/linux/config/opencode/skills/verification/verifiers/agents.sh"
       ]
     }
   }

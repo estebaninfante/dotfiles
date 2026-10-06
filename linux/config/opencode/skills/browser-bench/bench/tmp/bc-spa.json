@@ -1,0 +1,25 @@
+[
+  {
+    "backend": "browser-control",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2264,
+    "total_ms": 2264,
+    "roundtrips": 1,
+    "snapshot_chars": 337,
+    "est_tokens": 85,
+    "detail": "6 items url=http://127.0.0.1:39399/app",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T06:34:48.518Z"
+  }
+]

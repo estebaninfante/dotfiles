@@ -46,7 +46,7 @@ PYEOF
         fail "jsonc:$base" "JSONC invalido"
       fi
       ;;
-    *.sh)
+    *.sh|*.bashrc)
       if bash -n "$target" 2>/dev/null; then
         ok "sh:$base" "sintaxis ok"
       else
@@ -75,7 +75,18 @@ PYEOF
       fi
       ;;
     *)
-      skip "$base" "extension no soportada"
+      case "$(head -n1 "$target" 2>/dev/null || true)" in
+        *bash*)
+          if bash -n "$target" 2>/dev/null; then
+            ok "sh:$base" "sintaxis ok"
+          else
+            fail "sh:$base" "$(bash -n "$target" 2>&1 | head -n1)"
+          fi
+          ;;
+        *)
+          skip "$base" "extension no soportada"
+          ;;
+      esac
       ;;
   esac
 done

@@ -1,0 +1,41 @@
+{
+  "youtube": {
+    "site": "youtube",
+    "patterns": [
+      "https://www.youtube.com",
+      "https://youtu.be"
+    ],
+    "selectors": {
+      "searchInput": "input[name=\"search_query\"]",
+      "resultsNav": "a#video-title, ytd-video-renderer #video-title",
+      "lockupItem": "yt-lockup-view-model",
+      "lockupTitle": ".yt-lockup-metadata-view-model__title, h3",
+      "lockupLink": "a[href*=\"watch?v=\"]",
+      "player": "video",
+      "playButton": ".ytp-large-play-button, .ytp-play-button",
+      "loggedInHeader": "ytd-masthead #avatar-btn, a[href=\"/feed/subscriptions\"]"
+    },
+    "waits": {
+      "resultsReady": "a#video-title, ytd-video-renderer #video-title, yt-lockup-view-model",
+      "lockupsReady": "yt-lockup-view-model"
+    },
+    "verified": "2026-10-06"
+  },
+  "x": {
+    "site": "x",
+    "patterns": [
+      "https://x.com",
+      "https://twitter.com"
+    ],
+    "selectors": {
+      "tweet": "article[data-testid=\"tweet\"]",
+      "tweetText": "[data-testid=\"tweetText\"]",
+      "userName": "[data-testid=\"User-Name\"]",
+      "homeLink": "a[href=\"/home\"]"
+    },
+    "waits": {
+      "timelineReady": "article[data-testid=\"tweet\"]"
+    },
+    "verified": "2026-10-06"
+  }
+}

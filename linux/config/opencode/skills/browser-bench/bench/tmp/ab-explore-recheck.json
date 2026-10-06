@@ -1,0 +1,30 @@
+[
+  {
+    "backend": "agent-browser",
+    "scenario": "explore",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 3687,
+    "roundtrips": 4,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T06:42:02.073Z"
+  },
+  {
+    "backend": "agent-browser",
+    "scenario": "explore",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 3643,
+    "roundtrips": 4,
+    "snapshot_chars": 0,
+    "est_tokens": 0,
+    "detail": "escenario no soportado",
+    "data": null,
+    "error": null,
+    "ts": "2026-10-06T06:42:05.716Z"
+  }
+]

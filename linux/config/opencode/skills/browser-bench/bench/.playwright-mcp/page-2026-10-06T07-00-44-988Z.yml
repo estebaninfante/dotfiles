@@ -1,0 +1,4 @@
+- generic [ref=e1]:
+  - heading "Demo App" [level=1] [ref=e2]
+  - button "Load items" [active] [ref=e3]
+  - list

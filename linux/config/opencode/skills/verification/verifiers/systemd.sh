@@ -32,6 +32,24 @@ fi
 
 for target in "${targets[@]}"; do
   base=$(basename "$target")
+  if [[ "$base" == *.sh ]]; then
+    if command -v shellcheck >/dev/null 2>&1; then
+      if shellcheck "$target" >/dev/null 2>&1; then
+        ok "shellcheck:$base" "limpio"
+      else
+        fail "shellcheck:$base" "$(shellcheck "$target" 2>&1 | head -n2 | tr '\n' ' ')"
+      fi
+    else
+      skip "shellcheck:$base" "shellcheck no instalado"
+    fi
+    selftest_out=$("$target" --selftest 2>&1)
+    if [ $? -eq 0 ]; then
+      ok "selftest:$base" "ok"
+    else
+      fail "selftest:$base" "$(printf '%s' "$selftest_out" | head -n2 | tr '\n' ' ')"
+    fi
+    continue
+  fi
   verify_out=$(systemd-analyze verify "$target" 2>&1)
   if [ $? -eq 0 ]; then
     ok "unit:$base" "valido"

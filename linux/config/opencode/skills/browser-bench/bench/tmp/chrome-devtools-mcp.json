@@ -1,0 +1,39 @@
+[
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1647,
+    "total_ms": 1736,
+    "roundtrips": 4,
+    "snapshot_chars": 2152,
+    "est_tokens": 538,
+    "detail": "title=\"Example Domain\" snapshot_chars=1235",
+    "data": {
+      "title": "Example Domain",
+      "snapshot_chars": 1235
+    },
+    "error": null,
+    "ts": "2026-10-06T06:01:54.024Z"
+  },
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 8723,
+    "total_ms": 8881,
+    "roundtrips": 6,
+    "snapshot_chars": 5152,
+    "est_tokens": 1288,
+    "detail": "3 titulos",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "The Open Source Internet Is Here",
+        "I used Open Source Apps for 200 days. Here are my favorites"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T06:02:10.985Z"
+  }
+]

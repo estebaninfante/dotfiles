@@ -1,0 +1,120 @@
+[
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1661,
+    "total_ms": 1661,
+    "roundtrips": 1,
+    "snapshot_chars": 32,
+    "est_tokens": 8,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain",
+      "hasDoc": true
+    },
+    "error": null,
+    "ts": "2026-10-06T06:07:12.267Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 7054,
+    "roundtrips": 1,
+    "snapshot_chars": 66,
+    "est_tokens": 17,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T06:07:26.047Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 8415,
+    "roundtrips": 1,
+    "snapshot_chars": 66,
+    "est_tokens": 17,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T06:07:46.084Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 8356,
+    "roundtrips": 1,
+    "snapshot_chars": 66,
+    "est_tokens": 17,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T06:08:01.122Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": false,
+    "t_first_useful_ms": null,
+    "total_ms": 7164,
+    "roundtrips": 1,
+    "snapshot_chars": 66,
+    "est_tokens": 17,
+    "detail": "0 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": []
+    },
+    "error": null,
+    "ts": "2026-10-06T06:09:04.325Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "public_nav",
+    "success": true,
+    "t_first_useful_ms": 1474,
+    "total_ms": 1474,
+    "roundtrips": 1,
+    "snapshot_chars": 32,
+    "est_tokens": 8,
+    "detail": "title=\"Example Domain\"",
+    "data": {
+      "title": "Example Domain",
+      "hasDoc": true
+    },
+    "error": null,
+    "ts": "2026-10-06T06:10:09.502Z"
+  },
+  {
+    "backend": "browser-control",
+    "scenario": "youtube_light",
+    "success": true,
+    "t_first_useful_ms": 3072,
+    "total_ms": 3072,
+    "roundtrips": 1,
+    "snapshot_chars": 66,
+    "est_tokens": 17,
+    "detail": "3 titulos url=https://www.youtube.com/results?search_query=open+source",
+    "data": {
+      "titles": [
+        "Open Source Explained",
+        "Open Source Is Beating Paid Mac Apps",
+        "His audacious plan to open-source EVERY PART of a drone // OPENDRONE"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T06:10:19.284Z"
+  }
+]

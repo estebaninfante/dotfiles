@@ -1,0 +1,25 @@
+[
+  {
+    "backend": "chrome-devtools-mcp",
+    "scenario": "spa_task",
+    "success": true,
+    "t_first_useful_ms": 2583,
+    "total_ms": 2683,
+    "roundtrips": 5,
+    "snapshot_chars": 691,
+    "est_tokens": 173,
+    "detail": "6 items",
+    "data": {
+      "items": [
+        "alpha",
+        "bravo",
+        "charlie",
+        "delta",
+        "echo",
+        "foxtrot"
+      ]
+    },
+    "error": null,
+    "ts": "2026-10-06T06:31:46.716Z"
+  }
+]
