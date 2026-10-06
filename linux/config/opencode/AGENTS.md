@@ -89,10 +89,11 @@ a ese agente.
 
 ## Enrutamiento por dominio: agentes owners
 
-Cada dominio de sistema tiene UN agente **dueño**. `build` (y cualquier agente primario,
-incluido el hilo principal) **NO implementa** cambios de un dominio con owner: **delega** con
-la tool `task` (`subagent_type: <owner>`) o cambia a ese agente. Los owners tienen
-`mode: all`, asi que build ya los ve y puede invocarlos.
+Cada dominio de sistema tiene UN agente **dueño**. `main` —el unico agente primario y
+`default_agent`— **NO implementa** cambios de un dominio con owner: **delega** con la tool
+`task` (`subagent_type: <owner>`) o cambia a ese agente. Los owners tienen `mode: all`, asi
+que `main` los ve y puede invocarlos. `main` si hace directo lo trivial o sin owner (docs,
+glue, preguntas, coordinacion); `build` queda deshabilitado.
 
 | Dominio | Agente owner | Alcance |
 |---------|--------------|---------|

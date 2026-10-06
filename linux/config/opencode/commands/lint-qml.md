@@ -1,6 +1,6 @@
 ---
 description: Lint quickshell/omarchy QML for UX/layout issues (margins, hover, animations)
-agent: build
+agent: main
 ---
 
 Run the local QML UX linter and act on the results.

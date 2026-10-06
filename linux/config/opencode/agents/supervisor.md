@@ -84,8 +84,8 @@ sin `LIMIT`.
 La tabla de dominios->owner esta en `AGENTS.md` (seccion "Enrutamiento por dominio").
 Tu trabajo es que **no haya huecos**:
 
-- Por cada dominio con owner (hoy: `omarchy-shell`, `hyprland`, `supervisor`,
-  `dotfiles`, `computer-use`): confirma que existen los tres pilares:
+- Por cada dominio con owner (hoy: `omarchy-shell`, `hyprland`, `audio`, `supervisor`,
+  `dotfiles`, `computer-use`, `ui-ux`): confirma que existen los tres pilares:
   1. **Owner** (`~/.config/opencode/agents/<owner>.md`): alcance, skills, flujo.
   2. **Regla** en `AGENTS.md` (o en la skill del dominio) que obligue a delegar.
   3. **Verificacion** determinista: `verify <dominio>` o linter/script en
