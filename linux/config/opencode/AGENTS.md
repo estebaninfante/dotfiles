@@ -320,6 +320,37 @@ fastembed, prefijos `query: `/`passage: ` aplicados a mano). Dueño: agente
   model-cache, MCP). Verifier: `verifiers/ai-chats.sh` (priority 15, gana a
   `code`). Tras tocar units: `verify auto <unit>` (dominio `systemd`).
 
+## Verificacion proporcional al riesgo (E3)
+
+El default de un agente es "maximum-context-first": un edit de 1 linea se convierte en una
+auditoria del codebase y gasta 20 min de E2E para un riesgo bajo. Se prohibe. Estima el TIER
+**antes** de ejecutar (framework E3: Estimate -> Execute -> Expand), corre el camino minimo de
+verificacion y expande UN nivel solo si falla o la confianza cae. La redundancia cuesta mas en
+las tareas mas simples.
+
+Tiers (elige **el menor** que cubra el riesgo):
+
+| Tier | Cuando | Verificacion minima (y suficiente) |
+|------|--------|------------------------------------|
+| `micro` | 1-2 lineas / valor de config, sin foco/input/UI | `hyprctl reload` (o recarga equivalente) + `hyprctl configerrors` + `verify auto <archivo>`. **PROHIBIDO** montar harness E2E. |
+| `medio` | logica acotada, 1-5 archivos, sin efectos criticos | `verify run <dominio>` + spot-check del efecto |
+| `riesgoso` | foco, input, plugins, shell/QML, systemd, migraciones, multi-maquina, o algo que no se revierte facil | E2E real (nested/dry-run) + casos negativos |
+
+Reglas (duras):
+
+- **Empieza en el tier mas bajo que cubra el riesgo.** Nunca arranques en el mas alto.
+- **Expande UN nivel solo si** la verificacion falla o la confianza cae. No antes.
+- **Anti-overcheck**: corta en el PRIMER PASS. Prohibido re-verificar un resultado ya verde
+  (un re-check es confirmatorio, no correctivo; solo gasta tokens).
+- **Stop-and-ask**: antes de montar un harness E2E, o si vas a exceder ~10 min de subagente
+  o muchas tool calls, PARA y pregunta al usuario: "¿ligero o a fondo?".
+- **Escala por SEÑAL, no por confianza** (el modelo es sobre-optimista): tocar 3+ archivos
+  fuera del pedido, repetir tool calls casi identicas (loop) o exceder el presupuesto ->
+  parar y reportar/preguntar.
+- **Cierre**: todo reporte final cita el tier elegido y el comando EXACTO de verificacion usado.
+
+Dueño: `supervisor`. Verificacion: dominio `agents` (`policy-present`, `agents-declare-tier`).
+
 ## Verificacion (skill `verification`)
 
 Verificar SIEMPRE con el sistema determinista, no a ojo ni razonando. Skill

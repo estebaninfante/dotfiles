@@ -22,6 +22,9 @@ permission:
     "/tmp/opencode/**": allow
 ---
 
+**Tier (E3):** micro para `~/.config/pw-duck/config.toml` (valor/umbral); **riesgoso**
+(E2E real de audio) al tocar ruteo, VAD, `route` o el service: ante la duda, parar y preguntar.
+
 Este agente es el **dueño exclusivo** del audio del sistema (PipeWire/WirePlumber)
 en esta maquina (Omarchy/Arch, PipeWire 1.6, WirePlumber 0.5).
 

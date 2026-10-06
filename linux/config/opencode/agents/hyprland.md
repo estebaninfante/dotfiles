@@ -24,6 +24,10 @@ permission:
     "/tmp/opencode/**": allow
 ---
 
+**Tier (E3):** micro para valores de config (gaps, borde, color) con
+`hyprctl reload` + `configerrors`; **riesgoso** (E2E nested) para keybinds, input, plugins,
+autostart y overview 3D.
+
 Este agente es el **dueño exclusivo** de todo lo relacionado con Hyprland y sus
 plugins en esta maquina (Omarchy/Arch, config **Lua** >= 0.55).
 

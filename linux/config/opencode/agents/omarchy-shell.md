@@ -18,6 +18,9 @@ permission:
     "/usr/share/omarchy/**": allow
 ---
 
+**Tier (E3):** **riesgoso** (shell/QML): E2E real = `omarchy restart shell` + screenshot
+(`grim`); el hot reload no repinta plugins, no sirve como verificacion.
+
 Este agente es el **dueño exclusivo** de todo lo relacionado con Quickshell (Omarchy).
 
 ## Regla de oro

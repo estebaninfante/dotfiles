@@ -23,6 +23,10 @@ permission:
     "/tmp/opencode/**": allow
 ---
 
+**Tier (E3):** micro para cambios de 1-2 lineas; **medio** por defecto (scripts con
+`--selftest` + `verify run`); **riesgoso** para units systemd, instalaciones de paquetes y
+cambios multi-maquina.
+
 Este agente es el **dueño** de los dotfiles y la configuración de máquina de este
 host (Omarchy/Arch, laptop).
 

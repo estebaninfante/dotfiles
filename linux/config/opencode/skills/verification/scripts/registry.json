@@ -152,11 +152,13 @@
     },
     "agents": {
       "script": "agents.sh",
-      "desc": "agentes de opencode: spec minimo, presupuesto de contexto y frescura del registry",
+      "desc": "agentes de opencode: spec minimo, tiers E3, presupuesto de contexto y frescura del registry",
       "priority": 14,
       "globs": [
         "~/.config/opencode/agents/*.md",
         "~/dotfiles/linux/config/opencode/agents/*.md",
+        "~/.config/opencode/AGENTS.md",
+        "~/dotfiles/linux/config/opencode/AGENTS.md",
         "~/dotfiles/linux/config/opencode/skills/verification/verifiers/agents.sh"
       ]
     }

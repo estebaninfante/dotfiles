@@ -24,7 +24,7 @@ export const VerifyHook = async () => {
         if (handledByQmlLint(file)) return
         if (!existsSync(VERIFY)) return
 
-        const res = Bun.spawnSync(["python3", VERIFY, "auto", "--quiet", file])
+        const res = Bun.spawnSync(["python3", VERIFY, "--quiet", "auto", file])
         const text = (res.stdout ? res.stdout.toString() : "").trim()
         if (!text) return
 
