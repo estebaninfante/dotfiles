@@ -21,3 +21,6 @@ linux/voice/__pycache__/
 
 # gh: hosts.yml contiene tokens de autenticación (NO trackear)
 linux/config/gh/hosts.yml
+
+# caveman: flag de sesion, se genera en runtime (caveman apagado por defecto)
+linux/config/opencode/.caveman-active

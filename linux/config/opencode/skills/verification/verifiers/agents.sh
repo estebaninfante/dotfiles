@@ -49,6 +49,134 @@ else
   fail "policy-present" "falta la seccion E3 (o alguna regla dura) en $policy_file"
 fi
 
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'unidades chicas + steering' "$policy_file" \
+   && grep -qF 'session_interrupt' "$policy_file" \
+   && grep -qF 'background=true' "$policy_file" \
+   && grep -qF 'Delegar en unidades chicas' "$policy_file" \
+   && grep -qF 'Volver al usuario entre unidades' "$policy_file"; then
+  ok "interrupt-policy" "AGENTS.md define unidades chicas + steering + interrupcion"
+else
+  fail "interrupt-policy" "falta la politica de interrupcion/steering en $policy_file"
+fi
+
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'entrada/salida de UI se anima' "$policy_file" \
+   && grep -qF 'ningun elemento aparece o desaparece abruptamente' "$policy_file" \
+   && grep -qF 'fade/transicion' "$policy_file" \
+   && grep -qF 'prefers-reduced-motion' "$policy_file"; then
+  ok "motion-policy" "AGENTS.md exige fade/transicion en toda entrada/salida de UI"
+else
+  fail "motion-policy" "falta la regla de motion (nada abrupto) en $policy_file"
+fi
+
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'cambios paralelos con git worktree por ticket' "$policy_file" \
+   && grep -qF 'un escritor por arbol' "$policy_file" \
+   && grep -qF 'rig work' "$policy_file" \
+   && grep -qF 'trazabilidad' "$policy_file"; then
+  ok "worktree-policy" "AGENTS.md define cambios paralelos + trazabilidad por git worktree"
+else
+  fail "worktree-policy" "falta la politica de worktree por ticket en $policy_file"
+fi
+
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'Metricas por ticket' "$policy_file" \
+   && grep -qF 'opencode.db' "$policy_file" \
+   && grep -qF 'rig ticket metrics' "$policy_file" \
+   && grep -qF 'ticket -> sesion' "$policy_file"; then
+  ok "metrics-policy" "AGENTS.md define metricas por ticket (tokens/costo/tiempo)"
+else
+  fail "metrics-policy" "falta la politica de metricas por ticket en $policy_file"
+fi
+
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'Doctrina sillas-first' "$policy_file" \
+   && grep -qF 'main es el punto de entrada y se mantiene libre' "$policy_file" \
+   && grep -qF 'rig work new <ticket> --spawn' "$policy_file" \
+   && grep -qF 'prohibido delegar con la tool' "$policy_file" \
+   && grep -qF 'rig scan' "$policy_file"; then
+  ok "sillas-policy" "AGENTS.md define la doctrina sillas-first (main libre, trabajo largo en sillas, task in-process prohibido)"
+else
+  fail "sillas-policy" "falta la doctrina sillas-first en $policy_file"
+fi
+
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'ningun pedido de trabajo queda sin lanzar' "$policy_file" \
+   && grep -qF 'abre el ticket y la silla en el momento' "$policy_file" \
+   && grep -qF 'Pregunta solo si hay bloqueo real' "$policy_file" \
+   && grep -qF 'in-progress sin silla viva' "$policy_file"; then
+  ok "launch-policy" "AGENTS.md exige lanzar (ticket+silla) cada pedido, sin dejarlo en '¿lo lanzo?'"
+else
+  fail "launch-policy" "falta la regla de lanzamiento inmediato (nada queda sin lanzar) en $policy_file"
+fi
+
+tickets_file="${RIG_TICKETS_FILE:-$HOME/.config/opencode/tickets.json}"
+if [[ ! -f "$tickets_file" ]]; then
+  skip "tickets-live" "sin $tickets_file"
+elif ! command -v jq >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
+  skip "tickets-live" "jq/tmux no disponible"
+elif ! tmux list-sessions >/dev/null 2>&1; then
+  skip "tickets-live" "sin servidor tmux"
+else
+  live_cwds="$(tmux list-sessions -F $'#{@agent}\t#{@agent_cwd}' 2>/dev/null | awk -F'\t' '$1=="1"{print $2}')"
+  orphans="$(printf '%s\n' "$live_cwds" | jq -R -s -r --slurpfile tf "$tickets_file" '
+    ($tf[0].tickets // []) as $tickets
+    | (split("\n") | map(select(length > 0))) as $cwds
+    | [ $tickets[]
+        | select(.status == "in-progress")
+        | (.worktree // "") as $w
+        | select(($w == "") or (($cwds | index($w)) == null))
+        | .id ]
+    | .[]' 2>/dev/null)"
+  if [[ -z "$orphans" ]]; then
+    ok "tickets-live" "todo ticket in-progress tiene silla viva (worktree con seat)"
+  else
+    fail "tickets-live" "in-progress sin silla viva: $(printf '%s' "$orphans" | paste -sd, -) (relanza: rig work new <id> --cwd <repo> --spawn, o marca pending/blocked)"
+  fi
+fi
+
+main_file="$HOME/.config/opencode/agents/main.md"
+if [[ -f "$main_file" ]] \
+   && grep -qiE 'punto de entrada' "$main_file" \
+   && grep -qiE 'prohibido' "$main_file" \
+   && grep -qF 'task' "$main_file" \
+   && grep -qiE 'silla' "$main_file"; then
+  ok "main-pure" "main.md: punto de entrada puro, prohibe task in-process, delega en sillas"
+else
+  fail "main-pure" "main.md no declara punto de entrada puro / prohibicion de task in-process / delegacion por sillas"
+fi
+
+style_agents_md="${AGENTS_STYLE_MD:-$HOME/.config/opencode/AGENTS.md}"
+style_main_md="${AGENTS_MAIN_MD:-$AGENTS_DIR/main.md}"
+style_flag="${CAVEMAN_FLAG:-$HOME/.config/opencode/.caveman-active}"
+style_cfg="${CAVEMAN_CFG:-$HOME/.config/caveman/config.json}"
+style_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'Estilo de respuesta (REGLA DURA' "$style_agents_md" \
+   || ! grep -qF 'espanol neutro' "$style_agents_md"; then
+  style_reason="falta la regla de estilo en $style_agents_md"
+elif [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF 'Estilo de respuesta (REGLA DURA' "$style_main_md" \
+   || ! grep -qF 'espanol neutro' "$style_main_md"; then
+  style_reason="falta la regla de estilo en $style_main_md"
+elif [[ -f "$style_flag" ]]; then
+  style_reason="flag caveman activo: $style_flag"
+else
+  style_mode="${CAVEMAN_DEFAULT_MODE:-}"
+  if [[ -z "$style_mode" && -f "$style_cfg" ]]; then
+    style_mode="$(node -e 'try{const c=require(process.argv[1]);process.stdout.write(String(c.defaultMode||"").toLowerCase())}catch(e){}' "$style_cfg" 2>/dev/null)"
+  fi
+  if [[ "$style_mode" != "off" ]]; then
+    style_reason="caveman defaultMode=${style_mode:-ausente} != off (cfg $style_cfg)"
+  fi
+fi
+if [[ -z "$style_reason" ]]; then
+  ok "style-policy" "regla de estilo presente y caveman apagado por defecto (defaultMode=off, sin flag)"
+else
+  fail "style-policy" "$style_reason"
+fi
+
 spec_err=$(mktemp)
 AGENTS_DIR="$AGENTS_DIR" DESC_BUDGET="$DESC_BUDGET" node -e '
 const fs = require("fs")
