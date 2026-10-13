@@ -200,11 +200,12 @@
     },
     "rig": {
       "script": "rig.sh",
-      "desc": "sillas de agentes sobre tmux + tablero de tickets + worktrees y metricas (tokens/costo/tiempo) por ticket (rig seats/spawn/send/read/ticket/board/work)",
-      "priority": 14,
+      "desc": "rig: sillas tmux + tablero de tickets (store/board/work) + areas, numeracion y titulos descriptivos + metricas (tokens/costo/tiempo) por ticket",
+      "priority": 16,
       "globs": [
         "~/dotfiles/linux/bin/rig",
         "~/.local/bin/rig",
+        "**/linux/bin/rig",
         "~/dotfiles/linux/config/opencode/tickets.json",
         "~/.config/opencode/tickets.json",
         "~/dotfiles/linux/config/opencode/skills/verification/verifiers/rig.sh"

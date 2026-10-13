@@ -695,3 +695,45 @@ agente `ui-ux` y su skill `~/.config/opencode/skills/ui-ux-scorer/`.
 - Dueño: agente `ui-ux`. No implementa en dominios ajenos: reporta y delega
   (`omarchy-shell`, `hyprland`, ...).
 
+
+## Areas de ticket (rig): agrupacion por dominio + color
+
+Cada ticket puede llevar un campo opcional `area` que identifica su dominio y le da color en el
+tablero. Es el eje de agrupacion de `rig board` (ademas de filtro). Dominios y color hex:
+
+| area | dominio | color |
+|------|---------|-------|
+| `hr` | hypr-remote | `#4C9AFF` |
+| `hypr` | hyprland / plugins | `#B389FF` |
+| `shell` | omarchy-shell / QML | `#FFB84C` |
+| `audio` | PipeWire / WirePlumber | `#4CD9A0` |
+| `meta` | rig / agentes / herdr / doctrina | `#8A8F98` |
+| `infra` | dotfiles / systemd / packages | `#FF7A85` |
+| `foldertinder` | foldertinder | `#7ADBFF` |
+| (sin area) | — | `#8A8F98` |
+
+- **CLI**: `rig ticket add ... --area A`, `rig ticket set <id> --area A`,
+  `rig ticket list --area A` (filtro; `--area none` = sin area). `rig ticket backfill`
+  rellena por prefijo/proyecto los tickets sin area (HR* -> hr, HYPR* -> hypr, FT-* ->
+  foldertinder, M-*/META-*/WEB-RESEARCH -> meta, resto por proyecto) y ademas asigna `num`.
+- **Numero (`num`)**: campo entero secuencial por orden de creacion (1, 2, 3...), asignado por
+  `rig ticket backfill` en la migracion y por `rig ticket add` en altas nuevas. Se muestra como
+  prefijo `#12` en `rig board` y `rig ticket list`. `rig ticket set|done|rm|metrics` aceptan tanto
+  el slug interno (`id`) como el numero (`#12` o `12`); branch/worktree siguen usando el slug, que
+  no cambia.
+- **Titulo descriptivo (REGLA)**: `rig ticket add` rechaza titulos de menos de 6 palabras. El
+  titulo es una frase en espanol que explica el trabajo (ej. "Navegacion herdr: espacios, tabs y
+  agentes"); el slug queda solo como identificador interno, nunca como titulo.
+- **Render**: `rig board` agrupa por area con una cabecera coloreada (barra + nombre del area) y
+  prefija cada fila con `#num`. `rig board --plain` = salida plana, sin color ni agrupacion (para
+  pipes). Las columnas son de ancho fijo y el titulo se trunca al ancho de la terminal: sin
+  desbordes.
+- **Contrato compartido (NO romper)**: `rig board --porcelain` y `rig ticket list --porcelain`
+  exponen `area` + `color` + `num` por ticket (aditivo). Los consume el cockpit `agentes-platform`
+  y la silla de trazabilidad. No cambiar la forma existente.
+- **herdr**: el tab del ticket usa el color de su area cuando la version lo permite; herdr 0.8.2
+  no tiene color por tab, asi que el area se muestra como etiqueta/emoji de color en el label.
+- Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
+  (`tickets-area`, `area-add`, `area-valid`, `area-cli`, `area-color`, `area-porcelain`,
+  `board-area`, `board-plain`, `tickets-num`, `tickets-title`, `num-resolve`, `title-valid`)
+  + `rig --selftest`.

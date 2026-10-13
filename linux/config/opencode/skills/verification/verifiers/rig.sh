@@ -9,6 +9,7 @@ elif [ -f "$REPO_RIG" ]; then SRC="$(readlink -f "$REPO_RIG")"
 else SRC="$HOME/dotfiles/linux/bin/rig"; fi
 LINK="$HOME/.local/bin/rig"
 STORE="$HOME/.config/opencode/tickets.json"
+AREAS="hr hypr shell audio meta infra foldertinder"
 
 rc=0
 ok() { printf 'OK\t%s\t%s\n' "$1" "$2"; }
@@ -245,6 +246,24 @@ if [ -f "$STORE" ]; then
   else
     fail "tickets-shape" "${badshape} tickets con campos faltantes o tipo invalido"
   fi
+  badarea=$(jq -r --arg valid "$AREAS" '[.tickets[] | select(has("area")) | .area as $ar | select(($ar|type)!="string" or (($valid|split(" "))|index($ar)|not))]|length' "$STORE" 2>/dev/null || echo 999)
+  if [ "${badarea:-999}" = "0" ]; then
+    ok "tickets-area" "area valida o ausente"
+  else
+    fail "tickets-area" "${badarea} tickets con area invalida"
+  fi
+  badnum=$(jq -r '[.tickets[]|select((.num//0) <= 0 or (.num|type)!="number")]|length' "$STORE" 2>/dev/null || echo 999)
+  if [ "${badnum:-999}" = "0" ]; then
+    ok "tickets-num" "todo ticket tiene num secuencial"
+  else
+    fail "tickets-num" "${badnum} tickets sin num o con num invalido"
+  fi
+  badtitle=$(jq -r '[.tickets[]|select((.title|split(" ")|map(select(length>0))|length) < 6)]|length' "$STORE" 2>/dev/null || echo 999)
+  if [ "${badtitle:-999}" = "0" ]; then
+    ok "tickets-title" "titulos descriptivos (>= 6 palabras)"
+  else
+    fail "tickets-title" "${badtitle} titulos poco descriptivos (< 6 palabras)"
+  fi
   badstatus=$(jq -r '[.tickets[]|select(.status|IN("pending","in-progress","blocked","done")|not)]|length' "$STORE" 2>/dev/null || echo 999)
   if [ "${badstatus:-999}" = "0" ]; then
     ok "tickets-status" "estados validos"
@@ -281,7 +300,11 @@ fi
 
 if out=$("$SRC" board --porcelain 2>&1); then
   if printf '%s' "$out" | jq -e 'type=="array"' >/dev/null 2>&1; then
-    ok "board-porcelain" "JSON valido"
+    if printf '%s' "$out" | jq -e 'all(has("area") and has("color") and has("num"))' >/dev/null 2>&1; then
+      ok "board-porcelain" "JSON con area+color+num"
+    else
+      fail "board-porcelain" "faltan area/color en el porcelain"
+    fi
   else
     fail "board-porcelain" "salida no es JSON array"
   fi
@@ -289,7 +312,7 @@ else
   fail "board-porcelain" "rig board --porcelain fallo: $(printf '%s' "$out" | head -n1)"
 fi
 
-if out=$("$SRC" board 2>&1); then
+if out=$(RIG_METRICS=0 "$SRC" board 2>&1); then
   if printf '%s' "$out" | grep -q 'total='; then
     ok "board-render" "render ok"
   else
@@ -298,6 +321,74 @@ if out=$("$SRC" board 2>&1); then
 else
   fail "board-render" "rig board fallo: $(printf '%s' "$out" | head -n1)"
 fi
+
+atmp=$(mktemp)
+printf '{"version":1,"tickets":[]}\n' >"$atmp"
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-HR --project hypr-remote --title "ticket de prueba con area hr" --area hr >/dev/null 2>&1; then
+  ok "area-add" "ticket add --area"
+else
+  fail "area-add" "ticket add --area fallo"
+fi
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-BAD --project x --title "titulo descriptivo de prueba" --area bogus >/dev/null 2>&1; then
+  fail "area-valid" "area invalida fue aceptada"
+else
+  ok "area-valid" "area invalida rechazada"
+fi
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-SHORT --project x --title "muy corto" >/dev/null 2>&1; then
+  fail "title-valid" "titulo corto fue aceptado"
+else
+  ok "title-valid" "titulo poco descriptivo rechazado"
+fi
+out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket --help 2>&1)
+if printf '%s' "$out" | grep -q -- '--area' && printf '%s' "$out" | grep -q 'backfill'; then
+  ok "area-cli" "rig ticket --help documenta --area/backfill"
+else
+  fail "area-cli" "rig ticket --help sin --area/backfill"
+fi
+colorok=1
+for c in '#4C9AFF' '#B389FF' '#FFB84C' '#4CD9A0' '#8A8F98' '#FF7A85' '#7ADBFF'; do
+  grep -q "$c" "$SRC" || colorok=0
+done
+if [ "$colorok" = "1" ]; then
+  ok "area-color" "mapa de color completo en la fuente"
+else
+  fail "area-color" "falta algun color del mapa en $SRC"
+fi
+out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket list --porcelain 2>&1)
+if printf '%s' "$out" | grep -q '"area": "hr"' && printf '%s' "$out" | grep -q '"color": "#4C9AFF"'; then
+  ok "area-porcelain" "list --porcelain expone area+color"
+else
+  fail "area-porcelain" "list --porcelain sin area/color"
+fi
+out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" board 2>&1)
+if printf '%s' "$out" | grep -q 'hr'; then
+  ok "board-area" "board agrupa por area (etiqueta hr)"
+else
+  fail "board-area" "board sin cabecera de area"
+fi
+out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" board --plain 2>&1)
+if [[ "$out" != *$'\033'* ]] && [[ "$out" == *"A-HR"* ]]; then
+  ok "board-plain" "board --plain sin ANSI y con el ticket"
+else
+  fail "board-plain" "board --plain con ANSI o sin ticket"
+fi
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket set 1 --evidence numericref >/dev/null 2>&1; then
+  out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket list --porcelain 2>&1)
+  if [[ "$out" == *'"num": 1'* ]] && [[ "$out" == *'"evidence": "numericref"'* ]]; then
+    ok "num-resolve" "referencia numerica (#N o N) resuelve"
+  else
+    fail "num-resolve" "ref numerica no aplico al ticket"
+  fi
+else
+  fail "num-resolve" "ticket set 1 (ref numerica) fallo"
+fi
+out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket list --porcelain 2>&1)
+if printf '%s' "$out" | jq -e 'all((.num//0) > 0)' >/dev/null 2>&1; then
+  ok "tickets-num" "todo ticket tiene num > 0"
+else
+  fail "tickets-num" "tickets sin num secuencial"
+fi
+rm -f "$atmp"
 
 if out=$("$SRC" scan --help 2>&1); then
   if printf '%s' "$out" | grep -q 'worktree' && printf '%s' "$out" | grep -q 'archivos modificados'; then
