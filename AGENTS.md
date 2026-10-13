@@ -340,6 +340,25 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
   `rig send main-seat "[dc] <texto>"`.
 - **Salida**: `main` responde con `rig say "<respuesta>"` (evento `kind=reply`, `actor=main`);
   el bot sigue `~/.local/state/rig/events.jsonl` y reenvia los replies al canal dedicado.
+- **Hilos por pedido (conversacion matricial)**: cada pedido nuevo del usuario abre un **hilo
+  nativo de Discord** (nombre = numero/titulo del ticket o las primeras palabras de la idea);
+  el canal general queda limpio y el detalle vive en el hilo. `main` responde **una vez** por
+  mensaje del usuario, corto; prohibido encadenar varios mensajes largos en el canal (el reporte
+  largo se parte **dentro** del hilo, tope 2000 chars por mensaje). Se usa la **respuesta nativa**
+  de Discord (`message_reference`) para saber a que mensaje contesta el usuario. **Limite
+  honesto**: Discord da un solo nivel de hilo (no hay arbol infinito tipo Reddit): hilo por
+  pedido + respuestas con cita al padre; un arbol profundo lo dibuja la interfaz del hub, no
+  Discord. Toggle `RIG_DISCORD_THREADS` (default 1).
+- **Registro padre/hijo (para el hub)**: cada mensaje emitido deja un evento con el id propio y
+  el del padre. Forma canonica (acordada con `work-hub-conversacion`): `kind` en `{conv-in,
+  conv-out, ask, answer}`, `data={channel_id, thread_id, message_id, parent_id, child_id, to}`;
+  el hub enlaza por `parent_id` y el rol sale de `actor` (usuario -> user, main/bot -> assistant).
+- **Extraccion conversacional (adjuntos)**: se pide conversando ("bajame la conversacion y el
+  pensamiento del ticket 93"); el bot detecta verbo de entrega + sustantivo de contenido, saca el
+  ticket (`#93` o `FOO-3`) y sube el archivo (`extraccion-<ticket>.md`) como adjunto dentro del
+  hilo con `Sesion: <ticket> · generado: <hora ISO>`. El bot invoca `RIG_EXTRACT_CMD` (default
+  `rig-transcript`, owner `work-visibilidad-y-cierre`) y lee su salida (contenido o ruta); **no**
+  lee la base de opencode por su cuenta.
 - **`main` en silla**: `main` corre como silla tmux (`rig spawn main-seat --agent main`) para
   ser direccionable; el pane de herdr le hace attach para seguir viendolo en el escritorio.
 - **Sin puertos**: el bot abre conexion **saliente** al Gateway (`wss://gateway.discord.gg`);

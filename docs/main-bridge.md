@@ -97,10 +97,59 @@ ensucia el journal): es intencional.
 
 ## Uso
 
-- Escribis en el canal dedicado -> main responde en el canal.
+- Escribis un pedido en el canal dedicado -> el bot **abre un hilo** para ese pedido y ahi vive
+  toda la conversacion (respuesta de `main`, avisos, pedidos de ayuda, cierre).
+- El canal general queda limpio: los pedidos del usuario y una linea por hilo, nunca las
+  respuestas largas.
 - El bot ignora sus propios mensajes, mensajes de otros bots, de otros canales y de user ids
   fuera de la allowlist.
 - Voz: nota de voz -> STT local -> texto (ver abajo).
+- Pedis la extraccion conversando ("bajame la conversacion y el pensamiento del ticket 93"): el
+  bot entiende el pedido en lenguaje natural y sube el archivo como adjunto **dentro del hilo**.
+
+## Hilos y respuestas anidadas (conversacion matricial)
+
+Cada pedido del usuario abre su **hilo nativo de Discord** (el hilo cuelga de tu mensaje). El
+hilo es la conversacion de ese pedido; adentro va el detalle. Reglas:
+
+- **Nombre del hilo**: el numero/titulo del ticket si ya es ticket, o las primeras palabras de la
+  idea si todavia no lo es (tope `THREAD_NAME_MAX`, 90 caracteres).
+- **Canal limpio**: en el canal solo quedan tus pedidos y la linea "Abri un hilo para este
+  pedido". Las respuestas largas jamas se encadenan en el canal.
+- **Respuesta corta**: `main` responde UNA vez por mensaje tuyo, corto; el detalle va al hilo.
+- **Responder a un mensaje puntual**: el bot usa la **respuesta nativa** de Discord
+  (`message_reference`): el mensaje citado aparece arriba y se puede tocar para saltar a el. Asi
+  el bot sabe a que mensaje tuyo contesta.
+- **Limite honesto**: Discord da respuesta por mensaje con cita y **un solo nivel de hilo** (un
+  hilo dentro de un hilo no se puede). No hay arbol infinito tipo Reddit. En Discord el arbol se
+  representa como: hilo por pedido + respuestas con cita apuntando al mensaje padre. Un arbol
+  profundo de verdad lo dibuja la interfaz del hub, no Discord.
+- **Si un pedido es varios tickets**: el hilo queda como paraguas y se abren hilos hijos.
+- **Registro para el hub (padre/hijo)**: cada mensaje emitido deja un evento en el registro con
+  el id del mensaje propio y el del padre. Forma canonica (coordinada con `work-hub-conversacion`):
+  `kind` en `{conv-in, conv-out, ask, answer}`, `data={channel_id, thread_id, message_id,
+  parent_id, child_id, to}`; el hub enlaza por `parent_id` y toma el rol por `actor`.
+- **2000 caracteres**: un reporte largo se parte en varios mensajes **dentro del hilo**, nunca en
+  el canal.
+
+## Extraccion conversacional (adjuntos)
+
+No hay que memorizar comandos: se pide conversando en el canal y el bot lo entrega como adjunto
+dentro del hilo del pedido.
+
+- **Pedido en lenguaje natural**: "bajame la conversacion y el pensamiento del ticket 93",
+  "mandame lo que penso el agente del bot de Discord". El bot detecta un verbo de entrega
+  (`bajame`, `mandame`, `pasame`, `enviame`, ...) + un sustantivo de contenido (`conversacion`,
+  `extraccion`, `transcripcion`, `pensamiento`, `sesion`, ...) y no espera sintaxis exacta.
+- **Ticket**: si el texto trae un numero (`93` / `#93`) o un slug (`FOO-3`), se usa para acotar.
+- **Quien extrae**: el bot invoca el comando de extraccion (env `RIG_EXTRACT_CMD`, default
+  `rig-transcript`), pasandole el ticket (o el texto del pedido) y lee su salida (stdout: el
+  contenido, o una ruta a un archivo). El bot **no** lee la base de opencode por su cuenta: el
+  comando lo construye/posee `work-visibilidad-y-cierre`.
+- **Entrega**: sube el archivo (`extraccion-<ticket>.md`) como adjunto dentro del hilo, con una
+  linea `Sesion: <ticket> · generado: <hora ISO>` y cita al mensaje del usuario.
+- **Sin comando configurado o sin contenido**: responde en el canal pidiendo el comando
+  (`RIG_EXTRACT_CMD`) en vez de fallar en silencio.
 
 ## Escalado al humano (cualquier flujo te llama a TI)
 

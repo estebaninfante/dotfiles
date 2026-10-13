@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import base64
+import datetime
+import fcntl
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -26,6 +29,18 @@ FORWARD_INTERVAL = 1.0
 IDLE_POLL = 1.0
 FRAME_TIMEOUT = 30.0
 DEFAULT_ESCALATE_MIN = 10.0
+THREAD_NAME_MAX = 90
+CHANNEL_LINE_MAX = 240
+ARCHIVE_MINUTES = 1440
+AREA_EMOJI = {
+    "hr": "\U0001F4E1",
+    "hypr": "\U0001F5A5",
+    "shell": "\U0001F5C2",
+    "audio": "\U0001F50A",
+    "meta": "\U0001F9E0",
+    "infra": "\U0001F527",
+    "foldertinder": "\U0001F4C1",
+}
 INTENTS = (1 << 0) | (1 << 9) | (1 << 15)
 OP_DISPATCH = 0
 OP_HEARTBEAT = 1
@@ -69,6 +84,13 @@ class Config:
         except ValueError:
             self.escalate_secs = DEFAULT_ESCALATE_MIN * 60.0
         self.escalate_cmd: str = os.environ.get("RIG_ESCALATE_BIN") or shutil.which("rig-escalate") or str(Path.home() / ".local" / "bin" / "rig-escalate")
+        self.threads: bool = os.environ.get("RIG_DISCORD_THREADS", "1") != "0"
+        self.archive_minutes: int = ARCHIVE_MINUTES
+        self.projects_dir: Path = Path(
+            os.environ.get("RIG_DISCORD_PROJECTS") or (self.state_dir / "projects.json")
+        )
+        self.extract_cmd: list[str] = (
+            os.environ.get("RIG_EXTRACT_CMD") or "rig-transcript").split()
 
     def ready(self) -> Optional[str]:
         if not self.token:
@@ -85,7 +107,7 @@ def rest_request(cfg: Config, method: str, path: str, payload: Optional[dict[str
     url = cfg.api + path
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     headers = {"Authorization": f"Bot {cfg.token}", "Content-Type": "application/json",
-               "User-Agent": "rig-discord-bot"}
+               "User-Agent": "rig-discord-bot (https://localhost, 1.0)"}
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         body = resp.read().decode("utf-8")
@@ -150,6 +172,217 @@ def mention(cfg: Config) -> str:
     return " ".join(f"<@{u}>" for u in cfg.allowed)
 
 
+AREA_PREFIX = {
+    "HR": "hr",
+    "HYPR": "hypr",
+    "SHELL": "shell",
+    "AUDIO": "audio",
+    "META": "meta",
+    "M": "meta",
+    "MAIN": "meta",
+    "INFRA": "infra",
+    "FT": "foldertinder",
+}
+
+
+def area_of(ticket: str) -> str:
+    if not ticket:
+        return ""
+    return AREA_PREFIX.get(ticket.split("-")[0].upper(), "")
+
+
+def load_projects(cfg: Config) -> dict[str, dict[str, Any]]:
+    try:
+        data = json.loads(cfg.projects_dir.read_text())
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_projects(cfg: Config, projects: dict[str, dict[str, Any]]) -> None:
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+    tmp = cfg.projects_dir.with_suffix(".tmp")
+    tmp.write_text(json.dumps(projects))
+    tmp.replace(cfg.projects_dir)
+
+
+def remember_project(cfg: Config, keys: list[str], project: dict[str, Any]) -> None:
+    projects = load_projects(cfg)
+    for key in keys:
+        if key:
+            projects[str(key)] = project
+    save_projects(cfg, projects)
+
+
+def thread_for(cfg: Config, key: str) -> str:
+    proj = load_projects(cfg).get(str(key))
+    if isinstance(proj, dict):
+        return str(proj.get("thread") or "")
+    return ""
+
+
+def latest_project(cfg: Config) -> dict[str, Any]:
+    best: dict[str, Any] = {}
+    best_ts = -1.0
+    for proj in load_projects(cfg).values():
+        if not isinstance(proj, dict):
+            continue
+        ts = float(proj.get("ts") or 0)
+        if ts >= best_ts:
+            best, best_ts = proj, ts
+    return best
+
+
+def thread_name(cfg: Config, ticket: str, text: str) -> str:
+    words = " ".join((text or "").split())
+    label = (ticket + " " + words).strip()
+    return (label or "pedido")[:THREAD_NAME_MAX]
+
+
+def create_thread(cfg: Config, message_id: str, name: str) -> Optional[str]:
+    payload = {"name": name, "auto_archive_duration": cfg.archive_minutes, "type": 11}
+    try:
+        res = rest_request(
+            cfg, "POST",
+            f"/channels/{cfg.channel_id}/messages/{message_id}/threads", payload)
+    except Exception as exc:
+        log(f"crear hilo fallo: {exc}")
+        return None
+    return str(res.get("id") or "") or None
+
+
+def post_message(cfg: Config, channel_id: str, text: str, reference: str = "") -> list[str]:
+    ids: list[str] = []
+    for chunk in split_chunks(text):
+        payload: dict[str, Any] = {"content": chunk}
+        had_ref = bool(reference) and not ids
+        if had_ref:
+            payload["message_reference"] = {
+                "message_id": reference, "channel_id": channel_id, "fail_if_not_exists": False}
+        try:
+            res = rest_request(cfg, "POST", f"/channels/{channel_id}/messages", payload)
+        except Exception as exc:
+            if had_ref:
+                log(f"post con cita en {channel_id} fallo ({exc}); reintento sin cita")
+                payload.pop("message_reference", None)
+                try:
+                    res = rest_request(cfg, "POST", f"/channels/{channel_id}/messages", payload)
+                except Exception as exc2:
+                    log(f"post en {channel_id} fallo: {exc2}")
+                    break
+            else:
+                log(f"post en {channel_id} fallo: {exc}")
+                break
+        mid = str(res.get("id") or "")
+        if mid:
+            ids.append(mid)
+    return ids
+
+
+def record(cfg: Config, kind: str, summary: str, data: dict[str, Any],
+           ticket: str = "", seat: str = "") -> None:
+    event = {
+        "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "kind": kind,
+        "actor": "discord-bridge",
+        "ticket": ticket,
+        "seat": seat,
+        "area": area_of(ticket),
+        "summary": summary,
+        "data": data,
+    }
+    try:
+        cfg.events_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(cfg.events_file, "a", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            handle.write(json.dumps(event) + "\n")
+            fcntl.flock(handle, fcntl.LOCK_UN)
+    except Exception as exc:
+        log(f"record fallo: {exc}")
+
+
+EXTRACT_VERBS = ("bajame", "bájame", "mandame", "mándame", "pasame", "pásame",
+                 "descargame", "descárgame", "enviame", "envíame", "dame", "exportame")
+EXTRACT_NOUNS = ("conversacion", "conversación", "extraccion", "extracción",
+                 "transcripcion", "transcripción", "pensamiento", "penso", "pensó",
+                 "sesion", "sesión", "charla")
+
+
+def wants_extract(text: str) -> bool:
+    low = (text or "").lower()
+    return any(v in low for v in EXTRACT_VERBS) and any(n in low for n in EXTRACT_NOUNS)
+
+
+def extract_ticket(text: str) -> str:
+    match = re.search(r"#?(\d{1,6})\b", text or "")
+    if match:
+        return match.group(1)
+    match = re.search(r"\b([A-Za-z]{2,}-\d+)\b", text or "")
+    return match.group(1) if match else ""
+
+
+def upload_attachment(cfg: Config, channel_id: str, path: Path, content: str,
+                      reference: str = "") -> str:
+    boundary = "----rigbridge" + os.urandom(12).hex()
+    payload: dict[str, Any] = {"content": content}
+    if reference:
+        payload["message_reference"] = {
+            "message_id": reference, "channel_id": channel_id, "fail_if_not_exists": False}
+    head = (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n\r\n"
+        f"{json.dumps(payload)}\r\n"
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[0]\"; "
+        f"filename=\"{path.name}\"\r\nContent-Type: text/markdown\r\n\r\n").encode()
+    body = head + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+    request = urllib.request.Request(
+        f"{cfg.api}/channels/{channel_id}/messages", data=body, method="POST",
+        headers={
+            "Authorization": f"Bot {cfg.token}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "User-Agent": "rig-discord-bot (https://localhost, 1.0)",
+        })
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        log(f"subir adjunto fallo: {exc}")
+        send_message(cfg, channel_id, content + f"\n(no pude subir el adjunto: {exc})")
+        return ""
+    return str(result.get("id") or "")
+
+
+def handle_extract(cfg: Config, channel_id: str, text: str, message_id: str,
+                   in_thread: bool) -> None:
+    ticket = extract_ticket(text)
+    stamp = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    args = list(cfg.extract_cmd) + ([ticket] if ticket else [text])
+    try:
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=180)
+    except Exception as exc:
+        emit(cfg, "extract-error", f"extraccion fallo: {exc}")
+        send_message(cfg, channel_id, f"No pude extraer la conversacion ({exc}).")
+        return
+    raw = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not raw:
+        emit(cfg, "extract-empty", (proc.stderr or "").strip()[:200])
+        send_message(cfg, channel_id,
+                     "La extraccion no devolvio contenido. Comando: "
+                     f"{' '.join(cfg.extract_cmd)} (override RIG_EXTRACT_CMD).")
+        return
+    out_dir = cfg.state_dir / "exports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    single = raw.splitlines()[0]
+    if len(raw.splitlines()) == 1 and Path(single).is_file():
+        path = Path(single)
+    else:
+        path = out_dir / f"extraccion-{ticket or 'pedido'}-{stamp.replace(':', '')}.md"
+        path.write_text(raw)
+    header = f"Sesion: {ticket or '-'} · generado: {stamp}"
+    reference = message_id if in_thread else ""
+    upload_attachment(cfg, channel_id, path, header, reference)
+    emit(cfg, "extract", f"{path.name} ({ticket or text[:40]})")
+
+
 def pending_path(cfg: Config) -> Path:
     return cfg.state_dir / "pending-asks.json"
 
@@ -200,29 +433,56 @@ def post_ask(cfg: Config, event: dict[str, Any]) -> None:
     stamp = str(event.get("ts") or "")
     if stamp:
         lines.append(f"-# {stamp} · fuente {event.get('actor') or seat or '?'}")
-    send_message(cfg, cfg.channel_id, "\n".join(lines))
+    proj = latest_project(cfg)
+    target = str(proj.get("thread") or "") or cfg.channel_id
+    reference = str(proj.get("last_user") or "")
+    ids = post_message(cfg, target, "\n".join(lines), reference)
     emit(cfg, "discord-ask", question, ticket=ticket, seat=seat)
+    record(cfg, "ask", question,
+           {"channel_id": target, "thread_id": target if target != cfg.channel_id else "",
+            "message_id": ids[0] if ids else "", "parent_id": reference,
+            "child_id": ids[0] if ids else "", "to": "discord"},
+           ticket=ticket, seat=seat)
     pending = load_pending(cfg)
     pending.append({"ts": time.time(), "seat": seat, "ticket": ticket,
-                    "question": question, "priority": priority, "reminded": False})
+                    "question": question, "priority": priority, "reminded": False,
+                    "thread": target if target != cfg.channel_id else "",
+                    "message_id": ids[0] if ids else ""})
     save_pending(cfg, pending)
 
 
-def deliver_answer(cfg: Config, text: str, pending: list[dict[str, Any]]) -> None:
+def deliver_answer(cfg: Config, text: str, pending: list[dict[str, Any]],
+                   channel_id: str = "", parent_id: str = "") -> None:
     ask = pending[-1]
     seat = str(ask.get("seat") or cfg.seat)
     ticket = str(ask.get("ticket") or "")
+    target = channel_id or str(ask.get("thread") or "") or cfg.channel_id
+    ask_id = str(ask.get("message_id") or "")
     ok, err = inject_to(cfg, seat, f"{cfg.prefix} [respuesta] {text}")
+    if not ok and seat != cfg.seat:
+        emit(cfg, "discord-error",
+             f"respuesta a {seat} fallo ({err}); reintento en {cfg.seat}")
+        ok2, err2 = inject_to(cfg, cfg.seat, f"{cfg.prefix} [respuesta] {text}")
+        if ok2:
+            seat, ok, err = cfg.seat, ok2, err2
+        else:
+            err = err2
     if not ok:
-        emit(cfg, "discord-error", f"respuesta a {seat} fallo: {err}")
-        send_message(cfg, cfg.channel_id, f"No pude entregar tu respuesta a {seat}: {err}")
+        emit(cfg, "discord-error", f"respuesta fallo: {err}")
+        post_message(cfg, target, f"No pude entregar tu respuesta a {seat}: {err}", ask_id)
         return
     emit(cfg, "answer", text, ticket=ticket, seat=seat)
     if ticket:
         unblock_ticket(cfg, ticket, text)
+    reply_id = parent_id or ask_id
+    ids = post_message(cfg, target, f"Respuesta entregada a {seat}.", reply_id)
+    record(cfg, "answer", text,
+           {"channel_id": target, "thread_id": target if target != cfg.channel_id else "",
+            "message_id": reply_id, "parent_id": reply_id,
+            "child_id": ids[0] if ids else "", "to": "discord"},
+           ticket=ticket, seat=seat)
     pending.pop()
     save_pending(cfg, pending)
-    send_message(cfg, cfg.channel_id, f"Respuesta entregada a {seat}.")
 
 
 def route_text(cfg: Config, channel_id: str, text: str) -> None:
@@ -276,24 +536,50 @@ def handle_message(cfg: Config, d: dict[str, Any]) -> None:
     if author.get("bot"):
         return
     channel_id = str(d.get("channel_id", ""))
-    if channel_id != cfg.channel_id:
+    projects = load_projects(cfg)
+    in_thread = channel_id != cfg.channel_id and channel_id in projects
+    if channel_id != cfg.channel_id and not in_thread:
         return
     user_id = str(author.get("id", ""))
     if user_id not in cfg.allowed:
         emit(cfg, "discord-reject", f"user no autorizado: {user_id}")
         return
     content = d.get("content") or ""
+    message_id = str(d.get("id", ""))
+    ref = d.get("message_reference") or {}
+    parent_id = str(ref.get("message_id") or "")
     if not content.strip():
         for attachment in d.get("attachments") or []:
             if str(attachment.get("content_type") or "").startswith("audio"):
                 handle_voice(cfg, channel_id, attachment)
         return
+    if cfg.threads and not in_thread and message_id:
+        name = thread_name(cfg, "", content)
+        thread_id = create_thread(cfg, message_id, name) or ""
+        if thread_id:
+            remember_project(cfg, [message_id, thread_id],
+                             {"root": message_id, "thread": thread_id,
+                              "ts": time.time(), "ticket": "", "name": name})
+            send_message(cfg, cfg.channel_id, f"Abri un hilo para este pedido: {name}")
+    if in_thread and message_id:
+        project = projects.get(channel_id)
+        if isinstance(project, dict):
+            project["last_user"] = message_id
+            remember_project(cfg, [channel_id], project)
+    record(cfg, "conv-in", f"{user_id}: {content}",
+           {"channel_id": channel_id,
+            "thread_id": channel_id if in_thread else "",
+            "message_id": message_id, "parent_id": parent_id,
+            "child_id": "", "to": "discord"})
     emit(cfg, "discord-in", f"{user_id}: {content}")
     if content.startswith("!"):
         ok, err = inject(cfg, content[1:].lstrip())
         if not ok:
             emit(cfg, "discord-error", f"inject fallo: {err}")
             send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
+        return
+    if wants_extract(content):
+        handle_extract(cfg, channel_id, content, message_id, in_thread)
         return
     route_text(cfg, channel_id, content)
 
@@ -358,7 +644,17 @@ def forward_replies(cfg: Config) -> int:
             if text:
                 stamp = str(event.get("ts") or "")
                 body = text + (f"\n-# {stamp} · {event.get('actor') or 'main'}" if stamp else "")
-                send_message(cfg, cfg.channel_id, body)
+                proj = latest_project(cfg)
+                target = str(proj.get("thread") or "") or cfg.channel_id
+                reference = str(proj.get("last_user") or "")
+                ids = post_message(cfg, target, body, reference)
+                record(cfg, "conv-out", body,
+                       {"channel_id": target,
+                        "thread_id": target if target != cfg.channel_id else "",
+                        "message_id": ids[0] if ids else "",
+                        "parent_id": reference,
+                        "child_id": ids[0] if ids else "",
+                        "to": "discord"})
                 emit(cfg, "discord-out", text)
                 count += 1
             continue
@@ -393,7 +689,9 @@ def escalate_pending(cfg: Config) -> int:
         seat = str(ask.get("seat") or "")
         ticket = str(ask.get("ticket") or "")
         try:
-            send_message(cfg, cfg.channel_id, f"{mention(cfg)} Sigue sin respuesta: {question}")
+            target = str(ask.get("thread") or "") or cfg.channel_id
+            reference = str(ask.get("message_id") or "")
+            post_message(cfg, target, f"{mention(cfg)} Sigue sin respuesta: {question}", reference)
         except Exception as exc:
             log(f"escalate send fallo: {exc}")
         emit(cfg, "ask-reminder", question, ticket=ticket, seat=seat)
@@ -766,6 +1064,22 @@ def selftest() -> int:
             failures.append("no limpio la pregunta pendiente tras responder")
         if not any(a[:3] == ["ticket", "set", "T-1"] for a in sent):
             failures.append("no desbloqueo el ticket T-1")
+        state["paths"].clear()
+        state["sends"].clear()
+        handle_message(cfg, {"id": "7001", "channel_id": "999", "content": "una idea nueva",
+                             "author": {"id": "555", "bot": False}})
+        if not any(p.endswith("/threads") for p in state["paths"]):
+            failures.append("no creo hilo para el pedido nuevo")
+        projects = load_projects(cfg)
+        if not projects:
+            failures.append("el pedido no quedo registrado como proyecto")
+        elif not any(str(p.get("thread") or "") for p in projects.values()):
+            failures.append("el proyecto del pedido no tiene hilo")
+        handle_message(cfg, {"id": "7002", "channel_id": "1", "content": "comento en el hilo",
+                             "author": {"id": "555", "bot": False}})
+        if not any(a[:3] == ["send", "main-seat", "[dc] comento en el hilo"] for a in
+                   [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]):
+            failures.append("no ruteo el mensaje del hilo a main")
     except Exception as exc:
         failures.append(f"excepcion: {exc}")
     finally:
@@ -810,13 +1124,15 @@ def main(argv: list[str]) -> int:
         print("rig-discord-bot [--selftest] [--once]\n"
               "  puente Discord <-> main: mensajes del canal entran a la silla (rig send),\n"
               "  las respuestas (rig say, kind=reply) vuelven al canal.\n"
-              "  escalado: un evento kind=ask se publica en el canal mencionando al usuario;\n"
+              "  hilos: cada pedido nuevo abre un hilo de Discord (RIG_DISCORD_THREADS=1);\n"
+              "  el canal queda limpio y el detalle vive en el hilo del pedido.\n"
+              "  escalado: un evento kind=ask se publica mencionando al usuario;\n"
               "  al responder, la respuesta viaja a la silla que pregunto (inject del seat),\n"
               "  emite kind=answer, desbloquea el ticket y limpia la pregunta pendiente.\n"
               "  sin respuesta en RIG_DISCORD_ESCALATE_MIN (default 10) min, repite y sube.\n"
               "  Config por EnvironmentFile: DISCORD_BOT_TOKEN, DISCORD_ALLOWED_USER_IDS,\n"
               "  DISCORD_CHANNEL_ID, RIG_SEAT, RIG_EVENTS_FILE, RIG_BIN, RIG_STT_CMD,\n"
-              "  RIG_DISCORD_ESCALATE_MIN, RIG_ESCALATE_BIN (opcionales).")
+              "  RIG_DISCORD_ESCALATE_MIN, RIG_ESCALATE_BIN, RIG_DISCORD_THREADS (opcionales).")
         return 0
     cfg = Config()
     if "--once" in argv:
