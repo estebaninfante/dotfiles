@@ -161,6 +161,18 @@
         "~/dotfiles/linux/config/opencode/AGENTS.md",
         "~/dotfiles/linux/config/opencode/skills/verification/verifiers/agents.sh"
       ]
+    },
+    "rig": {
+      "script": "rig.sh",
+      "desc": "rig: sillas tmux + tablero de tickets (store, board, work, areas)",
+      "priority": 16,
+      "globs": [
+        "~/.local/bin/rig",
+        "~/dotfiles/linux/bin/rig",
+        "**/linux/bin/rig",
+        "~/.config/opencode/tickets.json",
+        "~/dotfiles/linux/config/opencode/skills/verification/verifiers/rig.sh"
+      ]
     }
   }
 }

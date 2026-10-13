@@ -404,3 +404,35 @@ agente `ui-ux` y su skill `~/.config/opencode/skills/ui-ux-scorer/`.
 - Dueño: agente `ui-ux`. No implementa en dominios ajenos: reporta y delega
   (`omarchy-shell`, `hyprland`, ...).
 
+
+## Areas de ticket (rig): agrupacion por dominio + color
+
+Cada ticket puede llevar un campo opcional `area` que identifica su dominio y le da color en el
+tablero. Es el eje de agrupacion de `rig board` (ademas de filtro). Dominios y color hex:
+
+| area | dominio | color |
+|------|---------|-------|
+| `hr` | hypr-remote | `#4C9AFF` |
+| `hypr` | hyprland / plugins | `#B389FF` |
+| `shell` | omarchy-shell / QML | `#FFB84C` |
+| `audio` | PipeWire / WirePlumber | `#4CD9A0` |
+| `meta` | rig / agentes / herdr / doctrina | `#8A8F98` |
+| `infra` | dotfiles / systemd / packages | `#FF7A85` |
+| `foldertinder` | foldertinder | `#7ADBFF` |
+| (sin area) | — | `#8A8F98` |
+
+- **CLI**: `rig ticket add ... --area A`, `rig ticket set <id> --area A`,
+  `rig ticket list --area A` (filtro; `--area none` = sin area). `rig ticket backfill-area`
+  rellena por prefijo/proyecto los tickets sin area (HR* -> hr, HYPR* -> hypr, FT-* ->
+  foldertinder, M-*/META-*/WEB-RESEARCH -> meta, resto por proyecto).
+- **Render**: `rig board` agrupa por area con una cabecera coloreada (barra + nombre del area).
+  `rig board --plain` = salida plana, sin color ni agrupacion (para pipes). Las columnas son de
+  ancho fijo y el titulo se trunca al ancho de la terminal: sin desbordes.
+- **Contrato compartido (NO romper)**: `rig board --porcelain` y `rig ticket list --porcelain`
+  exponen `area` + `color` por ticket (aditivo). Los consume el cockpit `agentes-platform` y la
+  silla de trazabilidad. No cambiar la forma existente.
+- **herdr**: el tab del ticket usa el color de su area cuando la version lo permite; herdr 0.8.2
+  no tiene color por tab, asi que el area se muestra como etiqueta/emoji de color en el label.
+- Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
+  (`tickets-area`, `area-add`, `area-valid`, `area-cli`, `area-color`, `area-porcelain`,
+  `board-area`, `board-plain`) + `rig --selftest`.
