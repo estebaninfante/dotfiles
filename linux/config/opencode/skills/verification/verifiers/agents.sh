@@ -147,6 +147,36 @@ else
   fail "main-pure" "main.md no declara punto de entrada puro / prohibicion de task in-process / delegacion por sillas"
 fi
 
+style_agents_md="${AGENTS_STYLE_MD:-$HOME/.config/opencode/AGENTS.md}"
+style_main_md="${AGENTS_MAIN_MD:-$AGENTS_DIR/main.md}"
+style_flag="${CAVEMAN_FLAG:-$HOME/.config/opencode/.caveman-active}"
+style_cfg="${CAVEMAN_CFG:-$HOME/.config/caveman/config.json}"
+style_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'Estilo de respuesta (REGLA DURA' "$style_agents_md" \
+   || ! grep -qF 'espanol neutro' "$style_agents_md"; then
+  style_reason="falta la regla de estilo en $style_agents_md"
+elif [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF 'Estilo de respuesta (REGLA DURA' "$style_main_md" \
+   || ! grep -qF 'espanol neutro' "$style_main_md"; then
+  style_reason="falta la regla de estilo en $style_main_md"
+elif [[ -f "$style_flag" ]]; then
+  style_reason="flag caveman activo: $style_flag"
+else
+  style_mode="${CAVEMAN_DEFAULT_MODE:-}"
+  if [[ -z "$style_mode" && -f "$style_cfg" ]]; then
+    style_mode="$(node -e 'try{const c=require(process.argv[1]);process.stdout.write(String(c.defaultMode||"").toLowerCase())}catch(e){}' "$style_cfg" 2>/dev/null)"
+  fi
+  if [[ "$style_mode" != "off" ]]; then
+    style_reason="caveman defaultMode=${style_mode:-ausente} != off (cfg $style_cfg)"
+  fi
+fi
+if [[ -z "$style_reason" ]]; then
+  ok "style-policy" "regla de estilo presente y caveman apagado por defecto (defaultMode=off, sin flag)"
+else
+  fail "style-policy" "$style_reason"
+fi
+
 spec_err=$(mktemp)
 AGENTS_DIR="$AGENTS_DIR" DESC_BUDGET="$DESC_BUDGET" node -e '
 const fs = require("fs")

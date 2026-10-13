@@ -34,3 +34,6 @@ __pycache__/
 
 # estado runtime del tablero de tickets (rig ticket): churn, no versionar
 linux/config/opencode/tickets.json
+
+# caveman: flag de sesion, se genera en runtime (caveman apagado por defecto)
+linux/config/opencode/.caveman-active

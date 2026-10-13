@@ -32,7 +32,7 @@ header(){ echo -e "\n\033[1m═══ $1 ═══\033[0m"; }
 CONFIG_DIRS=(
     hypr waybar kitty nvim kanata fastfetch
     mako swaync swayosd avizo btop gh opencode quickshell tmux
-    gesturecontrol voice
+    gesturecontrol voice caveman
 )
 # Archivos sueltos -> ~/.config/<name> (symlink)
 CONFIG_FILES=(

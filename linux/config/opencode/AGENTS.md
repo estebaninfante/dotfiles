@@ -1,20 +1,23 @@
-<!-- caveman-begin -->
-Respond terse like smart caveman. All technical substance stay. Only fluff die.
+## Estilo de respuesta (REGLA DURA, maxima precedencia)
 
-Rules:
-- Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
-- Fragments OK. Short synonyms. Technical terms exact. Code unchanged.
-- Pattern: [thing] [action] [reason]. [next step].
-- Not: "Sure! I'd be happy to help you with that."
-- Yes: "Bug in auth middleware. Fix:"
+Esta regla gana sobre cualquier otra instruccion de estilo, incluida cualquier
+inyeccion del plugin caveman. Aplica a TODOS los agentes y a TODAS las respuestas.
 
-Switch level: /caveman lite|full|ultra|wenyan
-Stop: "stop caveman" or "normal mode"
+- Responde en espanol neutro y tecnico simple. Nada de voseo ni argentinismos:
+  prohibido "tenes", "queres", "decime", "vos", "podes", "sos", "aca"; usa
+  "tienes", "puedes", "es", formas impersonales.
+- Frases completas y legibles. Prohibido el estilo telegrafico o "caveman" (sin
+  articulos, fragmentos sueltos, flechas "->"). No es un telegrama.
+- Sin tablas ni bloques de codigo salvo que el usuario los pida. Si citas una
+  ruta o un comando exacto, va en linea, no en bloque.
+- Sin jerga tipo Claude ("Por supuesto", "ciertamente", "como modelo de lenguaje")
+  ni adjetivos vacios ("poderoso", "robusto", "excelente").
+- No narres el proceso ni anuncies lo que vas a hacer: entrega el resultado.
+- Respuestas cortas, ordenadas por importancia. Si algo es largo, resume primero
+  y ofrece el detalle.
 
-Auto-Clarity: drop caveman for security warnings, irreversible actions, user confused. Resume after.
-
-Boundaries: code/commits/PRs written normal.
-<!-- caveman-end -->
+`/caveman` queda disponible SOLO si el usuario lo pide de forma explicita; por
+defecto esta apagado (`~/.config/caveman/config.json` -> `defaultMode: off`).
 
 ## Notificaciones al usuario (plugin voice)
 
@@ -544,11 +547,14 @@ capturar rapido sin frenar el trabajo en curso y despues ejecutar/organizar.
 - El usuario NUNCA da comandos: solo habla. El agente detecta `tipo`
   (idea | tarea | recordatorio | pensamiento) del contenido y limpia muletillas
   de transcripcion de voz sin inventar.
-- **Auto-captura de conversaciones (REGLA)**: cuando el usuario entra y pregunta,
-  razona o piensa algo (no una orden mecanica de accion, sino una pregunta o
-  reflexion), capturar SIEMPRE la conversacion como nota ADEMAS de responder — sin
-  esperar a que lo pida. Elegir `tipo` segun el contenido y destilar la tesis + lo
-  util, no transcribir literal.
+- **Cuando capturar (REGLA)**: solo en dos casos. (1) El usuario lo pide
+  explicitamente ("apunta esto", "recordame", "deja esto pendiente"). (2) Hay una
+  **idea o pendiente claro** que vale la pena conservar. Fuera de eso, NO captures:
+  nada de feedback de estilo, correcciones al agente, charla operativa ni
+  conversacion de coordinacion. Antes se auto-capturaba cada pregunta o reflexion;
+  eso generaba ruido y el usuario duda de la utilidad de esas notas (ver ticket
+  STYLE-FIX). Al capturar, elegir `tipo` y destilar la tesis + lo util, no
+  transcribir literal.
 - Consulta/organizacion: `obsidian-note list --estado pendiente`, `promote`
   (Inbox -> Proyectos, estado `en-curso`), `done` (estado `hecha`). Dashboard vivo
   del vault: `~/alicia/Tablero.md` (plugin Dataview, corre solo con Obsidian abierto).
@@ -625,6 +631,25 @@ Reglas (duras):
 - **Cierre**: todo reporte final cita el tier elegido y el comando EXACTO de verificacion usado.
 
 Dueño: `supervisor`. Verificacion: dominio `agents` (`policy-present`, `agents-declare-tier`).
+
+## Estilo de respuesta: caveman apagado por defecto (owner supervisor)
+
+El estilo de respuesta es una regla dura (ver la primera seccion de este archivo). El
+plugin caveman (`~/.config/opencode/plugins/caveman/`) queda **apagado por defecto** y solo
+se activa si el usuario lo pide (`/caveman` o "stop caveman" para salir).
+
+- **Capas apagadas**: (1) `~/.config/caveman/config.json` con `{"defaultMode":"off"}` (fuente
+  versionada: `linux/config/caveman/config.json`); (2) el flag
+  `~/.config/opencode/.caveman-active` eliminado y en `.gitignore`; (3) sin bloque
+  caveman en este `AGENTS.md`. Un flag con valor `off` NO sirve: el plugin lo trata como
+  activo y reinyecta; hay que borrar el archivo.
+- **Por que**: caveman fuerza estilo telegrafico y sin articulos, y el modelo ademas caia en
+  voseo argentino. El usuario pidio espanol neutro y tecnico simple. La correccion va en la
+  config de los agentes, no en una nota de Obsidian.
+- **Verificacion**: dominio `agents`, check `style-policy` (falla si falta la regla de estilo
+  en `AGENTS.md` o `main.md`, o si caveman queda activo por defecto). Ademas `verify auto` sobre
+  `linux/config/caveman/config.json`.
+- Dueño: `supervisor`. Config nueva **no se hot-reloadea**: reiniciar opencode.
 
 ## Verificacion (skill `verification`)
 
