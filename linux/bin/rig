@@ -67,7 +67,7 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
 
   rig seats [--porcelain]            listar sillas (sesiones tmux marcadas)
   rig ls                             alias de seats
-  rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M]
+  rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID]
                    [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--herdr-cwd DIR] [--attach] [--dry-run]
   rig send <silla> [--force] [--no-enter] <mensaje...>
   rig read <silla> [--lines N]       capturar el output reciente
@@ -103,14 +103,17 @@ worktree: cada ticket corre en su propio arbol git (branch ticket/<id>) -> cambi
 paralelos sin carrera; merge a la base es explicito. Override de ubicacion: RIG_WORKTREE_DIR.
 modelo: toda silla arranca con --model explicito (default opencode-go/deepseek-v4.1-flash).
   Override: RIG_SEAT_MODEL.
-herdr: workspace = proyecto (git repo), tab = agente, pane = attach a la silla. Se crea/reusa
-  al spawnear y se ENFOCA por defecto (--no-focus lo evita, RIG_FOCUS=0 global).
+herdr: workspace = proyecto (git repo), tab = ticket, pane = agente (attach a la silla). Si el
+  ticket ya tiene tab, un 2do agente abre un pane nuevo (split), no una tab nueva; sin ticket,
+  la tab se llama como la silla. Se crea/reusa al spawnear y se ENFOCA por defecto
+  (--no-focus lo evita, RIG_FOCUS=0 global).
   Desactivar: RIG_HERDR=0 o --no-herdr.
 espejo tmux: ventana extra en la sesion de espejos (RIG_MIRROR_SESSION; autodetectada).
   Desactivar: --no-mirror.
-ciclo de vida: al cerrar un ticket (work finish / ticket done) se mata la silla del ticket,
-  su tab en herdr y la ventana espejo (--keep-open / --no-close-seat lo evita). Nunca mata
-  main ni sillas sin ticket asociado; ante duda deja el ticket blocked.
+ciclo de vida: al cerrar un ticket (work finish / ticket done) se matan TODAS las sillas de su
+  tab (todos los agentes del ticket) y la tab en herdr, mas su ventana espejo (--keep-open /
+  --no-close-seat lo evita). Nunca mata main ni sillas sin ticket asociado; ante duda deja el
+  ticket blocked.
 EOF
 }
 
@@ -205,9 +208,46 @@ herdr_ensure_ws() {
     "$(printf '%s' "$out" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)"
 }
 
-herdr_tab_for_seat() {
+herdr_tab_for_label() {
   local ws="$1" label="$2"
   herdr tab list --workspace "$ws" 2>/dev/null | jq -r --arg l "$label" '.result.tabs[]|select(.label==$l)|.tab_id' 2>/dev/null
+}
+
+herdr_first_pane() {
+  herdr pane list --workspace "$1" 2>/dev/null \
+    | jq -r --arg t "$2" '[.result.panes[]|select(.tab_id==$t)]|.[0].pane_id // empty' 2>/dev/null
+}
+
+herdr_split_pane() {
+  local ws="$1" tid="$2" anchor before after pid
+  anchor=$(herdr_first_pane "$ws" "$tid")
+  [ -n "$anchor" ] || return 0
+  before=$(herdr pane list --workspace "$ws" 2>/dev/null | jq -r '.result.panes[].pane_id' 2>/dev/null | sort)
+  herdr pane split --pane "$anchor" --direction right --no-focus >/dev/null 2>&1 || true
+  after=$(herdr pane list --workspace "$ws" 2>/dev/null | jq -r '.result.panes[].pane_id' 2>/dev/null | sort)
+  pid=$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n1)
+  printf '%s' "$pid"
+}
+
+seat_ticket_label() {
+  local seat="$1" ticket="$2" canon
+  if [ -z "$ticket" ]; then
+    case "$seat" in work-*) ticket="${seat#work-}" ;; *) return 1 ;; esac
+  fi
+  canon=""
+  if [ -f "$TICKETS_FILE" ]; then canon=$(store_key "$ticket" 2>/dev/null || true); fi
+  [ -n "$canon" ] || canon="$ticket"
+  printf '%s' "$canon"
+}
+
+tab_label_for_seat() {
+  local seat="$1" ticket_lbl
+  ticket_lbl=$(seat_ticket_label "$seat" "${2:-}") || { printf '%s' "$seat"; return 0; }
+  printf '%s' "$ticket_lbl"
+}
+
+herdr_tab_id_for_seat() {
+  tmux show-environment -t "$1" HERDR_TAB_ID 2>/dev/null | sed -n 's/^HERDR_TAB_ID=//p'
 }
 
 herdr_socket_path() {
@@ -215,19 +255,21 @@ herdr_socket_path() {
 }
 
 herdr_open_seat() {
-  local ws="$1" seat="$2" dir="$3" ex_tid="${4:-}"
-  local out tid="$ex_tid" pid=""
+  local ws="$1" seat="$2" dir="$3" ex_tid="${4:-}" label="${5:-$2}"
+  local out tid="" pid=""
   if [ -n "$ex_tid" ]; then
-    herdr tab rename "$ex_tid" "$seat" >/dev/null 2>&1 || true
-  else
-    tid=$(herdr_tab_for_seat "$ws" "$seat")
+    herdr tab rename "$ex_tid" "$label" >/dev/null 2>&1 || true
+    tid="$ex_tid"; pid=$(herdr_first_pane "$ws" "$tid")
+    [ -n "$tid" ] && printf '%s %s\n' "$tid" "$pid"; return 0
   fi
+  tid=$(herdr_tab_for_label "$ws" "$label")
   if [ -z "$tid" ]; then
-    out=$(herdr tab create --workspace "$ws" --cwd "$dir" --label "$seat" --no-focus 2>/dev/null) || return 1
+    out=$(herdr tab create --workspace "$ws" --cwd "$dir" --label "$label" --no-focus 2>/dev/null) || return 1
     tid=$(printf '%s' "$out" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)
     pid=$(printf '%s' "$out" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
   else
-    pid=$(herdr pane list --workspace "$ws" 2>/dev/null | jq -r --arg t "$tid" '[.result.panes[]|select(.tab_id==$t)]|.[0].pane_id // empty' 2>/dev/null)
+    pid=$(herdr_pane_for_seat "$seat")
+    [ -n "$pid" ] || pid=$(herdr_split_pane "$ws" "$tid")
   fi
   [ -n "$tid" ] && printf '%s %s\n' "$tid" "$pid"
 }
@@ -239,23 +281,18 @@ herdr_attach_seat() {
 }
 
 herdr_set_title() {
-  local pid="$1" agent="$2" seat="$3" label="$3"
+  local pid="$1" agent="$2" seat="$3" pane_label="$3" label="$3"
   [ -n "$pid" ] || return 0
-  [ -n "$agent" ] && label="$agent · $seat"
-  herdr pane rename "$pid" "$seat" >/dev/null 2>&1 || true
+  [ -n "$agent" ] && pane_label="$agent" && label="$agent · $seat"
+  herdr pane rename "$pid" "$pane_label" >/dev/null 2>&1 || true
   herdr pane report-metadata "$pid" --source rig --title "$label" >/dev/null 2>&1 || true
 }
 
 herdr_pane_for_seat() {
-  local seat="$1" ws tid
-  for ws in $(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[].workspace_id' 2>/dev/null); do
-    [ -n "$ws" ] || continue
-    tid=$(herdr_tab_for_seat "$ws" "$seat")
-    [ -n "$tid" ] || continue
-    herdr pane list --workspace "$ws" 2>/dev/null \
-      | jq -r --arg t "$tid" '[.result.panes[]|select(.tab_id==$t)]|.[0].pane_id // empty' 2>/dev/null
-    return 0
-  done
+  local seat="$1" pid
+  pid=$(tmux show-environment -t "$seat" HERDR_PANE_ID 2>/dev/null | sed -n 's/^HERDR_PANE_ID=//p')
+  [ -n "$pid" ] || return 0
+  herdr pane list 2>/dev/null | jq -e --arg p "$pid" 'any(.result.panes[]; .pane_id==$p)' >/dev/null 2>&1 && printf '%s' "$pid"
 }
 
 seat_has_agent_env() {
@@ -276,16 +313,24 @@ seat_activity_state() {
 }
 
 herdr_sync_seat() {
-  local seat="$1" quiet="$2" cwd agent ws tid pid state isnew=0 ex_tid
+  local seat="$1" quiet="$2" cwd agent ws tid pid state isnew=0 ex_tid env_tab label
   cwd=$(tmux show-options -t "$seat" -v @agent_cwd 2>/dev/null)
   [ -n "$cwd" ] || cwd=$(tmux display-message -p -t "$seat" '#{pane_current_path}' 2>/dev/null)
   [ -n "$cwd" ] && [ -d "$cwd" ] || return 0
   agent=$(tmux show-options -t "$seat" -v @agent_cmd 2>/dev/null | sed -n 's/.*--agent[ =]\+\([A-Za-z0-9_.-]\+\).*/\1/p' | head -1)
   herdr_ok || return 0
+  env_tab=$(herdr_tab_id_for_seat "$seat")
+  if [ -n "$env_tab" ]; then
+    pid=$(herdr_pane_for_seat "$seat")
+    [ -n "$pid" ] && herdr_set_title "$pid" "$agent" "$seat"
+    [ "$quiet" = "1" ] || info "  $seat -> $env_tab [plugin herdr]"
+    return 0
+  fi
   read -r ws ex_tid _ < <(herdr_ensure_ws "$cwd" "$(basename "$cwd")") || true
   [ -n "$ws" ] || return 0
-  if [ -z "$ex_tid" ] && [ -z "$(herdr_tab_for_seat "$ws" "$seat")" ]; then isnew=1; fi
-  read -r tid pid < <(herdr_open_seat "$ws" "$seat" "$cwd" "$ex_tid")
+  label=$(tab_label_for_seat "$seat")
+  if [ -z "$ex_tid" ] && [ -z "$(herdr_tab_for_label "$ws" "$label")" ]; then isnew=1; fi
+  read -r tid pid < <(herdr_open_seat "$ws" "$seat" "$cwd" "$ex_tid" "$label")
   if [ -n "$pid" ]; then
     [ "$isnew" = "1" ] && herdr_attach_seat "$pid" "$seat"
     herdr_set_title "$pid" "$agent" "$seat"
@@ -307,13 +352,32 @@ herdr_focus_seat() {
   return 0
 }
 
+herdr_kill_seats_on_tab() {
+  local tid="$1" self="$2" s
+  [ -n "$tid" ] || return 0
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    [ "$s" = "$self" ] && continue
+    is_seat "$s" || continue
+    [ "$(herdr_tab_id_for_seat "$s")" = "$tid" ] || continue
+    if session_exists "$s"; then tmux kill-session -t "$s" 2>/dev/null && info "silla cerrada: $s"; fi
+    mirror_rm "$s"
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+}
+
 herdr_close_seat() {
-  local seat="$1" dir="$2" ws tid
+  local seat="$1" dir="$2" ws tid label
   herdr_ok || return 0
-  ws=$(herdr_ws_for_cwd "$dir") || true
-  [ -n "$ws" ] || return 0
-  tid=$(herdr_tab_for_seat "$ws" "$seat")
-  [ -n "$tid" ] && herdr tab close "$tid" >/dev/null 2>&1 || true
+  tid=$(herdr_tab_id_for_seat "$seat")
+  if [ -z "$tid" ]; then
+    ws=$(herdr_ws_for_cwd "$dir") || true
+    [ -n "$ws" ] || return 0
+    label=$(tab_label_for_seat "$seat")
+    tid=$(herdr_tab_for_label "$ws" "$label")
+  fi
+  [ -n "$tid" ] || return 0
+  herdr_kill_seats_on_tab "$tid" "$seat"
+  herdr tab close "$tid" >/dev/null 2>&1 || true
   return 0
 }
 
@@ -399,9 +463,9 @@ cmd_seats() {
 }
 
 cmd_spawn() {
-  [ $# -ge 1 ] || die "uso: rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--attach] [--dry-run]"
+  [ $# -ge 1 ] || die "uso: rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--attach] [--dry-run]"
   local name="$1"; shift
-  local agent="" cwd="$PWD" custom="" prompt="" model="$SEAT_MODEL" attach=0 dry_run=0
+  local agent="" cwd="$PWD" custom="" prompt="" model="$SEAT_MODEL" attach=0 dry_run=0 ticket=""
   local herdr_flag="auto" mirror_flag="1" herdr_cwd="" focus_flag="${RIG_FOCUS:-1}"
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -410,6 +474,7 @@ cmd_spawn() {
       --cmd) [ $# -ge 2 ] || die "--cmd requiere valor"; custom="$2"; shift 2 ;;
       --prompt) [ $# -ge 2 ] || die "--prompt requiere valor"; prompt="$2"; shift 2 ;;
       --model) [ $# -ge 2 ] || die "--model requiere valor"; model="$2"; shift 2 ;;
+      --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
       --herdr-cwd) [ $# -ge 2 ] || die "--herdr-cwd requiere valor"; herdr_cwd="$2"; shift 2 ;;
       --herdr) herdr_flag=1; shift ;;
       --no-herdr) herdr_flag=0; shift ;;
@@ -438,10 +503,11 @@ cmd_spawn() {
     return 0
   fi
   [ -n "$herdr_cwd" ] || herdr_cwd="$cwd"
-  local ws="" tid="" pid="" ex_tid=""
+  local ws="" tid="" pid="" ex_tid="" tab_label=""
+  tab_label=$(tab_label_for_seat "$name" "$ticket")
   if herdr_enabled; then
     read -r ws ex_tid _ < <(herdr_ensure_ws "$herdr_cwd" "$(basename "$herdr_cwd")") || true
-    if [ -n "$ws" ]; then read -r tid pid < <(herdr_open_seat "$ws" "$name" "$herdr_cwd" "$ex_tid"); fi
+    if [ -n "$ws" ]; then read -r tid pid < <(herdr_open_seat "$ws" "$name" "$herdr_cwd" "$ex_tid" "$tab_label"); fi
   fi
   local env_args=()
   if [ -n "$ws" ] && [ -n "$pid" ]; then
@@ -458,7 +524,7 @@ cmd_spawn() {
     herdr_attach_seat "$pid" "$name"
     herdr_set_title "$pid" "$agent" "$name"
     if [ "$focus_flag" = "1" ]; then herdr_focus_seat "$ws" "$tid"; fi
-    info "  herdr: workspace $ws, tab $name (agente reporta estado via plugin)"
+    info "  herdr: workspace $ws, tab $tab_label (agente reporta estado via plugin)"
   fi
   if mirror_enabled; then mirror_add "$name"; fi
   if [ "$attach" = "1" ]; then
@@ -986,14 +1052,16 @@ rig work - cambios paralelos y trazables: un git worktree + branch por ticket
       --session <ses_id> asocia una sesion de opencode (para metricas por ticket).
       --model M fija el modelo de la silla (default $RIG_SEAT_MODEL o
       opencode-go/deepseek-v4.1-flash). --herdr crea/reusa el workspace del proyecto
-      (workspace=proyecto, tab=agente) y --mirror abre la ventana espejo en tmux.
+      (workspace=proyecto, tab=ticket, pane=agente; un 2do agente del mismo ticket
+      se abre como pane nuevo de la tab) y --mirror abre la ventana espejo en tmux.
   rig work list [--project P] [--status S] [--porcelain]
       tickets con worktree: branch, commits y si el arbol sigue vivo.
   rig work finish <id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]
       corre 'verify auto' sobre lo cambiado, commitea en el branch y cierra el
       ticket (done) con evidencia branch/commit/verify. No mergea. Al cerrar,
-      mata la silla del ticket, su tab herdr y la ventana espejo (--keep-open o
-      --no-close-seat lo evitan). Nunca mata main ni sillas sin ticket.
+      mata TODAS las sillas de la tab del ticket, su tab herdr y sus ventanas
+      espejo (--keep-open o --no-close-seat lo evitan). Nunca mata main ni sillas
+      sin ticket.
   rig work rm <id> [--delete-branch] [--force]
       elimina el worktree (conserva el branch salvo --delete-branch).
 
@@ -1080,7 +1148,7 @@ work_new() {
   if [ "$spawn" = "1" ]; then
     local seat
     seat=$(seat_for_ticket "$key")
-    local -a sargs=(--cwd "$wt" --herdr-cwd "$repo" --model "$model")
+    local -a sargs=(--cwd "$wt" --herdr-cwd "$repo" --model "$model" --ticket "$key")
     [ -n "$agent" ] && sargs+=(--agent "$agent")
     [ -n "$prompt" ] && sargs+=(--prompt "$prompt")
     if [ "$herdr_flag" = "0" ]; then sargs+=(--no-herdr); elif [ "$herdr_flag" = "1" ]; then sargs+=(--herdr); fi
@@ -1414,6 +1482,7 @@ cmd_herdr() {
 cmd_scan() {
   need_jq
   local porcelain=0 lines=40 project="" status="" no_metrics=0 no_seats=0
+  local idle_max="${RIG_IDLE_MAX_MIN:-60}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --porcelain|-p) porcelain=1; shift ;;
@@ -1428,6 +1497,7 @@ cmd_scan() {
     esac
   done
   [[ "$lines" =~ ^[0-9]+$ ]] || die "lines invalido: $lines"
+  [[ "$idle_max" =~ ^[0-9]+$ ]] || die "RIG_IDLE_MAX_MIN invalido: $idle_max"
   if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
   store_ensure
 
@@ -1459,7 +1529,7 @@ cmd_scan() {
   tw=$(jv_file "$wts")
   sf=$(jv_file "$sessions")
   full=$(jq -cn --rawfile tickets "$tf" --rawfile seats "$ts" \
-    --rawfile wts "$tw" --rawfile sj "$sf" \
+    --rawfile wts "$tw" --rawfile sj "$sf" --argjson idle_max "$idle_max" \
     "$METRICS_DEFS"'
     ($tickets | fromjson) as $tickets
     | ($seats | fromjson) as $seats
@@ -1473,6 +1543,7 @@ cmd_scan() {
           | ($wtm[$wp] // {path:$wp,live:false,branch:"",files:[],insertions:0,deletions:0,activity:0}) as $w
           | ($seatm[$wp] // null) as $s
           | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
+          | ([($w.activity // 0), (if $s then $s.activity else 0 end)] | max) as $act
           | {kind:"ticket", id:$t.id, project:$t.project, owner:$t.owner, status:$t.status,
              branch:(if $w.branch!="" then $w.branch else ($t.branch // "") end),
              worktree:$wp, live:($w.live // false),
@@ -1480,7 +1551,9 @@ cmd_scan() {
              seat_mode:(if $s then $s.mode else 0 end),
              pane:(if $s then $s.pane else "" end),
              files:($w.files // []), insertions:($w.insertions // 0), deletions:($w.deletions // 0),
-             activity:([($w.activity // 0), (if $s then $s.activity else 0 end)] | max),
+             activity:$act,
+             idle_min:(if $act > 0 then ((now - $act) / 60 | floor) else null end),
+             stale:( ($t.status == "in-progress") and ($s != null) and (($w.live // false) == true) and ($act > 0) and (((now - $act) / 60) > $idle_max) ),
              metrics:{sessions:$m.n,
                tokens:{input:$m.tin,output:$m.tout,reasoning:$m.trea,cache_read:$m.tcr,cache_write:$m.tcw,total:($m.tin+$m.tout+$m.trea)},
                cost:$m.cost, time:{created:$m.created,updated:$m.updated,duration_ms:($m.updated-$m.created)}} }
@@ -1511,9 +1584,9 @@ cmd_scan() {
   printf '%s%s%s\n' "$C_HEAD" "$(printf '%-10s %-10s %-10s %-14s %-8s %-12s %-5s %-22s %s' "ID" "PROJECT" "OWNER" "SEAT" "STATE" "ACTIVITY" "FILES" "METRICS" "BRANCH")" "$C_OFF"
   printf '%s' "$full" | jq -r '
     .[] as $e
-    | ("E\u001f" + $e.id + "\u001f" + ($e.project // "") + "\u001f" + ($e.owner // "")
+    | ("E\u001f" + (if ($e.stale // false) then "!" else "" end) + $e.id + "\u001f" + ($e.project // "") + "\u001f" + ($e.owner // "")
        + "\u001f" + ($e.seat // "")
-       + "\u001f" + (if ($e.live and ($e.seat // "")!="") then "live" elif $e.live then "idle" else "missing" end)
+       + "\u001f" + (if ($e.stale // false) then "stale" elif ($e.live and ($e.seat // "")!="") then "live" elif $e.live then "idle" else "missing" end)
        + "\u001f" + (($e.activity // 0)|tostring)
        + "\u001f" + (($e.files|length)|tostring)
        + "\u001f" + ((($e.metrics.sessions) // 0)|tostring)

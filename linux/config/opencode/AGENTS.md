@@ -210,9 +210,15 @@ eso el trabajo **no** corre in-process en `main`, y **esta prohibido delegar con
   `ticket/<id>` + silla `work-<id>`), y se le habla con `rig send <silla> "..."`. **Un escritor por
   arbol** (ver el invariante de worktree).
 - **Herramientas visibles por defecto**: al spawnear, `rig` arma el **workspace herdr del
-  proyecto** (workspace = proyecto git -- un worktree cae en el workspace de su repo; tab = agente,
-  pane = attach a la silla; `--no-herdr` para omitir, `RIG_HERDR=0`) y la **ventana espejo** en una
+  proyecto** (workspace = proyecto git -- un worktree cae en el workspace de su repo; **tab = ticket**,
+  **pane = agente**; `--no-herdr` para omitir, `RIG_HERDR=0`) y la **ventana espejo** en una
   sesion tmux de agentes (`--no-mirror`).
+- **Nomenclatura de tab herdr = ticket (REGLA)**: la tab de una silla con ticket lleva el `id` del
+  ticket (p.ej. `HR-PAD-TAB`), NO el nombre de la silla (`work-hr-pad-tab`). Al spawnear un **2do
+  agente del mismo ticket** NO se crea tab nueva: se abre un **pane nuevo dentro de la tab
+  existente** (`herdr pane split`), con label por agente (cada pane = attach de una silla). Una
+  silla **sin ticket** conserva el comportamiento anterior (tab = silla). `rig spawn` acepta
+  `--ticket <ID>` para fijarlo explicito; `rig work new ... --spawn` lo deriva del ticket.
 - **Estado real del agente en herdr (panel de trazabilidad)**: la silla sigue siendo **una sola
   sesion tmux con UN proceso opencode** (nada de duplicar). Al spawnear, `rig` crea primero el
   tab/pane herdr y arranca la sesion tmux con `-e HERDR_ENV=1 -e HERDR_PANE_ID=<pane> -e
@@ -234,17 +240,20 @@ eso el trabajo **no** corre in-process en `main`, y **esta prohibido delegar con
   `opencode-go/deepseek-v4.1-flash`, override `RIG_SEAT_MODEL`) para no heredar el ultimo modelo y
   caer en un provider sin auth.
 - **Ciclo de vida**: al cerrar el ticket (`rig work finish` / `rig ticket done`) se libera la RAM:
-  se mata la silla del ticket, su tab en herdr y la ventana espejo (`--keep-open` /
-  `--no-close-seat` lo evitan). Nunca mata `main` ni sillas sin ticket; ante duda, deja el ticket
-  `blocked` en vez de matar.
+  se matan **TODAS las sillas de la tab del ticket** (todos sus panes/agentes), su tab en herdr y sus
+  ventanas espejo (`--keep-open` / `--no-close-seat` lo evitan). Nunca mata `main` ni sillas sin
+  ticket; ante duda, deja el ticket `blocked` en vez de matar. `rig herdr sync` NO renombra las tabs
+  ya existentes (una silla con `HERDR_TAB_ID` en su env solo retitula su propio pane), para no romper
+  las tabs legacy con formato viejo.
 - Se lee el avance con `rig read <silla>` y, para un vistazo completo, con `rig scan`: ticket/
   proyecto/agente, ruta del worktree, **archivos modificados** (`git status` + `git diff --numstat`,
   incluye untracked), **ultima actividad** (mtime mas reciente), las ultimas ~40 lineas del pane y
   **tokens/costo/tiempo** del ticket (`--porcelain` = JSON).
 - Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
   (`scan-cli`, `scan-porcelain`, `scan-empty`, `scan-empty-render`, `seat-model`, `seat-model-env`,
-  `herdr-hooks`, `lifecycle-cli`) y anti-rot `verify run agents` (checks `sillas-policy`,
-  `main-pure`); `rig --selftest` cubre `scan`/herdr/lifecycle con un worktree temporal.
+  `herdr-hooks`, `lifecycle-cli`, `tabs-policy`) y anti-rot `verify run agents` (checks
+  `sillas-policy`, `main-pure`); `rig --selftest` cubre `scan`/herdr/lifecycle con un worktree
+  temporal.
 
 ## Invariante: ningun pedido de trabajo queda sin lanzar
 
@@ -261,8 +270,21 @@ owner. **Nunca** deja el pedido en `"¿lo lanzo?"`: o lo lanza, o lo cierra con 
   ticket in-progress sin silla viva (ni worktree vivo) es **stale**: se relanza
   (`rig work new <id> --cwd <repo> --spawn`) o se marca `pending`/`blocked`, jamas se deja
   `in-progress` huerfano.
+- **Ciclo completo, nunca entregable parcial**: si el pedido admite diagnostico + fix, el
+  encargo es el ciclo entero (diagnostico -> fix -> `verify` -> evidencia -> ticket
+  `done`/`blocked`). Prohibido cerrar una delegacion con un entregable parcial (p.ej. solo el
+  diagnostico) dejando el ticket `in-progress`.
+- **La silla cierra su ticket**: al terminar su unidad, la silla DEBE reflejar el resultado en
+  el store en el momento (`rig ticket done <id> --evidence ...` o `rig ticket set <id> --status
+  blocked --evidence ...`). Silla que termino y quedo idle con el ticket `in-progress` = fallo
+  de flujo.
+- **main cierra los bucles**: tras CADA interaccion del usuario y antes de cerrar cualquier
+  unidad, `main` corre `rig scan` / `rig board`, detecta los tickets `in-progress` con silla sin
+  actividad reciente (`stale`, ver check `tickets-idle`) y los cierra: relanza
+  (`rig work new <id> --cwd <repo> --spawn`) o marca `pending`/`blocked`. `main` nunca asume que
+  la silla aviso.
 - Dueño: `supervisor`. Verificacion: `verify run agents` (checks `launch-policy`,
-  `tickets-live`).
+  `tickets-live`) + `verify run rig` (check `tickets-idle`, senal de sillas in-progress idle).
 
 ## Invariante: cambios paralelos con git worktree por ticket
 
