@@ -404,3 +404,36 @@ agente `ui-ux` y su skill `~/.config/opencode/skills/ui-ux-scorer/`.
 - Dueño: agente `ui-ux`. No implementa en dominios ajenos: reporta y delega
   (`omarchy-shell`, `hyprland`, ...).
 
+## Central de trazabilidad (rig central)
+
+Un comando materializa un workspace herdr **CENTRAL** con la trazabilidad viva en 4 panes:
+
+```
+rig central
+```
+
+- **panes**: `board` (`rig board --watch`), `scan` (`rig scan --watch`), `agents`
+  (`rig agents --watch`), `queue` (`rig queue --watch`).
+- Idempotente: si CENTRAL ya existe solo lo enfoca. `--rebuild` lo cierra y recrea;
+  `--no-focus` no roba el foco; `--interval SEG` ajusta el refresco; `--label`/`--cwd`
+  cambian nombre/directorio (default `CENTRAL` / `$HOME`, override `RIG_CENTRAL_CWD`).
+- Vive en el server de herdr: sobrevive a cerrar la terminal y se reabre con el mismo
+  comando. Requiere herdr disponible (`RIG_HERDR=1`).
+
+Comandos de la vista viva:
+
+- `rig agents [--watch] [--porcelain] [--interval SEG]`: por silla, agente + estado
+  `working|idle|blocked` + **fuente**. `source=plugin` = estado reportado por herdr
+  (snapshot `pane.agent_status`); `source=derive` = inferido del contenido del pane cuando
+  el panel de agentes de herdr no tiene datos (fallback robusto, nunca pane vacio).
+  `--porcelain` = JSON array `{seat,agent,state,source,pane,activity}`.
+- `rig queue [--watch] [--porcelain] [--interval SEG]`: cola accionable (`blocked` luego
+  `pending`) + ultimos cierres `done` con evidencia (limite `RIG_QUEUE_DONE`, default 8).
+  `--porcelain` = `{pending:[], blocked:[], done:[]}`.
+- `rig scan` / `rig board` suman `--watch` (refresco vivo, `--interval` default 2; no
+  combinan con `--porcelain`).
+
+Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
+(checks `scan-watch`, `scan-watch-guard`, `agents-cli`, `agents-porcelain`, `queue-cli`,
+`queue-porcelain`, `central-cli`) y `rig --selftest`.
+
