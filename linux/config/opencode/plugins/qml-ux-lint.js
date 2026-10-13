@@ -1,52 +1,41 @@
-// qml-ux-lint — opencode plugin.
-//
-// Runs the local quickshell/omarchy QML UX linter after any edit to a QML file
-// living under ~/.config/omarchy/ or ~/.config/quickshell/, and appends the
-// findings to the tool result so the model (and the user) see them immediately.
-//
-// This exists because a bar widget regression (content filling the full bar,
-// no horizontal padding) shipped silently. The rule is now mechanical.
-//
-// Linter: ~/.local/bin/omarchy-qml-lint (see that script for the rule set).
-// Fail-soft: any error here must never break the host session.
+import { Plugin } from "@opencode/plugin"
+import { spawnSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { homedir } from "node:os"
 
-import { existsSync } from "fs"
-
-const HOME = process.env.HOME || ""
+const HOME = homedir()
 const LINTER = `${HOME}/.local/bin/omarchy-qml-lint`
 const WATCHED_PREFIXES = [`${HOME}/.config/omarchy/`, `${HOME}/.config/quickshell/`]
 const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit", "apply_patch"])
 
-function editedPath(input) {
-  const a = input?.args || {}
-  return a.filePath || a.path || a.filename || ""
+function toolPath(input) {
+  const value = input?.filePath ?? input?.path ?? input?.filename
+  return typeof value === "string" ? value : undefined
 }
 
-function isWatchedQml(p) {
-  return typeof p === "string" && p.endsWith(".qml") && WATCHED_PREFIXES.some((pre) => p.startsWith(pre))
+function appendContent(result, text) {
+  if (typeof result.content === "string") result.content = `${result.content}${text}`
+  else if (Array.isArray(result.content)) result.content = [...result.content, { type: "text", text }]
+  else result.content = text
 }
 
-export const QmlUxLint = async () => {
-  return {
-    "tool.execute.after": async (input, output) => {
+export default Plugin.define({
+  id: "eztvn.qml-ux-lint",
+  async setup(ctx) {
+    if (!existsSync(LINTER)) return
+    await ctx.tool.hook("execute.after", (event) => {
       try {
-        if (!EDIT_TOOLS.has(input?.tool)) return
-        const file = editedPath(input)
-        if (!isWatchedQml(file)) return
-        if (!existsSync(LINTER)) return
-
-        const res = Bun.spawnSync(["python3", LINTER, "--quiet", file])
-        const text = (res.stdout ? res.stdout.toString() : "").trim()
-        if (!text) return
-
-        const header = "[ux-lint] quickshell/omarchy QML check flagged this edit:"
-        output.output = `${output.output || ""}\n\n${header}\n${text}`
-        output.metadata = { ...(output.metadata || {}), uxLint: true }
-      } catch {
-        // fail-soft: linting must never break a tool call
-      }
-    },
-  }
-}
-
-export default QmlUxLint
+        if (event.status !== "completed") return
+        if (!EDIT_TOOLS.has(event.tool)) return
+        const file = toolPath(event.input)
+        if (!file || !file.endsWith(".qml")) return
+        if (!WATCHED_PREFIXES.some((prefix) => file.startsWith(prefix))) return
+        const proc = spawnSync("python3", [LINTER, "--quiet", file], { encoding: "utf8" })
+        const out = (proc.stdout ?? "").trim()
+        if (!out) return
+        appendContent(event.result, `\n\n[ux-lint] quickshell/omarchy QML check flagged this edit:\n${out}`)
+        event.result.metadata = { ...(event.result.metadata ?? {}), uxLint: true }
+      } catch {}
+    })
+  },
+})

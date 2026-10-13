@@ -1,50 +1,50 @@
-import { existsSync } from "fs"
+import { Plugin } from "@opencode/plugin"
+import { spawnSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { extname } from "node:path"
+import { homedir } from "node:os"
 
-const HOME = process.env.HOME || ""
+const HOME = homedir()
 const LINTER = `${HOME}/.local/bin/app-arch-lint`
 const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit", "apply_patch"])
 const EXTENSIONS = new Set([
-  ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".css", ".html",
-  ".py", ".rs", ".go", ".vue", ".svelte",
+  ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".css", ".html", ".py", ".rs", ".go",
+  ".vue", ".svelte",
 ])
 const IGNORED = [
-  "/node_modules/", "/.git/", "/dist/", "/.next/", "/build/",
-  "/venv/", "/.venv/", "/__pycache__/", "/coverage/",
+  "/node_modules/", "/.git/", "/dist/", "/.next/", "/build/", "/venv/", "/.venv/",
+  "/__pycache__/", "/coverage/",
 ]
 
-function editedPath(input) {
-  const a = input?.args || {}
-  return a.filePath || a.path || a.filename || ""
+function toolPath(input) {
+  const value = input?.filePath ?? input?.path ?? input?.filename
+  return typeof value === "string" ? value : undefined
 }
 
-function watched(file) {
-  if (typeof file !== "string" || !file) return false
-  const dot = file.lastIndexOf(".")
-  if (dot < 0) return false
-  if (!EXTENSIONS.has(file.slice(dot).toLowerCase())) return false
-  return !IGNORED.some((segment) => file.includes(segment))
+function appendContent(result, text) {
+  if (typeof result.content === "string") result.content = `${result.content}${text}`
+  else if (Array.isArray(result.content)) result.content = [...result.content, { type: "text", text }]
+  else result.content = text
 }
 
-export const AppArchLint = async () => {
-  return {
-    "tool.execute.after": async (input, output) => {
+export default Plugin.define({
+  id: "eztvn.app-arch-lint",
+  async setup(ctx) {
+    if (!existsSync(LINTER)) return
+    await ctx.tool.hook("execute.after", (event) => {
       try {
-        if (!EDIT_TOOLS.has(input?.tool)) return
-        const file = editedPath(input)
-        if (!watched(file)) return
-        if (!existsSync(LINTER)) return
-
-        const res = Bun.spawnSync([LINTER, "--quiet", file])
-        const text = (res.stdout ? res.stdout.toString() : "").trim()
-        if (!text) return
-
-        const header = "[app-arch] App Agent-Friendly v1 violation in this edit:"
-        output.output = `${output.output || ""}\n\n${header}\n${text}`
-        output.metadata = { ...(output.metadata || {}), appArchLint: true }
-      } catch {
-      }
-    },
-  }
-}
-
-export default AppArchLint
+        if (event.status !== "completed") return
+        if (!EDIT_TOOLS.has(event.tool)) return
+        const file = toolPath(event.input)
+        if (!file) return
+        if (!EXTENSIONS.has(extname(file))) return
+        if (IGNORED.some((segment) => file.includes(segment))) return
+        const proc = spawnSync(LINTER, ["--quiet", file], { encoding: "utf8" })
+        const out = (proc.stdout ?? "").trim()
+        if (!out) return
+        appendContent(event.result, `\n\n[app-arch] App Agent-Friendly v1 violation in this edit:\n${out}`)
+        event.result.metadata = { ...(event.result.metadata ?? {}), appArchLint: true }
+      } catch {}
+    })
+  },
+})

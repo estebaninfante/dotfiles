@@ -23,12 +23,6 @@
       "enabled": true
     }
   },
-  "plugin": [
-    "./plugins/caveman/plugin.js",
-    "./plugins/voice/plugin.js",
-    "@smart-coders-hq/opencode-model-fallback",
-    "@tarquinen/opencode-dcp@latest"
-  ],
   "permission": {
     "bash": {
       "sudo *": "ask"

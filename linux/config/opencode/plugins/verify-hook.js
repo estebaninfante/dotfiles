@@ -1,39 +1,42 @@
-import { existsSync } from "fs"
+import { Plugin } from "@opencode/plugin"
+import { spawnSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { homedir } from "node:os"
 
-const HOME = process.env.HOME || ""
+const HOME = homedir()
 const VERIFY = `${HOME}/.config/opencode/skills/verification/scripts/verify.py`
-const QML_PREFIXES = [`${HOME}/.config/omarchy/`, `${HOME}/.config/quickshell/`]
 const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit", "apply_patch"])
+const QML_PREFIXES = [`${HOME}/.config/omarchy/`, `${HOME}/.config/quickshell/`]
 
-function editedPath(input) {
-  const a = input?.args || {}
-  return a.filePath || a.path || a.filename || ""
+function toolPath(input) {
+  if (!input || typeof input !== "object") return undefined
+  const value = input.filePath ?? input.path ?? input.filename
+  return typeof value === "string" ? value : undefined
 }
 
-function handledByQmlLint(file) {
-  return file.endsWith(".qml") && QML_PREFIXES.some((prefix) => file.startsWith(prefix))
+function appendContent(result, text) {
+  if (typeof result.content === "string") result.content = `${result.content}${text}`
+  else if (Array.isArray(result.content)) result.content = [...result.content, { type: "text", text }]
+  else result.content = text
 }
 
-export const VerifyHook = async () => {
-  return {
-    "tool.execute.after": async (input, output) => {
+export default Plugin.define({
+  id: "eztvn.verify-hook",
+  async setup(ctx) {
+    if (!existsSync(VERIFY)) return
+    await ctx.tool.hook("execute.after", (event) => {
       try {
-        if (!EDIT_TOOLS.has(input?.tool)) return
-        const file = editedPath(input)
-        if (!file || !existsSync(file)) return
-        if (handledByQmlLint(file)) return
-        if (!existsSync(VERIFY)) return
-
-        const res = Bun.spawnSync(["python3", VERIFY, "--quiet", "auto", file])
-        const text = (res.stdout ? res.stdout.toString() : "").trim()
-        if (!text) return
-
-        output.output = `${output.output || ""}\n\n[verify] ${text}`
-        output.metadata = { ...(output.metadata || {}), verify: true }
-      } catch {
-      }
-    },
-  }
-}
-
-export default VerifyHook
+        if (event.status !== "completed") return
+        if (!EDIT_TOOLS.has(event.tool)) return
+        const file = toolPath(event.input)
+        if (!file) return
+        if (file.endsWith(".qml") && QML_PREFIXES.some((prefix) => file.startsWith(prefix))) return
+        const proc = spawnSync("python3", [VERIFY, "--quiet", "auto", file], { encoding: "utf8" })
+        const out = (proc.stdout ?? "").trim()
+        if (!out) return
+        appendContent(event.result, `\n\n[verify] ${out}`)
+        event.result.metadata = { ...(event.result.metadata ?? {}), verify: true }
+      } catch {}
+    })
+  },
+})

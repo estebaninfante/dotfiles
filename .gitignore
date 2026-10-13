@@ -40,3 +40,4 @@ linux/config/opencode/.caveman-active
 
 # secrets locales (tokens): nunca versionar
 linux/config/opencode/secrets/
+linux/config/opencode/service.json

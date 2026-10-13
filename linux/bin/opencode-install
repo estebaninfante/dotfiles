@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+version="${1:-2.0.28}"
+export TMPDIR="${TMPDIR:-/var/tmp}"
+printf '%s\n' "$(curl -fsSL https://opencode.ai/v2/install)" | bash -s -- --no-modify-path --version "$version"

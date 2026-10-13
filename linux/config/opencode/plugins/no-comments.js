@@ -1,4 +1,5 @@
-import { basename, extname } from "path"
+import { Plugin } from "@opencode/plugin"
+import { basename, extname } from "node:path"
 
 const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit", "apply_patch"])
 const CONTENT_KEYS = ["newString", "new_string", "content", "text"]
@@ -61,7 +62,7 @@ function familyFor(file) {
 
 function startsWithAny(text, list) {
   const lower = text.toLowerCase()
-  return list.some((p) => lower.startsWith(p))
+  return list.some((prefix) => lower.startsWith(prefix))
 }
 
 function indexOutsideString(line, marker) {
@@ -103,7 +104,8 @@ function isCommentLine(line, family) {
 }
 
 function isTrailingComment(line, family) {
-  const markers = family === "slash" ? ["/*", "//"] : family === "hash" ? ["#"] : family === "dash" ? ["--"] : []
+  const markers =
+    family === "slash" ? ["/*", "//"] : family === "hash" ? ["#"] : family === "dash" ? ["--"] : []
   for (const marker of markers) {
     const idx = indexOutsideString(line, marker)
     if (idx <= 0) continue
@@ -141,7 +143,10 @@ function candidates(args) {
   args = args || {}
   const file = args.filePath || args.path || args.filename || ""
   if (Array.isArray(args.edits)) {
-    return args.edits.map((e) => ({ file: e.filePath || e.path || file, text: e.newString || e.new_string || e.content || "" }))
+    return args.edits.map((e) => ({
+      file: e.filePath || e.path || file,
+      text: e.newString || e.new_string || e.content || "",
+    }))
   }
   const list = []
   for (const key of CONTENT_KEYS) {
@@ -160,18 +165,22 @@ function candidates(args) {
   return list
 }
 
-export const NoComments = async () => {
-  return {
-    "tool.execute.before": async (input, output) => {
+export default Plugin.define({
+  id: "eztvn.no-comments",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
       if (ALLOW) return
-      if (!EDIT_TOOLS.has(input?.tool)) return
-      for (const { file, text } of candidates(output?.args)) {
+      if (!EDIT_TOOLS.has(event.tool)) return
+      for (const { file, text } of candidates(event.input)) {
         if (!file || !text) continue
         const family = familyFor(file)
         if (!family) continue
         const hits = offendingLines(text, family)
         if (!hits.length) continue
-        const preview = hits.slice(0, 5).map((h) => `  L${h.n}: ${h.text}`).join("\n")
+        const preview = hits
+          .slice(0, 5)
+          .map((h) => `  L${h.n}: ${h.text}`)
+          .join("\n")
         throw new Error(
           `[no-comments] Comentario(s) detectado(s) en ${file}. ` +
             `Los comentarios son un DEFECTO en esta codebase: el codigo debe explicarse solo ` +
@@ -180,6 +189,6 @@ export const NoComments = async () => {
             `Rehace la edicion sin comentarios. (Override explicito del usuario: OPENCODE_ALLOW_COMMENTS=1)`,
         )
       }
-    },
-  }
-}
+    })
+  },
+})
