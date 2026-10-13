@@ -356,4 +356,45 @@ else
   fi
 fi
 
+herdr_plugin="${HERDR_REPORTER:-$HOME/.config/opencode/plugins/herdr-pane-state.js}"
+if [[ ! -f "$herdr_plugin" ]]; then
+  fail "herdr-reporter" "falta $herdr_plugin (el panel nativo de herdr no se pobla con opencode >=1.19)"
+else
+  herdr_err=$(mktemp)
+  node --input-type=module -e '
+const file = process.argv[1]
+import("file://" + file)
+  .then((mod) => {
+    if (typeof mod.default === "function") console.log("")
+    else console.log("default export no es funcion: usa la API V1 y no reporta en opencode 1.19")
+  })
+  .catch((error) => console.log("no carga: " + String((error && error.message) || error)))
+' "$herdr_plugin" >"$herdr_err" 2>&1
+  herdr_problem="$(cat "$herdr_err")"
+  rm -f "$herdr_err"
+  if [[ -n "$herdr_problem" ]]; then
+    fail "herdr-reporter" "$herdr_problem"
+  elif ! grep -qF 'pane.report_agent' "$herdr_plugin" || ! grep -qF 'HERDR_PANE_ID' "$herdr_plugin" || ! grep -qF 'HERDR_ENV' "$herdr_plugin"; then
+    fail "herdr-reporter" "no reporta pane.report_agent con guard HERDR_ENV/HERDR_PANE_ID"
+  else
+    ok "herdr-reporter" "plugin V2-style presente y reporta estado al socket de herdr"
+  fi
+fi
+
+herdr_managed="${HERDR_MANAGED_PLUGIN:-$HOME/.config/opencode/plugins/herdr-agent-state.js}"
+if [[ ! -f "$herdr_managed" ]]; then
+  skip "herdr-single-source" "sin plugin gestionado por herdr en $herdr_managed"
+else
+  managed_export=$(node --input-type=module -e '
+import(process.argv[1])
+  .then((mod) => console.log(typeof mod.default === "function" ? "function" : "object"))
+  .catch(() => console.log("error"))
+' "file://$herdr_managed" 2>/dev/null)
+  if [[ "$managed_export" == "function" ]]; then
+    fail "herdr-single-source" "el plugin gestionado por herdr reporta (V2): dos fuentes sobre el mismo pane; desactiva una"
+  else
+    ok "herdr-single-source" "una sola fuente activa (el gestionado por herdr es V1 inerte en opencode >=1.19)"
+  fi
+fi
+
 exit "$rc"
