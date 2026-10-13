@@ -164,8 +164,14 @@ def inject_to(cfg: Config, seat: str, text: str) -> tuple[bool, str]:
     return True, ""
 
 
-def inject(cfg: Config, text: str) -> tuple[bool, str]:
-    return inject_to(cfg, cfg.seat, f"{cfg.prefix} {text}")
+def tagged(cfg: Config, text: str, thread: str = "") -> str:
+    if thread:
+        return f"{cfg.prefix} t={thread} {text}"
+    return f"{cfg.prefix} {text}"
+
+
+def inject(cfg: Config, text: str, thread: str = "") -> tuple[bool, str]:
+    return inject_to(cfg, cfg.seat, tagged(cfg, text, thread))
 
 
 def mention(cfg: Config) -> str:
@@ -231,6 +237,16 @@ def latest_project(cfg: Config) -> dict[str, Any]:
         if ts >= best_ts:
             best, best_ts = proj, ts
     return best
+
+
+def route_target(cfg: Config, thread: str) -> tuple[str, str]:
+    if thread:
+        proj = load_projects(cfg).get(thread)
+        if isinstance(proj, dict):
+            return thread, str(proj.get("last_user") or "")
+        return thread, ""
+    proj = latest_project(cfg)
+    return str(proj.get("thread") or "") or cfg.channel_id, str(proj.get("last_user") or "")
 
 
 def thread_name(cfg: Config, ticket: str, text: str) -> str:
@@ -404,7 +420,7 @@ def save_pending(cfg: Config, pending: list[dict[str, Any]]) -> None:
 
 
 def ask_events(event: dict[str, Any]) -> bool:
-    return event.get("kind") == "ask"
+    return event.get("kind") == "ask" and event.get("actor") != "discord-bridge"
 
 
 def unblock_ticket(cfg: Config, ticket: str, text: str) -> None:
@@ -433,9 +449,8 @@ def post_ask(cfg: Config, event: dict[str, Any]) -> None:
     stamp = str(event.get("ts") or "")
     if stamp:
         lines.append(f"-# {stamp} · fuente {event.get('actor') or seat or '?'}")
-    proj = latest_project(cfg)
-    target = str(proj.get("thread") or "") or cfg.channel_id
-    reference = str(proj.get("last_user") or "")
+    thread = str(data.get("thread") or "")
+    target, reference = route_target(cfg, thread)
     ids = post_message(cfg, target, "\n".join(lines), reference)
     emit(cfg, "discord-ask", question, ticket=ticket, seat=seat)
     record(cfg, "ask", question,
@@ -452,17 +467,18 @@ def post_ask(cfg: Config, event: dict[str, Any]) -> None:
 
 
 def deliver_answer(cfg: Config, text: str, pending: list[dict[str, Any]],
-                   channel_id: str = "", parent_id: str = "") -> None:
+                   channel_id: str = "", parent_id: str = "", thread: str = "") -> None:
     ask = pending[-1]
     seat = str(ask.get("seat") or cfg.seat)
     ticket = str(ask.get("ticket") or "")
     target = channel_id or str(ask.get("thread") or "") or cfg.channel_id
+    thread_id = str(ask.get("thread") or "") or thread
     ask_id = str(ask.get("message_id") or "")
-    ok, err = inject_to(cfg, seat, f"{cfg.prefix} [respuesta] {text}")
+    ok, err = inject_to(cfg, seat, tagged(cfg, f"[respuesta] {text}", thread_id))
     if not ok and seat != cfg.seat:
         emit(cfg, "discord-error",
              f"respuesta a {seat} fallo ({err}); reintento en {cfg.seat}")
-        ok2, err2 = inject_to(cfg, cfg.seat, f"{cfg.prefix} [respuesta] {text}")
+        ok2, err2 = inject_to(cfg, cfg.seat, tagged(cfg, f"[respuesta] {text}", thread_id))
         if ok2:
             seat, ok, err = cfg.seat, ok2, err2
         else:
@@ -485,12 +501,12 @@ def deliver_answer(cfg: Config, text: str, pending: list[dict[str, Any]],
     save_pending(cfg, pending)
 
 
-def route_text(cfg: Config, channel_id: str, text: str) -> None:
+def route_text(cfg: Config, channel_id: str, text: str, thread: str = "") -> None:
     pending = load_pending(cfg)
     if pending:
-        deliver_answer(cfg, text, pending)
+        deliver_answer(cfg, text, pending, thread=thread)
         return
-    ok, err = inject(cfg, text)
+    ok, err = inject(cfg, text, thread)
     if not ok:
         emit(cfg, "discord-error", f"inject fallo: {err}")
         send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
@@ -515,7 +531,8 @@ def transcribe(cfg: Config, url: str, suffix: str) -> Optional[str]:
         return None
 
 
-def handle_voice(cfg: Config, channel_id: str, attachment: dict[str, Any]) -> None:
+def handle_voice(cfg: Config, channel_id: str, attachment: dict[str, Any],
+                 thread: str = "") -> None:
     emit(cfg, "discord-voice", f"{channel_id}: audio {attachment.get('filename', '')}")
     if not cfg.stt_cmd:
         send_message(cfg, channel_id, "Voz aun no soportada (falta STT local en RIG_STT_CMD). Escribi texto.")
@@ -528,7 +545,7 @@ def handle_voice(cfg: Config, channel_id: str, attachment: dict[str, Any]) -> No
         return
     send_message(cfg, channel_id, f"Transcrito: {text}")
     emit(cfg, "discord-in", f"voz: {text}")
-    route_text(cfg, channel_id, text)
+    route_text(cfg, channel_id, text, thread)
 
 
 def handle_message(cfg: Config, d: dict[str, Any]) -> None:
@@ -548,15 +565,17 @@ def handle_message(cfg: Config, d: dict[str, Any]) -> None:
     message_id = str(d.get("id", ""))
     ref = d.get("message_reference") or {}
     parent_id = str(ref.get("message_id") or "")
+    origin_thread = channel_id if in_thread else ""
     if not content.strip():
         for attachment in d.get("attachments") or []:
             if str(attachment.get("content_type") or "").startswith("audio"):
-                handle_voice(cfg, channel_id, attachment)
+                handle_voice(cfg, channel_id, attachment, origin_thread)
         return
     if cfg.threads and not in_thread and message_id:
         name = thread_name(cfg, "", content)
         thread_id = create_thread(cfg, message_id, name) or ""
         if thread_id:
+            origin_thread = thread_id
             remember_project(cfg, [message_id, thread_id],
                              {"root": message_id, "thread": thread_id,
                               "ts": time.time(), "ticket": "", "name": name})
@@ -573,7 +592,7 @@ def handle_message(cfg: Config, d: dict[str, Any]) -> None:
             "child_id": "", "to": "discord"})
     emit(cfg, "discord-in", f"{user_id}: {content}")
     if content.startswith("!"):
-        ok, err = inject(cfg, content[1:].lstrip())
+        ok, err = inject(cfg, content[1:].lstrip(), origin_thread)
         if not ok:
             emit(cfg, "discord-error", f"inject fallo: {err}")
             send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
@@ -581,7 +600,7 @@ def handle_message(cfg: Config, d: dict[str, Any]) -> None:
     if wants_extract(content):
         handle_extract(cfg, channel_id, content, message_id, in_thread)
         return
-    route_text(cfg, channel_id, content)
+    route_text(cfg, channel_id, content, origin_thread)
 
 
 def load_cursor(cfg: Config) -> dict[str, int]:
@@ -644,9 +663,8 @@ def forward_replies(cfg: Config) -> int:
             if text:
                 stamp = str(event.get("ts") or "")
                 body = text + (f"\n-# {stamp} · {event.get('actor') or 'main'}" if stamp else "")
-                proj = latest_project(cfg)
-                target = str(proj.get("thread") or "") or cfg.channel_id
-                reference = str(proj.get("last_user") or "")
+                thread = str((event.get("data") or {}).get("thread") or "")
+                target, reference = route_target(cfg, thread)
                 ids = post_message(cfg, target, body, reference)
                 record(cfg, "conv-out", body,
                        {"channel_id": target,
@@ -955,7 +973,7 @@ def selftest() -> int:
     )
     rig.chmod(0o755)
 
-    state: dict[str, Any] = {"sends": [], "paths": []}
+    state: dict[str, Any] = {"sends": [], "paths": [], "calls": []}
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args: Any) -> None:
@@ -966,6 +984,9 @@ def selftest() -> int:
             payload = json.loads(self.rfile.read(length) or b"{}")
             state["paths"].append(self.path)
             state["sends"].append(payload.get("content", ""))
+            ref = payload.get("message_reference") or {}
+            state["calls"].append({"path": self.path, "content": payload.get("content", ""),
+                                   "reference": str(ref.get("message_id") or "")})
             body = json.dumps({"id": "1", "content": payload.get("content", "")}).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1070,6 +1091,9 @@ def selftest() -> int:
                              "author": {"id": "555", "bot": False}})
         if not any(p.endswith("/threads") for p in state["paths"]):
             failures.append("no creo hilo para el pedido nuevo")
+        sent = [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]
+        if not any(a[:3] == ["send", "main-seat", "[dc] t=1 una idea nueva"] for a in sent):
+            failures.append(f"el pedido nuevo no inyecto con su hilo: {sent}")
         projects = load_projects(cfg)
         if not projects:
             failures.append("el pedido no quedo registrado como proyecto")
@@ -1077,9 +1101,40 @@ def selftest() -> int:
             failures.append("el proyecto del pedido no tiene hilo")
         handle_message(cfg, {"id": "7002", "channel_id": "1", "content": "comento en el hilo",
                              "author": {"id": "555", "bot": False}})
-        if not any(a[:3] == ["send", "main-seat", "[dc] comento en el hilo"] for a in
+        if not any(a[:3] == ["send", "main-seat", "[dc] t=1 comento en el hilo"] for a in
                    [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]):
             failures.append("no ruteo el mensaje del hilo a main")
+
+        forward_replies(cfg)
+        state["calls"].clear()
+        state["sends"].clear()
+        state["paths"].clear()
+        remember_project(cfg, ["11"], {"root": "11", "thread": "11", "ts": 1.0,
+                                       "ticket": "", "name": "hilo A", "last_user": "9001"})
+        remember_project(cfg, ["22"], {"root": "22", "thread": "22", "ts": 2.0,
+                                       "ticket": "", "name": "hilo B", "last_user": "9002"})
+        with events.open("a") as fh:
+            for th, txt in (("11", "respuesta hilo A"), ("22", "respuesta hilo B")):
+                fh.write(json.dumps({"ts": "2026-01-01T00:00:02-05:00", "kind": "reply",
+                                     "actor": "main", "ticket": "", "seat": "main-seat",
+                                     "area": "", "summary": txt,
+                                     "data": {"message": txt, "to": "discord", "thread": th}}) + "\n")
+        routed = forward_replies(cfg)
+        if routed != 2:
+            failures.append(f"ruteo por hilo conto {routed}, esperaba 2")
+        calls = state["calls"]
+        in_a = [c for c in calls if c["path"].endswith("/channels/11/messages")]
+        in_b = [c for c in calls if c["path"].endswith("/channels/22/messages")]
+        if not any("respuesta hilo A" in c["content"] for c in in_a):
+            failures.append(f"la respuesta del hilo A no cayo en su hilo: {calls}")
+        if not any("respuesta hilo B" in c["content"] for c in in_b):
+            failures.append(f"la respuesta del hilo B no cayo en su hilo: {calls}")
+        if any("respuesta hilo B" in c["content"] for c in in_a):
+            failures.append("la respuesta del hilo B se mezclo en el hilo A")
+        if any("respuesta hilo A" in c["content"] for c in in_b):
+            failures.append("la respuesta del hilo A se mezclo en el hilo B")
+        if not any(c["reference"] == "9001" for c in in_a):
+            failures.append("la respuesta del hilo A no cito al ultimo mensaje del hilo")
     except Exception as exc:
         failures.append(f"excepcion: {exc}")
     finally:
@@ -1126,6 +1181,8 @@ def main(argv: list[str]) -> int:
               "  las respuestas (rig say, kind=reply) vuelven al canal.\n"
               "  hilos: cada pedido nuevo abre un hilo de Discord (RIG_DISCORD_THREADS=1);\n"
               "  el canal queda limpio y el detalle vive en el hilo del pedido.\n"
+              "  cada mensaje viaja a la silla con su hilo ('[dc] t=<thread> ...') y las\n"
+              "  respuestas (rig say --thread) vuelven al mismo hilo, sin mezclar temas.\n"
               "  escalado: un evento kind=ask se publica mencionando al usuario;\n"
               "  al responder, la respuesta viaja a la silla que pregunto (inject del seat),\n"
               "  emite kind=answer, desbloquea el ticket y limpia la pregunta pendiente.\n"

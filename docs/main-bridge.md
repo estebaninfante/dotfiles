@@ -120,6 +120,12 @@ hilo es la conversacion de ese pedido; adentro va el detalle. Reglas:
 - **Responder a un mensaje puntual**: el bot usa la **respuesta nativa** de Discord
   (`message_reference`): el mensaje citado aparece arriba y se puede tocar para saltar a el. Asi
   el bot sabe a que mensaje tuyo contesta.
+- **Hilo de ida y vuelta (sin mezclar temas)**: cada mensaje que el bot inyecta en la silla viaja
+  con su hilo de origen: `[dc] t=<thread_id> <texto>`, con `[dc]` como primer token (el canal
+  dedicado sin hilo va sin `t=`). `main` responde con `rig say "<respuesta>" --thread <thread_id>`
+  y la respuesta vuelve al MISMO hilo, citando el ultimo mensaje de ese hilo. Si se omite
+  `--thread`, se usa el hilo mas reciente (compatibilidad). Los `ask` viajan y vuelven con su hilo
+  igual, asi varios pedidos en paralelo no se mezclan.
 - **Limite honesto**: Discord da respuesta por mensaje con cita y **un solo nivel de hilo** (un
   hilo dentro de un hilo no se puede). No hay arbol infinito tipo Reddit. En Discord el arbol se
   representa como: hilo por pedido + respuestas con cita apuntando al mensaje padre. Un arbol
