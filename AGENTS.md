@@ -328,3 +328,41 @@ Solo solicita confirmacion para operaciones potencialmente destructivas:
 - Reiniciar o apagar el sistema.
 
 Los reinicios de aplicaciones, recargas de servicios, validaciones de configuracion y operaciones rutinarias **no requieren confirmacion**.
+
+## Puente Discord <-> `main` (hablarle desde el celular)
+
+El dueno habla con su agente primario `main` desde un **canal dedicado de Discord**: ahi vive el
+agente, ahi le escribe. Transporte elegido por el usuario (Telegram queda como alternativa
+documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
+
+- **Entrada**: `rig-discord-bot` recibe el mensaje del canal por el Gateway de Discord, valida
+  que el autor este en la allowlist de **user ids** y lo inyecta en la silla con
+  `rig send main-seat "[dc] <texto>"`.
+- **Salida**: `main` responde con `rig say "<respuesta>"` (evento `kind=reply`, `actor=main`);
+  el bot sigue `~/.local/state/rig/events.jsonl` y reenvia los replies al canal dedicado.
+- **`main` en silla**: `main` corre como silla tmux (`rig spawn main-seat --agent main`) para
+  ser direccionable; el pane de herdr le hace attach para seguir viendolo en el escritorio.
+- **Sin puertos**: el bot abre conexion **saliente** al Gateway (`wss://gateway.discord.gg`);
+  nada escucha en la LAN/internet. Bot Python3 stdlib (WebSocket propio), sin `discord.js`.
+- **Seguridad**: allowlist estricta de **user id**; token, allowlist y `channel_id` en
+  `~/.config/rig/discord.env` (chmod 600, FUERA del repo); se ignora todo mensaje de bots u
+  otros canales; cada mensaje queda como evento (`discord-in/out/voice/error/reject`).
+- **Alta del bot**: el usuario debe crear/reusar la app en el portal de Discord, activar
+  **MESSAGE CONTENT INTENT**, regenerar el token e invitar el bot con permisos `76800` (View
+  Channel + Send Messages + Read Message History); luego pega el token/user id/channel id en
+  `~/.config/rig/discord.env`. Paso a paso en `docs/main-bridge.md`.
+- **Regla para `main`**: un mensaje que empieza con `[dc]` se responde al usuario con
+  `rig say "<respuesta>"`.
+- **Unit**: `linux/system/systemd-user/rig-discord-bot.service` (`Restart=always`,
+  `EnvironmentFile`, `ConditionPathExists=%h/.config/rig/discord.env`; sin token queda
+  `condition failed`, no arranca).
+- **Voz**: nota de voz de Discord (attachment `audio/*`) -> STT local (aun no instalado) ->
+  texto; respuesta en audio via `voice` (chatterbox). Llamada telefonica real (SIP) NO viable
+  sin proveedor externo; canales de voz nativos de Discord fuera de alcance. WhatsApp: solo
+  documentado (Cloud API oficial vs no-oficial con riesgo de bloqueo del numero).
+- **Un solo transporte**: NO correr el bot de Telegram y el de Discord a la vez (ambos reenvian
+  los mismos `kind=reply`).
+- Dueño: `supervisor` (doctrina/canal) + `dotfiles` (script y unit).
+  Verificacion: `verify run bridge` (py_compile + selftest + token-leak + unit + symlink, para
+  discord y telegram) y `verify run rig`. Config nueva -> reinicia opencode no aplica, pero la
+  silla `main-seat` se levanta con `rig spawn`.

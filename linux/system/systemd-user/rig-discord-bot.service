@@ -1,0 +1,18 @@
+[Unit]
+Description=Puente Discord <-> agente main (rig-discord-bot)
+Documentation=file:%h/dotfiles/docs/main-bridge.md
+ConditionPathExists=%h/.config/rig/discord.env
+After=graphical-session.target
+PartOf=graphical-session.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/rig/discord.env
+ExecStart=%h/.local/bin/rig-discord-bot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

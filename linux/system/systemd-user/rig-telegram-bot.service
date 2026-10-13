@@ -1,0 +1,18 @@
+[Unit]
+Description=Puente Telegram <-> agente main (rig-telegram-bot)
+Documentation=file:%h/dotfiles/docs/main-bridge.md
+ConditionPathExists=%h/.config/rig/telegram.env
+After=graphical-session.target
+PartOf=graphical-session.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/rig/telegram.env
+ExecStart=%h/.local/bin/rig-telegram-bot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
