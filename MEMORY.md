@@ -6,12 +6,17 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 
 - **websockets v17+ API change**: `websockets.serve()` ahora requiere `async with` pattern, no `run_until_complete`. Usar `asyncio.new_event_loop()` en thread separado con `asyncio.Future()` para mantener vivo el loop.
 - **WebSocket server en gesturecontrol**: LandmarkServer corre en thread separado con asyncio loop propio. `publish()` usa `run_coroutine_threadsafe()` para enviar desde el thread principal.
+- **opencode en Omarchy = backend aqua de mise (unico dueno)**: la config `~/.config/mise/config.toml` (hoy versionada en `linux/config/mise/config.toml`) fija `opencode = "1.19.0"`. El binario vive autocontenido en `~/.local/share/mise/installs/opencode/1.19.0/opencode`. El lanzador `linux/bin/opencode` hace `exec mise x opencode@1.19.0 -- opencode "$@"` (NUNCA `mise use -g`). Nada de pacman `opencode-bin` ni npm global `opencode-ai`.
 
 ## Errores comunes y soluciones
 
 - **gesturecontrol engine camera busy**: Proceso zombie retenía /dev/video0. Kill manual resolvió.
 - **websockets RuntimeError: no running event loop**: API v17 cambió. Solución: `asyncio.new_event_loop()` + `run_until_complete(asyncio.Future())`.
 - **Nautilus "no abre" (Files)**: el servicio D-Bus `dbus-:1.1-org.gnome.Nautilus@0.service` (`nautilus --gapplication-service`) se queda wedged → `gtk-launch org.gnome.Nautilus.desktop` retorna exit 0 pero no crea ventana. Diagnóstico: `systemctl --user status 'dbus-:1.1-org.gnome.Nautilus@0.service'` (RSS >1GB, decenas de tasks) + `coredumpctl list | grep nautilus`. Fix: `pkill -x nautilus` (el servicio D-Bus lo relanza limpio en el próximo launch). Causa raíz: fuga de thumbnailers glycin (`glycin-image-rs` en bwrap) que nunca salen y revientan el proceso con SEGV. Si reaparece: limpiar bwrap huérfanos y considerar desactivar thumbnails nautilus.
+- **opencode lentísimo al arrancar (>25s, cuelga)**: causa = `mise use -g --quiet opencode` dentro del lanzador (golpea el registro/red en cada arranque). Fix: fijar `opencode = "1.19.0"` en la config de mise y ejecutar `mise x opencode@1.19.0 -- opencode` (overhead ~0.02s; el binario aqua tarda ~0.70s por sí solo).
+- **Backend npm de mise no corre postinstall**: `mise exec -- opencode` falla con `opencode-ai's postinstall script was not run`; el empaquetador (aube) ignora scripts. Evitarlo usando el backend aqua. Si se insiste en npm: `cd .../node_modules/opencode-ai && node postinstall.mjs`.
+- **`pkill -f '<patrón>'` se auto-matchea** y mata la propia shell si el patrón aparece en el comando (p.ej. `pkill -f 'mise use'`). Filtrar por PID.
+- **`grep` en la shell de opencode resuelve a BusyBox** (no soporta `-A`/`-B`): usar `/usr/bin/grep`.
 
 ## Configuraciones frecuentes
 
@@ -19,6 +24,7 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - `~/.config/gesturecontrol/actions.toml` — mapeo de señales a acciones
 - `~/.local/share/gesturecontrol/gestureControl.py` — engine parcheado (cv2.waitKey fix)
 - **Bedtime timer**: desktop se apaga a las 21:00 (hora Colombia). `bedtime-skip.sh` crea flag `/run/bedtime-skip` para cancelar una noche.
+- **opencode**: `~/.config/mise/config.toml` (→ `linux/config/mise/config.toml`), `~/.local/bin/opencode` (→ `linux/bin/opencode`), skill/plugins en `~/.config/opencode/` (→ `linux/config/opencode/`). `rtk` v1.0.0 en `~/.local/bin/rtk` (instalador oficial, ver `scripts/`). El plugin `plugins/rtk.ts` reescribe comandos bash via `rtk rewrite` cuando `rtk` esta en PATH.
 
 ## Skills creadas
 
@@ -29,6 +35,15 @@ _(Agente: listar skills creadas por auto-mejora)_
 _(agregar aqui pendientes activos)_
 
 ## Historial de sesiones (últimas 5)
+
+### Sesión 2026-10-13: Ticket MACHINE-OPENCODE-RTK — opencode 1.19.0 (dueño único) + rtk
+- **Pedido**: actualizar opencode a "la 2.0", arreglar el aviso "rtk not found in PATH" y el arranque lento.
+- **Hallazgo (delta)**: OpenCode 2 SÍ existe y es GA/estable (`@opencode/cli` 2.0.28, docs `opencode.ai/v2`, tag v2.0.28 del 13-oct), NO es preview. Pero su breaking change #1 deja fuera los plugins V1: los ~10 plugins locales (no-comments, verify-hook, qml-ux-lint, app-arch-lint, voice, caveman, notify-sound, herdr-agent-state, rtk, btw) dejarían de correr hasta portarlos. Con 15 sillas vivas y 7 tickets in-progress se abre ticket aparte y se pregunta antes de migrar.
+- **Opencode 1.19.0, dueño único**: se quitó `opencode-bin` de pacman (`sudo pacman -Rns`), el npm global del node de mise y el install npm de mise; queda SOLO el backend aqua de mise con `opencode = "1.19.0"` en `~/.config/mise/config.toml` (versionado en `linux/config/mise/config.toml`). Lanzador versionado `linux/bin/opencode`: `exec mise x opencode@1.19.0 -- opencode "$@"` (sin `mise use -g`).
+- **Arranque**: antes `opencode --version` por el lanzador viejo se colgaba >25s (había colgado >120s); después ~0,77s (binario aqua ~0,70s + overhead mise ~0,02s).
+- **rtk**: instalado con el instalador oficial (`github.com/rtk-ai/rtk`), v1.0.0 en `~/.local/bin/rtk`; `rtk gain` OK y `rtk rewrite "git status"` devuelve `rtk git status` (exit 3 = ask, el plugin lo acepta). El aviso de startup de `plugins/rtk.ts` desaparece cuando rtk está en PATH (requiere reiniciar opencode: no hay hot-reload). Honestidad: el aviso era ruido; la lentitud era `mise use -g`.
+- **Colateral `gh` colgaba**: `~/.local/bin/gh` era un wrapper real con `mise use -g --quiet gh` → `gh auth token` colgaba → `git push` colgaba. Reemplazado por `linux/bin/gh` versionado (`exec mise x gh@2.101.0 -- gh "$@"`). Push OK: `df45bcd..42d26d8` (18 commits de backlog).
+- **Evidencia**: `verify run packages` PASS; `opencode --version` = 1.19.0; `rtk --version` = 1.0.0; `rtk gain` OK.
 
 ### Sesión 2026-10-13: Ticket rig-focus — rig spawn enfoca el herdr
 - **Síntoma**: `rig spawn` creaba workspace+tab herdr sin foco → el usuario (kitty) no veía la silla aparecer.
@@ -62,10 +77,5 @@ _(agregar aqui pendientes activos)_
 - **IMPORTANTE**: existía `dotfiles-sync.timer` (systemd user) que auto-commiteaba cada 5 min. Detenido, deshabilitado y units eliminadas. No recrear (setup-omarchy ya no lo instala).
 - **Lección**: Omarchy = Arch; nada de `/run/current-system` ni `nixos-rebuild`/`home-manager`. Paquetes con pacman/yay.
 
-### Sesión 2026-09-15: SystemBar attempt + revert
-- **Qué se hizo**: Intenté agregar CPU/GPU pills a la barra del custom quickshell de dotfiles. Descubrí que la barra visible era la de Omarchy (`/usr/share/omarchy/shell`), no la del dotfiles. Matar omarchy-launch-shell rompió la barra. Revertí todo.
-- **Lección**: El usuario usa la barra de Omarchy, NO el custom quickshell de dotfiles. No confundir uno con el otro.
-- **Acción**: Revertí DashboardService.qml, Bar.qml, eliminé SystemBar.qml. Restauré omarchy-launch-shell.
-
 ---
-_Ultima actualización: 2026-10-13 (ticket rig-focus: spawn enfoca herdr)_
+_Ultima actualización: 2026-10-13 (ticket MACHINE-OPENCODE-RTK: opencode 1.19.0 dueño único via mise + rtk 1.0.0)_
