@@ -1,0 +1,754 @@
+#!/usr/bin/env node
+const fs = require("fs")
+const os = require("os")
+const path = require("path")
+const crypto = require("crypto")
+const { execFileSync } = require("child_process")
+
+const HOME = process.env.HOME || os.homedir()
+const SELF = (() => {
+  try { return fs.realpathSync(process.argv[1]) } catch (e) { return process.argv[1] || "" }
+})()
+const DEFAULT_REPO = path.resolve(SELF, "..", "..", "..")
+const STATE_HOME = process.env.XDG_STATE_HOME || path.join(HOME, ".local", "state")
+
+const REPO = process.env.RIG_AGENTS_REPO || DEFAULT_REPO
+const CONFIG = process.env.RIG_AGENTS_CONFIG || path.join(REPO, "linux", "config", "opencode")
+const STATE = process.env.RIG_AGENTS_STATE || path.join(STATE_HOME, "rig", "agents")
+const EVENTS = process.env.RIG_EVENTS_FILE || path.join(STATE_HOME, "rig", "events.jsonl")
+const TICKETS = process.env.RIG_TICKETS_FILE || path.join(HOME, ".config", "opencode", "tickets.json")
+const DB = process.env.RIG_DB || path.join(HOME, ".local", "share", "opencode", "opencode.db")
+const DOCS = process.env.RIG_AGENTS_DOCS || path.join(REPO, "docs", "agents.md")
+const SCHEMA = 1
+const SEP = "\u001f"
+
+function out(s) { process.stdout.write(String(s) + "\n") }
+function readText(p) { try { return fs.readFileSync(p, "utf8") } catch (e) { return "" } }
+function exists(p) { try { fs.accessSync(p); return true } catch (e) { return false } }
+function run(cmd, args, opts) {
+  try {
+    return execFileSync(cmd, args, Object.assign({ encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }, opts || {})).replace(/\s+$/, "")
+  } catch (e) { return "" }
+}
+function sha256(p) { try { return crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex") } catch (e) { return "" } }
+function listFiles(dir, filter) {
+  let names
+  try { names = fs.readdirSync(dir) } catch (e) { return [] }
+  const res = []
+  for (const n of names.slice().sort()) {
+    const p = path.join(dir, n)
+    let st
+    try { st = fs.statSync(p) } catch (e) { continue }
+    if (st.isFile() && (!filter || filter(n))) res.push(p)
+  }
+  return res
+}
+function listDirs(dir) {
+  let names
+  try { names = fs.readdirSync(dir) } catch (e) { return [] }
+  const res = []
+  for (const n of names.slice().sort()) {
+    const p = path.join(dir, n)
+    try { if (fs.statSync(p).isDirectory()) res.push(p) } catch (e) {}
+  }
+  return res
+}
+function listPluginFiles(dir) {
+  const res = []
+  const walk = (d, depth) => {
+    if (depth > 3) return
+    let names
+    try { names = fs.readdirSync(d) } catch (e) { return }
+    for (const n of names.slice().sort()) {
+      if (n === "node_modules" || n === ".git") continue
+      const p = path.join(d, n)
+      let st
+      try { st = fs.statSync(p) } catch (e) { continue }
+      if (st.isDirectory()) walk(p, depth + 1)
+      else if (/\.(js|mjs|cjs|ts)$/.test(n)) res.push(p)
+    }
+  }
+  walk(dir, 0)
+  return res
+}
+
+function parseFrontmatter(text) {
+  const m = String(text).match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  if (!m) return { data: {}, body: String(text) }
+  const lines = m[1].split(/\r?\n/)
+  const root = {}
+  const stack = [{ indent: -1, obj: root }]
+  let i = 0
+  while (i < lines.length) {
+    const raw = lines[i]
+    if (!raw.trim()) { i += 1; continue }
+    const indent = (raw.match(/^ */) || [""])[0].length
+    const content = raw.slice(indent)
+    const km = content.match(/^([A-Za-z_][\w.-]*)\s*:\s*(.*)$/)
+    if (!km) { i += 1; continue }
+    const key = km[1]
+    const val = km[2].trim()
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop()
+    const parent = stack[stack.length - 1].obj
+    if (val === "" ) {
+      const child = {}
+      parent[key] = child
+      stack.push({ indent, obj: child })
+      i += 1
+      continue
+    }
+    if (val === ">" || val === "|" || val === ">-" || val === "|-" || val === ">+" || val === "|+") {
+      const buf = []
+      let j = i + 1
+      while (j < lines.length) {
+        const l = lines[j]
+        if (!l.trim()) { j += 1; continue }
+        const ind = (l.match(/^ */) || [""])[0].length
+        if (ind <= indent) break
+        buf.push(l.trim())
+        j += 1
+      }
+      parent[key] = buf.join(" ")
+      i = j
+      continue
+    }
+    parent[key] = val.replace(/^["']|["']$/g, "")
+    i += 1
+  }
+  const body = String(text).slice(m[0].length)
+  return { data: root, body }
+}
+
+function extractTriggers(desc) {
+  if (!desc) return []
+  const m = String(desc).match(/Triggers?\s*:\s*([\s\S]*)$/i)
+  if (!m) return []
+  return m[1].split(/[,;]/).map((s) => s.trim().replace(/[.\s]+$/, "")).filter(Boolean)
+}
+function toolsFromPermission(permission) {
+  const allow = []
+  const deny = []
+  if (permission && typeof permission === "object") {
+    for (const k of Object.keys(permission)) {
+      if (k === "external_directory") continue
+      const v = String(permission[k])
+      if (v === "allow") allow.push(k)
+      else if (v === "deny") deny.push(k)
+    }
+  }
+  return { allow: allow.sort(), deny: deny.sort() }
+}
+function normDesc(d) {
+  if (d === undefined || d === null) return null
+  if (typeof d === "string") return d.trim() || null
+  return String(d)
+}
+
+function gitInfo(rel) {
+  const empty = { commit: null, short: null, date: null, author: null, subject: null }
+  if (!rel || rel.startsWith("..")) return empty
+  const o = run("git", ["-C", REPO, "log", "-1", "--format=%H" + SEP + "%h" + SEP + "%cI" + SEP + "%an" + SEP + "%s", "--", rel])
+  if (!o) return empty
+  const [commit, short, date, author, subject] = o.split(SEP)
+  return { commit: commit || null, short: short || null, date: date || null, author: author || null, subject: subject || null }
+}
+function gitLog(rel) {
+  if (!rel || rel.startsWith("..")) return []
+  const o = run("git", ["-C", REPO, "log", "--format=%h" + SEP + "%cI" + SEP + "%an" + SEP + "%s", "--", rel])
+  if (!o) return []
+  return o.split("\n").map((l) => {
+    const [short, date, author, subject] = l.split(SEP)
+    return { short, date, author, subject }
+  })
+}
+
+function harnessInfo() {
+  const o = run("herdr", ["integration", "status"])
+  if (!o) return { name: "opencode", version: null, state: null }
+  for (const line of o.split("\n")) {
+    const m = line.match(/^opencode:\s*(\w+)\s*(?:\(v(\d+)\))?/)
+    if (m) return { name: "opencode", version: m[2] ? Number(m[2]) : null, state: m[1] }
+  }
+  return { name: "opencode", version: null, state: null }
+}
+
+function normModel(s) {
+  if (!s) return null
+  const t = String(s).trim()
+  if (t.startsWith("{")) {
+    try {
+      const j = JSON.parse(t)
+      return [j.providerID, j.id].filter(Boolean).join("/") || null
+    } catch (e) { return t }
+  }
+  return t
+}
+function dbUsage() {
+  const byAgent = new Map()
+  const lastByAgent = new Map()
+  let defaultModel = null
+  if (!exists(DB)) return { byAgent, lastByAgent, defaultModel }
+  const rows = run("sqlite3", ["-readonly", "-separator", SEP, DB,
+    "SELECT agent, COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(tokens_input),0), COALESCE(SUM(tokens_output),0), COALESCE(SUM(tokens_reasoning),0), COALESCE(SUM(tokens_cache_read),0), COALESCE(SUM(tokens_cache_write),0), COALESCE(MIN(time_created),0), COALESCE(MAX(time_updated),0) FROM session WHERE agent IS NOT NULL GROUP BY agent"])
+  if (rows) {
+    for (const line of rows.split("\n")) {
+      const c = line.split(SEP)
+      if (c.length < 10) continue
+      const input = Number(c[3]) || 0
+      const output = Number(c[4]) || 0
+      const reasoning = Number(c[5]) || 0
+      byAgent.set(c[0], {
+        sessions: Number(c[1]) || 0,
+        cost: Number(c[2]) || 0,
+        tokens: {
+          input, output, reasoning,
+          cache_read: Number(c[6]) || 0,
+          cache_write: Number(c[7]) || 0,
+          total: input + output + reasoning,
+        },
+        first: Number(c[8]) || 0,
+        last: Number(c[9]) || 0,
+      })
+    }
+  }
+  const models = run("sqlite3", ["-readonly", "-separator", SEP, DB,
+    "SELECT agent, model, MAX(time_updated) FROM session WHERE agent IS NOT NULL AND model IS NOT NULL GROUP BY agent"])
+  if (models) {
+    for (const line of models.split("\n")) {
+      const c = line.split(SEP)
+      if (c.length >= 2 && c[1]) lastByAgent.set(c[0], normModel(c[1]))
+    }
+  }
+  const dm = run("sqlite3", ["-readonly", DB, "SELECT model FROM session WHERE model IS NOT NULL ORDER BY time_updated DESC LIMIT 1"])
+  defaultModel = normModel(dm) || null
+  return { byAgent, lastByAgent, defaultModel }
+}
+
+function sessionAgentIndex() {
+  const byId = new Map()
+  const byDir = new Map()
+  if (!exists(DB)) return { byId, byDir }
+  const o = run("sqlite3", ["-readonly", "-separator", SEP, DB, "SELECT id, agent, directory FROM session"])
+  if (o) {
+    for (const line of o.split("\n")) {
+      const c = line.split(SEP)
+      if (c.length < 3 || !c[1]) continue
+      byId.set(c[0], c[1])
+      if (c[2]) {
+        if (!byDir.has(c[2])) byDir.set(c[2], new Set())
+        byDir.get(c[2]).add(c[1])
+      }
+    }
+  }
+  return { byId, byDir }
+}
+
+function ticketInfo() {
+  const owner = new Map()
+  const worked = new Map()
+  const add = (map, agent, id) => {
+    if (!agent) return
+    if (!map.has(agent)) map.set(agent, new Set())
+    map.get(agent).add(id)
+  }
+  let data
+  try { data = JSON.parse(readText(TICKETS)) } catch (e) { return { owner, worked } }
+  const idx = sessionAgentIndex()
+  const tickets = (data && data.tickets) || []
+  for (const t of tickets) {
+    const id = t.num ? "#" + t.num + " " + t.id : t.id
+    const participants = new Set()
+    if (t.owner) add(owner, t.owner, id)
+    for (const sid of (t.sessions || [])) {
+      const a = idx.byId.get(sid)
+      if (a) participants.add(a)
+    }
+    if (t.worktree && idx.byDir.has(t.worktree)) {
+      for (const a of idx.byDir.get(t.worktree)) participants.add(a)
+    }
+    for (const a of participants) add(worked, a, id)
+  }
+  return { owner, worked }
+}
+
+function verifyAgentsStatus() {
+  const o = run("verify", ["--json", "run", "agents"], { cwd: REPO, timeout: 120000 })
+  if (!o) return "unchecked"
+  try {
+    const j = JSON.parse(o)
+    return j.ok ? "PASS" : "FAIL"
+  } catch (e) { return "unchecked" }
+}
+
+function buildCatalog(opts) {
+  opts = opts || {}
+  const skillNames = listDirs(path.join(CONFIG, "skills")).map((d) => path.basename(d))
+  const harness = harnessInfo()
+  const usage = dbUsage()
+  const tickets = ticketInfo()
+  const verifyStatus = opts.verify ? verifyAgentsStatus() : "unchecked"
+  const entries = []
+
+  const refsSkills = (text) => {
+    const hits = []
+    for (const name of skillNames) {
+      const re = new RegExp("(^|[^\\w-])" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^\\w-])")
+      if (re.test(text)) hits.push(name)
+    }
+    return hits
+  }
+
+  const finish = (base) => {
+    const rel = (() => {
+      const r = path.relative(REPO, base.abs)
+      return r && !r.startsWith("..") ? r : base.abs
+    })()
+    const hash = sha256(base.abs)
+    let st
+    try { st = fs.statSync(base.abs) } catch (e) { st = { size: 0, mtime: new Date(0) } }
+    const permission = base.permission && typeof base.permission === "object" ? base.permission : null
+    const entry = {
+      kind: base.kind,
+      name: base.name,
+      path: rel,
+      abs_path: base.abs,
+      hash,
+      version: hash ? hash.slice(0, 12) : null,
+      size: st.size,
+      mtime: st.mtime.toISOString(),
+      git: gitInfo(rel),
+      mode: base.mode || null,
+      model: { declared: base.declaredModel || null, effective: null },
+      description: normDesc(base.desc),
+      triggers: extractTriggers(base.desc),
+      skills_referenced: base.kind === "agent" ? refsSkills(base.text) : [],
+      permission,
+      tools: toolsFromPermission(permission),
+      harness: { name: harness.name, version: harness.version, state: harness.state },
+      verification: { domain: base.kind === "agent" ? "agents" : null, status: base.kind === "agent" ? verifyStatus : "n/a" },
+      tickets: { owner: [], worked: [] },
+      usage: null,
+    }
+    if (base.kind === "agent") {
+      const u = usage.byAgent.get(base.name)
+      if (u) entry.usage = { sessions: u.sessions, cost: u.cost, tokens: u.tokens, first: u.first, last: u.last, duration_ms: Math.max(0, (u.last || 0) - (u.first || 0)) }
+      entry.model.effective = usage.lastByAgent.get(base.name) || entry.model.declared || usage.defaultModel || null
+      const ow = tickets.owner.get(base.name)
+      const wo = tickets.worked.get(base.name)
+      entry.tickets.owner = ow ? Array.from(ow).sort() : []
+      entry.tickets.worked = wo ? Array.from(wo).sort() : []
+    }
+    entries.push(entry)
+  }
+
+  for (const f of listFiles(path.join(CONFIG, "agents"), (n) => n.endsWith(".md"))) {
+    const text = readText(f)
+    const fm = parseFrontmatter(text)
+    finish({ kind: "agent", abs: f, name: path.basename(f, ".md"), text, desc: fm.data.description, mode: fm.data.mode, declaredModel: fm.data.model, permission: fm.data.permission })
+  }
+  for (const d of listDirs(path.join(CONFIG, "skills"))) {
+    const sk = path.join(d, "SKILL.md")
+    if (!exists(sk)) continue
+    const text = readText(sk)
+    const fm = parseFrontmatter(text)
+    finish({ kind: "skill", abs: sk, name: path.basename(d), text, desc: fm.data.description, mode: fm.data.mode, declaredModel: fm.data.model, permission: fm.data.permission })
+  }
+  for (const f of listPluginFiles(path.join(CONFIG, "plugins"))) {
+    const text = readText(f)
+    finish({ kind: "plugin", abs: f, name: path.relative(path.join(CONFIG, "plugins"), f), text, desc: null, mode: null, declaredModel: null, permission: null })
+  }
+
+  entries.sort((a, b) => (a.kind === b.kind ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : (a.kind < b.kind ? -1 : 1)))
+  const counts = { agent: 0, skill: 0, plugin: 0 }
+  for (const e of entries) counts[e.kind] = (counts[e.kind] || 0) + 1
+  return {
+    schema: SCHEMA,
+    generated: new Date().toISOString(),
+    repo: REPO,
+    config: CONFIG,
+    harness: harness,
+    counts,
+    entries,
+  }
+}
+
+function keyOf(e) { return e.kind + ":" + e.name }
+function indexBy(entries) {
+  const m = new Map()
+  for (const e of entries) m.set(keyOf(e), e)
+  return m
+}
+function snapshotsDir() { return path.join(STATE, "snapshots") }
+function latestSnapshot() {
+  const dir = snapshotsDir()
+  let names
+  try { names = fs.readdirSync(dir) } catch (e) { return null }
+  const files = names.filter((n) => n.startsWith("catalog-") && n.endsWith(".json"))
+  if (!files.length) return null
+  const scored = files.map((n) => {
+    const p = path.join(dir, n)
+    let m = 0
+    try { m = fs.statSync(p).mtimeMs } catch (e) {}
+    return { p, m, n }
+  }).sort((a, b) => (a.m !== b.m ? a.m - b.m : (a.n < b.n ? -1 : 1)))
+  const last = scored[scored.length - 1].p
+  try { return { file: last, data: JSON.parse(readText(last)) } } catch (e) { return null }
+}
+function diffCatalog(cur, prev) {
+  const added = []
+  const removed = []
+  const changed = []
+  if (!prev) {
+    for (const e of cur.entries) added.push(e)
+    return { added, removed, changed }
+  }
+  const a = indexBy(cur.entries)
+  const b = indexBy(prev.entries || [])
+  for (const [k, e] of a) {
+    if (!b.has(k)) added.push(e)
+    else if (b.get(k).hash !== e.hash) changed.push({ kind: e.kind, name: e.name, from: b.get(k).version, to: e.version, path: e.path, reason: e.git && e.git.subject ? e.git.subject : null })
+  }
+  for (const [k, e] of b) if (!a.has(k)) removed.push(e)
+  added.sort((x, y) => (keyOf(x) < keyOf(y) ? -1 : 1))
+  removed.sort((x, y) => (keyOf(x) < keyOf(y) ? -1 : 1))
+  changed.sort((x, y) => (keyOf(x) < keyOf(y) ? -1 : 1))
+  return { added, removed, changed }
+}
+
+function actor() { return process.env.RIG_ACTOR || "agents-registry" }
+function emit(kind, summary, data) {
+  const line = JSON.stringify({
+    ts: new Date().toISOString(),
+    kind,
+    actor: actor(),
+    ticket: process.env.RIG_TICKET || "",
+    seat: "",
+    area: "meta",
+    summary,
+    data: data || {},
+  })
+  try {
+    fs.mkdirSync(path.dirname(EVENTS), { recursive: true })
+    const fd = fs.openSync(EVENTS, "a")
+    fs.writeSync(fd, line + "\n")
+    fs.closeSync(fd)
+  } catch (e) {}
+}
+function readEvents() {
+  const text = readText(EVENTS)
+  const res = []
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue
+    try { res.push(JSON.parse(line)) } catch (e) {}
+  }
+  return res
+}
+
+function stamp() {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, "0")
+  return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) + "T" + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds())
+}
+function writeSnapshot(cat) {
+  fs.mkdirSync(snapshotsDir(), { recursive: true })
+  let base = path.join(snapshotsDir(), "catalog-" + stamp() + ".json")
+  let n = 1
+  while (exists(base)) { base = path.join(snapshotsDir(), "catalog-" + stamp() + "-" + n + ".json"); n += 1 }
+  fs.writeFileSync(base, JSON.stringify(cat, null, 2) + "\n")
+  fs.mkdirSync(STATE, { recursive: true })
+  fs.writeFileSync(path.join(STATE, "catalog.json"), JSON.stringify(cat, null, 2) + "\n")
+  return base
+}
+function shortDate(iso) { return iso ? String(iso).replace("T", " ").replace(/\.\d+Z?$/, "").replace(/Z$/, "") : "-" }
+function modelLabel(e) {
+  if (e.model.effective) return e.model.effective
+  if (e.model.declared) return e.model.declared
+  return "-"
+}
+
+function renderDocs(cat) {
+  const L = []
+  L.push("# Registro de agentes")
+  L.push("")
+  L.push("Generado por `agents-registry build`. Archivo de solo lectura: no editar a mano.")
+  L.push("")
+  L.push("Actualizado: " + shortDate(cat.generated) + " | agentes: " + cat.counts.agent + " | skills: " + cat.counts.skill + " | plugins: " + cat.counts.plugin)
+  L.push("")
+  const section = (title, kind) => {
+    L.push("## " + title)
+    L.push("")
+    L.push("| nombre | modelo | skills | version | ultimo cambio |")
+    L.push("|--------|--------|--------|---------|---------------|")
+    for (const e of cat.entries.filter((x) => x.kind === kind)) {
+      const skills = e.skills_referenced.length ? e.skills_referenced.join(", ") : "-"
+      L.push("| " + e.name + " | " + modelLabel(e) + " | " + skills + " | " + (e.version || "-") + " | " + shortDate(e.mtime) + " |")
+    }
+    L.push("")
+  }
+  section("Agentes", "agent")
+  section("Skills", "skill")
+  if (cat.entries.some((e) => e.kind === "plugin")) {
+    L.push("## Plugins")
+    L.push("")
+    L.push("| nombre | version | ultimo cambio |")
+    L.push("|--------|---------|---------------|")
+    for (const e of cat.entries.filter((x) => x.kind === "plugin")) {
+      L.push("| " + e.name + " | " + (e.version || "-") + " | " + shortDate(e.mtime) + " |")
+    }
+    L.push("")
+  }
+  L.push("## Auto-mejora (como se mejora un agente o una skill)")
+  L.push("")
+  L.push("Este registro es de solo lectura para los agentes: se regenera con `agents-registry build`, nunca se edita a mano. El historial real vive en git (cada commit de un agente o skill es una version) y en el feed de eventos (`kind=agent-change`).")
+  L.push("")
+  L.push("Protocolo para proponer una mejora sobre un agente o una skill:")
+  L.push("")
+  L.push("1. Abrir un ticket con `rig ticket add <ID> --project dotfiles --title \"...\" --area meta --owner supervisor`.")
+  L.push("2. En el ticket, declarar el motivo y la evidencia: fallos o loops repetidos (sesiones en `opencode.db`), consumo alto (`agents-registry show <nombre>`), un hueco de razonamiento visto en una conversacion exportada, o un check de `verify` roto.")
+  L.push("3. Declarar la verificacion: que check/`verify` demuestra la mejora.")
+  L.push("4. Integrar el cambio en una silla (worktree + branch `ticket/<id>`); al mergear, `agents-registry build` registra la version anterior y la nueva y emite el evento `agent-change` con el motivo.")
+  L.push("5. Cerrar el ticket con evidencia (`rig ticket done`).")
+  L.push("")
+  return L.join("\n") + "\n"
+}
+function writeDocs(cat) {
+  fs.mkdirSync(path.dirname(DOCS), { recursive: true })
+  fs.writeFileSync(DOCS, renderDocs(cat))
+  return DOCS
+}
+
+function fmtTokens(t) {
+  if (!t) return "-"
+  return String(t.total) + " tok"
+}
+function fmtCost(c) {
+  if (c === undefined || c === null) return "-"
+  return "$" + Number(c).toFixed(4)
+}
+
+function cmdBuild(argv) {
+  const json = argv.includes("--json")
+  const quiet = argv.includes("--quiet")
+  const noWrite = argv.includes("--no-write")
+  const noMd = argv.includes("--no-md") || process.env.RIG_AGENTS_NO_MD === "1"
+  const noEvents = argv.includes("--no-events")
+  const skipVerify = process.env.AGENTS_REGISTRY_SKIP_VERIFY === "1"
+  const verify = (argv.includes("--verify") || !skipVerify) && !argv.includes("--no-verify")
+  const cat = buildCatalog({ verify })
+  const prev = latestSnapshot()
+  const d = diffCatalog(cat, prev ? prev.data : null)
+
+  let snapshotFile = null
+  let docsFile = null
+  if (!noWrite) {
+    snapshotFile = writeSnapshot(cat)
+    if (!noMd) docsFile = writeDocs(cat)
+    if (!noEvents) {
+      if (d.changed.length) {
+        for (const c of d.changed) {
+          emit("agent-change", c.kind + " " + c.name + ": " + (c.from || "?") + " -> " + (c.to || "?"), {
+            name: c.name, kind: c.kind, path: c.path, from: c.from, to: c.to, reason: c.reason,
+          })
+        }
+      }
+      emit("agents-snapshot", "registro de agentes: " + cat.counts.agent + " agentes, " + cat.counts.skill + " skills, " + cat.counts.plugin + " plugins" + (prev ? " (" + d.changed.length + " cambios)" : " (primera foto)"), {
+        counts: cat.counts, changed: d.changed.length, added: d.added.length, removed: d.removed.length, snapshot: snapshotFile,
+      })
+    }
+  }
+
+  if (json) { out(JSON.stringify(cat, null, 2)); return 0 }
+  if (quiet) return 0
+  out("Catalogo de agentes v" + cat.schema)
+  out("Generado: " + shortDate(cat.generated))
+  out("Agentes: " + cat.counts.agent + " | Skills: " + cat.counts.skill + " | Plugins: " + cat.counts.plugin)
+  out("Harness opencode: " + (cat.harness.version != null ? "v" + cat.harness.version + " (" + cat.harness.state + ")" : "desconocido"))
+  if (prev) {
+    out("Cambios desde " + path.basename(prev.file) + ": " + d.changed.length + " modificados, " + d.added.length + " nuevos, " + d.removed.length + " eliminados")
+    for (const c of d.changed) out("  ~ " + c.kind + " " + c.name + ": " + (c.from || "?") + " -> " + (c.to || "?") + (c.reason ? "  (" + c.reason + ")" : ""))
+    for (const a of d.added) out("  + " + a.kind + " " + a.name + " v" + (a.version || "?"))
+    for (const r of d.removed) out("  - " + r.kind + " " + r.name)
+  } else {
+    out("Primera foto: no hay snapshot previo.")
+  }
+  if (snapshotFile) out("Snapshot: " + snapshotFile)
+  if (docsFile) out("Indice: " + docsFile)
+  return 0
+}
+
+function loadCatalog() { return buildCatalog({ verify: false }) }
+
+function cmdList(argv) {
+  const cat = loadCatalog()
+  if (argv.includes("--json") || argv.includes("--porcelain")) { out(JSON.stringify(cat.entries, null, 2)); return 0 }
+  const pad = (s, n) => { s = String(s); return s.length >= n ? s : s + " ".repeat(n - s.length) }
+  out(pad("TIPO", 7) + pad("NOMBRE", 24) + pad("VERSION", 14) + pad("MODELO", 34) + "ULTIMO CAMBIO")
+  for (const e of cat.entries) {
+    out(pad(e.kind, 7) + pad(e.name, 24) + pad(e.version || "-", 14) + pad(modelLabel(e), 34) + shortDate(e.mtime))
+  }
+  return 0
+}
+
+function findEntry(cat, name) {
+  const want = String(name).replace(/^\/+/, "")
+  for (const e of cat.entries) if (e.name === want) return e
+  const hit = cat.entries.filter((e) => e.name.toLowerCase() === want.toLowerCase())
+  if (hit.length) return hit[0]
+  const tail = cat.entries.filter((e) => e.name.split("/").pop() === want)
+  return tail.length ? tail[0] : null
+}
+
+function cmdShow(argv) {
+  const name = argv.find((a) => !a.startsWith("-"))
+  if (!name) { out("uso: agents-registry show <nombre>"); return 2 }
+  const cat = loadCatalog()
+  const e = findEntry(cat, name)
+  if (!e) { out("no encontrado: " + name); return 1 }
+  if (argv.includes("--json")) { out(JSON.stringify(e, null, 2)); return 0 }
+  out("Tipo: " + e.kind)
+  out("Nombre: " + e.name)
+  out("Version: " + (e.version || "-") + "  (hash " + (e.hash ? e.hash.slice(0, 16) + "..." : "-") + ")")
+  out("Archivo: " + e.abs_path)
+  out("Ruta en repo: " + e.path)
+  out("Ultima modificacion: " + shortDate(e.mtime))
+  out("Modo: " + (e.mode || "-"))
+  out("Modelo declarado: " + (e.model.declared || "-"))
+  out("Modelo efectivo: " + (e.model.effective || "-"))
+  out("Harness: " + e.harness.name + (e.harness.version != null ? " v" + e.harness.version : ""))
+  out("Verificacion: " + e.verification.status + (e.verification.domain ? " (dominio " + e.verification.domain + ")" : ""))
+  if (e.description) out("Descripcion: " + e.description)
+  out("Disparadores: " + (e.triggers.length ? e.triggers.join(", ") : "-"))
+  out("Skills que referencia: " + (e.skills_referenced.length ? e.skills_referenced.join(", ") : "-"))
+  out("Permisos: allow=" + (e.tools.allow.join(",") || "-") + " deny=" + (e.tools.deny.join(",") || "-"))
+  out("Tickets (dueno): " + (e.tickets.owner.join(", ") || "-"))
+  out("Tickets (trabajo): " + (e.tickets.worked.join(", ") || "-"))
+  if (e.usage) out("Consumo: " + e.usage.sessions + " sesiones, " + fmtTokens(e.usage.tokens) + ", " + fmtCost(e.usage.cost) + ", " + Math.round((e.usage.duration_ms || 0) / 60000) + " min")
+  if (e.git && e.git.commit) out("Ultimo commit: " + e.git.short + " " + shortDate(e.git.date) + " " + (e.git.author || "") + " - " + (e.git.subject || ""))
+  else out("Ultimo commit: sin trackear en git")
+  return 0
+}
+
+function cmdHistory(argv) {
+  const name = argv.find((a) => !a.startsWith("-"))
+  if (!name) { out("uso: agents-registry history <nombre>"); return 2 }
+  const cat = loadCatalog()
+  const e = findEntry(cat, name)
+  const rel = e ? e.path : name
+  const commits = gitLog(rel)
+  const events = readEvents().filter((ev) => ev.kind === "agent-change" && ev.data && ev.data.name === (e ? e.name : name))
+  if (argv.includes("--json")) { out(JSON.stringify({ name: e ? e.name : name, path: rel, commits, events: events.map((x) => ({ ts: x.ts, from: x.data.from, to: x.data.to, reason: x.data.reason })) }, null, 2)); return 0 }
+  if (!e) out("Aviso: " + name + " no esta en el catalogo; muestro el historial de git por ruta.")
+  out("Historial de " + (e ? e.name : name) + " (" + rel + ")")
+  out("")
+  out("Versiones en git (" + commits.length + "):")
+  if (!commits.length) out("  (sin commits)")
+  for (const c of commits) out("  " + c.short + "  " + shortDate(c.date) + "  " + (c.author || "") + "  " + (c.subject || ""))
+  out("")
+  out("Eventos de cambio registrados (" + events.length + "):")
+  if (!events.length) out("  (sin eventos agent-change)")
+  for (const ev of events) out("  " + shortDate(ev.ts) + "  " + (ev.data.from || "?") + " -> " + (ev.data.to || "?") + "  " + (ev.data.reason || ""))
+  return 0
+}
+
+function cmdDiff(argv) {
+  const cat = loadCatalog()
+  const prev = latestSnapshot()
+  const d = diffCatalog(cat, prev ? prev.data : null)
+  if (argv.includes("--json")) { out(JSON.stringify({ since: prev ? prev.file : null, added: d.added.map(keyOf), removed: d.removed.map(keyOf), changed: d.changed }, null, 2)); return 0 }
+  if (!prev) { out("Sin snapshot previo: todo es nuevo (" + d.added.length + " entradas)."); return 0 }
+  out("Cambios desde " + path.basename(prev.file) + " (" + shortDate(prev.data.generated) + ")")
+  out("Modificados: " + d.changed.length + " | Nuevos: " + d.added.length + " | Eliminados: " + d.removed.length)
+  for (const c of d.changed) out("  ~ " + c.kind + " " + c.name + ": " + (c.from || "?") + " -> " + (c.to || "?") + (c.reason ? "  (" + c.reason + ")" : ""))
+  for (const a of d.added) out("  + " + a.kind + " " + a.name + " v" + (a.version || "?"))
+  for (const r of d.removed) out("  - " + r.kind + " " + r.name)
+  return 0
+}
+
+function cmdSelftest() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agents-registry-selftest-"))
+  const cfg = path.join(tmp, "config")
+  fs.mkdirSync(path.join(cfg, "agents"), { recursive: true })
+  fs.mkdirSync(path.join(cfg, "skills", "demo"), { recursive: true })
+  fs.mkdirSync(path.join(cfg, "plugins"), { recursive: true })
+  const agentFile = path.join(cfg, "agents", "demo-agent.md")
+  fs.writeFileSync(agentFile, "---\nname: demo-agent\ndescription: >\n  Agente de prueba.\n  Triggers: demo, prueba.\nmode: all\npermission:\n  bash: allow\n  edit: deny\n---\n\nCuerpo.\n")
+  fs.writeFileSync(path.join(cfg, "skills", "demo", "SKILL.md"), "---\nname: demo\ndescription: Skill de prueba.\n---\n\nCuerpo.\n")
+  fs.writeFileSync(path.join(cfg, "plugins", "demo.js"), "export const Demo = async () => ({})\n")
+  const env = Object.assign({}, process.env, {
+    RIG_AGENTS_CONFIG: cfg,
+    RIG_AGENTS_STATE: path.join(tmp, "state"),
+    RIG_AGENTS_DOCS: path.join(tmp, "docs.md"),
+    RIG_EVENTS_FILE: path.join(tmp, "events.jsonl"),
+    RIG_TICKETS_FILE: path.join(tmp, "none.json"),
+    RIG_DB: path.join(tmp, "none.db"),
+    RIG_AGENTS_REPO: tmp,
+    AGENTS_REGISTRY_SKIP_VERIFY: "1",
+    RIG_AGENT_REGISTRY_SELFTEST: "1",
+  })
+  const runSelf = (args) => {
+    const r = execFileSync(process.execPath, [SELF].concat(args), { env, encoding: "utf8" })
+    return r
+  }
+  let ok = true
+  const check = (cond, label) => { if (!cond) { ok = false; out("FAIL " + label) } else out("OK   " + label) }
+  try {
+    const b1 = JSON.parse(runSelf(["build", "--json"]))
+    check(b1.schema === 1, "schema v1")
+    check(b1.entries.length === 3, "3 entradas (1 agente, 1 skill, 1 plugin)")
+    check(b1.entries.some((e) => e.kind === "agent" && e.name === "demo-agent"), "entrada de agente")
+    check(b1.entries.some((e) => e.kind === "skill" && e.name === "demo"), "entrada de skill")
+    check(b1.entries.some((e) => e.kind === "plugin"), "entrada de plugin")
+    const v1 = b1.entries.find((e) => e.name === "demo-agent").version
+    fs.appendFileSync(agentFile, "\ncambio\n")
+    const diff = JSON.parse(runSelf(["diff", "--json"]))
+    check(diff.changed.length >= 1, "diff detecta el cambio antes de re-fotografiar")
+    const b2 = JSON.parse(runSelf(["build", "--json"]))
+    const v2 = b2.entries.find((e) => e.name === "demo-agent").version
+    check(v1 !== v2, "el hash cambia al modificar el agente")
+    const ev = readText(path.join(tmp, "events.jsonl"))
+    check(ev.includes("agent-change") && ev.includes("demo-agent"), "evento agent-change emitido")
+    const hist = JSON.parse(runSelf(["history", "demo-agent", "--json"]))
+    check(Array.isArray(hist.commits), "history responde")
+    const showd = JSON.parse(runSelf(["show", "demo-agent", "--json"]))
+    check(showd.name === "demo-agent", "show responde")
+  } catch (e) {
+    ok = false
+    out("FAIL selftest: " + (e && e.message ? e.message : e))
+  } finally {
+    try { fs.rmSync(tmp, { recursive: true, force: true }) } catch (e) {}
+  }
+  out(ok ? "selftest: PASS" : "selftest: FAIL")
+  return ok ? 0 : 1
+}
+
+function main() {
+  const argv = process.argv.slice(2)
+  const cmd = argv[0]
+  const rest = argv.slice(1)
+  if (!cmd || cmd === "--help" || cmd === "-h" || cmd === "help") {
+    out("agents-registry <comando>")
+    out("")
+    out("  build [--json] [--quiet] [--no-write] [--no-md] [--no-events] [--verify]  construye el catalogo, guarda una foto e indexa")
+    out("  list [--json|--porcelain]      lista agentes, skills y plugins con version y ultimo cambio")
+    out("  show <nombre> [--json]         detalle de un agente, skill o plugin")
+    out("  history <nombre> [--json]      historial de versiones (git + eventos de cambio)")
+    out("  diff [--json]                  que cambio desde la ultima foto del catalogo")
+    out("  --selftest                     prueba end-to-end en un directorio temporal")
+    return 0
+  }
+  if (cmd === "--selftest" || cmd === "selftest") return cmdSelftest()
+  if (cmd === "build") return cmdBuild(rest)
+  if (cmd === "list" || cmd === "ls") return cmdList(rest)
+  if (cmd === "show") return cmdShow(rest)
+  if (cmd === "history" || cmd === "hist") return cmdHistory(rest)
+  if (cmd === "diff") return cmdDiff(rest)
+  out("comando desconocido: " + cmd + " (usa agents-registry --help)")
+  return 2
+}
+
+if (fs.existsSync(CONFIG) || process.argv.slice(2).length) {
+  process.exitCode = main()
+} else {
+  out("config no encontrado: " + CONFIG)
+  process.exitCode = 2
+}

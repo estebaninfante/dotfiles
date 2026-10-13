@@ -356,4 +356,53 @@ else
   fi
 fi
 
+REG_TOOL="${AGENTS_REGISTRY_BIN:-agents-registry}"
+reg_json=""
+reg_repo=""
+if command -v "$REG_TOOL" >/dev/null 2>&1; then
+  ok "registry-tool" "$(command -v "$REG_TOOL")"
+  reg_json="$(AGENTS_REGISTRY_SKIP_VERIFY=1 "$REG_TOOL" build --no-write --json 2>/dev/null || true)"
+  reg_repo="$(printf '%s' "$reg_json" | jq -r '.repo // empty' 2>/dev/null || true)"
+else
+  fail "registry-tool" "no encontrado agents-registry (symlink ~/.local/bin/agents-registry)"
+fi
+
+if [[ -n "$reg_json" ]] && printf '%s' "$reg_json" | jq -e '.schema == 1 and (.entries | type == "array")' >/dev/null 2>&1; then
+  n_md=$(find "$AGENTS_DIR" -maxdepth 1 -name '*.md' | wc -l)
+  n_cat=$(printf '%s' "$reg_json" | jq '[.entries[] | select(.kind == "agent")] | length')
+  n_tot=$(printf '%s' "$reg_json" | jq '.entries | length')
+  n_hash=$(printf '%s' "$reg_json" | jq '[.entries[] | select((.hash | type) == "string" and (.hash | length) == 64)] | length')
+  if [[ "$n_cat" == "$n_md" && "$n_hash" == "$n_tot" && "$n_tot" -gt 0 ]]; then
+    ok "registry-catalog" "schema 1: $n_cat agentes (= $n_md .md), $n_tot entradas con hash"
+  else
+    fail "registry-catalog" "catalogo invalido: agentes=$n_cat esperado=$n_md, hash=$n_hash/$n_tot"
+  fi
+else
+  fail "registry-catalog" "agents-registry build no devolvio JSON valido (schema 1)"
+fi
+
+if command -v "$REG_TOOL" >/dev/null 2>&1; then
+  if "$REG_TOOL" --selftest >/dev/null 2>&1; then
+    ok "registry-change" "hash cambia y se emite agent-change (selftest aislado)"
+  else
+    fail "registry-change" "agents-registry --selftest fallo (hash/evento/diff)"
+  fi
+else
+  skip "registry-change" "sin agents-registry"
+fi
+
+reg_doc="$reg_repo/docs/agents.md"
+if [[ -n "$reg_repo" && -f "$reg_doc" ]] && grep -qF 'Auto-mejora' "$reg_doc" && grep -qF '| nombre | modelo |' "$reg_doc"; then
+  ok "registry-doc" "$reg_doc"
+else
+  fail "registry-doc" "falta $reg_doc (indice versionado con seccion de auto-mejora)"
+fi
+
+reg_policy="$reg_repo/linux/config/opencode/AGENTS.md"
+if grep -qF 'Registro versionado de agentes' "$reg_policy" 2>/dev/null || grep -qF 'Registro versionado de agentes' "$policy_file" 2>/dev/null; then
+  ok "registry-policy" "AGENTS.md documenta el registro versionado de agentes"
+else
+  fail "registry-policy" "falta la regla 'Registro versionado de agentes' en AGENTS.md"
+fi
+
 exit "$rc"
