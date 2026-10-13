@@ -341,6 +341,63 @@ else
 fi
 rm -f "$etmp"
 
+evtmp=$(mktemp -d)
+evfile="$evtmp/events.jsonl"
+if command -v jq >/dev/null 2>&1; then
+  if out=$(RIG_EVENTS_FILE="$evfile" "$SRC" log "verifier evento uno" 2>&1) &&
+     RIG_EVENTS_FILE="$evfile" "$SRC" log "verifier evento dos" >/dev/null 2>&1; then
+    if [ "$(wc -l <"$evfile" 2>/dev/null | tr -d ' ')" = "2" ]; then
+      ok "events-append" "dos logs -> dos lineas"
+    else
+      fail "events-append" "append no acumula lineas"
+    fi
+    if jq -e 'has("ts") and has("kind") and has("actor") and has("ticket") and has("seat") and has("area") and has("summary") and has("data")' "$evfile" >/dev/null 2>&1; then
+      ok "events-shape" "eventos con los 8 campos"
+    else
+      fail "events-shape" "evento sin esquema completo"
+    fi
+    if out=$(RIG_EVENTS_FILE="$evfile" "$SRC" events --porcelain 2>&1) &&
+       printf '%s\n' "$out" | jq -e -s 'length==2' >/dev/null 2>&1; then
+      ok "events-porcelain" "--porcelain devuelve los eventos"
+    else
+      fail "events-porcelain" "events --porcelain no devuelve los eventos escritos"
+    fi
+  else
+    fail "events-append" "rig log fallo: $(printf '%s' "$out" | head -n1)"
+  fi
+else
+  skip "events-append" "jq ausente"
+fi
+if "$SRC" events --watch --porcelain >/dev/null 2>&1; then
+  fail "events-watch-guard" "events --watch no debe combinarse con --porcelain"
+else
+  ok "events-watch-guard" "events --watch rechaza --porcelain"
+fi
+if out=$("$SRC" events --help 2>&1); then
+  if printf '%s' "$out" | grep -q -- '--since' && printf '%s' "$out" | grep -q -- '--porcelain'; then
+    ok "events-cli" "rig events documenta --since/--porcelain"
+  else
+    fail "events-cli" "rig events --help no documenta --since/--porcelain"
+  fi
+else
+  fail "events-cli" "rig events --help fallo"
+fi
+if out=$("$SRC" log --help 2>&1); then
+  if printf '%s' "$out" | grep -q -- '--ticket' && printf '%s' "$out" | grep -q -- '--seat'; then
+    ok "log-cli" "rig log documenta --ticket/--seat"
+  else
+    fail "log-cli" "rig log --help no documenta --ticket/--seat"
+  fi
+else
+  fail "log-cli" "rig log --help fallo"
+fi
+if grep -q 'cmd_events' "$SRC" && grep -q 'event_emit' "$SRC" && grep -q -- 'events --watch' "$SRC"; then
+  ok "central-events" "central incluye el pane de eventos"
+else
+  fail "central-events" "central sin pane de eventos en vivo"
+fi
+rm -rf "$evtmp"
+
 if "$SRC" scan --watch --porcelain >/dev/null 2>&1; then
   fail "scan-watch-guard" "scan --watch no debe combinarse con --porcelain"
 else
