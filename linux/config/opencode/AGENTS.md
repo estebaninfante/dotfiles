@@ -323,8 +323,18 @@ owner. **Nunca** deja el pedido en `"¿lo lanzo?"`: o lo lanza, o lo cierra con 
   actividad reciente (`stale`, ver check `tickets-idle`) y los cierra: relanza
   (`rig work new <id> --cwd <repo> --spawn`) o marca `pending`/`blocked`. `main` nunca asume que
   la silla aviso.
+- **Entrega confirmada (REGLA DURA)**: ninguna silla se considera lanzada hasta que su encargo esta confirmado. Lanzar trabajo es UNA operacion determinista: `rig launch
+  <ticket-id> --cwd <repo> --brief <archivo>` (o `rig spawn ... --brief <archivo>` / `rig work
+  new ... --spawn --brief <archivo>`) crea el ticket (si no existe) + su worktree + su silla y
+  entrega el encargo: espera a que la interfaz este realmente lista (sin sleeps fijos), lo pega
+  y CONFIRMA que llego (el texto aparece en el panel o el consumo de contexto de la silla dejo
+  de ser cero). Si no confirma tras los reintentos, NO reporta exito: emite el evento
+  `launch-failed`, deja el ticket en `blocked` con el motivo y sale con codigo distinto de cero.
+  Una silla viva con el panel vacio y consumo cero es "encargo no entregado" (el check
+  `tickets-idle` y `rig scan` lo marcan `undelivered`), nunca "trabajando".
 - Dueño: `supervisor`. Verificacion: `verify run agents` (checks `launch-policy`,
-  `tickets-live`) + `verify run rig` (check `tickets-idle`, senal de sillas in-progress idle).
+  `tickets-live`) + `verify run rig` (checks `tickets-idle` y `launch-failed-blocked`, senal de
+  sillas in-progress idle o con encargo no entregado).
 
 ## Invariante: cambios paralelos con git worktree por ticket
 
