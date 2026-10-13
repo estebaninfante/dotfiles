@@ -212,16 +212,18 @@ eso el trabajo **no** corre in-process en `main`, y **esta prohibido delegar con
 - El trabajo largo corre en una **silla tmux**: `rig work new <ticket> --spawn` (worktree + branch
   `ticket/<id>` + silla `work-<id>`), y se le habla con `rig send <silla> "..."`. **Un escritor por
   arbol** (ver el invariante de worktree).
-- **Herramientas visibles por defecto**: al spawnear, `rig` arma el **workspace herdr del
-  proyecto** (workspace = proyecto git -- un worktree cae en el workspace de su repo; **tab = ticket**,
-  **pane = agente**; `--no-herdr` para omitir, `RIG_HERDR=0`) y la **ventana espejo** en una
-  sesion tmux de agentes (`--no-mirror`).
-- **Nomenclatura de tab herdr = ticket (REGLA)**: la tab de una silla con ticket lleva el `id` del
-  ticket (p.ej. `HR-PAD-TAB`), NO el nombre de la silla (`work-hr-pad-tab`). Al spawnear un **2do
-  agente del mismo ticket** NO se crea tab nueva: se abre un **pane nuevo dentro de la tab
-  existente** (`herdr pane split`), con label por agente (cada pane = attach de una silla). Una
-  silla **sin ticket** conserva el comportamiento anterior (tab = silla). `rig spawn` acepta
-  `--ticket <ID>` para fijarlo explicito; `rig work new ... --spawn` lo deriva del ticket.
+- **Herramientas visibles por defecto**: al spawnear, `rig` arma el **space herdr de la cosa**
+  (`--no-herdr` para omitir, `RIG_HERDR=0`) y la **ventana espejo** en una sesion tmux de agentes
+  (`--no-mirror`).
+- **ESPACIO POR COSA NUEVA (REGLA)**: cada unidad de trabajo nueva abre su **PROPIO space herdr**,
+  nombrado por esa cosa: para un ticket el label es `#<num> <titulo>` (o `<id> <titulo>` si aun no
+  tiene `num`); para un pedido suelto (`rig spawn` sin ticket) el label es el nombre de la silla.
+  Dentro del space, **cada agente es su propia ventana** (tab): al spawnear un 2do agente de la misma
+  cosa NO se crea space nuevo, se suma su ventana al space existente (si ya existe una ventana con
+  ese label se hace `pane split`). Es **idempotente** (matchea por el id/num de la cosa: label exacto
+  o `key + " "`) y **nunca toca spaces ni sillas previos**. `rig spawn` acepta `--ticket <ID>` para
+  fijarlo explicito; `rig work new ... --spawn` lo deriva del ticket. `--no-focus` / `RIG_FOCUS=0`
+  evitan enfocar. Este modelo **reemplaza** el viejo (workspace = proyecto git, tab = ticket).
 - **Estado real del agente en herdr (panel de trazabilidad)**: la silla sigue siendo **una sola
   sesion tmux con UN proceso opencode** (nada de duplicar). Al spawnear, `rig` crea primero el
   tab/pane herdr y arranca la sesion tmux con `-e HERDR_ENV=1 -e HERDR_PANE_ID=<pane> -e
@@ -243,20 +245,55 @@ eso el trabajo **no** corre in-process en `main`, y **esta prohibido delegar con
   `opencode-go/deepseek-v4.1-flash`, override `RIG_SEAT_MODEL`) para no heredar el ultimo modelo y
   caer en un provider sin auth.
 - **Ciclo de vida**: al cerrar el ticket (`rig work finish` / `rig ticket done`) se libera la RAM:
-  se matan **TODAS las sillas de la tab del ticket** (todos sus panes/agentes), su tab en herdr y sus
-  ventanas espejo (`--keep-open` / `--no-close-seat` lo evitan). Nunca mata `main` ni sillas sin
-  ticket; ante duda, deja el ticket `blocked` en vez de matar. `rig herdr sync` NO renombra las tabs
-  ya existentes (una silla con `HERDR_TAB_ID` en su env solo retitula su propio pane), para no romper
-  las tabs legacy con formato viejo.
+  se matan **TODAS las sillas de su space** (todos sus panes/agentes) y se cierra **el space** (solo
+  si el space es de ese ticket: su label matchea el id/num de la cosa), mas sus ventanas espejo
+  (`--keep-open` / `--no-close-seat` lo evitan). Nunca mata `main`, sillas sin ticket ni **spaces
+  ajenos** (un space legacy de proyecto cae al fallback: cierra solo su ventana/pane); ante duda,
+  deja el ticket `blocked` en vez de matar. `rig herdr sync` NO renombra las tabs ya existentes (una
+  silla con `HERDR_TAB_ID` en su env solo retitula su propio pane), para no romper las tabs legacy
+  con formato viejo.
 - Se lee el avance con `rig read <silla>` y, para un vistazo completo, con `rig scan`: ticket/
   proyecto/agente, ruta del worktree, **archivos modificados** (`git status` + `git diff --numstat`,
   incluye untracked), **ultima actividad** (mtime mas reciente), las ultimas ~40 lineas del pane y
   **tokens/costo/tiempo** del ticket (`--porcelain` = JSON).
 - Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
   (`scan-cli`, `scan-porcelain`, `scan-empty`, `scan-empty-render`, `seat-model`, `seat-model-env`,
-  `herdr-hooks`, `lifecycle-cli`, `tabs-policy`) y anti-rot `verify run agents` (checks
-  `sillas-policy`, `main-pure`); `rig --selftest` cubre `scan`/herdr/lifecycle con un worktree
-  temporal.
+  `rig-tracked`, `herdr-hooks`, `lifecycle-cli`, `tabs-policy`) y anti-rot `verify run agents`
+  (checks `sillas-policy`, `main-pure`); `rig --selftest` cubre `scan`/herdr/lifecycle con un
+  worktree temporal.
+
+### Invariante: rig SIEMPRE trackeado en git
+
+`linux/bin/rig` es el corazon operativo de la doctrina sillas-first y **debe vivir en el repo**
+(`~/dotfiles/linux/bin/rig`, symlink `~/.local/bin/rig`), nunca solo en el arbol de trabajo sin
+commitear. Motivo (caso real): durante meses `rig` estuvo **sin trackear** mientras sus features se
+apilaban en worktrees/branches paralelos, y eso hizo imposible reconciliar la herramienta. Por eso:
+cualquier cambio de `rig` se commitea en la base (o en su worktree `ticket/<id>` que luego integra
+`RIG-RECONCILE`); jamas se deja el archivo vivo fuera de git. Check: `verify run rig` → `rig-tracked`
+(falla si `git ls-files --error-unmatch linux/bin/rig` no lo encuentra).
+
+### Reconciliacion de ramas paralelas (un solo integrador)
+
+Cuando varias ramas/PRs nacen de la misma base y ninguna contiene a las otras, la integracion se
+hace **serial y con verifiacion entre cada paso**, nunca a ciegas:
+
+1. **Un solo integrador**: un ticket dedicado (p.ej. `RIG-RECONCILE`) es el **unico autorizado** a
+   mergear en la base; el resto de las sillas siguen en su worktree y no tocan `main`.
+2. **Inventario antes de mergear**: por cada rama, `git diff --stat base..rama` y una **matriz de
+   features** (grep de marcadores en los archivos que ambas tocan) para saber quien aporta que y
+   quien es superset de quien. Nunca mergear sin saber que features pueden perderse.
+3. **Checkpoint primero**: commitear/usar un commit de base conocido; si algo se rompe,
+   `git reset --hard <checkpoint>` vuelve atras.
+4. **Orden de menor a mayor**: primero las ramas que solo agregan, al final la mas grande/conflictiva.
+5. **Merge preservando ambos lados**: en `add/add` de un script se toma el superset verificado; si
+   los dos divergen, se hace **union 3-way** (`git merge-file`) conservando las features de ambos
+   (renombrando colisiones de funciones). En verificadores/registries se **une** (no se elige).
+6. **Verificacion entre cada merge**: `verify run rig` + `rig --selftest` + `verify run agents`; si
+   rompe, **PARAR** y reportar (no seguir apilando merges sobre algo roto).
+
+Caso real: `RIG-RECONCILE` integro 5 ramas (`herdr-tabs-tickets`, `areas-tickets`, `style-fix`,
+`hypr-herdr-hotkey`, `trace-visibility`) sobre la base `df45bcd`; `rig` quedo como la union de
+`areas` (areas/numeracion/titulos) y `trace` (eventos/central/log/say/agents/queue).
 
 ## Invariante: ningun pedido de trabajo queda sin lanzar
 

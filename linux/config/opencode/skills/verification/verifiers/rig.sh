@@ -91,6 +91,16 @@ else
   fail "git" "git no instalado (requerido por rig work)"
 fi
 
+if command -v git >/dev/null 2>&1 && [ -d "$HOME/dotfiles/.git" ]; then
+  if git -C "$HOME/dotfiles" ls-files --error-unmatch linux/bin/rig >/dev/null 2>&1; then
+    ok "rig-tracked" "linux/bin/rig versionado en git (invariante: rig siempre trackeado)"
+  else
+    fail "rig-tracked" "linux/bin/rig NO esta trackeado por git: agregalo al repo (git add linux/bin/rig)"
+  fi
+else
+  skip "rig-tracked" "sin repo git en ~/dotfiles"
+fi
+
 if out=$("$SRC" work --help 2>&1); then
   if printf '%s' "$out" | grep -q 'worktree'; then
     ok "work-cli" "rig work disponible"
@@ -154,13 +164,13 @@ else
 fi
 
 hookok=1
-for fn in herdr_ensure_ws herdr_attach_seat mirror_add; do
+for fn in herdr_ensure_space herdr_attach_seat mirror_add; do
   grep -q "$fn" "$SRC" || hookok=0
 done
 if [ "$hookok" = "1" ]; then
   ok "herdr-hooks" "spawn engancha herdr (workspace/tab) + espejo tmux"
 else
-  fail "herdr-hooks" "rig sin herdr_ensure_ws/herdr_attach_seat/mirror_add"
+  fail "herdr-hooks" "rig sin herdr_ensure_space/herdr_attach_seat/mirror_add"
 fi
 
 if grep -q 'herdr_focus_seat' "$SRC" && "$SRC" --help 2>&1 | grep -q -- '--no-focus'; then
@@ -190,19 +200,19 @@ else
 fi
 
 tabok=1
-for fn in tab_label_for_seat herdr_tab_for_label herdr_split_pane herdr_kill_seats_on_tab; do
+for fn in space_meta herdr_ensure_space window_label_for_seat herdr_kill_seats_in_space; do
   grep -q "$fn" "$SRC" || tabok=0
 done
-grep -q 'herdr tab close' "$SRC" || tabok=0
-createline=$(grep -m1 'tab create' "$SRC")
+grep -q 'herdr workspace close' "$SRC" || tabok=0
+createline=$(grep -m1 'workspace create' "$SRC")
 case "$createline" in
   *"--label \"\$label\""*) : ;;
   *) tabok=0 ;;
 esac
 if [ "$tabok" = "1" ]; then
-  ok "tabs-policy" "herdr tab = ticket; 2do agente -> pane split; sin ticket -> tab = silla"
+  ok "tabs-policy" "espacio por cosa: 1 unidad nueva = 1 workspace herdr (label #num/titulo o silla), cada agente su ventana; close cierra el space"
 else
-  fail "tabs-policy" "rig no sigue la politica de tabs por ticket (tab_label_for_seat/herdr_tab_for_label/herdr_split_pane/kill-seats)"
+  fail "tabs-policy" "rig no sigue la politica de espacio-por-cosa (space_meta/herdr_ensure_space/window_label_for_seat/herdr_kill_seats_in_space)"
 fi
 
 if command -v sqlite3 >/dev/null 2>&1; then

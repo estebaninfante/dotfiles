@@ -15,10 +15,10 @@ EVENTS_MAX_BYTES="${RIG_EVENTS_MAX_BYTES:-5242880}"
 
 if [ -t 1 ]; then
   C_OFF=$'\033[0m'; C_DONE=$'\033[32m'; C_PROG=$'\033[33m'; C_BLOCK=$'\033[31m'
-  C_PEND=$'\033[2m'; C_PROJ=$'\033[1;36m'; C_HEAD=$'\033[1m'
+  C_PEND=$'\033[2m'; C_HEAD=$'\033[1m'
   C_AREA=($'\033[36m' $'\033[35m' $'\033[34m' $'\033[95m' $'\033[96m' $'\033[92m')
 else
-  C_OFF=""; C_DONE=""; C_PROG=""; C_BLOCK=""; C_PEND=""; C_PROJ=""; C_HEAD=""
+  C_OFF=""; C_DONE=""; C_PROG=""; C_BLOCK=""; C_PEND=""; C_HEAD=""
   C_AREA=("" "" "" "" "" "")
 fi
 C_HIDE=$'\033[?25l'; C_SHOW=$'\033[?25h'
@@ -138,17 +138,18 @@ worktree: cada ticket corre en su propio arbol git (branch ticket/<id>) -> cambi
 paralelos sin carrera; merge a la base es explicito. Override de ubicacion: RIG_WORKTREE_DIR.
 modelo: toda silla arranca con --model explicito (default opencode-go/deepseek-v4.1-flash).
   Override: RIG_SEAT_MODEL.
-herdr: workspace = proyecto (git repo), tab = ticket, pane = agente (attach a la silla). Si el
-  ticket ya tiene tab, un 2do agente abre un pane nuevo (split), no una tab nueva; sin ticket,
-  la tab se llama como la silla. Se crea/reusa al spawnear y se ENFOCA por defecto
-  (--no-focus lo evita, RIG_FOCUS=0 global).
+herdr (ESPACIO POR COSA NUEVA): cada unidad de trabajo nueva abre su PROPIO space (workspace)
+  herdr, nombrado por esa cosa: "#<num> <titulo>" para un ticket, o el nombre de la silla para
+  un pedido suelto. Dentro del space, cada agente es su propia ventana (tab). Se crea o reusa de
+  forma idempotente (matchea por el id/num de la cosa; nunca toca spaces ni sillas previos) y se
+  ENFOCA por defecto (--no-focus lo evita, RIG_FOCUS=0 global).
   Desactivar: RIG_HERDR=0 o --no-herdr.
 espejo tmux: ventana extra en la sesion de espejos (RIG_MIRROR_SESSION; autodetectada).
   Desactivar: --no-mirror.
 ciclo de vida: al cerrar un ticket (work finish / ticket done) se matan TODAS las sillas de su
-  tab (todos los agentes del ticket) y la tab en herdr, mas su ventana espejo (--keep-open /
-  --no-close-seat lo evita). Nunca mata main ni sillas sin ticket asociado; ante duda deja el
-  ticket blocked.
+  space y se cierra el space (solo si el space es de ese ticket), mas sus ventanas espejo
+  (--keep-open / --no-close-seat lo evita). Nunca cierra spaces ajenos ni sillas sin ticket
+  asociado; ante duda deja el ticket blocked.
 EOF
 }
 
@@ -232,9 +233,46 @@ herdr_ws_for_cwd() {
   return 1
 }
 
-herdr_ensure_ws() {
-  local dir="$1" label="$2" ws out
-  ws=$(herdr_ws_for_cwd "$dir") || true
+space_meta() {
+  local seat="$1" ticket="$2" key title num
+  if [ -z "$ticket" ]; then
+    case "$seat" in work-*) ticket="${seat#work-}" ;; esac
+  fi
+  if [ -n "$ticket" ] && [ -f "$TICKETS_FILE" ]; then
+    key=$(store_key "$ticket" 2>/dev/null || true)
+    [ -n "$key" ] || key="$ticket"
+    read -r num title < <(jq -r --arg id "$key" \
+      '.tickets[]|select((.id|ascii_downcase)==($id|ascii_downcase))|"\(.num//0)\t\(.title//"")"' \
+      "$TICKETS_FILE" 2>/dev/null | head -n1)
+    case "$num" in ''|*[!0-9]*) num=0 ;; esac
+    if [ "${num:-0}" -gt 0 ]; then
+      printf '#%s\n' "$num"
+      [ -n "$title" ] && printf '#%s %s\n' "$num" "$title" || printf '#%s\n' "$num"
+    else
+      printf '%s\n' "$key"
+      [ -n "$title" ] && printf '%s %s\n' "$key" "$title" || printf '%s\n' "$key"
+    fi
+    return 0
+  fi
+  printf '%s\n%s\n' "$seat" "$seat"
+}
+
+herdr_space_for_key() {
+  local k="$1"
+  herdr workspace list 2>/dev/null \
+    | jq -r --arg k "$k" '.result.workspaces[]
+        | select((.label//"")==$k or ((.label//"")|startswith($k+" ")))
+        | .workspace_id' 2>/dev/null | head -n1
+}
+
+herdr_space_label() {
+  herdr workspace list 2>/dev/null \
+    | jq -r --arg w "$1" '.result.workspaces[]|select(.workspace_id==$w)|(.label//"")' 2>/dev/null | head -n1
+}
+
+herdr_ensure_space() {
+  local dir="$1" label="$2" key="$3" ws out
+  ws=$(herdr_space_for_key "$key") || true
   if [ -n "$ws" ]; then printf '%s  \n' "$ws"; return 0; fi
   out=$(herdr workspace create --cwd "$dir" --label "$label" --no-focus 2>/dev/null) || return 1
   printf '%s %s %s\n' \
@@ -264,25 +302,17 @@ herdr_split_pane() {
   printf '%s' "$pid"
 }
 
-seat_ticket_label() {
-  local seat="$1" ticket="$2" canon
-  if [ -z "$ticket" ]; then
-    case "$seat" in work-*) ticket="${seat#work-}" ;; *) return 1 ;; esac
-  fi
-  canon=""
-  if [ -f "$TICKETS_FILE" ]; then canon=$(store_key "$ticket" 2>/dev/null || true); fi
-  [ -n "$canon" ] || canon="$ticket"
-  printf '%s' "$canon"
-}
-
-tab_label_for_seat() {
-  local seat="$1" ticket_lbl
-  ticket_lbl=$(seat_ticket_label "$seat" "${2:-}") || { printf '%s' "$seat"; return 0; }
-  printf '%s' "$ticket_lbl"
+window_label_for_seat() {
+  local seat="$1" agent="$2"
+  if [ -n "$agent" ]; then printf '%s' "$agent"; else printf '%s' "$seat"; fi
 }
 
 herdr_tab_id_for_seat() {
   tmux show-environment -t "$1" HERDR_TAB_ID 2>/dev/null | sed -n 's/^HERDR_TAB_ID=//p'
+}
+
+herdr_ws_id_for_seat() {
+  tmux show-environment -t "$1" HERDR_WORKSPACE_ID 2>/dev/null | sed -n 's/^HERDR_WORKSPACE_ID=//p'
 }
 
 herdr_socket_path() {
@@ -361,9 +391,10 @@ herdr_sync_seat() {
     [ "$quiet" = "1" ] || info "  $seat -> $env_tab [plugin herdr]"
     return 0
   fi
-  read -r ws ex_tid _ < <(herdr_ensure_ws "$cwd" "$(basename "$cwd")") || true
+  { IFS= read -r space_key; IFS= read -r space_lbl; } < <(space_meta "$seat" "")
+  read -r ws ex_tid _ < <(herdr_ensure_space "$cwd" "$space_lbl" "$space_key") || true
   [ -n "$ws" ] || return 0
-  label=$(tab_label_for_seat "$seat")
+  label=$(window_label_for_seat "$seat" "$agent")
   if [ -z "$ex_tid" ] && [ -z "$(herdr_tab_for_label "$ws" "$label")" ]; then isnew=1; fi
   read -r tid pid < <(herdr_open_seat "$ws" "$seat" "$cwd" "$ex_tid" "$label")
   if [ -n "$pid" ]; then
@@ -387,6 +418,20 @@ herdr_focus_seat() {
   return 0
 }
 
+herdr_kill_seats_in_space() {
+  local ws="$1" self="$2" s sws
+  [ -n "$ws" ] || return 0
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    [ "$s" = "$self" ] && continue
+    is_seat "$s" || continue
+    sws=$(herdr_ws_id_for_seat "$s")
+    [ "$sws" = "$ws" ] || continue
+    if session_exists "$s"; then tmux kill-session -t "$s" 2>/dev/null && info "silla cerrada: $s"; fi
+    mirror_rm "$s"
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+}
+
 herdr_kill_seats_on_tab() {
   local tid="$1" self="$2" s
   [ -n "$tid" ] || return 0
@@ -401,14 +446,27 @@ herdr_kill_seats_on_tab() {
 }
 
 herdr_close_seat() {
-  local seat="$1" dir="$2" ws tid label
+  local seat="$1" dir="$2" ws key label tid
   herdr_ok || return 0
+  read -r key _ < <(space_meta "$seat" "")
+  ws=$(herdr_ws_id_for_seat "$seat")
+  [ -n "$ws" ] || ws=$(herdr_space_for_key "$key")
+  if [ -n "$ws" ]; then
+    label=$(herdr_space_label "$ws")
+    case "$label" in
+      "$key"|"$key "*)
+        herdr_kill_seats_in_space "$ws" "$seat"
+        herdr workspace close "$ws" >/dev/null 2>&1 || true
+        return 0
+        ;;
+    esac
+  fi
   tid=$(herdr_tab_id_for_seat "$seat")
   if [ -z "$tid" ]; then
     ws=$(herdr_ws_for_cwd "$dir") || true
     [ -n "$ws" ] || return 0
-    label=$(tab_label_for_seat "$seat")
-    tid=$(herdr_tab_for_label "$ws" "$label")
+    tid=$(herdr_tab_for_label "$ws" "$(window_label_for_seat "$seat" "")")
+    [ -n "$tid" ] || tid=$(herdr_tab_for_label "$ws" "$key")
   fi
   [ -n "$tid" ] || return 0
   herdr_kill_seats_on_tab "$tid" "$seat"
@@ -538,11 +596,12 @@ cmd_spawn() {
     return 0
   fi
   [ -n "$herdr_cwd" ] || herdr_cwd="$cwd"
-  local ws="" tid="" pid="" ex_tid="" tab_label=""
-  tab_label=$(tab_label_for_seat "$name" "$ticket")
+  local ws="" tid="" pid="" ex_tid="" space_key="" space_lbl="" win_label=""
+  { IFS= read -r space_key; IFS= read -r space_lbl; } < <(space_meta "$name" "$ticket")
+  win_label=$(window_label_for_seat "$name" "$agent")
   if herdr_enabled; then
-    read -r ws ex_tid _ < <(herdr_ensure_ws "$herdr_cwd" "$(basename "$herdr_cwd")") || true
-    if [ -n "$ws" ]; then read -r tid pid < <(herdr_open_seat "$ws" "$name" "$herdr_cwd" "$ex_tid" "$tab_label"); fi
+    read -r ws ex_tid _ < <(herdr_ensure_space "$herdr_cwd" "$space_lbl" "$space_key") || true
+    if [ -n "$ws" ]; then read -r tid pid < <(herdr_open_seat "$ws" "$name" "$herdr_cwd" "$ex_tid" "$win_label"); fi
   fi
   local env_args=()
   if [ -n "$ws" ] && [ -n "$pid" ]; then
@@ -559,7 +618,7 @@ cmd_spawn() {
     herdr_attach_seat "$pid" "$name"
     herdr_set_title "$pid" "$agent" "$name"
     if [ "$focus_flag" = "1" ]; then herdr_focus_seat "$ws" "$tid"; fi
-    info "  herdr: workspace $ws, tab $tab_label (agente reporta estado via plugin)"
+    info "  herdr: space $ws ($space_lbl), ventana $win_label (agente reporta estado via plugin)"
   fi
   if mirror_enabled; then mirror_add "$name"; fi
   event_emit spawn "silla $name creada en $cwd (agente ${agent:-spin-default})" --seat "$name" --ticket "$ticket" \
@@ -1350,17 +1409,18 @@ rig work - cambios paralelos y trazables: un git worktree + branch por ticket
       (con --prompt <texto> arranca el agente con ese primer mensaje).
       --session <ses_id> asocia una sesion de opencode (para metricas por ticket).
       --model M fija el modelo de la silla (default $RIG_SEAT_MODEL o
-      opencode-go/deepseek-v4.1-flash). --herdr crea/reusa el workspace del proyecto
-      (workspace=proyecto, tab=ticket, pane=agente; un 2do agente del mismo ticket
-      se abre como pane nuevo de la tab) y --mirror abre la ventana espejo en tmux.
+      opencode-go/deepseek-v4.1-flash). --herdr abre un SPACE herdr propio para
+      esta cosa (label '#num titulo' o el id), y cada agente es una ventana del
+      space; un 2do agente de la misma cosa suma su ventana. --mirror abre la
+      ventana espejo en tmux.
   rig work list [--project P] [--status S] [--porcelain]
       tickets con worktree: branch, commits y si el arbol sigue vivo.
   rig work finish <id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]
       corre 'verify auto' sobre lo cambiado, commitea en el branch y cierra el
       ticket (done) con evidencia branch/commit/verify. No mergea. Al cerrar,
-      mata TODAS las sillas de la tab del ticket, su tab herdr y sus ventanas
-      espejo (--keep-open o --no-close-seat lo evitan). Nunca mata main ni sillas
-      sin ticket.
+      mata TODAS las sillas de su space y cierra el space, mas sus ventanas
+      espejo (--keep-open o --no-close-seat lo evitan). Nunca mata main ni
+      sillas sin ticket.
   rig work rm <id> [--delete-branch] [--force]
       elimina el worktree (conserva el branch salvo --delete-branch).
 
