@@ -432,6 +432,157 @@ else
 fi
 rm -f "$etmp"
 
+evtmp=$(mktemp -d)
+evfile="$evtmp/events.jsonl"
+if command -v jq >/dev/null 2>&1; then
+  if out=$(RIG_EVENTS_FILE="$evfile" "$SRC" log "verifier evento uno" 2>&1) &&
+     RIG_EVENTS_FILE="$evfile" "$SRC" log "verifier evento dos" >/dev/null 2>&1; then
+    if [ "$(wc -l <"$evfile" 2>/dev/null | tr -d ' ')" = "2" ]; then
+      ok "events-append" "dos logs -> dos lineas"
+    else
+      fail "events-append" "append no acumula lineas"
+    fi
+    if jq -e 'has("ts") and has("kind") and has("actor") and has("ticket") and has("seat") and has("area") and has("summary") and has("data")' "$evfile" >/dev/null 2>&1; then
+      ok "events-shape" "eventos con los 8 campos"
+    else
+      fail "events-shape" "evento sin esquema completo"
+    fi
+    if out=$(RIG_EVENTS_FILE="$evfile" "$SRC" events --porcelain 2>&1) &&
+       printf '%s\n' "$out" | jq -e -s 'length==2' >/dev/null 2>&1; then
+      ok "events-porcelain" "--porcelain devuelve los eventos"
+    else
+      fail "events-porcelain" "events --porcelain no devuelve los eventos escritos"
+    fi
+  else
+    fail "events-append" "rig log fallo: $(printf '%s' "$out" | head -n1)"
+  fi
+else
+  skip "events-append" "jq ausente"
+fi
+if "$SRC" events --watch --porcelain >/dev/null 2>&1; then
+  fail "events-watch-guard" "events --watch no debe combinarse con --porcelain"
+else
+  ok "events-watch-guard" "events --watch rechaza --porcelain"
+fi
+if out=$("$SRC" events --help 2>&1); then
+  if printf '%s' "$out" | grep -q -- '--since' && printf '%s' "$out" | grep -q -- '--porcelain'; then
+    ok "events-cli" "rig events documenta --since/--porcelain"
+  else
+    fail "events-cli" "rig events --help no documenta --since/--porcelain"
+  fi
+else
+  fail "events-cli" "rig events --help fallo"
+fi
+if out=$("$SRC" log --help 2>&1); then
+  if printf '%s' "$out" | grep -q -- '--ticket' && printf '%s' "$out" | grep -q -- '--seat'; then
+    ok "log-cli" "rig log documenta --ticket/--seat"
+  else
+    fail "log-cli" "rig log --help no documenta --ticket/--seat"
+  fi
+else
+  fail "log-cli" "rig log --help fallo"
+fi
+if grep -q 'cmd_events' "$SRC" && grep -q 'event_emit' "$SRC" && grep -q -- 'events --watch' "$SRC"; then
+  ok "central-events" "central incluye el pane de eventos"
+else
+  fail "central-events" "central sin pane de eventos en vivo"
+fi
+if "$SRC" say --help >/dev/null 2>&1 && "$SRC" say --help 2>&1 | grep -q -- '--to' && "$SRC" say --help 2>&1 | grep -q 'reply'; then
+  ok "say-cli" "rig say documenta --to y kind=reply"
+else
+  fail "say-cli" "rig say --help no documenta --to/reply"
+fi
+if "$SRC" say "x" --to bogus >/dev/null 2>&1; then
+  fail "say-to-guard" "rig say acepta un --to invalido"
+else
+  ok "say-to-guard" "rig say rechaza --to invalido"
+fi
+if command -v jq >/dev/null 2>&1; then
+  if RIG_EVENTS_FILE="$evfile" "$SRC" say "verifier respuesta al usuario" --to hub --ticket T13 >/dev/null 2>&1; then
+    if RIG_EVENTS_FILE="$evfile" "$SRC" events --kind reply --since 10m --porcelain 2>/dev/null | jq -e 'select(.kind=="reply" and .actor=="main" and .data.to=="hub" and .summary=="verifier respuesta al usuario")' >/dev/null 2>&1; then
+      ok "say-reply" "say deja un evento reply de main leible por --kind reply"
+    else
+      fail "say-reply" "el evento reply de main no aparece con --kind reply --since 10m --porcelain"
+    fi
+  else
+    fail "say-reply" "rig say fallo"
+  fi
+else
+  skip "say-reply" "jq no disponible"
+fi
+rm -rf "$evtmp"
+
+if "$SRC" scan --watch --porcelain >/dev/null 2>&1; then
+  fail "scan-watch-guard" "scan --watch no debe combinarse con --porcelain"
+else
+  ok "scan-watch-guard" "scan --watch rechaza --porcelain"
+fi
+if grep -q 'scan_report' "$SRC" && out=$("$SRC" scan --help 2>&1); then
+  if printf '%s' "$out" | grep -q -- '--watch'; then
+    ok "scan-watch" "scan soporta modo vivo (--watch/scan_report)"
+  else
+    fail "scan-watch" "scan --help no documenta --watch"
+  fi
+else
+  fail "scan-watch" "scan sin scan_report / --help"
+fi
+
+if out=$("$SRC" agents --help 2>&1); then
+  if printf '%s' "$out" | grep -q 'working' && printf '%s' "$out" | grep -q 'derive'; then
+    ok "agents-cli" "rig agents describe working|idle|blocked + fallback derive"
+  else
+    fail "agents-cli" "rig agents --help no describe estado/fallback"
+  fi
+else
+  fail "agents-cli" "rig agents --help fallo"
+fi
+if command -v tmux >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  if out=$("$SRC" agents --porcelain 2>&1); then
+    if printf '%s' "$out" | jq -e 'type=="array"' >/dev/null 2>&1; then
+      ok "agents-porcelain" "JSON array valido"
+    else
+      fail "agents-porcelain" "salida no es JSON array"
+    fi
+  else
+    fail "agents-porcelain" "rig agents --porcelain fallo: $(printf '%s' "$out" | head -n1)"
+  fi
+else
+  skip "agents-porcelain" "tmux/jq no disponible"
+fi
+
+if out=$("$SRC" queue --help 2>&1); then
+  if printf '%s' "$out" | grep -qi 'blocked'; then
+    ok "queue-cli" "rig queue describe la cola pending/blocked"
+  else
+    fail "queue-cli" "rig queue --help no describe la cola"
+  fi
+else
+  fail "queue-cli" "rig queue --help fallo"
+fi
+if command -v jq >/dev/null 2>&1; then
+  if out=$("$SRC" queue --porcelain 2>&1); then
+    if printf '%s' "$out" | jq -e 'has("pending") and has("blocked") and has("done")' >/dev/null 2>&1; then
+      ok "queue-porcelain" "JSON valido (pending/blocked/done)"
+    else
+      fail "queue-porcelain" "salida sin pending/blocked/done"
+    fi
+  else
+    fail "queue-porcelain" "rig queue --porcelain fallo: $(printf '%s' "$out" | head -n1)"
+  fi
+else
+  skip "queue-porcelain" "jq no disponible"
+fi
+
+if grep -q 'cmd_central' "$SRC" && out=$("$SRC" central --help 2>&1); then
+  if printf '%s' "$out" | grep -q 'CENTRAL' && printf '%s' "$out" | grep -q 'board'; then
+    ok "central-cli" "rig central arma el workspace CENTRAL (board/scan/agents/queue)"
+  else
+    fail "central-cli" "rig central --help no describe los 4 panes"
+  fi
+else
+  fail "central-cli" "rig central no disponible"
+fi
+
 idle_max="${RIG_IDLE_MAX_MIN:-60}"
 [[ "$idle_max" =~ ^[0-9]+$ ]] || idle_max=60
 if command -v jq >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1 && tmux list-sessions >/dev/null 2>&1; then

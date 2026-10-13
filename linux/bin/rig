@@ -9,12 +9,17 @@ TICKETS_FILE="${RIG_TICKETS_FILE:-$HOME/.config/opencode/tickets.json}"
 TICKETS_LOCK="${RIG_TICKETS_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/rig-tickets.lock}"
 TICKET_STATUSES="pending in-progress blocked done"
 TICKET_AREAS="hr hypr shell audio meta infra foldertinder"
+EVENTS_FILE="${RIG_EVENTS_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/rig/events.jsonl}"
+EVENTS_LOCK="${RIG_EVENTS_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/rig-events.lock}"
+EVENTS_MAX_BYTES="${RIG_EVENTS_MAX_BYTES:-5242880}"
 
 if [ -t 1 ]; then
   C_OFF=$'\033[0m'; C_DONE=$'\033[32m'; C_PROG=$'\033[33m'; C_BLOCK=$'\033[31m'
-  C_PEND=$'\033[2m'; C_HEAD=$'\033[1m'
+  C_PEND=$'\033[2m'; C_PROJ=$'\033[1;36m'; C_HEAD=$'\033[1m'
+  C_AREA=($'\033[36m' $'\033[35m' $'\033[34m' $'\033[95m' $'\033[96m' $'\033[92m')
 else
-  C_OFF=""; C_DONE=""; C_PROG=""; C_BLOCK=""; C_PEND=""; C_HEAD=""
+  C_OFF=""; C_DONE=""; C_PROG=""; C_BLOCK=""; C_PEND=""; C_PROJ=""; C_HEAD=""
+  C_AREA=("" "" "" "" "" "")
 fi
 C_HIDE=$'\033[?25l'; C_SHOW=$'\033[?25h'
 
@@ -80,7 +85,7 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig herdr sync [--watch] [--interval S] [--quiet]
                                      registra cada silla en herdr (ws/tab/pane+titulo) y
                                      reporta estado derivado si el opencode no trae el plugin
-  rig scan [--porcelain] [--lines N] [--project P] [--status S]
+  rig scan [--porcelain] [--lines N] [--project P] [--status S] [--watch] [--interval SEG]
            [--no-metrics] [--no-seats]   vistazo de sillas/worktrees activos
 
   rig ticket add <id> --project P --title T [--status S] [--owner O] [--evidence E] [--session SES] [--area A]
@@ -91,6 +96,22 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig ticket backfill              asigna area faltante y numera tickets (migracion)
   rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
   rig board [--watch] [--porcelain] [--plain] [--no-metrics] [--project P] [--status S] [--area A] [--interval SEG]
+  rig agents [--watch] [--porcelain] [--interval SEG]
+                                     estado por silla: agente, working|idle|blocked y la
+                                     fuente (plugin herdr o derivada del contenido del pane)
+  rig queue [--watch] [--porcelain] [--interval SEG]
+                                     cola de tickets pending/blocked + ultimos cierres (evidencia)
+  rig central [--interval SEG] [--focus|--no-focus] [--rebuild] [--label L] [--cwd DIR]
+                                     abre el workspace herdr "CENTRAL" con 5 panes en vivo
+                                     (events/board/scan/agents/queue); idempotente
+
+  rig events [--watch] [--ticket X] [--seat S] [--kind K] [--since 30m] [--limit N] [--porcelain]
+                                     feed append-only de lo que hacen main y las sillas
+                                     (~/.local/state/rig/events.jsonl); --watch refresca
+  rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]
+                                     registra un evento propio (decision/diagnostico) en el feed
+  rig say "<mensaje>" [--to telegram|hub] [--ticket X]
+                                     buzon de salida de main: respuesta al usuario (kind=reply)
 
   rig work new <ticket-id> [--agent A] [--cwd DIR] [--base REF] [--session SES] [--prompt TEXTO]
                              [--model M] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--spawn] [--attach]
@@ -541,6 +562,8 @@ cmd_spawn() {
     info "  herdr: workspace $ws, tab $tab_label (agente reporta estado via plugin)"
   fi
   if mirror_enabled; then mirror_add "$name"; fi
+  event_emit spawn "silla $name creada en $cwd (agente ${agent:-spin-default})" --seat "$name" --ticket "$ticket" \
+    --data "$(jq -nc --arg a "$agent" --arg m "$model" --arg c "$cwd" --arg ws "$ws" '{agent:$a,model:$m,cwd:$c,workspace:$ws}' 2>/dev/null)"
   if [ "$attach" = "1" ]; then
     if [ -n "${TMUX:-}" ]; then tmux switch-client -t "$name"; else tmux attach -t "$name"; fi
   fi
@@ -585,6 +608,10 @@ cmd_send() {
   if [ "$no_enter" != "1" ]; then
     tmux send-keys -t "$seat" Enter
   fi
+  local msum
+  msum=$(printf '%s' "$msg" | tr '\n' ' ' | sed 's/  */ /g')
+  event_emit send "a $seat: $(trunc "$msum" 160)" --seat "$seat" \
+    --data "$(jq -nc --arg m "$msg" --argjson n "${#msg}" '{message:$m,len:$n}' 2>/dev/null)"
   info "enviado a $seat"
 }
 
@@ -687,6 +714,78 @@ term_width() {
   case "$w" in ''|*[!0-9]*) w=0 ;; esac
   if [ "$w" -lt 60 ] 2>/dev/null; then w=100; fi
   printf '%s' "$w"
+}
+
+events_actor() {
+  if [ -n "${RIG_ACTOR:-}" ]; then printf '%s' "$RIG_ACTOR"; return 0; fi
+  if [ -n "${TMUX:-}" ]; then
+    local n
+    n=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
+    if [ -n "$n" ] && is_seat "$n" 2>/dev/null; then printf '%s' "$n"; return 0; fi
+    if [ -n "$n" ]; then printf '%s' "$n"; return 0; fi
+  fi
+  printf 'main'
+}
+
+event_area_for_ticket() {
+  local t="${1:-}"
+  [ -n "$t" ] || return 0
+  [ -f "$TICKETS_FILE" ] || return 0
+  jq -r --arg id "$t" '.tickets[]|select((.id|ascii_downcase)==($id|ascii_downcase))|(.area // .project // "")' "$TICKETS_FILE" 2>/dev/null | head -n1
+}
+
+events_rotate() {
+  [ -f "$EVENTS_FILE" ] || return 0
+  local size
+  size=$(stat -c %s "$EVENTS_FILE" 2>/dev/null || echo 0)
+  [ "${size:-0}" -gt "$EVENTS_MAX_BYTES" ] 2>/dev/null || return 0
+  local dir base stamp target n
+  dir=$(dirname "$EVENTS_FILE")
+  base=$(basename "$EVENTS_FILE" .jsonl)
+  stamp=$(date +%Y%m%d)
+  target="$dir/${base}-${stamp}.jsonl"
+  n=1
+  while [ -e "$target" ]; do
+    target="$dir/${base}-${stamp}-${n}.jsonl"
+    n=$((n + 1))
+  done
+  mv "$EVENTS_FILE" "$target" 2>/dev/null || return 0
+}
+
+events_append_raw() {
+  local dir
+  dir=$(dirname "$EVENTS_FILE")
+  mkdir -p "$dir" 2>/dev/null || return 0
+  if command -v flock >/dev/null 2>&1; then
+    exec 8>>"$EVENTS_LOCK" 2>/dev/null || true
+    flock 8 2>/dev/null || true
+  fi
+  printf '%s\n' "$1" >>"$EVENTS_FILE" 2>/dev/null || true
+  if command -v flock >/dev/null 2>&1; then flock -u 8 2>/dev/null || true; fi
+}
+
+event_emit() {
+  local kind="$1" summary="$2"
+  shift 2
+  local ticket="" seat="" area="" data="{}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ticket) [ $# -ge 2 ] || break; ticket="$2"; shift 2 ;;
+      --seat) [ $# -ge 2 ] || break; seat="$2"; shift 2 ;;
+      --area) [ $# -ge 2 ] || break; area="$2"; shift 2 ;;
+      --data) [ $# -ge 2 ] || break; data="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  command -v jq >/dev/null 2>&1 || return 0
+  [ -n "$area" ] || area=$(event_area_for_ticket "$ticket")
+  local line
+  line=$(jq -nc --arg ts "$(date -Iseconds)" --arg kind "$kind" --arg actor "$(events_actor)" \
+    --arg ticket "$ticket" --arg seat "$seat" --arg area "${area:-}" --arg summary "$summary" \
+    --argjson data "${data:-{\}}" '{ts:$ts,kind:$kind,actor:$actor,ticket:$ticket,seat:$seat,area:$area,summary:$summary,data:$data}' 2>/dev/null) || return 0
+  [ -n "$line" ] || return 0
+  events_rotate
+  events_append_raw "$line"
 }
 
 store_lock() {
@@ -901,6 +1000,8 @@ ticket_add() {
     '.tickets += [({id:$id,project:$p,title:$t,status:$s,owner:$o,created:$d,updated:$d,evidence:$e,sessions:(if $ses=="" then [] else [$ses] end)} + (if $a=="" then {} else {area:$a} end) + {num:$n})]' \
     "$TICKETS_FILE") || die "jq fallo al agregar $id"
   store_write <<<"$out"
+  event_emit ticket-add "ticket $id agregado ($status) en $project: $(trunc "$title" 90)" --ticket "$id" --area "$project" \
+    --data "$(jq -nc --arg p "$project" --arg t "$title" --arg s "$status" --arg o "$owner" '{project:$p,title:$t,status:$s,owner:$o}' 2>/dev/null)"
   info "ticket $id agregado (#$n, $status)"
 }
 
@@ -966,6 +1067,20 @@ ticket_set() {
       + (if $ses=="" then {} else {sessions:((.sessions // []) + [$ses] | unique)} end)
       + {updated:$d}) else . end)' "$TICKETS_FILE") || die "jq fallo al actualizar $key"
   store_write <<<"$out"
+  local final_status fields ev_kind
+  final_status=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.status // ""' "$TICKETS_FILE" 2>/dev/null | head -n1)
+  fields=""
+  if [ -n "$status" ]; then fields="$fields status=$status"; fi
+  if [ -n "$owner" ]; then fields="$fields owner=$owner"; fi
+  if [ -n "$title" ]; then fields="$fields title"; fi
+  if [ -n "$project" ]; then fields="$fields project=$project"; fi
+  if [ -n "$ses" ]; then fields="$fields session"; fi
+  if [ -n "$evidence" ]; then fields="$fields evidence=$(trunc "$evidence" 70)"; fi
+  [ -n "$fields" ] || fields=" status=$final_status"
+  ev_kind="ticket-set"
+  [ "$final_status" = "done" ] && ev_kind="ticket-done"
+  event_emit "$ev_kind" "ticket $key -> $final_status:$fields" --ticket "$key" \
+    --data "$(jq -nc --arg s "$status" --arg o "$owner" --arg e "$evidence" --arg t "$title" --arg p "$project" --arg f "$final_status" '{status:$s,owner:$o,evidence:$e,title:$t,project:$p,result:$f}' 2>/dev/null)"
   info "ticket $key actualizado"
 }
 
@@ -979,6 +1094,7 @@ ticket_rm() {
   [ -n "$key" ] || die "ticket no encontrado: $ref"
   out=$(jq --arg id "$key" '.tickets |= map(select(.id!=$id))' "$TICKETS_FILE") || die "jq fallo"
   store_write <<<"$out"
+  event_emit ticket-rm "ticket $key eliminado" --ticket "$key"
   info "ticket $key eliminado"
 }
 
@@ -1322,6 +1438,8 @@ work_new() {
     "$TICKETS_FILE") || die "jq fallo al registrar el worktree"
   store_write <<<"$out"
   info "ticket $key -> in-progress (repo $repo, branch $branch)"
+  event_emit work-new "worktree $wt para $key (branch $branch, base $base)" --ticket "$key" --seat "$(seat_for_ticket "$key")" \
+    --data "$(jq -nc --arg r "$repo" --arg b "$branch" --arg w "$wt" --arg bs "$base" --arg a "$agent" '{repo:$r,branch:$b,worktree:$w,base:$bs,agent:$a}' 2>/dev/null)"
 
   if [ "$porcelain" = "1" ]; then
     jq -nc --arg id "$key" --arg repo "$repo" --arg branch "$branch" --arg worktree "$wt" \
@@ -1492,6 +1610,8 @@ work_finish() {
     "$TICKETS_FILE") || die "jq fallo al cerrar el ticket"
   store_write <<<"$out"
   info "ticket $key -> $status ($evidence)"
+  event_emit work-finish "ticket $key -> $status ($evidence)" --ticket "$key" \
+    --data "$(jq -nc --arg s "$status" --arg e "$evidence" --arg b "$branch" --arg c "$commits" --arg v "$vstatus" '{status:$s,evidence:$e,branch:$b,commits:$c,verify:$v}' 2>/dev/null)"
 
   if [ "$status" = "done" ] && [ "$close_seat" = "1" ]; then
     close_seat_for_ticket "$key" "$wt"
@@ -1556,6 +1676,8 @@ work_rm() {
   out=$(jq --arg id "$key" --arg d "$d" '
     .tickets |= map(if .id==$id then . + {worktree:""} + {updated:$d} else . end)' "$TICKETS_FILE") || die "jq fallo"
   store_write <<<"$out"
+  event_emit work-rm "worktree de $key desregistrado (${wt:-<sin worktree>})" --ticket "$key" \
+    --data "$(jq -nc --arg w "$wt" --arg b "$branch" --argjson db "$delete_branch" '{worktree:$w,branch:$b,delete_branch:($db==1)}' 2>/dev/null)"
   info "ticket $key: worktree desregistrado"
 }
 
@@ -1577,13 +1699,15 @@ scan_usage() {
 rig scan - vistazo de sillas y worktrees activos: que hizo cada uno
 
   rig scan [--porcelain] [--lines N] [--project P] [--status S] [--no-metrics] [--no-seats]
+           [--watch] [--interval SEG]
 
   Por cada silla/worktree activo muestra: ticket/proyecto/agente, ruta del worktree,
   archivos modificados (git status + diff --numstat, incluye untracked), ultima actividad
   (mtime mas reciente del arbol) y las ultimas N lineas del pane (default 40). Suma
   tokens/costo/tiempo del ticket desde opencode.db. --no-seats omite tmux (solo worktrees);
-  --porcelain devuelve un JSON array. Aguanta silla muerta (worktree sin pane), pane en
-  copy-mode, worktree sin branch y 0 sillas (empty state honesto).
+  --porcelain devuelve un JSON array. --watch refresca la vista cada --interval seg
+  (default 2, no combina con --porcelain). Aguanta silla muerta (worktree sin pane),
+  pane en copy-mode, worktree sin branch y 0 sillas (empty state honesto).
 EOF
 }
 
@@ -1651,24 +1775,32 @@ cmd_herdr() {
   done
   need_tmux
   herdr_ok || die "herdr no disponible: revisa el binario y el server (RIG_HERDR=1)"
-  local s
+  local s nsync=0
   while :; do
+    nsync=0
     for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
       is_seat "$s" 2>/dev/null || continue
       herdr_sync_seat "$s" "$quiet"
+      nsync=$((nsync + 1))
     done
-    [ "$watch" = "1" ] || break
+    if [ "$watch" != "1" ]; then
+      event_emit herdr-sync "sync herdr de $nsync silla(s)" --data "$(jq -nc --argjson n "$nsync" '{seats:$n}' 2>/dev/null)"
+      break
+    fi
     sleep "$interval"
   done
 }
 
 cmd_scan() {
   need_jq
-  local porcelain=0 lines=40 project="" status="" no_metrics=0 no_seats=0
+  local porcelain=0 lines=40 project="" status="" no_metrics=0 no_seats=0 interval=2
   local idle_max="${RIG_IDLE_MAX_MIN:-60}"
+  watch=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --porcelain|-p) porcelain=1; shift ;;
+      --watch|-w) watch=1; shift ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
       --lines|-n) [ $# -ge 2 ] || die "--lines requiere valor"; lines="$2"; shift 2 ;;
       --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
       --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
@@ -1682,8 +1814,22 @@ cmd_scan() {
   [[ "$lines" =~ ^[0-9]+$ ]] || die "lines invalido: $lines"
   [[ "$idle_max" =~ ^[0-9]+$ ]] || die "RIG_IDLE_MAX_MIN invalido: $idle_max"
   if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
+  if [ "$watch" = "1" ] && [ "$porcelain" = "1" ]; then die "--watch no soporta --porcelain"; fi
   store_ensure
+  if [ "$watch" = "1" ]; then
+    trap 'printf "%s\n" "$C_SHOW"; exit 0' INT TERM
+    printf '%s' "$C_HIDE"
+    while true; do
+      scan_report
+      sleep "$interval"
+    done
+  else
+    scan_report
+  fi
+}
 
+scan_report() {
+  [ "${watch:-0}" = "1" ] && { printf '\033[H\033[2J'; printf '%srig scan%s  %s  (Ctrl-C para salir)\n' "$C_HEAD" "$C_OFF" "$(date '+%Y-%m-%d %H:%M:%S')"; }
   local seats_json='[]'
   if [ "$no_seats" = "0" ] && command -v tmux >/dev/null 2>&1 && tmux list-sessions >/dev/null 2>&1; then
     seats_json=$(scan_seats_json "$lines" | jq -s '.')
@@ -1799,9 +1945,482 @@ cmd_scan() {
   done
 }
 
+agents_usage() {
+  cat >&2 <<'EOF'
+rig agents - estado de cada silla/agente en vivo (working|idle|blocked)
+
+  rig agents [--watch] [--porcelain] [--interval SEG]
+
+  Por cada silla (sesion tmux marcada @agent) muestra: silla, agente, estado
+  (working|idle|blocked), la fuente y el pane herdr. Fuente "plugin" = estado
+  reportado por herdr (snapshot pane.agent_status); fuente "derive" = inferido del
+  contenido del pane cuando el panel de agentes de herdr no trae datos (fallback).
+  --watch refresca cada --interval seg (default 2, no combina con --porcelain).
+  --porcelain devuelve un JSON array de {seat,agent,state,source,pane,activity}.
+EOF
+}
+
+agents_render() {
+  local snap statusmap row seats_json
+  snap=''
+  if herdr_ok; then snap=$(herdr api snapshot 2>/dev/null || true); fi
+  statusmap='{}'
+  if [ -n "$snap" ]; then
+    statusmap=$(printf '%s' "$snap" | jq -c '[.result.snapshot.panes[]? | select((.agent_status // "") | IN("working","idle","blocked")) | {key:.pane_id,value:.agent_status}] | from_entries' 2>/dev/null || echo '{}')
+    [ -n "$statusmap" ] || statusmap='{}'
+  fi
+  row=''
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    is_seat "$name" || continue
+    local agent pid state source act
+    agent=$(tmux show-options -t "$name" -v @agent_cmd 2>/dev/null | sed -n 's/.*--agent[ =]\+\([A-Za-z0-9_.-]\+\).*/\1/p' | head -n1)
+    pid=$(tmux show-environment -t "$name" HERDR_PANE_ID 2>/dev/null | sed -n 's/^HERDR_PANE_ID=//p' | head -n1)
+    state=''
+    source=''
+    if [ -n "$pid" ]; then
+      state=$(printf '%s' "$statusmap" | jq -r --arg p "$pid" '.[$p] // empty' 2>/dev/null)
+      [ -n "$state" ] && source=plugin
+    fi
+    if [ -z "$state" ]; then
+      state=$(seat_activity_state "$name")
+      source=derive
+    fi
+    act=$(tmux display-message -p -t "$name" '#{session_activity}' 2>/dev/null || echo 0)
+    row="${row}${name}${SEP}${agent:-opencode}${SEP}${state}${SEP}${source}${SEP}${pid}${SEP}${act}"$'\n'
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+  seats_json=$(printf '%s' "$row" | jq -Rn '[inputs | select(length>0) | split("\u001f") | {seat:.[0],agent:.[1],state:.[2],source:.[3],pane:.[4],activity:((.[5] // "0")|tonumber? // 0)}]' 2>/dev/null)
+  [ -n "$seats_json" ] || seats_json='[]'
+  if [ "${porcelain:-0}" = "1" ]; then
+    printf '%s\n' "$seats_json"
+    return 0
+  fi
+  local count
+  count=$(printf '%s' "$seats_json" | jq 'length' 2>/dev/null || echo 0)
+  if [ "${count:-0}" = "0" ]; then
+    info "no hay sillas activas"
+    return 0
+  fi
+  printf '%s%s%s\n' "$C_HEAD" "$(printf '  %-18s %-14s %-9s %-8s %s' "SEAT" "AGENT" "STATE" "SOURCE" "PANE")" "$C_OFF"
+  printf '%s' "$seats_json" | jq -r '.[] | "\(.seat)\u001f\(.agent)\u001f\(.state)\u001f\(.source)\u001f\(.pane)"' | while IFS=$'\x1f' read -r seat agent state source pane; do
+    local sc="$C_OFF"
+    case "$state" in
+      working) sc="$C_PROG" ;;
+      blocked) sc="$C_BLOCK" ;;
+    esac
+    printf '  %-18s %-14s %s%-9s%s %-8s %s\n' "$(trunc "$seat" 18)" "$(trunc "$agent" 14)" "$sc" "$state" "$C_OFF" "$source" "${pane:--}"
+  done
+}
+
+cmd_agents() {
+  need_tmux
+  need_jq
+  local interval=2
+  porcelain=0
+  watch=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --watch|-w) watch=1; shift ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      -h|--help|help) agents_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  if [ "$watch" = "1" ] && [ "$porcelain" = "1" ]; then die "--watch no soporta --porcelain"; fi
+  if [ "$watch" = "1" ]; then
+    trap 'printf "%s\n" "$C_SHOW"; exit 0' INT TERM
+    printf '%s' "$C_HIDE"
+    while true; do
+      printf '\033[H\033[2J'
+      printf '%srig agents%s  %s  (Ctrl-C para salir)\n' "$C_HEAD" "$C_OFF" "$(date '+%Y-%m-%d %H:%M:%S')"
+      agents_render
+      sleep "$interval"
+    done
+  else
+    agents_render
+  fi
+}
+
+queue_usage() {
+  cat >&2 <<'EOF'
+rig queue - cola accionable de tickets + ultimos cierres con evidencia
+
+  rig queue [--watch] [--porcelain] [--interval SEG]
+
+  Muestra lo que pide accion (blocked primero, luego pending) y los ultimos cierres
+  (done) con su evidencia. --watch refresca cada --interval seg (default 2, no
+  combina con --porcelain). --porcelain devuelve {pending:[], blocked:[], done:[]}.
+  Limite de cierres: RIG_QUEUE_DONE (default 8).
+EOF
+}
+
+queue_json() {
+  jq -c --argjson n "${RIG_QUEUE_DONE:-8}" '
+    {pending: ([.tickets[] | select(.status=="pending")] | sort_by(.project, .id)),
+     blocked: ([.tickets[] | select(.status=="blocked")] | sort_by(.project, .id)),
+     done: ([.tickets[] | select(.status=="done")] | sort_by(.updated) | reverse | .[0:$n])}' \
+    "$TICKETS_FILE" 2>/dev/null || printf '{"pending":[],"blocked":[],"done":[]}'
+}
+
+queue_row() {
+  local color="$1" a b c d
+  while IFS=$'\x1f' read -r a b c d; do
+    [ -n "$a" ] || continue
+    printf '  %s%-16s%s %-10s %-46s %s\n' "$color" "$(trunc "$a" 16)" "$C_OFF" "$(trunc "$b" 10)" "$(trunc "$c" 46)" "$(trunc "$d" 40)"
+  done
+}
+
+queue_render() {
+  local data
+  data=$(queue_json)
+  if [ "${porcelain:-0}" = "1" ]; then
+    printf '%s\n' "$data"
+    return 0
+  fi
+  printf '%sBLOQUEADOS%s\n' "$C_HEAD" "$C_OFF"
+  printf '%s' "$data" | jq -r '.blocked[] | "\(.id)\u001f\(.project)\u001f\(.title)\u001f\((.owner // ""))"' | queue_row "$C_BLOCK"
+  printf '%sPENDIENTES%s\n' "$C_HEAD" "$C_OFF"
+  printf '%s' "$data" | jq -r '.pending[] | "\(.id)\u001f\(.project)\u001f\(.title)\u001f\((.owner // ""))"' | queue_row "$C_PEND"
+  printf '%sULTIMOS CIERRES%s\n' "$C_HEAD" "$C_OFF"
+  printf '%s' "$data" | jq -r '.done[] | "\(.id)\u001f\(.project)\u001f\(.title)\u001f\((.evidence // ""))"' | queue_row "$C_DONE"
+}
+
+cmd_queue() {
+  need_jq
+  local interval=2
+  porcelain=0
+  watch=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --watch|-w) watch=1; shift ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      -h|--help|help) queue_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  if [ "$watch" = "1" ] && [ "$porcelain" = "1" ]; then die "--watch no soporta --porcelain"; fi
+  store_ensure
+  if [ "$watch" = "1" ]; then
+    trap 'printf "%s\n" "$C_SHOW"; exit 0' INT TERM
+    printf '%s' "$C_HIDE"
+    while true; do
+      printf '\033[H\033[2J'
+      printf '%srig queue%s  %s  (Ctrl-C para salir)\n' "$C_HEAD" "$C_OFF" "$(date '+%Y-%m-%d %H:%M:%S')"
+      queue_render
+      sleep "$interval"
+    done
+  else
+    queue_render
+  fi
+}
+
+central_usage() {
+  cat >&2 <<'EOF'
+rig central - workspace herdr "CENTRAL" con la trazabilidad en vivo (5 panes)
+
+  rig central [--interval SEG] [--focus|--no-focus] [--rebuild] [--label L] [--cwd DIR]
+
+  Abre (o enfoca si ya existe) un workspace herdr llamado CENTRAL con 5 panes:
+    events - rig events --watch   FEED de eventos: que hace main y cada silla, en vivo
+    board  - rig board  --watch   tickets/sillas/branch/commits/metrics
+    scan   - rig scan   --watch   sillas + ultima actividad + archivos modificados
+    agents - rig agents --watch   estado working|idle|blocked por silla/agente
+    queue  - rig queue  --watch   cola pending/blocked + ultimos cierres
+  El pane events (izquierda, ancho) es el protagonista: ahi aparece cada delegacion
+  (rig send), cada cambio de ticket y cada cierre de worktree.
+  Idempotente: si el workspace existe solo lo enfoca. --rebuild lo cierra y recrea.
+  --no-focus lo crea sin robar el foco. --interval ajusta el refresco (default 2 seg).
+  Vive en el server de herdr, asi que sobrevive a cerrar la terminal: se reabre con
+  el mismo comando. Override del cwd: RIG_CENTRAL_CWD (default $HOME).
+EOF
+}
+
+cmd_central() {
+  need_jq
+  local label=CENTRAL cwd="${RIG_CENTRAL_CWD:-$HOME}" interval=2 do_focus=1 rebuild=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --label) [ $# -ge 2 ] || die "--label requiere valor"; label="$2"; shift 2 ;;
+      --cwd) [ $# -ge 2 ] || die "--cwd requiere valor"; cwd="$2"; shift 2 ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      --focus) do_focus=1; shift ;;
+      --no-focus) do_focus=0; shift ;;
+      --rebuild) rebuild=1; shift ;;
+      -h|--help|help) central_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  herdr_ok || die "herdr no disponible: revisa el binario y el server (RIG_HERDR=1)"
+  [ -d "$cwd" ] || die "cwd no existe: $cwd"
+  local ws
+  ws=$(herdr workspace list 2>/dev/null | jq -r --arg l "$label" '.result.workspaces[] | select(.label==$l) | .workspace_id' 2>/dev/null | head -n1)
+  if [ -n "$ws" ]; then
+    if [ "$rebuild" = "1" ]; then
+      herdr workspace close "$ws" >/dev/null 2>&1 || true
+      ws=""
+    else
+      if [ "$do_focus" = "1" ]; then herdr workspace focus "$ws" >/dev/null 2>&1 || true; fi
+      event_emit log "central $label ya abierto ($ws): foco al feed" --area rig
+      info "workspace $label ya abierto ($ws)"
+      return 0
+    fi
+  fi
+  local out tab p1 p2 p3 p4 p5
+  out=$(herdr workspace create --cwd "$cwd" --label "$label" --no-focus 2>/dev/null) || die "no pude crear el workspace $label"
+  ws=$(printf '%s' "$out" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null)
+  tab=$(printf '%s' "$out" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)
+  p1=$(printf '%s' "$out" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
+  if [ -z "$ws" ] || [ -z "$p1" ]; then die "herdr no devolvio workspace/pane al crear $label"; fi
+  p2=$(herdr pane split --pane "$p1" --direction right --ratio 0.42 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
+  p3=$(herdr pane split --pane "$p2" --direction down --ratio 0.75 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
+  p4=$(herdr pane split --pane "$p2" --direction down --ratio 0.66 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
+  p5=$(herdr pane split --pane "$p2" --direction down --ratio 0.5 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
+  if [ -z "$p2" ] || [ -z "$p3" ] || [ -z "$p4" ] || [ -z "$p5" ]; then die "no pude dividir los panes del workspace $label"; fi
+  herdr pane rename "$p1" events >/dev/null 2>&1 || true
+  herdr pane rename "$p2" board >/dev/null 2>&1 || true
+  herdr pane rename "$p5" scan >/dev/null 2>&1 || true
+  herdr pane rename "$p4" agents >/dev/null 2>&1 || true
+  herdr pane rename "$p3" queue >/dev/null 2>&1 || true
+  herdr pane run "$p1" "$SELF events --watch --interval $interval" >/dev/null 2>&1 || true
+  herdr pane run "$p2" "$SELF board --watch --interval $interval" >/dev/null 2>&1 || true
+  herdr pane run "$p5" "$SELF scan --watch --interval $interval" >/dev/null 2>&1 || true
+  herdr pane run "$p4" "$SELF agents --watch --interval $interval" >/dev/null 2>&1 || true
+  herdr pane run "$p3" "$SELF queue --watch --interval $interval" >/dev/null 2>&1 || true
+  if [ "$do_focus" = "1" ] && [ -n "$tab" ]; then herdr_focus_seat "$ws" "$tab"; fi
+  event_emit log "central $label abierto ($ws): panes events/board/scan/agents/queue" --area rig \
+    --data "$(jq -nc --arg w "$ws" --arg t "$tab" --arg c "$cwd" --argjson i "$interval" '{workspace:$w,tab:$t,cwd:$c,interval:$i}' 2>/dev/null)"
+  info "workspace $label listo ($ws): panes events/board/scan/agents/queue"
+}
+
+events_usage() {
+  cat >&2 <<'EOF'
+rig events - feed en vivo de lo que hacen main y las sillas (~/.local/state/rig/events.jsonl)
+
+  rig events [--watch] [--ticket X] [--seat S] [--kind K] [--since 30m] [--limit N]
+             [--porcelain] [--interval SEG]
+
+  Cada linea es un evento append-only: spawn, send, ticket-add, ticket-set, ticket-done,
+  ticket-rm, work-new, work-finish, work-rm, herdr-sync, log, reply. Columnas:
+  HORA  KIND  ACTOR  TICKET  AREA  RESUMEN (el AREA da el color).
+  --since acepta 30m, 2h, 90s, 7d o una fecha (date -d). --limit default 40.
+  --porcelain emite JSON lines (para el hub web) y no combina con --watch.
+  --watch refresca en el lugar (Ctrl-C sale); --interval default 2 seg.
+  Registra tus propios eventos con: rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]
+  El buzon de salida de main es: rig say "<mensaje>" [--to telegram|hub] (kind=reply);
+  el puente y el hub lo leen con: rig events --kind reply --since 10m --porcelain
+EOF
+}
+
+events_files() {
+  local dir base f
+  dir=$(dirname "$EVENTS_FILE"); base=$(basename "$EVENTS_FILE" .jsonl)
+  [ -f "$EVENTS_FILE" ] && printf '%s\n' "$EVENTS_FILE"
+  for f in "$dir/$base"-[0-9]*.jsonl; do
+    [ -e "$f" ] || continue
+    [ "$f" = "$EVENTS_FILE" ] && continue
+    printf '%s\n' "$f"
+  done
+}
+
+events_cutoff() {
+  local v="${1:-}" n u
+  [ -n "$v" ] || return 0
+  if [[ "$v" =~ ^[0-9]+[smhd]$ ]]; then
+    n="${v%?}"; u="${v: -1}"
+    case "$u" in
+      s) u=seconds ;;
+      m) u=minutes ;;
+      h) u=hours ;;
+      d) u=days ;;
+    esac
+    date -d "-$n $u" -Iseconds 2>/dev/null || true
+    return 0
+  fi
+  date -d "$v" -Iseconds 2>/dev/null || true
+}
+
+events_json() {
+  local -a files=()
+  mapfile -t files < <(events_files)
+  [ ${#files[@]} -gt 0 ] || return 0
+  jq -cs --arg ticket "${f_ticket:-}" --arg seat "${f_seat:-}" --arg kind "${f_kind:-}" \
+    --arg since "${f_since:-}" --argjson limit "${f_limit:-40}" '
+    map(select(
+      (($ticket=="") or (((.ticket//"")|ascii_downcase)==($ticket|ascii_downcase)))
+      and (($seat=="") or ((.seat//"")==$seat))
+      and (($kind=="") or (((.kind//"")|split(",")|index($kind))!=null))
+      and (($since=="") or ((.ts//"")>=$since))
+    ))
+    | sort_by(.ts)
+    | .[-$limit:]
+    | .[]' "${files[@]}" 2>/dev/null || true
+}
+
+events_area_color() {
+  local a="${1:-}" sum
+  if [ -z "$a" ]; then printf '%s' "$C_PEND"; return 0; fi
+  sum=$(printf '%s' "$a" | md5sum 2>/dev/null | tr -d -c '0-9')
+  [ -n "$sum" ] || sum=0
+  printf '%s' "${C_AREA[$((10#${sum:0:6} % 6))]}"
+}
+
+events_width() {
+  local w="${RIG_EVENTS_WIDTH:-${COLUMNS:-}}" cols=""
+  if ! [[ "${w:-}" =~ ^[0-9]+$ ]]; then
+    read -r _ cols < <(stty size 2>/dev/null) || cols=""
+    w="$cols"
+  fi
+  if ! [[ "${w:-}" =~ ^[0-9]+$ ]]; then w=$(tput cols 2>/dev/null || true); fi
+  if ! [[ "${w:-}" =~ ^[0-9]+$ ]] || [ "$w" -lt 30 ]; then w=120; fi
+  printf '%s' "$w"
+}
+
+events_render() {
+  local width w_kind w_actor w_ticket w_area fixed sumlen
+  width=$(events_width)
+  w_kind=14; w_actor=16; w_ticket=16; w_area=9
+  if [ "$width" -lt 90 ]; then w_kind=8; w_actor=10; w_ticket=10; w_area=5; fi
+  fixed=$((8 + w_kind + w_actor + w_ticket + w_area + 5))
+  sumlen=$((width - fixed - 1))
+  [ "$sumlen" -lt 10 ] && sumlen=10
+  local rows
+  rows=$(events_json)
+  if [ -z "$rows" ]; then info "sin eventos todavia (rig log \"...\" para registrar uno)"; return 0; fi
+  printf '%s%-8s %-*s %-*s %-*s %-*s %s%s\n' "$C_HEAD" HORA "$w_kind" KIND "$w_actor" ACTOR \
+    "$w_ticket" TICKET "$w_area" AREA RESUMEN "$C_OFF"
+  local actor_disp line
+  while IFS=$'\x1f' read -r rts rkind ractor rticket rseat rarea rsummary; do
+    [ -n "$rts" ] || continue
+    actor_disp="$ractor"
+    if [ -n "$rseat" ] && [ "$rseat" != "$ractor" ]; then actor_disp="$ractor/$rseat"; fi
+    line=$(printf '%-8s %-*s %-*s %-*s %-*s %s' "${rts:11:8}" "$w_kind" "$(trunc "$rkind" "$w_kind")" \
+      "$w_actor" "$(trunc "${actor_disp:--}" "$w_actor")" "$w_ticket" "$(trunc "${rticket:--}" "$w_ticket")" \
+      "$w_area" "$(trunc "${rarea:--}" "$w_area")" "$(trunc "$rsummary" "$sumlen")")
+    printf '%s%s%s\n' "$(events_area_color "$rarea")" "${line:0:width}" "$C_OFF"
+  done < <(printf '%s\n' "$rows" | jq -r '[.ts,.kind,.actor,(.ticket//"-"),(.seat//""),(.area//"-"),.summary]|join("\u001f")' 2>/dev/null)
+}
+
+cmd_events() {
+  need_jq
+  local watch=0 porcelain=0 interval=2
+  f_ticket=""; f_seat=""; f_kind=""; f_since=""; f_limit=40
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --watch|-w) watch=1; shift ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; f_ticket="$2"; shift 2 ;;
+      --seat) [ $# -ge 2 ] || die "--seat requiere valor"; f_seat="$2"; shift 2 ;;
+      --kind) [ $# -ge 2 ] || die "--kind requiere valor"; f_kind="$2"; shift 2 ;;
+      --since) [ $# -ge 2 ] || die "--since requiere valor"; f_since="$2"; shift 2 ;;
+      --limit|-n) [ $# -ge 2 ] || die "--limit requiere valor"; f_limit="$2"; shift 2 ;;
+      -h|--help|help) events_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  [[ "$f_limit" =~ ^[0-9]+$ ]] || die "limit invalido: $f_limit"
+  if [ "$watch" = "1" ] && [ "$porcelain" = "1" ]; then die "--watch no soporta --porcelain"; fi
+  if [ -n "$f_since" ]; then
+    local cut
+    cut=$(events_cutoff "$f_since")
+    [ -n "$cut" ] || die "since invalido: $f_since"
+    f_since="$cut"
+  fi
+  if [ "$watch" = "1" ]; then
+    trap 'printf "%s\n" "$C_SHOW"; exit 0' INT TERM
+    printf '%s' "$C_HIDE"
+    while true; do
+      printf '\033[H\033[2J'
+      printf '%srig events%s  %s  (Ctrl-C para salir)\n' "$C_HEAD" "$C_OFF" "$(date '+%Y-%m-%d %H:%M:%S')"
+      events_render
+      sleep "$interval"
+    done
+  fi
+  if [ "$porcelain" = "1" ]; then events_json; else events_render; fi
+}
+
+log_usage() {
+  cat >&2 <<'EOF'
+rig log - registra un evento propio en el feed (decision, diagnostico, hallazgo)
+
+  rig log "<mensaje>" [--ticket X] [--seat S] [--kind K] [--area A]
+
+  El mensaje se guarda append-only en ~/.local/state/rig/events.jsonl y aparece en
+  rig events / en el pane events de rig central. --kind default "log"; --area se
+  infiere del ticket si existe. El actor sale de la silla tmux actual (o RIG_ACTOR).
+EOF
+}
+
+cmd_log() {
+  need_jq
+  local msg="" ticket="" seat="" kind="log" area=""
+  local -a parts=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
+      --seat) [ $# -ge 2 ] || die "--seat requiere valor"; seat="$2"; shift 2 ;;
+      --kind) [ $# -ge 2 ] || die "--kind requiere valor"; kind="$2"; shift 2 ;;
+      --area) [ $# -ge 2 ] || die "--area requiere valor"; area="$2"; shift 2 ;;
+      -h|--help|help) log_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) parts+=("$1"); shift ;;
+    esac
+  done
+  [ ${#parts[@]} -gt 0 ] || die "uso: rig log \"<mensaje>\" [--ticket X] [--seat S] [--kind K] [--area A]"
+  msg="${parts[*]}"
+  [ -n "$seat" ] || seat="$(events_actor)"
+  event_emit "$kind" "$msg" --ticket "$ticket" --seat "$seat" --area "$area" \
+    --data "$(jq -nc --arg m "$msg" '{message:$m}' 2>/dev/null)"
+  info "evento $kind registrado"
+}
+
+say_usage() {
+  cat >&2 <<'EOF'
+rig say - buzon de salida de main: respuesta al usuario fuera de la terminal
+
+  rig say "<mensaje>" [--to telegram|hub] [--ticket X]
+
+  Escribe un evento kind=reply con actor=main en el mismo store append-only
+  (~/.local/state/rig/events.jsonl). El puente de mensajeria y el hub lo leen con:
+
+    rig events --kind reply --since 10m --porcelain
+
+  --to default "telegram" (valores: telegram|hub); viaja en data.to junto al texto.
+EOF
+}
+
+cmd_say() {
+  need_jq
+  local msg="" to="telegram" ticket=""
+  local -a parts=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --to) [ $# -ge 2 ] || die "--to requiere valor"; to="$2"; shift 2 ;;
+      --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
+      -h|--help|help) say_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) parts+=("$1"); shift ;;
+    esac
+  done
+  case "$to" in telegram|hub) ;; *) die "to invalido: $to (telegram|hub)" ;; esac
+  [ ${#parts[@]} -gt 0 ] || die "uso: rig say \"<mensaje>\" [--to telegram|hub] [--ticket X]"
+  msg="${parts[*]}"
+  RIG_ACTOR=main event_emit reply "$msg" --ticket "$ticket" --area "" \
+    --data "$(jq -nc --arg m "$msg" --arg t "$to" '{message:$m,to:$t,len:($m|length)}' 2>/dev/null)"
+  info "respuesta enviada a $to"
+}
+
 selftest() {
   need_tmux
-  local s="$SELFTEST_SESSION" out tmp rc=0 i
+  local s="$SELFTEST_SESSION" out tmp rc=0 i edir efile
+  edir=$(mktemp -d)
+  export RIG_EVENTS_FILE="$edir/events.jsonl"
   tmux kill-session -t "$s" 2>/dev/null || true
   if ! tmux new-session -d -s "$s"; then
     printf 'rig selftest FAIL: no pude crear la sesion de prueba\n' >&2
@@ -1936,6 +2555,82 @@ selftest() {
     printf 'rig selftest FAIL: backfill no asigno hr/numeracion\n' >&2
     rc=1
   fi
+  if "$SELF" scan --watch --porcelain >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: scan --watch --porcelain deberia fallar\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$tmp" "$SELF" agents --porcelain 2>/dev/null)
+  if ! printf '%s' "$out" | jq -e 'type=="array"' >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: agents --porcelain no es JSON array\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$tmp" "$SELF" queue --porcelain 2>/dev/null)
+  if ! printf '%s' "$out" | jq -e 'has("pending") and has("blocked") and has("done")' >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: queue --porcelain sin pending/blocked/done\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" central --help >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: central --help fallo\n' >&2
+    rc=1
+  fi
+  if "$SELF" events --watch --porcelain >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: events --watch --porcelain deberia fallar\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" events --help >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: events --help fallo\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" log --help >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: log --help fallo\n' >&2
+    rc=1
+  fi
+  efile="$RIG_EVENTS_FILE"
+  local ebefore eafter
+  ebefore=$(wc -l <"$efile" 2>/dev/null | tr -d ' ')
+  if ! "$SELF" log "selftest evento uno" --ticket T9 >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: log fallo\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" log "selftest evento dos" --kind decision >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: log 2 fallo\n' >&2
+    rc=1
+  fi
+  eafter=$(wc -l <"$efile" 2>/dev/null | tr -d ' ')
+  if [ "$((eafter - ebefore))" != "2" ]; then
+    printf 'rig selftest FAIL: events no acumula 2 lineas (%s -> %s)\n' "$ebefore" "$eafter" >&2
+    rc=1
+  fi
+  out=$("$SELF" events --porcelain 2>/dev/null)
+  if ! printf '%s' "$out" | jq -e 'has("ts") and has("kind") and has("actor") and has("ticket") and has("seat") and has("area") and has("summary") and has("data")' >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: events --porcelain sin campos requeridos\n' >&2
+    rc=1
+  fi
+  if ! printf '%s' "$out" | jq -e 'select(.kind=="ticket-add")' >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: ticket add no dejo evento ticket-add\n' >&2
+    rc=1
+  fi
+  if ! printf '%s' "$out" | jq -e 'select(.kind=="log" and .summary=="selftest evento uno")' >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: events no muestra el evento log\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" say --help >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say --help fallo\n' >&2
+    rc=1
+  fi
+  if "$SELF" say "selftest respuesta" --to bogus >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say --to bogus deberia fallar\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" say "selftest respuesta al usuario" --to hub --ticket T9 >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say fallo\n' >&2
+    rc=1
+  fi
+  out=$("$SELF" events --kind reply --since 10m --porcelain 2>/dev/null)
+  if ! printf '%s' "$out" | jq -e 'select(.kind=="reply" and .actor=="main" and .data.to=="hub" and .summary=="selftest respuesta al usuario")' >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say no dejo un evento reply de main legible por --kind reply\n' >&2
+    rc=1
+  fi
   rm -f "$tmp"
 
   if command -v git >/dev/null 2>&1; then
@@ -2053,6 +2748,8 @@ selftest() {
   fi
 
   tmux kill-session -t "$s" 2>/dev/null || true
+  unset RIG_EVENTS_FILE
+  [ -n "$edir" ] && rm -rf "$edir"
   if [ "$rc" = "0" ]; then
     info "rig selftest OK"
   else
@@ -2074,6 +2771,12 @@ case "$cmd" in
   ticket|tickets) cmd_ticket "$@" ;;
   work|wt) cmd_work "$@" ;;
   board) cmd_board "$@" ;;
+  events|ev) cmd_events "$@" ;;
+  log|note) cmd_log "$@" ;;
+  say|reply) cmd_say "$@" ;;
+  agents|a) cmd_agents "$@" ;;
+  queue|q) cmd_queue "$@" ;;
+  central|center|c) cmd_central "$@" ;;
   --selftest|selftest) selftest ;;
   ''|-h|--help|help) usage; [ -z "$cmd" ] && exit 1 || exit 0 ;;
   *) usage; exit 1 ;;

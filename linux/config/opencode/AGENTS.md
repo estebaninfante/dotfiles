@@ -762,3 +762,73 @@ tablero. Es el eje de agrupacion de `rig board` (ademas de filtro). Dominios y c
   (`tickets-area`, `area-add`, `area-valid`, `area-cli`, `area-color`, `area-porcelain`,
   `board-area`, `board-plain`, `tickets-num`, `tickets-title`, `num-resolve`, `title-valid`)
   + `rig --selftest`.
+
+## Central de trazabilidad (rig central)
+
+Un comando materializa un workspace herdr **CENTRAL** con la trazabilidad viva en 5 panes:
+
+```
+rig central
+```
+
+- **panes**: `events` (`rig events --watch`, el protagonista: el feed de todo lo que
+  hacen los agentes), `board` (`rig board --watch`), `scan` (`rig scan --watch`),
+  `agents` (`rig agents --watch`), `queue` (`rig queue --watch`).
+- Idempotente: si CENTRAL ya existe solo lo enfoca. `--rebuild` lo cierra y recrea;
+  `--no-focus` no roba el foco; `--interval SEG` ajusta el refresco; `--label`/`--cwd`
+  cambian nombre/directorio (default `CENTRAL` / `$HOME`, override `RIG_CENTRAL_CWD`).
+- Vive en el server de herdr: sobrevive a cerrar la terminal y se reabre con el mismo
+  comando. Requiere herdr disponible (`RIG_HERDR=1`).
+
+Comandos de la vista viva:
+
+- `rig agents [--watch] [--porcelain] [--interval SEG]`: por silla, agente + estado
+  `working|idle|blocked` + **fuente**. `source=plugin` = estado reportado por herdr
+  (snapshot `pane.agent_status`); `source=derive` = inferido del contenido del pane cuando
+  el panel de agentes de herdr no tiene datos (fallback robusto, nunca pane vacio).
+  `--porcelain` = JSON array `{seat,agent,state,source,pane,activity}`.
+- `rig queue [--watch] [--porcelain] [--interval SEG]`: cola accionable (`blocked` luego
+  `pending`) + ultimos cierres `done` con evidencia (limite `RIG_QUEUE_DONE`, default 8).
+  `--porcelain` = `{pending:[], blocked:[], done:[]}`.
+- `rig scan` / `rig board` suman `--watch` (refresco vivo, `--interval` default 2; no
+  combinan con `--porcelain`).
+
+Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
+(checks `scan-watch`, `scan-watch-guard`, `agents-cli`, `agents-porcelain`, `queue-cli`,
+`queue-porcelain`, `central-cli`) y `rig --selftest`.
+
+## Objetivo permanente: trazabilidad total (event log `rig events`)
+
+**Objetivo de ahora en adelante**: ninguna delegacion, delta, cambio de ticket ni decision
+queda invisible. Todo lo que hacen los agentes deja un **evento** y se ve en la central en
+vivo. Si una accion no deja evento, es un hueco que hay que cerrar.
+
+- **Store**: `~/.local/state/rig/events.jsonl`, **append-only**, escritura bajo `flock`
+  (`RIG_EVENTS_LOCK`), una linea JSON por evento con `ts` (ISO), `kind`, `actor`
+  (`main` | silla | `usuario`), `ticket`, `seat`, `area`, `summary` (espanol legible), `data`.
+- **Emision automatica**: los comandos que mutan estado emiten solos — `spawn` (`spawn`),
+  `send` (`send`, con el resumen del mensaje delegado: eso es lo que el usuario quiere ver),
+  `ticket add/set/done/rm` (`ticket-add`/`ticket-set`/`ticket-done`/`ticket-rm`),
+  `work new/finish/rm` (`work-new`/`work-finish`/`work-rm`), `herdr sync` (`herdr-sync`) y
+  abrir la central (`log`). Nunca rompen el comando: emiten fail-soft.
+- **Actor sin tool de rig**: `rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]`
+  registra decisiones, diagnosticos y hallazgos (`main` lo usa con `bash`).
+- **Buzon de salida de main**: `rig say "<mensaje>" [--to telegram|hub] [--ticket X]` escribe
+  un evento `kind=reply` con `actor=main` en el **mismo** store (no hay archivo aparte): asi
+  `main` le responde al usuario por fuera de la terminal. El puente de mensajeria
+  (ticket MAIN-BRIDGE) y el hub web lo consumen con
+  `rig events --kind reply --since 10m --porcelain` (ordenado, JSON lines). `--to` default
+  `telegram` y viaja en `data.to` junto al texto (`data.message`, `data.len`).
+- **Vista viva**: `rig events [--watch] [--interval SEG] [--ticket X] [--seat S] [--kind K]`
+  `[--since 30m] [--limit N] [--porcelain]`. Render legible por hora, coloreado por area
+  (proyecto), sin desbordar el ancho. `--porcelain` = JSON lines (para el hub web);
+  `--watch` refresca en el lugar (Ctrl-C restaura); no combinan entre si.
+- **Rotacion**: si el feed supera `RIG_EVENTS_MAX_BYTES` (default 5MB) rota a
+  `events-YYYYMMDD.jsonl` y sigue; nunca se pierde una linea (la vista lee todos los archivos).
+- **Central**: `rig central` abre el workspace CENTRAL con el feed como pane prominente
+  (`events`) + `board`/`scan`/`agents`/`queue`.
+- Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
+  (checks `events-append`, `events-shape`, `events-porcelain`, `events-watch-guard`,
+  `events-cli`, `log-cli`, `say-cli`, `say-to-guard`, `say-reply`, `central-events`) +
+  `rig --selftest` + `verify selftest`.
+
