@@ -110,7 +110,7 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
                                      (~/.local/state/rig/events.jsonl); --watch refresca
   rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]
                                      registra un evento propio (decision/diagnostico) en el feed
-  rig say "<mensaje>" [--to telegram|hub] [--ticket X]
+  rig say "<mensaje>" [--to telegram|hub] [--ticket X] [--thread ID]
                                      buzon de salida de main: respuesta al usuario (kind=reply)
   rig ask "<pregunta>" [--ticket X] [--seat S] [--priority alta|normal]
                                      una silla pide una decision y queda esperando: delega en
@@ -2447,7 +2447,7 @@ say_usage() {
   cat >&2 <<'EOF'
 rig say - buzon de salida de main: respuesta al usuario fuera de la terminal
 
-  rig say "<mensaje>" [--to telegram|hub] [--ticket X]
+  rig say "<mensaje>" [--to telegram|hub] [--ticket X] [--thread ID]
 
   Escribe un evento kind=reply con actor=main en el mismo store append-only
   (~/.local/state/rig/events.jsonl). El puente de mensajeria y el hub lo leen con:
@@ -2455,27 +2455,30 @@ rig say - buzon de salida de main: respuesta al usuario fuera de la terminal
     rig events --kind reply --since 10m --porcelain
 
   --to default "telegram" (valores: telegram|hub); viaja en data.to junto al texto.
+  --thread ID fija el hilo destino (data.thread); el puente de Discord lo usa para
+  responder en el hilo donde nacio el pedido y no mezclar conversaciones.
 EOF
 }
 
 cmd_say() {
   need_jq
-  local msg="" to="telegram" ticket=""
+  local msg="" to="telegram" ticket="" thread=""
   local -a parts=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --to) [ $# -ge 2 ] || die "--to requiere valor"; to="$2"; shift 2 ;;
       --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
+      --thread) [ $# -ge 2 ] || die "--thread requiere valor"; thread="$2"; shift 2 ;;
       -h|--help|help) say_usage; return 0 ;;
       -*) die "opcion desconocida: $1" ;;
       *) parts+=("$1"); shift ;;
     esac
   done
   case "$to" in telegram|hub) ;; *) die "to invalido: $to (telegram|hub)" ;; esac
-  [ ${#parts[@]} -gt 0 ] || die "uso: rig say \"<mensaje>\" [--to telegram|hub] [--ticket X]"
+  [ ${#parts[@]} -gt 0 ] || die "uso: rig say \"<mensaje>\" [--to telegram|hub] [--ticket X] [--thread ID]"
   msg="${parts[*]}"
   RIG_ACTOR=main event_emit reply "$msg" --ticket "$ticket" --area "" \
-    --data "$(jq -nc --arg m "$msg" --arg t "$to" '{message:$m,to:$t,len:($m|length)}' 2>/dev/null)"
+    --data "$(jq -nc --arg m "$msg" --arg t "$to" --arg th "$thread" '{message:$m,to:$t,len:($m|length),thread:$th}' 2>/dev/null)"
   info "respuesta enviada a $to"
 }
 
