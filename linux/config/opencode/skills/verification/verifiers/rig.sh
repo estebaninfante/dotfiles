@@ -231,6 +231,18 @@ if [ -f "$STORE" ]; then
   else
     fail "tickets-area" "${badarea} tickets con area invalida"
   fi
+  badnum=$(jq -r '[.tickets[]|select((.num//0) <= 0 or (.num|type)!="number")]|length' "$STORE" 2>/dev/null || echo 999)
+  if [ "${badnum:-999}" = "0" ]; then
+    ok "tickets-num" "todo ticket tiene num secuencial"
+  else
+    fail "tickets-num" "${badnum} tickets sin num o con num invalido"
+  fi
+  badtitle=$(jq -r '[.tickets[]|select((.title|split(" ")|map(select(length>0))|length) < 6)]|length' "$STORE" 2>/dev/null || echo 999)
+  if [ "${badtitle:-999}" = "0" ]; then
+    ok "tickets-title" "titulos descriptivos (>= 6 palabras)"
+  else
+    fail "tickets-title" "${badtitle} titulos poco descriptivos (< 6 palabras)"
+  fi
   badstatus=$(jq -r '[.tickets[]|select(.status|IN("pending","in-progress","blocked","done")|not)]|length' "$STORE" 2>/dev/null || echo 999)
   if [ "${badstatus:-999}" = "0" ]; then
     ok "tickets-status" "estados validos"
@@ -267,8 +279,8 @@ fi
 
 if out=$("$SRC" board --porcelain 2>&1); then
   if printf '%s' "$out" | jq -e 'type=="array"' >/dev/null 2>&1; then
-    if printf '%s' "$out" | jq -e 'all(has("area") and has("color"))' >/dev/null 2>&1; then
-      ok "board-porcelain" "JSON con area+color"
+    if printf '%s' "$out" | jq -e 'all(has("area") and has("color") and has("num"))' >/dev/null 2>&1; then
+      ok "board-porcelain" "JSON con area+color+num"
     else
       fail "board-porcelain" "faltan area/color en el porcelain"
     fi
@@ -291,18 +303,23 @@ fi
 
 atmp=$(mktemp)
 printf '{"version":1,"tickets":[]}\n' >"$atmp"
-if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-HR --project hypr-remote --title "ticket hr" --area hr >/dev/null 2>&1; then
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-HR --project hypr-remote --title "ticket de prueba con area hr" --area hr >/dev/null 2>&1; then
   ok "area-add" "ticket add --area"
 else
   fail "area-add" "ticket add --area fallo"
 fi
-if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-BAD --project x --title y --area bogus >/dev/null 2>&1; then
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-BAD --project x --title "titulo descriptivo de prueba" --area bogus >/dev/null 2>&1; then
   fail "area-valid" "area invalida fue aceptada"
 else
   ok "area-valid" "area invalida rechazada"
 fi
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-SHORT --project x --title "muy corto" >/dev/null 2>&1; then
+  fail "title-valid" "titulo corto fue aceptado"
+else
+  ok "title-valid" "titulo poco descriptivo rechazado"
+fi
 out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket --help 2>&1)
-if printf '%s' "$out" | grep -q -- '--area' && printf '%s' "$out" | grep -q 'backfill-area'; then
+if printf '%s' "$out" | grep -q -- '--area' && printf '%s' "$out" | grep -q 'backfill'; then
   ok "area-cli" "rig ticket --help documenta --area/backfill"
 else
   fail "area-cli" "rig ticket --help sin --area/backfill"
@@ -329,10 +346,26 @@ else
   fail "board-area" "board sin cabecera de area"
 fi
 out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" board --plain 2>&1)
-if printf '%s' "$out" | grep -q 'A-HR' && ! printf '%s' "$out" | grep -q $'\033'; then
+if [[ "$out" != *$'\033'* ]] && [[ "$out" == *"A-HR"* ]]; then
   ok "board-plain" "board --plain sin ANSI y con el ticket"
 else
   fail "board-plain" "board --plain con ANSI o sin ticket"
+fi
+if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket set 1 --evidence numericref >/dev/null 2>&1; then
+  out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket list --porcelain 2>&1)
+  if [[ "$out" == *'"num": 1'* ]] && [[ "$out" == *'"evidence": "numericref"'* ]]; then
+    ok "num-resolve" "referencia numerica (#N o N) resuelve"
+  else
+    fail "num-resolve" "ref numerica no aplico al ticket"
+  fi
+else
+  fail "num-resolve" "ticket set 1 (ref numerica) fallo"
+fi
+out=$(RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket list --porcelain 2>&1)
+if printf '%s' "$out" | jq -e 'all((.num//0) > 0)' >/dev/null 2>&1; then
+  ok "tickets-num" "todo ticket tiene num > 0"
+else
+  fail "tickets-num" "tickets sin num secuencial"
 fi
 rm -f "$atmp"
 

@@ -64,7 +64,7 @@ def metrics_index($sessions): { byid: ($sessions | reduce .[] as $s ({}; .[$s.id
 # shellcheck disable=SC2016
 AREA_DEFS='def areacolor: {"hr":"#4C9AFF","hypr":"#B389FF","shell":"#FFB84C","audio":"#4CD9A0","meta":"#8A8F98","infra":"#FF7A85","foldertinder":"#7ADBFF"} as $m | $m[.] // "#8A8F98";
 def area_rank: {"hr":0,"hypr":1,"shell":2,"audio":3,"meta":4,"infra":5,"foldertinder":6} as $m | $m[.] // 7;
-def with_area: . + {area: (.area // ""), color: ((.area // "") | areacolor)};'
+def with_area: . + {area: (.area // ""), color: ((.area // "") | areacolor), num: (.num // 0)};'
 
 usage() {
   cat >&2 <<'EOF'
@@ -88,7 +88,7 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES] [--area A]
   rig ticket done <id> [--close-seat]
   rig ticket rm <id>
-  rig ticket backfill-area         rellena area de tickets sin area (por prefijo/proyecto)
+  rig ticket backfill              asigna area faltante y numera tickets (migracion)
   rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
   rig board [--watch] [--porcelain] [--plain] [--no-metrics] [--project P] [--status S] [--area A] [--interval SEG]
 
@@ -110,6 +110,9 @@ area: identificador de dominio del ticket (hr hypr shell audio meta infra folder
   opcional y se guarda en el store. Mapa de color: hr=#4C9AFF hypr=#B389FF shell=#FFB84C
   audio=#4CD9A0 meta=#8A8F98 infra=#FF7A85 foldertinder=#7ADBFF (sin area=#8A8F98).
   rig board --plain = salida plana sin color ni agrupacion (para pipes).
+num: cada ticket tiene un numero secuencial (#N, por orden de creacion) que se muestra como
+  prefijo en board y ticket list. Comandos como set/done/rm/metrics aceptan el slug o el numero
+  (#12 o 12). El titulo debe ser descriptivo en espanol (>=6 palabras), no un slug.
 worktree: cada ticket corre en su propio arbol git (branch ticket/<id>) -> cambios
 paralelos sin carrera; merge a la base es explicito. Override de ubicacion: RIG_WORKTREE_DIR.
 modelo: toda silla arranca con --model explicito (default opencode-go/deepseek-v4.1-flash).
@@ -712,6 +715,30 @@ store_key() {
   jq -r --arg id "$1" '.tickets[]|select((.id|ascii_downcase)==($id|ascii_downcase))|.id' "$TICKETS_FILE" | head -n1
 }
 
+next_num() {
+  jq -r '[.tickets[].num // 0] | if length == 0 then 1 else (max + 1) end' "$TICKETS_FILE"
+}
+
+resolve_ref() {
+  local ref="$1" num id
+  num="${ref#\#}"
+  case "$num" in
+    ''|*[!0-9]*) ;;
+    *)
+      id=$(jq -r --argjson n "$num" '.tickets[]|select((.num//0)==$n)|.id' "$TICKETS_FILE" | head -n1)
+      if [ -n "$id" ]; then printf '%s' "$id"; return 0; fi
+      ;;
+  esac
+  store_key "$ref"
+}
+
+valid_title() {
+  local words
+  words=$(printf '%s' "$1" | wc -w | tr -d ' ')
+  case "$words" in ''|*[!0-9]*) words=0 ;; esac
+  [ "$words" -ge 6 ]
+}
+
 # shellcheck disable=SC2016
 filter_prog() {
   local project="$1" status="$2" area="${3:-}" f=".tickets[]"
@@ -731,9 +758,10 @@ fmt_cost() { awk -v c="${1:-0}" 'BEGIN{ c=c+0; if (c>=1) printf "$%.2f", c; else
 fmt_dur() { awk -v ms="${1:-0}" 'BEGIN{ s=int((ms+0)/1000); if (s<60) printf "%ds", s; else if (s<3600) printf "%dm", int(s/60); else printf "%dh%02dm", int(s/3600), int((s%3600)/60) }'; }
 
 render_row() {
-  local id="$1" status="$2" owner="$3" area="$4" updated="$5" title="$6" evidence="$7"
-  local worktree="$8" branch="$9" commits="${10:-0}" ns="${11:-0}" toks="${12:-0}"
-  local cost="${13:-0}" durms="${14:-0}" titlew="${15:-31}" sc="" metr=""
+  local num="$1" id="$2" status="$3" owner="$4" area="$5" updated="$6" title="$7" evidence="$8"
+  local worktree="$9" branch="${10}" commits="${11:-0}" ns="${12:-0}" toks="${13:-0}"
+  local cost="${14:-0}" durms="${15:-0}" titlew="${16:-31}" sc="" metr="" nlab
+  nlab="#${num:-0}"
   if [ -n "$C_OFF" ]; then
     case "$status" in
       done) sc="$C_DONE" ;;
@@ -746,13 +774,13 @@ render_row() {
     metr="$(fmt_tokens "$toks") $(fmt_cost "$cost") $(fmt_dur "$durms")"
   fi
   if [ "${plain:-0}" = "1" ]; then
-    printf '%-13s %-11s %-12s %-12s %-10s %s\n' \
-      "$(trunc "$id" 13)" "$(trunc "$status" 11)" "$(area_label "$area")" \
+    printf '%-6s %-13s %-11s %-12s %-12s %-10s %s\n' \
+      "$(trunc "$nlab" 6)" "$(trunc "$id" 13)" "$(trunc "$status" 11)" "$(area_label "$area")" \
       "$(trunc "$owner" 12)" "$(trunc "$updated" 10)" "$(trunc "$title" "$titlew")"
     return 0
   fi
-  printf '  %-13s %s%-11s%s %-12s %-10s %-*s' \
-    "$(trunc "$id" 13)" "$sc" "$(trunc "$status" 11)" "$C_OFF" \
+  printf '  %-6s %-13s %s%-11s%s %-12s %-10s %-*s' \
+    "$(trunc "$nlab" 6)" "$(trunc "$id" 13)" "$sc" "$(trunc "$status" 11)" "$C_OFF" \
     "$(trunc "$owner" 12)" "$(trunc "$updated" 10)" "$titlew" "$(trunc "$title" "$titlew")"
   if [ -n "$metr" ]; then printf ' %s' "$(trunc "$metr" 16)"; fi
   printf '\n'
@@ -764,7 +792,7 @@ render_row() {
   if [ -n "$sub" ]; then
     local sw
     sw=$(term_width)
-    printf '  %-13s %s↳ %s%s\n' "" "$C_PEND" "$(trunc "$sub" "$((sw - 18))")" "$C_OFF"
+    printf '  %-6s %-13s %s↳ %s%s\n' "" "" "$C_PEND" "$(trunc "$sub" "$((sw - 24))")" "$C_OFF"
   fi
 }
 
@@ -780,10 +808,10 @@ render_tickets() {
   sf=$(jv_file "${SESSIONS_JSON:-[]}")
   if [ "${plain:-0}" = "1" ]; then
     titlew=60
-    printf '%-13s %-11s %-12s %-12s %-10s %s\n' "ID" "ESTADO" "AREA" "OWNER" "UPDATED" "TITULO"
+    printf '%-6s %-13s %-11s %-12s %-12s %-10s %s\n' "NUM" "ID" "ESTADO" "AREA" "OWNER" "UPDATED" "TITULO"
   else
-    titlew=$(( $(term_width) - 69 ))
-    if [ "$titlew" -lt 14 ]; then titlew=$(( $(term_width) - 53 )); fi
+    titlew=$(( $(term_width) - 76 ))
+    if [ "$titlew" -lt 14 ]; then titlew=$(( $(term_width) - 60 )); fi
     if [ "$titlew" -lt 10 ]; then titlew=10; fi
   fi
   printf '%s' "$data" | jq -r --rawfile sj "$sf" "$METRICS_DEFS$AREA_DEFS"'
@@ -795,7 +823,7 @@ render_tickets() {
     | .[]
     | ("A\u001f" + (.[0].area // "") + "\u001f" + (length | tostring)),
       (.[] | . as $t | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
-        | "T\u001f" + .id + "\u001f" + .status + "\u001f" + .owner + "\u001f"
+        | "T\u001f" + .id + "\u001f" + ((.num // 0) | tostring) + "\u001f" + .status + "\u001f" + .owner + "\u001f"
           + (.area // "") + "\u001f" + .updated + "\u001f" + .title + "\u001f" + .evidence + "\u001f"
           + (.worktree // "") + "\u001f" + (.branch // "") + "\u001f"
           + ((.commits // "") | split(" ") | map(select(length>0)) | length | tostring) + "\u001f"
@@ -803,7 +831,7 @@ render_tickets() {
           + "\u001f" + (($m.tin + $m.tout + $m.trea) | tostring)
           + "\u001f" + ($m.cost | tostring)
           + "\u001f" + (($m.updated - $m.created) | tostring))
-  ' | while IFS=$'\x1f' read -r kind a b c d e f g h i j k l m n; do
+  ' | while IFS=$'\x1f' read -r kind a b c d e f g h i j k l m n o; do
     case "$kind" in
       A)
         if [ "${plain:-0}" = "1" ]; then continue; fi
@@ -811,7 +839,7 @@ render_tickets() {
         ac=$(area_ansi "$a")
         printf '\n%s▌%s %s%s%s (%s)\n' "$ac" "$C_OFF" "$ac" "$(area_label "$a")" "$C_OFF" "$b"
         ;;
-      T) render_row "$a" "$b" "$c" "$d" "$e" "$f" "$g" "$h" "$i" "$j" "$k" "$l" "$m" "$titlew" ;;
+      T) render_row "$b" "$a" "$c" "$d" "$e" "$f" "$g" "$h" "$i" "$j" "$k" "$l" "$m" "$n" "$o" "$titlew" ;;
     esac
   done
   rm -f "$sf"
@@ -826,13 +854,16 @@ rig ticket - store de tickets (~/.config/opencode/tickets.json)
   rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES] [--area A]
   rig ticket done <id> [--close-seat]
   rig ticket rm <id>
-  rig ticket backfill-area         rellena area de tickets sin area (por prefijo/proyecto)
+  rig ticket backfill              asigna area faltante y numera tickets (migracion)
   rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
 
 Estados: pending | in-progress | blocked | done.
 area: opcional. Una de hr hypr shell audio meta infra foldertinder (da color y agrupacion en el
 board). --area none filtra los que no tienen area. Colores: hr=#4C9AFF hypr=#B389FF shell=#FFB84C
 audio=#4CD9A0 meta=#8A8F98 infra=#FF7A85 foldertinder=#7ADBFF (sin area=#8A8F98).
+num: numero secuencial (#N) asignado por orden de creacion; se muestra como prefijo en board y
+list. set/done/rm/metrics aceptan slug o numero (#12 o 12). El titulo debe ser descriptivo en
+espanol (>=6 palabras), no un slug.
 --session <ses_id> asocia la sesion de opencode al ticket (append, dedup). Las metricas
 (tokens in/out/reasoning/cache, costo, tiempo) salen de opencode.db (override: RIG_DB).
 EOF
@@ -861,14 +892,16 @@ ticket_add() {
   store_lock
   store_ensure
   [ -z "$(store_key "$id")" ] || die "ticket ya existe: $id"
-  local d out
+  valid_title "$title" || die "titulo poco descriptivo (min 6 palabras en espanol, no un slug): $title"
+  local d out n
   d=$(now_date)
+  n=$(next_num)
   out=$(jq --arg id "$id" --arg p "$project" --arg t "$title" --arg s "$status" \
-    --arg o "$owner" --arg e "$evidence" --arg ses "$ses" --arg a "$area" --arg d "$d" \
-    '.tickets += [({id:$id,project:$p,title:$t,status:$s,owner:$o,created:$d,updated:$d,evidence:$e,sessions:(if $ses=="" then [] else [$ses] end)} + (if $a=="" then {} else {area:$a} end))]' \
+    --arg o "$owner" --arg e "$evidence" --arg ses "$ses" --arg a "$area" --arg d "$d" --argjson n "$n" \
+    '.tickets += [({id:$id,project:$p,title:$t,status:$s,owner:$o,created:$d,updated:$d,evidence:$e,sessions:(if $ses=="" then [] else [$ses] end)} + (if $a=="" then {} else {area:$a} end) + {num:$n})]' \
     "$TICKETS_FILE") || die "jq fallo al agregar $id"
   store_write <<<"$out"
-  info "ticket $id agregado ($status)"
+  info "ticket $id agregado (#$n, $status)"
 }
 
 ticket_list() {
@@ -914,10 +947,11 @@ ticket_set() {
   [ -n "$ref" ] || die "uso: rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES] [--area A]"
   if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
   if [ -n "$area" ]; then valid_area "$area" || die "area invalida: $area (validas: $TICKET_AREAS)"; fi
+  if [ -n "$title" ]; then valid_title "$title" || die "titulo poco descriptivo (min 6 palabras en espanol, no un slug): $title"; fi
   store_lock
   store_ensure
   local key d out
-  key=$(store_key "$ref")
+  key=$(resolve_ref "$ref")
   [ -n "$key" ] || die "ticket no encontrado: $ref"
   d=$(now_date)
   out=$(jq --arg id "$key" --arg s "$status" --arg o "$owner" --arg e "$evidence" \
@@ -941,21 +975,20 @@ ticket_rm() {
   store_lock
   store_ensure
   local key out
-  key=$(store_key "$ref")
+  key=$(resolve_ref "$ref")
   [ -n "$key" ] || die "ticket no encontrado: $ref"
   out=$(jq --arg id "$key" '.tickets |= map(select(.id!=$id))' "$TICKETS_FILE") || die "jq fallo"
   store_write <<<"$out"
   info "ticket $key eliminado"
 }
 
-ticket_backfill_area() {
+ticket_backfill() {
   need_jq
   store_lock
   store_ensure
-  local ids out id proj a n=0
-  ids=$(jq -r '.tickets[]|select((.area//"")=="")|.id' "$TICKETS_FILE")
-  [ -n "$ids" ] || { info "backfill: no hay tickets sin area"; return 0; }
+  local ids out id proj a n=0 nn=0
   out=$(cat "$TICKETS_FILE")
+  ids=$(printf '%s' "$out" | jq -r '.tickets[]|select((.area//"")=="")|.id')
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     proj=$(printf '%s' "$out" | jq -r --arg id "$id" '.tickets[]|select(.id==$id)|.project')
@@ -965,8 +998,12 @@ ticket_backfill_area() {
       '.tickets |= map(if .id==$id and ((.area//"")=="") then . + {area:$a} else . end)') || die "jq fallo en backfill"
     n=$((n + 1))
   done <<<"$ids"
+  if [ "$(printf '%s' "$out" | jq '[.tickets[]|select((.num//0)==0)]|length')" != "0" ]; then
+    out=$(printf '%s' "$out" | jq '.tickets |= (to_entries | map(.value + {num:(.key+1)}))') || die "jq fallo al numerar"
+    nn=1
+  fi
   store_write <<<"$out"
-  info "backfill: $n ticket(s) con area asignada"
+  info "backfill: $n area(s) asignada(s), numeracion=${nn}"
 }
 
 ticket_metrics() {
@@ -985,7 +1022,12 @@ ticket_metrics() {
   if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
   local ids_json='[]'
   if [ ${#ids[@]} -gt 0 ]; then
-    ids_json=$(printf '%s\n' "${ids[@]}" | jq -R . | jq -s 'map(ascii_downcase)')
+    local ref r resolved=()
+    for ref in "${ids[@]}"; do
+      r=$(resolve_ref "$ref")
+      if [ -n "$r" ]; then resolved+=("$r"); else resolved+=("$ref"); fi
+    done
+    ids_json=$(printf '%s\n' "${resolved[@]}" | jq -R . | jq -s 'map(ascii_downcase)')
   fi
   local sessions sf
   sessions=$(db_sessions_json)
@@ -1068,7 +1110,7 @@ cmd_ticket() {
       if [ "$close" = "1" ] && [ -n "$tid" ]; then
         store_ensure
         local key wt
-        key=$(store_key "$tid")
+        key=$(resolve_ref "$tid")
         if [ -n "$key" ]; then
           wt=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree // ""' "$TICKETS_FILE" 2>/dev/null)
           close_seat_for_ticket "$key" "$wt"
@@ -1076,7 +1118,7 @@ cmd_ticket() {
       fi
       ;;
     rm|remove) ticket_rm "$@" ;;
-    backfill-area|backfill) ticket_backfill_area ;;
+    backfill|backfill-area|migrate|renumber) ticket_backfill ;;
     metrics|cost) ticket_metrics "$@" ;;
     ''|-h|--help|help) ticket_usage; [ -z "$action" ] && exit 1 || exit 0 ;;
     *) die "ticket: accion desconocida: $action" ;;
@@ -1816,16 +1858,29 @@ selftest() {
 
   tmp=$(mktemp)
   printf '{"version":1,"tickets":[]}\n' >"$tmp"
-  if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket add T9 --project demo --title "ticket demo" >/dev/null 2>&1; then
+  if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket add T9 --project demo --title "ticket de prueba para el store" >/dev/null 2>&1; then
     printf 'rig selftest FAIL: ticket add fallo\n' >&2
     rc=1
   fi
-  if RIG_TICKETS_FILE="$tmp" "$SELF" ticket add T9 --project demo --title dup >/dev/null 2>&1; then
+  if RIG_TICKETS_FILE="$tmp" "$SELF" ticket add T9 --project demo --title "otro titulo descriptivo de prueba" >/dev/null 2>&1; then
     printf 'rig selftest FAIL: ticket add duplicado no fallo\n' >&2
+    rc=1
+  fi
+  if RIG_TICKETS_FILE="$tmp" "$SELF" ticket add SHORT --project demo --title "dos palabras" >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: titulo corto aceptado\n' >&2
     rc=1
   fi
   if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket set T9 --status 'done' --owner supervisor >/dev/null 2>&1; then
     printf 'rig selftest FAIL: ticket set fallo\n' >&2
+    rc=1
+  fi
+  if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket set 1 --evidence numericref >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: referencia numerica no resuelve\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$tmp" "$SELF" ticket list --porcelain 2>/dev/null)
+  if [[ "$out" != *'"num": 1'* ]] || [[ "$out" != *'"evidence": "numericref"'* ]]; then
+    printf 'rig selftest FAIL: porcelain sin num o ref numerica no aplicada\n' >&2
     rc=1
   fi
   out=$(RIG_TICKETS_FILE="$tmp" "$SELF" board --porcelain 2>/dev/null)
@@ -1834,8 +1889,8 @@ selftest() {
     rc=1
   fi
   out=$(RIG_TICKETS_FILE="$tmp" "$SELF" board 2>/dev/null)
-  if [[ "$out" != *"T9"* ]]; then
-    printf 'rig selftest FAIL: board render no muestra el ticket\n' >&2
+  if [[ "$out" != *"T9"* ]] || [[ "$out" != *"#1"* ]]; then
+    printf 'rig selftest FAIL: board render no muestra el ticket o su numero\n' >&2
     rc=1
   fi
   out=$(RIG_TICKETS_FILE="$tmp" "$SELF" scan --porcelain --no-seats 2>/dev/null)
@@ -1848,7 +1903,7 @@ selftest() {
     printf 'rig selftest FAIL: scan sin contenido no avisa el empty state\n' >&2
     rc=1
   fi
-  if RIG_TICKETS_FILE="$tmp" "$SELF" ticket add ZZ-BAD --project demo --title bad --area bogus >/dev/null 2>&1; then
+  if RIG_TICKETS_FILE="$tmp" "$SELF" ticket add ZZ-BAD --project demo --title "titulo descriptivo de area" --area bogus >/dev/null 2>&1; then
     printf 'rig selftest FAIL: area invalida aceptada\n' >&2
     rc=1
   fi
@@ -1871,14 +1926,14 @@ selftest() {
     printf 'rig selftest FAIL: board --plain con ANSI o sin ticket\n' >&2
     rc=1
   fi
-  if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket add HR9 --project hypr-remote --title backfill >/dev/null 2>&1; then
+  if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket add HR9 --project hypr-remote --title "ticket de backfill con area hr" >/dev/null 2>&1; then
     printf 'rig selftest FAIL: ticket add backfill fallo\n' >&2
     rc=1
   fi
-  RIG_TICKETS_FILE="$tmp" "$SELF" ticket backfill-area >/dev/null 2>&1
+  RIG_TICKETS_FILE="$tmp" "$SELF" ticket backfill >/dev/null 2>&1
   out=$(RIG_TICKETS_FILE="$tmp" "$SELF" ticket list --area hr --porcelain 2>/dev/null)
-  if [[ "$out" != *'"HR9"'* ]] || [[ "$out" != *'"area": "hr"'* ]]; then
-    printf 'rig selftest FAIL: backfill-area no asigno hr\n' >&2
+  if [[ "$out" != *'"HR9"'* ]] || [[ "$out" != *'"area": "hr"'* ]] || [[ "$out" != *'"num": 2'* ]]; then
+    printf 'rig selftest FAIL: backfill no asigno hr/numeracion\n' >&2
     rc=1
   fi
   rm -f "$tmp"
@@ -1894,7 +1949,7 @@ selftest() {
     git -C "$wrepo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init 2>/dev/null
     export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
-    if ! RIG_TICKETS_FILE="$tstore" RIG_WORKTREE_DIR="$wtmp/wt" "$SELF" ticket add G1 --project demo --title "work test" >/dev/null 2>&1; then
+    if ! RIG_TICKETS_FILE="$tstore" RIG_WORKTREE_DIR="$wtmp/wt" "$SELF" ticket add G1 --project demo --title "ticket de prueba para el worktree" >/dev/null 2>&1; then
       printf 'rig selftest FAIL: work setup ticket add fallo\n' >&2
       rc=1
     fi
@@ -1975,7 +2030,7 @@ selftest() {
     sqlite3 "$mdb" "CREATE TABLE session (id text PRIMARY KEY, parent_id text, directory text, cost real DEFAULT 0, tokens_input integer DEFAULT 0, tokens_output integer DEFAULT 0, tokens_reasoning integer DEFAULT 0, tokens_cache_read integer DEFAULT 0, tokens_cache_write integer DEFAULT 0, time_created integer, time_updated integer);"
     sqlite3 "$mdb" "INSERT INTO session VALUES ('ses_a','','/wt/fake',0.5,1000,200,300,400,0,1000000,1006000),('ses_b','ses_a','/wt/fake',0.25,500,100,50,0,0,1001000,1036000);"
     printf '{"version":1,"tickets":[]}\n' >"$mtstore"
-    RIG_TICKETS_FILE="$mtstore" "$SELF" ticket add M1 --project demo --title "metricas" --session ses_a >/dev/null 2>&1
+    RIG_TICKETS_FILE="$mtstore" "$SELF" ticket add M1 --project demo --title "ticket de prueba para las metricas" --session ses_a >/dev/null 2>&1
     out=$(RIG_TICKETS_FILE="$mtstore" RIG_DB="$mdb" "$SELF" ticket metrics M1 --porcelain 2>/dev/null)
     if [[ "$out" != *'"total": 2150'* ]]; then
       printf 'rig selftest FAIL: metrics total de tokens incorrecto\n' >&2
