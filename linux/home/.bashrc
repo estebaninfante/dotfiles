@@ -23,7 +23,6 @@ if [ -d ~/.bashrc.d ]; then
     done
 fi
 unset rc
-export PATH="$HOME/.local/bin:$PATH"
 
 # deeptutor
 alias deeptutor='source ~/deeptutor-env/bin/activate && deeptutor'

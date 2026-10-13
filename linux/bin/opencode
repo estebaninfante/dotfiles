@@ -1,0 +1,4 @@
+#!/bin/bash
+export OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true
+export MISE_MINIMUM_RELEASE_AGE=0
+exec mise x opencode@1.19.0 -- opencode "$@"
