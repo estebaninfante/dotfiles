@@ -6,6 +6,30 @@ inyeccion del plugin caveman. Aplica a TODOS los agentes y a TODAS las respuesta
 - Responde en espanol neutro y tecnico simple. Nada de voseo ni argentinismos:
   prohibido "tenes", "queres", "decime", "vos", "podes", "sos", "aca"; usa
   "tienes", "puedes", "es", formas impersonales.
+- Nombra la cosa concreta, no "la cosa". Cuando le hablas al usuario, nombra siempre
+  la cosa de la que hablas con su nombre real y en palabras llanas: el ticket con su
+  numero y su titulo corto, el proyecto, la app o la funcionalidad, y que hace esa cosa
+  en una frase. Queda prohibido hablar de "la cosa", "esto", "lo nuevo", "el archivo" o
+  "el flujo" sin nombrarlo. Tampoco lo reemplaces por jerga tecnica: si mencionas una
+  herramienta, la nombras y explicas para que sirve en una linea.
+  Motivo: el usuario trabaja muchas cosas en paralelo y olvida los detalles, asi que
+  cada mensaje tiene que reconstruir el contexto por si solo, sin que el tenga que
+  recordar de que se estaba hablando.
+- Una respuesta por mensaje del usuario, y corta. Responde UNA sola vez por cada mensaje
+  del usuario: la primera linea es la respuesta directa, despues solo lo indispensable.
+  Prohibido encadenar varios mensajes largos seguidos mientras el usuario todavia esta
+  escribiendo o pensando (le desplaza el texto y no puede seguir el hilo). El detalle largo
+  no va al canal de conversacion: va a la ficha del ticket y al hilo de ese ticket. Si hace
+  falta mas, se ofrece el detalle en lugar de volcarlo.
+  Motivo: el usuario deja ideas mientras trabaja y tarda en escribir la siguiente; varios
+  volcados de texto seguidos le rompen la lectura.
+- Toda capacidad nueva se expone ademas en la interfaz o por conversacion. Ningun pedido del
+  usuario deberia exigirle recordar un comando. Los comandos son plomeria para los agentes y
+  para automatizar, y siempre tienen que tener su equivalente visible en la pantalla o
+  entendible en lenguaje natural por el canal (p.ej. "bajame la conversacion del ticket 93" en
+  vez de `rig export 93`).
+  Motivo: el usuario olvida los comandos de sistema y trabaja varias cosas a la vez; la
+  capacidad tiene que estar a la vista o pedirse hablando.
 - Frases completas y legibles. Prohibido el estilo telegrafico o "caveman" (sin
   articulos, fragmentos sueltos, flechas "->"). No es un telegrama.
 - Sin tablas ni bloques de codigo salvo que el usuario los pida. Si citas una
@@ -868,4 +892,39 @@ vivo. Si una accion no deja evento, es un hueco que hay que cerrar.
   (checks `events-append`, `events-shape`, `events-porcelain`, `events-watch-guard`,
   `events-cli`, `log-cli`, `say-cli`, `say-to-guard`, `say-reply`, `central-events`) +
   `rig --selftest` + `verify selftest`.
+
+## Regla: reporte verificado (re-consultar la fuente en el momento)
+
+Antes de informar cualquier estado al usuario, **re-consulta la fuente en ese momento** y
+cita cada cifra y estado con su hora y su fuente. **Prohibido reportar de memoria o de una
+lectura vieja.**
+
+- Fuentes: el store de tickets (`rig ticket show <id>` / `rig board`), el event log
+  (`rig events`) y el estado de las sillas (`rig scan` / `rig seats`). Se re-leen justo antes
+  de hablar, no antes.
+- Formato de cita: cada dato con su valor + hora + origen (p.ej. "ticket #12 in-progress,
+  leido de `rig board` a las 14:07"). Si un dato no se pudo re-consultar, dilo; no lo inventes.
+- Motivo: el usuario trabaja muchas cosas en paralelo y una lectura vieja produce caos (caso
+  real: una silla cerro y verifico un ticket mientras el usuario todavia lo veia trabado).
+- Dueño: `supervisor`. Verificacion: dominio `agents`, check `report-policy`.
+
+## Reparto de roles: conversar con main, observar en herdr
+
+HABLAR con el usuario es el canal de conversacion: **main** (y el puente a Discord con sus
+hilos, mas el hub para lectura comoda). OBSERVAR el trabajo es **herdr**, el observatorio:
+un espacio por cosa, una ventana por agente, y las vistas vivas de `rig central` (eventos,
+tablero, scan, agentes, cola y la ficha por ticket). La terminal es donde trabajan los
+agentes, no donde el usuario conversa.
+
+Estado real de herdr (para no reportarlo mal):
+
+- Los espacios de herdr ya se nombran con el numero y el titulo del ticket (#93, #94, ...).
+- El estado por silla se ve bien con `rig agents` (lo deriva del contenido del panel,
+  `source=derive`).
+- El panel nativo de agentes de herdr sigue vacio (`herdr agent list` devuelve lista vacia)
+  porque nuestros paneles corren tmux adentro y herdr ve tmux, no un agente. Es una
+  **limitacion conocida**, no un bug abierto, salvo que el usuario lo pida.
+
+- Dueño: `supervisor`. Verificacion: dominio `agents`, check `observe-policy`.
+
 

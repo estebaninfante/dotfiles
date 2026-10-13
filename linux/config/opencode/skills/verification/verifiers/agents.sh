@@ -177,6 +177,79 @@ else
   fail "style-policy" "$style_reason"
 fi
 
+naming_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'Nombra la cosa concreta' "$style_agents_md" \
+   || ! grep -qF 'palabras llanas' "$style_agents_md"; then
+  naming_reason="falta la regla de nombrar la cosa concreta en $style_agents_md"
+elif [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF 'Nombra la cosa concreta' "$style_main_md"; then
+  naming_reason="falta la regla de nombrar la cosa concreta en $style_main_md"
+fi
+if [[ -z "$naming_reason" ]]; then
+  ok "naming-policy" "regla de nombrar la cosa concreta presente en AGENTS.md y main.md"
+else
+  fail "naming-policy" "$naming_reason"
+fi
+
+report_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'reporte verificado' "$style_agents_md" \
+   || ! grep -qF 're-consulta la fuente en ese momento' "$style_agents_md" \
+   || ! grep -qF 'Prohibido reportar de memoria' "$style_agents_md"; then
+  report_reason="falta la regla de reporte verificado en $style_agents_md"
+fi
+if [[ -z "$report_reason" ]]; then
+  ok "report-policy" "regla de reporte verificado presente (re-consultar la fuente en el momento)"
+else
+  fail "report-policy" "$report_reason"
+fi
+
+reply_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'Una respuesta por mensaje del usuario' "$style_agents_md" \
+   || ! grep -qF 'encadenar varios mensajes largos seguidos' "$style_agents_md"; then
+  reply_reason="falta la regla de una sola respuesta por mensaje en $style_agents_md"
+elif [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF 'Una sola respuesta' "$style_main_md"; then
+  reply_reason="falta la regla de una sola respuesta por mensaje en $style_main_md"
+fi
+if [[ -z "$reply_reason" ]]; then
+  ok "reply-policy" "regla de una sola respuesta por mensaje presente en AGENTS.md y main.md"
+else
+  fail "reply-policy" "$reply_reason"
+fi
+
+interface_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'interfaz o por conversacion' "$style_agents_md" \
+   || ! grep -qF 'recordar un comando' "$style_agents_md"; then
+  interface_reason="falta la regla de exponer toda capacidad en la interfaz o por conversacion en $style_agents_md"
+elif [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF 'Interfaz o conversacion, nunca solo un comando' "$style_main_md"; then
+  interface_reason="falta la regla de exponer toda capacidad en la interfaz o por conversacion en $style_main_md"
+fi
+if [[ -z "$interface_reason" ]]; then
+  ok "interface-policy" "regla de exponer cada capacidad en la interfaz o por conversacion presente"
+else
+  fail "interface-policy" "$interface_reason"
+fi
+
+observe_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'conversar con main, observar en herdr' "$style_agents_md" \
+   || ! grep -qF 'limitacion conocida' "$style_agents_md"; then
+  observe_reason="falta la doctrina de reparto de roles (conversar con main, observar en herdr) en $style_agents_md"
+elif [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF 'observar en herdr' "$style_main_md"; then
+  observe_reason="falta la doctrina de reparto de roles (conversar con main, observar en herdr) en $style_main_md"
+fi
+if [[ -z "$observe_reason" ]]; then
+  ok "observe-policy" "reparto de roles presente (conversar con main, observar en herdr)"
+else
+  fail "observe-policy" "$observe_reason"
+fi
+
 spec_err=$(mktemp)
 AGENTS_DIR="$AGENTS_DIR" DESC_BUDGET="$DESC_BUDGET" node -e '
 const fs = require("fs")

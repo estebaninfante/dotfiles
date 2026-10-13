@@ -95,15 +95,18 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig ticket rm <id>
   rig ticket backfill              asigna area faltante y numera tickets (migracion)
   rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
-  rig board [--watch] [--porcelain] [--plain] [--no-metrics] [--project P] [--status S] [--area A] [--interval SEG]
+  rig ticket show <id> [--events N] [--no-metrics] [--porcelain]
+                                     ficha del ticket: que se hizo, quien lo trabajo y
+                                     que modifico (commits, archivos, verificacion, eventos)
+  rig board [--watch] [--porcelain] [--plain] [--detail [id]] [--no-metrics] [--project P] [--status S] [--area A] [--interval SEG]
   rig agents [--watch] [--porcelain] [--interval SEG]
                                      estado por silla: agente, working|idle|blocked y la
                                      fuente (plugin herdr o derivada del contenido del pane)
   rig queue [--watch] [--porcelain] [--interval SEG]
                                      cola de tickets pending/blocked + ultimos cierres (evidencia)
   rig central [--interval SEG] [--focus|--no-focus] [--rebuild] [--label L] [--cwd DIR]
-                                     abre el workspace herdr "CENTRAL" con 5 panes en vivo
-                                     (events/board/scan/agents/queue); idempotente
+                                     abre el workspace herdr "CENTRAL" con 6 panes en vivo
+                                     (events/board/scan/agents/queue/ficha); idempotente
 
   rig events [--watch] [--ticket X] [--seat S] [--kind K] [--since 30m] [--limit N] [--porcelain]
                                      feed append-only de lo que hacen main y las sillas
@@ -850,6 +853,25 @@ event_emit() {
   events_append_raw "$line"
 }
 
+notify_state_change() {
+  local key="$1" status="$2" summary="$3"
+  case "$status" in done|blocked) ;; *) return 0 ;; esac
+  [ "${RIG_STATE_NOTIFY:-1}" = "0" ] && return 0
+  local bin="${RIG_NOTIFY_BIN:-}"
+  if [ -z "$bin" ]; then
+    bin=$(command -v notify-send 2>/dev/null) || return 0
+  fi
+  [ -n "$bin" ] || return 0
+  local urgency title body
+  if [ "$status" = "done" ]; then
+    urgency="normal"; title="Ticket $key cerrado"
+  else
+    urgency="critical"; title="Ticket $key bloqueado"
+  fi
+  body="${summary:-$title}"
+  "$bin" -a opencode -u "$urgency" "$title" "$body" >/dev/null 2>&1 || true
+}
+
 store_lock() {
   if command -v flock >/dev/null 2>&1; then
     exec 9>"$TICKETS_LOCK"
@@ -1017,6 +1039,7 @@ rig ticket - store de tickets (~/.config/opencode/tickets.json)
   rig ticket rm <id>
   rig ticket backfill              asigna area faltante y numera tickets (migracion)
   rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
+  rig ticket show <id> [--events N] [--no-metrics] [--porcelain]
 
 Estados: pending | in-progress | blocked | done.
 area: opcional. Una de hr hypr shell audio meta infra foldertinder (da color y agrupacion en el
@@ -1143,6 +1166,9 @@ ticket_set() {
   [ "$final_status" = "done" ] && ev_kind="ticket-done"
   event_emit "$ev_kind" "ticket $key -> $final_status:$fields" --ticket "$key" \
     --data "$(jq -nc --arg s "$status" --arg o "$owner" --arg e "$evidence" --arg t "$title" --arg p "$project" --arg f "$final_status" '{status:$s,owner:$o,evidence:$e,title:$t,project:$p,result:$f}' 2>/dev/null)"
+  if [ -n "$status" ]; then
+    notify_state_change "$key" "$final_status" "ticket $key -> $final_status:$fields"
+  fi
   info "ticket $key actualizado"
 }
 
@@ -1267,6 +1293,191 @@ ticket_metrics() {
   rm -f "$sf"
 }
 
+ticket_show() {
+  need_jq
+  local porcelain=0 no_metrics=0 evlimit=20 ref=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --porcelain|-p) porcelain=1; shift ;;
+      --no-metrics) no_metrics=1; shift ;;
+      --events) [ $# -ge 2 ] || die "--events requiere valor"; evlimit="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) ref="$1"; shift ;;
+    esac
+  done
+  [ -n "$ref" ] || die "ticket show: falta <id>"
+  store_ensure
+  local key tj
+  key=$(resolve_ref "$ref")
+  [ -n "$key" ] || key="$ref"
+  tj=$(jq -c --arg id "$key" '.tickets[]|select(.id==$id)' "$TICKETS_FILE" 2>/dev/null | head -n1)
+  if [ -z "$tj" ] || [ "$tj" = "null" ]; then die "ticket no encontrado: $ref"; fi
+  local id num project title status owner area evidence created updated worktree branch base repo commits
+  id=$(printf '%s' "$tj" | jq -r '.id // ""')
+  num=$(printf '%s' "$tj" | jq -r '.num // 0')
+  project=$(printf '%s' "$tj" | jq -r '.project // ""')
+  title=$(printf '%s' "$tj" | jq -r '.title // ""')
+  status=$(printf '%s' "$tj" | jq -r '.status // ""')
+  owner=$(printf '%s' "$tj" | jq -r '.owner // ""')
+  area=$(printf '%s' "$tj" | jq -r '.area // ""')
+  evidence=$(printf '%s' "$tj" | jq -r '.evidence // ""')
+  created=$(printf '%s' "$tj" | jq -r '.created // ""')
+  updated=$(printf '%s' "$tj" | jq -r '.updated // ""')
+  worktree=$(printf '%s' "$tj" | jq -r '.worktree // ""')
+  branch=$(printf '%s' "$tj" | jq -r '.branch // ""')
+  base=$(printf '%s' "$tj" | jq -r '.base // ""')
+  repo=$(printf '%s' "$tj" | jq -r '.repo // ""')
+  commits=$(printf '%s' "$tj" | jq -r '.commits // ""')
+
+  local metrics_json='null' sf
+  if [ "$no_metrics" != "1" ] && metrics_enabled; then
+    local sessions
+    sessions=$(db_sessions_json)
+    sf=$(jv_file "$sessions")
+    metrics_json=$(jq -c --rawfile sj "$sf" --arg id "$key" "$METRICS_DEFS"'
+      ($sj | fromjson) as $sessions
+      | (metrics_index($sessions)) as $mi
+      | (.tickets[] | select(.id==$id)) as $t
+      | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
+      | {sessions:($t.sessions // []), count:$m.n,
+         tokens:{input:$m.tin, output:$m.tout, reasoning:$m.trea,
+                 cache_read:$m.tcr, cache_write:$m.tcw, total:($m.tin+$m.tout+$m.trea)},
+         cost:$m.cost,
+         time:{created:$m.created, updated:$m.updated, duration_ms:($m.updated-$m.created)}}' \
+      "$TICKETS_FILE" 2>/dev/null)
+    [ -n "$metrics_json" ] || metrics_json='null'
+    rm -f "$sf"
+  fi
+
+  local commits_tsv="" sha subj
+  if [ -n "$commits" ]; then
+    local -a shas=()
+    read -r -a shas <<<"$commits"
+    for sha in "${shas[@]}"; do
+      [ -n "$sha" ] || continue
+      subj=""
+      if [ -n "$repo" ] && [ -d "$repo" ]; then
+        subj=$(git -C "$repo" show -s --format='%s' "$sha" 2>/dev/null || true)
+      fi
+      commits_tsv="${commits_tsv}${sha}"$'\t'"${subj}"$'\n'
+    done
+  fi
+  if [ -z "$commits_tsv" ] && [ -n "$repo" ] && [ -n "$branch" ] && [ -n "$base" ] && [ -d "$repo" ]; then
+    while IFS=$'\t' read -r sha subj; do
+      [ -n "$sha" ] || continue
+      commits_tsv="${commits_tsv}${sha}"$'\t'"${subj}"$'\n'
+    done < <(git -C "$repo" log --format='%h%x09%s' "$base..$branch" 2>/dev/null || true)
+  fi
+  local commits_json
+  commits_json=$(printf '%s' "$commits_tsv" | jq -Rsc '
+    split("\n") | map(select(length>0) | split("\t") | {sha:(.[0] // ""), subject:(.[1] // "")})' 2>/dev/null)
+  [ -n "$commits_json" ] || commits_json='[]'
+
+  local changes_json='null' range mb rbase ct=""
+  if [ -n "$repo" ] && [ -d "$repo" ]; then
+    if [ -n "$commits" ]; then
+      local -a cshas=()
+      read -r -a cshas <<<"$commits"
+      for sha in "${cshas[@]}"; do
+        [ -n "$sha" ] || continue
+        ct="${ct}$(git -C "$repo" show --numstat --format= "$sha" 2>/dev/null || true)"$'\n'
+      done
+    elif [ -n "$branch" ]; then
+      rbase=""
+      if [ -n "$base" ] && git -C "$repo" rev-parse --verify --quiet "$base" >/dev/null 2>&1; then
+        mb=$(git -C "$repo" merge-base "$base" "$branch" 2>/dev/null || true)
+        rbase="${mb:-$base}"
+      fi
+      if [ -n "$rbase" ]; then range="$rbase..$branch"; else range="$branch"; fi
+      ct=$(git -C "$repo" diff --numstat "$range" 2>/dev/null || true)
+    fi
+    if [ -n "$ct" ]; then
+      changes_json=$(printf '%s' "$ct" | jq -Rsc '
+        (split("\n") | map(select(length>0) | split("\t"))
+          | map({status:"M", added:(.[0]|tonumber? // 0), removed:(.[1]|tonumber? // 0), path:(.[2] // "")})) as $files
+        | {live:false, branch:"", files:$files,
+           insertions:($files|map(.added)|add // 0),
+           deletions:($files|map(.removed)|add // 0)}' 2>/dev/null)
+      [ -n "$changes_json" ] || changes_json='null'
+    elif [ -n "$worktree" ] && [ -d "$worktree" ]; then
+      changes_json=$(scan_worktree_json "$worktree")
+    fi
+  elif [ -n "$worktree" ] && [ -d "$worktree" ]; then
+    changes_json=$(scan_worktree_json "$worktree")
+  fi
+
+  local timeline
+  f_ticket="$key"; f_seat=""; f_kind=""; f_since=""; f_limit="$evlimit"
+  timeline=$(events_json | jq -sc '.' 2>/dev/null)
+  [ -n "$timeline" ] || timeline='[]'
+
+  if [ "$porcelain" = "1" ]; then
+    jq -nc --arg id "$id" --argjson num "$num" --arg project "$project" --arg title "$title" \
+      --arg status "$status" --arg owner "$owner" --arg area "$area" --arg color "$(area_color "$area")" \
+      --arg evidence "$evidence" --arg created "$created" --arg updated "$updated" \
+      --arg worktree "$worktree" --arg branch "$branch" --arg base "$base" --arg repo "$repo" \
+      --argjson metrics "$metrics_json" --argjson commits "$commits_json" \
+      --argjson changes "$changes_json" --argjson timeline "$timeline" '
+      {id:$id, num:$num, project:$project, title:$title, status:$status, owner:$owner,
+       area:$area, color:$color, evidence:$evidence, created:$created, updated:$updated,
+       worktree:$worktree, branch:$branch, base:$base, repo:$repo,
+       metrics:$metrics, commits:$commits, changes:$changes, timeline:$timeline}'
+    return 0
+  fi
+
+  local ac=""
+  ac=$(area_ansi "$area")
+  printf '%s#%s %s%s  %s\n' "$C_HEAD" "$num" "$id" "$C_OFF" "$title"
+  printf '  proyecto: %s   area: %s%s%s   estado: %s   owner: %s\n' \
+    "${project:--}" "$ac" "$(area_label "$area")" "$C_OFF" "${status:--}" "${owner:--}"
+  printf '  creado: %s   actualizado: %s\n' "${created:--}" "${updated:--}"
+  [ -n "$evidence" ] && printf '  evidencia: %s\n' "$evidence"
+  if [ -n "$worktree" ] || [ -n "$branch" ]; then
+    printf '  worktree: %s\n  branch: %s   base: %s\n' "${worktree:--}" "${branch:--}" "${base:--}"
+  fi
+
+  printf '%sQue se hizo:%s\n' "$C_HEAD" "$C_OFF"
+  local cn
+  cn=$(printf '%s' "$commits_json" | jq 'length' 2>/dev/null || echo 0)
+  if [ "${cn:-0}" = "0" ]; then
+    printf '  sin commits registrados\n'
+  else
+    printf '%s' "$commits_json" | jq -r '.[] | "  \(.sha) \(.subject)"'
+  fi
+  local vres
+  vres=$(printf '%s' "$evidence" | sed -n 's/.*verify:\([A-Za-z]*\).*/\1/p' | head -n1)
+  printf '  verificacion: %s\n' "${vres:-(no registrada)}"
+
+  printf '%sQue modifico:%s\n' "$C_HEAD" "$C_OFF"
+  if [ -z "$changes_json" ] || [ "$changes_json" = "null" ]; then
+    printf '  no modifico nada (ticket sin worktree ni branch)\n'
+  else
+    local chins chdel chn
+    chins=$(printf '%s' "$changes_json" | jq -r '.insertions // 0')
+    chdel=$(printf '%s' "$changes_json" | jq -r '.deletions // 0')
+    chn=$(printf '%s' "$changes_json" | jq -r '(.files // [])|length')
+    printf '  %s archivo(s), +%s -%s\n' "$chn" "$chins" "$chdel"
+    printf '%s' "$changes_json" | jq -r '(.files // [])[:12][] | "    \(.status // "M")  +\(.added) -\(.removed)  \(.path)"'
+  fi
+
+  printf '%sQuien lo trabajo:%s\n' "$C_HEAD" "$C_OFF"
+  if [ -z "$metrics_json" ] || [ "$metrics_json" = "null" ]; then
+    printf '  sin metricas de sesiones\n'
+  else
+    printf '%s' "$metrics_json" | jq -r \
+      '"  sesiones: \(.count)   tokens: \(.tokens.total|tostring) (in \(.tokens.input)/out \(.tokens.output)/rea \(.tokens.reasoning))   costo: $\((.cost*1000|round)/1000)   tiempo: \((.time.duration_ms/1000)|floor)s"'
+  fi
+
+  printf '%sEventos (ultimos %s):%s\n' "$C_HEAD" "$evlimit" "$C_OFF"
+  local en
+  en=$(printf '%s' "$timeline" | jq 'length' 2>/dev/null || echo 0)
+  if [ "${en:-0}" = "0" ]; then
+    printf '  sin eventos registrados\n'
+  else
+    printf '%s' "$timeline" | jq -r '.[] | "  \(.ts[0:16])  \(.kind)  \(.actor)  \(.summary)"'
+  fi
+}
+
 cmd_ticket() {
   need_jq
   local action="${1:-}"
@@ -1298,6 +1509,7 @@ cmd_ticket() {
     rm|remove) ticket_rm "$@" ;;
     backfill|backfill-area|migrate|renumber) ticket_backfill ;;
     metrics|cost) ticket_metrics "$@" ;;
+    show|info|ficha) ticket_show "$@" ;;
     ''|-h|--help|help) ticket_usage; [ -z "$action" ] && exit 1 || exit 0 ;;
     *) die "ticket: accion desconocida: $action" ;;
   esac
@@ -1317,9 +1529,23 @@ board_render() {
   printf '%s' "$data" | render_tickets
 }
 
+board_detail() {
+  local ref="$1" ids id
+  if [ -n "$ref" ]; then
+    ticket_show "$ref" --no-metrics
+    return
+  fi
+  ids=$(jq -r '[.tickets[]|select(.status=="in-progress" or .status=="blocked")|.id][]' "$TICKETS_FILE" 2>/dev/null)
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    printf '\n'
+    ticket_show "$id" --no-metrics
+  done <<<"$ids"
+}
+
 cmd_board() {
   need_jq
-  local porcelain=0 interval=1.5
+  local porcelain=0 interval=1.5 detail=0 detail_ref=""
   project=""
   status=""
   area=""
@@ -1336,6 +1562,7 @@ cmd_board() {
       --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
       --area) [ $# -ge 2 ] || die "--area requiere valor"; area="$2"; shift 2 ;;
       --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      --detail) detail=1; shift; if [ $# -ge 1 ] && [[ "$1" != -* ]]; then detail_ref="$1"; shift; fi ;;
       -*) die "opcion desconocida: $1" ;;
       *) die "sobra argumento: $1" ;;
     esac
@@ -1369,10 +1596,12 @@ cmd_board() {
     printf '%s' "$C_HIDE"
     while true; do
       board_render "$prog"
+      if [ "$detail" = "1" ]; then printf '\n'; board_detail "$detail_ref"; fi
       sleep "$interval"
     done
   else
     board_render "$prog"
+    if [ "$detail" = "1" ]; then printf '\n'; board_detail "$detail_ref"; fi
   fi
 }
 
@@ -1675,6 +1904,9 @@ work_finish() {
   info "ticket $key -> $status ($evidence)"
   event_emit work-finish "ticket $key -> $status ($evidence)" --ticket "$key" \
     --data "$(jq -nc --arg s "$status" --arg e "$evidence" --arg b "$branch" --arg c "$commits" --arg v "$vstatus" '{status:$s,evidence:$e,branch:$b,commits:$c,verify:$v}' 2>/dev/null)"
+  if [ "$status" = "done" ]; then
+    notify_state_change "$key" "$status" "ticket $key -> done ($evidence)"
+  fi
 
   if [ "$status" = "done" ] && [ "$close_seat" = "1" ]; then
     close_seat_for_ticket "$key" "$wt"
@@ -2183,16 +2415,17 @@ cmd_queue() {
 
 central_usage() {
   cat >&2 <<'EOF'
-rig central - workspace herdr "CENTRAL" con la trazabilidad en vivo (5 panes)
+rig central - workspace herdr "CENTRAL" con la trazabilidad en vivo (6 panes)
 
   rig central [--interval SEG] [--focus|--no-focus] [--rebuild] [--label L] [--cwd DIR]
 
-  Abre (o enfoca si ya existe) un workspace herdr llamado CENTRAL con 5 panes:
-    events - rig events --watch   FEED de eventos: que hace main y cada silla, en vivo
-    board  - rig board  --watch   tickets/sillas/branch/commits/metrics
-    scan   - rig scan   --watch   sillas + ultima actividad + archivos modificados
-    agents - rig agents --watch   estado working|idle|blocked por silla/agente
-    queue  - rig queue  --watch   cola pending/blocked + ultimos cierres
+  Abre (o enfoca si ya existe) un workspace herdr llamado CENTRAL con 6 panes:
+    events - rig events --watch        FEED de eventos: que hace main y cada silla, en vivo
+    board  - rig board  --watch        tickets/sillas/branch/commits/metrics
+    scan   - rig scan   --watch        sillas + ultima actividad + archivos modificados
+    agents - rig agents --watch        estado working|idle|blocked por silla/agente
+    queue  - rig queue  --watch        cola pending/blocked + ultimos cierres
+    ficha  - rig board --detail --watch ficha de cada ticket (que se hizo y que modifico)
   El pane events (izquierda, ancho) es el protagonista: ahi aparece cada delegacion
   (rig send), cada cambio de ticket y cada cierre de worktree.
   Idempotente: si el workspace existe solo lo enfoca. --rebuild lo cierra y recrea.
@@ -2233,7 +2466,7 @@ cmd_central() {
       return 0
     fi
   fi
-  local out tab p1 p2 p3 p4 p5
+  local out tab p1 p2 p3 p4 p5 p6
   out=$(herdr workspace create --cwd "$cwd" --label "$label" --no-focus 2>/dev/null) || die "no pude crear el workspace $label"
   ws=$(printf '%s' "$out" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null)
   tab=$(printf '%s' "$out" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)
@@ -2243,21 +2476,24 @@ cmd_central() {
   p3=$(herdr pane split --pane "$p2" --direction down --ratio 0.75 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
   p4=$(herdr pane split --pane "$p2" --direction down --ratio 0.66 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
   p5=$(herdr pane split --pane "$p2" --direction down --ratio 0.5 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
-  if [ -z "$p2" ] || [ -z "$p3" ] || [ -z "$p4" ] || [ -z "$p5" ]; then die "no pude dividir los panes del workspace $label"; fi
+  p6=$(herdr pane split --pane "$p2" --direction down --ratio 0.4 --cwd "$cwd" --no-focus 2>/dev/null | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
+  if [ -z "$p2" ] || [ -z "$p3" ] || [ -z "$p4" ] || [ -z "$p5" ] || [ -z "$p6" ]; then die "no pude dividir los panes del workspace $label"; fi
   herdr pane rename "$p1" events >/dev/null 2>&1 || true
   herdr pane rename "$p2" board >/dev/null 2>&1 || true
   herdr pane rename "$p5" scan >/dev/null 2>&1 || true
   herdr pane rename "$p4" agents >/dev/null 2>&1 || true
   herdr pane rename "$p3" queue >/dev/null 2>&1 || true
+  herdr pane rename "$p6" ficha >/dev/null 2>&1 || true
   herdr pane run "$p1" "$SELF events --watch --interval $interval" >/dev/null 2>&1 || true
   herdr pane run "$p2" "$SELF board --watch --interval $interval" >/dev/null 2>&1 || true
   herdr pane run "$p5" "$SELF scan --watch --interval $interval" >/dev/null 2>&1 || true
   herdr pane run "$p4" "$SELF agents --watch --interval $interval" >/dev/null 2>&1 || true
   herdr pane run "$p3" "$SELF queue --watch --interval $interval" >/dev/null 2>&1 || true
+  herdr pane run "$p6" "$SELF board --detail --watch --interval $interval" >/dev/null 2>&1 || true
   if [ "$do_focus" = "1" ] && [ -n "$tab" ]; then herdr_focus_seat "$ws" "$tab"; fi
-  event_emit log "central $label abierto ($ws): panes events/board/scan/agents/queue" --area rig \
+  event_emit log "central $label abierto ($ws): panes events/board/scan/agents/queue/ficha" --area rig \
     --data "$(jq -nc --arg w "$ws" --arg t "$tab" --arg c "$cwd" --argjson i "$interval" '{workspace:$w,tab:$t,cwd:$c,interval:$i}' 2>/dev/null)"
-  info "workspace $label listo ($ws): panes events/board/scan/agents/queue"
+  info "workspace $label listo ($ws): panes events/board/scan/agents/queue/ficha"
 }
 
 events_usage() {
@@ -2518,6 +2754,140 @@ cmd_ask() {
   [ -n "$seat" ] && args+=(--seat "$seat")
   [ -n "$pri" ] && args+=(--priority "$pri")
   exec "$bin" "${args[@]}"
+}
+
+export_usage() {
+  cat >&2 <<'EOF'
+rig export - extrae la conversacion y el pensamiento de un ticket, silla o sesion
+
+  rig export <cosa> [--format md|jsonl|both] [--out DIR] [--mode summary|full] [--porcelain]
+
+  <cosa> = ticket (#93 / 93 / id), nombre de silla o id de sesion (ses_...).
+  Junta TODAS las sesiones de la cosa y escribe:
+    md    - legible: de quien es, pedido, linea de tiempo, razonamiento, que hizo
+    jsonl - crudo (una parte por linea) para pasar a otra IA
+
+  --mode summary (default) resume cada herramienta en una linea; full incluye su
+  salida entera. --out es un directorio (default $RIG_EXPORT_DIR o
+  ~/.local/state/rig/exports/<cosa>). Imprime SIEMPRE en stdout la ruta absoluta
+  de cada archivo escrito (una por linea). --porcelain imprime un JSON
+  {cosa,kind,sessions,files[]} en vez de la ficha.
+EOF
+}
+
+cmd_export() {
+  need_jq
+  command -v sqlite3 >/dev/null 2>&1 || die "sqlite3 requerido para rig export"
+  [ -f "$DB_PATH" ] || die "no encuentro la base de opencode: $DB_PATH"
+  local cosa="" format="md" mode="summary" out="" porcelain=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --format) [ $# -ge 2 ] || die "--format requiere valor"; format="$2"; shift 2 ;;
+      --mode) [ $# -ge 2 ] || die "--mode requiere valor"; mode="$2"; shift 2 ;;
+      --out) [ $# -ge 2 ] || die "--out requiere valor"; out="$2"; shift 2 ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      -h|--help|help) export_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) [ -z "$cosa" ] || die "sobra argumento: $1"; cosa="$1"; shift ;;
+    esac
+  done
+  [ -n "$cosa" ] || die "uso: rig export <cosa> [--format md|jsonl|both] [--out DIR] [--mode summary|full]"
+  case "$format" in md|jsonl|both) ;; *) die "format invalido: $format (md|jsonl|both)" ;; esac
+  case "$mode" in summary|full) ;; *) die "mode invalido: $mode (summary|full)" ;; esac
+
+  local kind="" key="" worktree="" tkey dir ewt edir
+  local -a sids=()
+  tkey=$(resolve_ref "$cosa" 2>/dev/null || true)
+  if [ -n "$tkey" ]; then
+    kind="ticket"; key="$tkey"
+    worktree=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree//""' "$TICKETS_FILE" 2>/dev/null | head -n1)
+    while IFS= read -r sid; do [ -n "$sid" ] && sids+=("$sid"); done < <(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|(.sessions//[])[]' "$TICKETS_FILE" 2>/dev/null)
+    if [ -n "$worktree" ] && [ -d "$worktree" ]; then
+      ewt="${worktree//\'/\'\'}"
+      while IFS= read -r sid; do [ -n "$sid" ] && sids+=("$sid"); done < <(sqlite3 -readonly "$DB_PATH" "SELECT id FROM session WHERE directory='$ewt' ORDER BY time_created" 2>/dev/null)
+    fi
+  elif [ "${cosa#ses_}" != "$cosa" ]; then
+    kind="session"; key="$cosa"; sids=("$cosa")
+  else
+    kind="seat"; key="$cosa"
+    dir=$(tmux display-message -p -t "$cosa" '#{@agent_cwd}' 2>/dev/null || true)
+    if [ -n "$dir" ]; then
+      edir="${dir//\'/\'\'}"
+      while IFS= read -r sid; do [ -n "$sid" ] && sids+=("$sid"); done < <(sqlite3 -readonly "$DB_PATH" "SELECT id FROM session WHERE directory='$edir' ORDER BY time_updated DESC LIMIT ${RIG_EXPORT_LIMIT:-5}" 2>/dev/null)
+    fi
+  fi
+
+  local uniq
+  uniq=$(printf '%s\n' "${sids[@]}" 2>/dev/null | awk 'NF && !seen[$0]++' || true)
+  [ -n "$uniq" ] || die "sin sesiones para '$cosa' (kind=$kind)"
+  mapfile -t sids <<<"$uniq"
+
+  local inlist=""
+  local sidq
+  for sidq in "${sids[@]}"; do inlist="${inlist:+$inlist,}'${sidq//\'/\'\'}'"; done
+
+  local sess_json parts_json
+  sess_json=$(sqlite3 -readonly -json "$DB_PATH" "SELECT id,title,directory,agent,model,cost,tokens_input,tokens_output,tokens_reasoning,tokens_cache_read,tokens_cache_write,time_created,time_updated FROM session WHERE id IN ($inlist) ORDER BY time_created" 2>/dev/null) || die "fallo leyendo sesiones"
+  [ -n "$sess_json" ] && [ "$sess_json" != "[]" ] || die "no encontre esas sesiones en la base"
+  parts_json=$(sqlite3 -readonly -json "$DB_PATH" "SELECT p.session_id AS session_id,p.time_created AS t,json_extract(m.data,'\$.role') AS role,json_extract(p.data,'\$.type') AS type,json_extract(p.data,'\$.text') AS text,json_extract(p.data,'\$.tool') AS tool,p.data AS pdata FROM part p LEFT JOIN message m ON m.id=p.message_id WHERE p.session_id IN ($inlist) ORDER BY p.time_created,p.id" 2>/dev/null) || parts_json='[]'
+  [ -n "$parts_json" ] || parts_json='[]'
+
+  local safekey
+  safekey=$(printf '%s' "$cosa" | tr -c 'A-Za-z0-9._-' '-')
+  local odir="${out:-${RIG_EXPORT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/rig/exports}/$safekey}"
+  mkdir -p "$odir" || die "no pude crear el directorio de salida: $odir"
+
+  local -a written=()
+  local mdpath="$odir/$safekey.md" jsonlpath="$odir/$safekey.jsonl"
+
+  if [ "$format" = "md" ] || [ "$format" = "both" ]; then
+    {
+      printf '# Conversacion exportada: %s\n\n' "$cosa"
+      printf -- '- Origen: %s (%s)\n' "$cosa" "$kind"
+      printf -- '- Sesiones: %s\n' "${#sids[@]}"
+      printf -- '- Generado: %s\n\n' "$(date -Iseconds)"
+      printf '%s' "$sess_json" | jq -r '.[] | "- sesion \(.id)  agente=\(.agent // "?")  modelo=\(.model // "?")  costo=\(.cost // 0)  tokens=\((.tokens_input // 0)+(.tokens_output // 0)+(.tokens_reasoning // 0))  dir=\(.directory // "?")"'
+      printf '\n---\n\n'
+      printf '%s' "$parts_json" | jq -r --arg mode "$mode" '
+        .[] as $p
+        | ($p.t // 0) as $ms
+        | ($ms/1000 | floor | strftime("%H:%M:%S")) as $h
+        | if $p.type == "text" then
+            "[\($h)] \($p.role // "?"): \($p.text // "")"
+          elif $p.type == "reasoning" then
+            "[\($h)] pensamiento: \($p.text // "")"
+          elif $p.type == "tool" then
+            (($p.pdata | fromjson?) // {}) as $d
+            | "[\($h)] herramienta \($p.tool // "?"): \(($d.state.input // {}) | tostring)"
+              + (if $mode == "full" then "\n    salida: \((($d.state.output // "") | tostring))" else "" end)
+          else empty end'
+    } >"$mdpath" 2>/dev/null || die "no pude escribir $mdpath"
+    written+=("$mdpath")
+  fi
+
+  if [ "$format" = "jsonl" ] || [ "$format" = "both" ]; then
+    printf '%s' "$parts_json" | jq -c --arg mode "$mode" '
+      .[] as $p
+      | select($p.type == "text" or $p.type == "reasoning" or $p.type == "tool")
+      | (($p.pdata // "{}") | fromjson?) as $d0
+      | {session:$p.session_id, ts:($p.t/1000|floor), role:($p.role // null), type:$p.type,
+         text:($p.text // null), tool:($p.tool // null),
+         input:(if $p.type=="tool" then ($d0.state.input // null) else null end)}
+        + (if $mode=="full" and $p.type=="tool" then {output:($d0.state.output // null)} else {} end)
+    ' >"$jsonlpath" 2>/dev/null || die "no pude escribir $jsonlpath"
+    written+=("$jsonlpath")
+  fi
+
+  if [ "$porcelain" = "1" ]; then
+    local files_json
+    files_json=$(printf '%s\n' "${written[@]}" | while IFS= read -r f; do
+      printf '%s\t%s\n' "$f" "$(wc -c <"$f" 2>/dev/null | tr -d ' ')"
+    done | jq -Rsc 'split("\n")|map(select(length>0)|split("\t"))|map({path:.[0],bytes:(.[1]|tonumber? // 0)})')
+    jq -nc --arg cosa "$cosa" --arg kind "$kind" --argjson sessions "$(printf '%s' "$sess_json" | jq -c '[.[].id]')" --argjson files "${files_json:-[]}" '{cosa:$cosa,kind:$kind,sessions:$sessions,files:$files}'
+  else
+    local f
+    for f in "${written[@]}"; do printf '%s\n' "$f"; done
+  fi
 }
 
 selftest() {
@@ -2877,6 +3247,52 @@ FAKE
     rm -rf "$mtmp"
   fi
 
+  local shtmp sstore nbin nlog
+  shtmp=$(mktemp -d)
+  sstore="$shtmp/tickets.json"
+  printf '{"version":1,"tickets":[]}\n' >"$sstore"
+  nbin="$shtmp/notify-send"
+  nlog="$shtmp/notify.log"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >>"%s"\n' "$nlog" >"$nbin"
+  chmod +x "$nbin"
+  RIG_TICKETS_FILE="$sstore" RIG_METRICS=0 "$SELF" ticket add SHOW1 --project demo \
+    --title "Ficha de prueba del ticket de visibilidad" --area meta >/dev/null 2>&1 || {
+      printf 'rig selftest FAIL: no pude crear el ticket de prueba de la ficha\n' >&2; rc=1; }
+  out=$(RIG_TICKETS_FILE="$sstore" RIG_METRICS=0 "$SELF" ticket show SHOW1 --no-metrics 2>/dev/null)
+  if [[ "$out" != *'Que se hizo:'* ]] || [[ "$out" != *'no modifico nada'* ]]; then
+    printf 'rig selftest FAIL: ticket show no arma la ficha (que se hizo / que modifico)\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$sstore" RIG_METRICS=0 "$SELF" ticket show SHOW1 --no-metrics --porcelain 2>/dev/null | jq -r '.id // empty' 2>/dev/null)
+  if [ "$out" != "SHOW1" ]; then
+    printf 'rig selftest FAIL: ticket show --porcelain no devuelve JSON con el id\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$sstore" RIG_METRICS=0 "$SELF" board --detail 2>/dev/null)
+  if [[ "$out" != *'total='* ]]; then
+    printf 'rig selftest FAIL: board --detail no renderiza el tablero\n' >&2
+    rc=1
+  fi
+  : >"$nlog"
+  RIG_TICKETS_FILE="$sstore" RIG_NOTIFY_BIN="$nbin" "$SELF" ticket set SHOW1 --status "done" >/dev/null 2>&1
+  if ! grep -q 'cerrado' "$nlog" 2>/dev/null; then
+    printf 'rig selftest FAIL: no aviso al cerrar el ticket (done)\n' >&2
+    rc=1
+  fi
+  : >"$nlog"
+  RIG_TICKETS_FILE="$sstore" RIG_NOTIFY_BIN="$nbin" "$SELF" ticket set SHOW1 --status blocked >/dev/null 2>&1
+  if ! grep -q 'bloqueado' "$nlog" 2>/dev/null; then
+    printf 'rig selftest FAIL: no aviso al bloquear el ticket (blocked)\n' >&2
+    rc=1
+  fi
+  : >"$nlog"
+  RIG_TICKETS_FILE="$sstore" RIG_NOTIFY_BIN="$nbin" RIG_STATE_NOTIFY=0 "$SELF" ticket set SHOW1 --status "done" >/dev/null 2>&1
+  if [ -s "$nlog" ]; then
+    printf 'rig selftest FAIL: RIG_STATE_NOTIFY=0 no desactivo el aviso\n' >&2
+    rc=1
+  fi
+  rm -rf "$shtmp"
+
   tmux kill-session -t "$s" 2>/dev/null || true
   unset RIG_EVENTS_FILE
   [ -n "$edir" ] && rm -rf "$edir"
@@ -2905,6 +3321,7 @@ case "$cmd" in
   log|note) cmd_log "$@" ;;
   say|reply) cmd_say "$@" ;;
   ask) cmd_ask "$@" ;;
+  export|extract|transcript) cmd_export "$@" ;;
   agents|a) cmd_agents "$@" ;;
   queue|q) cmd_queue "$@" ;;
   central|center|c) cmd_central "$@" ;;
