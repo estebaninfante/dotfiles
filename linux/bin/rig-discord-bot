@@ -25,6 +25,7 @@ DISCORD_MAX_CHARS = 1900
 FORWARD_INTERVAL = 1.0
 IDLE_POLL = 1.0
 FRAME_TIMEOUT = 30.0
+DEFAULT_ESCALATE_MIN = 10.0
 INTENTS = (1 << 0) | (1 << 9) | (1 << 15)
 OP_DISPATCH = 0
 OP_HEARTBEAT = 1
@@ -62,6 +63,12 @@ class Config:
         self.state_dir: Path = Path(os.environ.get("RIG_DISCORD_STATE_DIR") or DEFAULT_STATE_DIR)
         self.events_file: Path = Path(os.environ.get("RIG_EVENTS_FILE") or DEFAULT_EVENTS)
         self.stt_cmd: str = os.environ.get("RIG_STT_CMD", "").strip()
+        minutes = os.environ.get("RIG_DISCORD_ESCALATE_MIN", "").strip()
+        try:
+            self.escalate_secs: float = float(minutes) * 60.0 if minutes else DEFAULT_ESCALATE_MIN * 60.0
+        except ValueError:
+            self.escalate_secs = DEFAULT_ESCALATE_MIN * 60.0
+        self.escalate_cmd: str = os.environ.get("RIG_ESCALATE_BIN") or shutil.which("rig-escalate") or str(Path.home() / ".local" / "bin" / "rig-escalate")
 
     def ready(self) -> Optional[str]:
         if not self.token:
@@ -111,26 +118,119 @@ def split_chunks(text: str) -> list[str]:
     return out
 
 
-def emit(cfg: Config, kind: str, message: str) -> None:
+def emit(cfg: Config, kind: str, message: str, ticket: str = "", seat: str = "") -> None:
     env = dict(os.environ)
     env["RIG_ACTOR"] = "discord-bridge"
+    args = [cfg.rig, "log", message, "--kind", kind]
+    if ticket:
+        args += ["--ticket", ticket]
+    if seat:
+        args += ["--seat", seat]
     try:
-        subprocess.run([cfg.rig, "log", message, "--kind", kind], env=env,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        subprocess.run(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
     except Exception as exc:
         log(f"emit {kind} fallo: {exc}")
 
 
-def inject(cfg: Config, text: str) -> tuple[bool, str]:
-    payload = f"{cfg.prefix} {text}"
+def inject_to(cfg: Config, seat: str, text: str) -> tuple[bool, str]:
     try:
-        proc = subprocess.run([cfg.rig, "send", cfg.seat, payload],
-                              capture_output=True, text=True, timeout=20)
+        proc = subprocess.run([cfg.rig, "send", seat, text], capture_output=True, text=True, timeout=20)
     except Exception as exc:
         return False, str(exc)
     if proc.returncode != 0:
         return False, (proc.stderr or proc.stdout or "rig send fallo").strip()
     return True, ""
+
+
+def inject(cfg: Config, text: str) -> tuple[bool, str]:
+    return inject_to(cfg, cfg.seat, f"{cfg.prefix} {text}")
+
+
+def mention(cfg: Config) -> str:
+    return " ".join(f"<@{u}>" for u in cfg.allowed)
+
+
+def pending_path(cfg: Config) -> Path:
+    return cfg.state_dir / "pending-asks.json"
+
+
+def load_pending(cfg: Config) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(pending_path(cfg).read_text())
+        return [x for x in data if isinstance(x, dict)]
+    except Exception:
+        return []
+
+
+def save_pending(cfg: Config, pending: list[dict[str, Any]]) -> None:
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+    path = pending_path(cfg)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(pending))
+    tmp.replace(path)
+
+
+def ask_events(event: dict[str, Any]) -> bool:
+    return event.get("kind") == "ask"
+
+
+def unblock_ticket(cfg: Config, ticket: str, text: str) -> None:
+    evidence = "answer(discord): " + text[:160]
+    try:
+        subprocess.run([cfg.rig, "ticket", "set", ticket, "--status", "in-progress",
+                        "--evidence", evidence], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=15)
+    except Exception as exc:
+        log(f"unblock ticket {ticket} fallo: {exc}")
+
+
+def post_ask(cfg: Config, event: dict[str, Any]) -> None:
+    data = event.get("data") or {}
+    question = data.get("message") or event.get("summary") or ""
+    if not question:
+        return
+    seat = str(event.get("seat") or "")
+    ticket = str(event.get("ticket") or data.get("ticket") or "")
+    priority = str(data.get("priority") or "normal")
+    head = "PREGUNTA URGENTE" if priority == "alta" else "Pregunta"
+    lines = [f"{mention(cfg)} {head} de la silla {seat}".rstrip()]
+    if ticket:
+        lines.append(f"Ticket: {ticket}")
+    lines += ["", question, "", "Responde en este canal y te la hago llegar."]
+    send_message(cfg, cfg.channel_id, "\n".join(lines))
+    emit(cfg, "discord-ask", question, ticket=ticket, seat=seat)
+    pending = load_pending(cfg)
+    pending.append({"ts": time.time(), "seat": seat, "ticket": ticket,
+                    "question": question, "priority": priority, "reminded": False})
+    save_pending(cfg, pending)
+
+
+def deliver_answer(cfg: Config, text: str, pending: list[dict[str, Any]]) -> None:
+    ask = pending[-1]
+    seat = str(ask.get("seat") or cfg.seat)
+    ticket = str(ask.get("ticket") or "")
+    ok, err = inject_to(cfg, seat, f"{cfg.prefix} [respuesta] {text}")
+    if not ok:
+        emit(cfg, "discord-error", f"respuesta a {seat} fallo: {err}")
+        send_message(cfg, cfg.channel_id, f"No pude entregar tu respuesta a {seat}: {err}")
+        return
+    emit(cfg, "answer", text, ticket=ticket, seat=seat)
+    if ticket:
+        unblock_ticket(cfg, ticket, text)
+    pending.pop()
+    save_pending(cfg, pending)
+    send_message(cfg, cfg.channel_id, f"Respuesta entregada a {seat}.")
+
+
+def route_text(cfg: Config, channel_id: str, text: str) -> None:
+    pending = load_pending(cfg)
+    if pending:
+        deliver_answer(cfg, text, pending)
+        return
+    ok, err = inject(cfg, text)
+    if not ok:
+        emit(cfg, "discord-error", f"inject fallo: {err}")
+        send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
 
 
 def transcribe(cfg: Config, url: str, suffix: str) -> Optional[str]:
@@ -164,9 +264,8 @@ def handle_voice(cfg: Config, channel_id: str, attachment: dict[str, Any]) -> No
         send_message(cfg, channel_id, "No pude transcribir el audio.")
         return
     send_message(cfg, channel_id, f"Transcrito: {text}")
-    ok, err = inject(cfg, text)
-    if not ok:
-        emit(cfg, "discord-error", f"inject voz fallo: {err}")
+    emit(cfg, "discord-in", f"voz: {text}")
+    route_text(cfg, channel_id, text)
 
 
 def handle_message(cfg: Config, d: dict[str, Any]) -> None:
@@ -186,11 +285,14 @@ def handle_message(cfg: Config, d: dict[str, Any]) -> None:
             if str(attachment.get("content_type") or "").startswith("audio"):
                 handle_voice(cfg, channel_id, attachment)
         return
-    ok, err = inject(cfg, content)
     emit(cfg, "discord-in", f"{user_id}: {content}")
-    if not ok:
-        emit(cfg, "discord-error", f"inject fallo: {err}")
-        send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
+    if content.startswith("!"):
+        ok, err = inject(cfg, content[1:].lstrip())
+        if not ok:
+            emit(cfg, "discord-error", f"inject fallo: {err}")
+            send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
+        return
+    route_text(cfg, channel_id, content)
 
 
 def load_cursor(cfg: Config) -> dict[str, int]:
@@ -248,16 +350,57 @@ def forward_replies(cfg: Config) -> int:
             event = json.loads(line)
         except Exception:
             continue
-        if not reply_targets(event):
+        if reply_targets(event):
+            text = (event.get("data") or {}).get("message") or event.get("summary") or ""
+            if text:
+                send_message(cfg, cfg.channel_id, text)
+                emit(cfg, "discord-out", text)
+                count += 1
             continue
-        text = (event.get("data") or {}).get("message") or event.get("summary") or ""
-        if not text:
+        if ask_events(event):
+            try:
+                post_ask(cfg, event)
+                count += 1
+            except Exception as exc:
+                log(f"post_ask fallo: {exc}")
             continue
-        send_message(cfg, cfg.channel_id, text)
-        emit(cfg, "discord-out", text)
-        count += 1
     save_cursor(cfg, st.st_ino, offset + consumed)
     return count
+
+
+def escalate_pending(cfg: Config) -> int:
+    pending = load_pending(cfg)
+    if not pending:
+        return 0
+    now = time.time()
+    changed = False
+    for ask in pending:
+        try:
+            age = now - float(ask.get("ts", now))
+        except (TypeError, ValueError):
+            age = cfg.escalate_secs
+        if age < cfg.escalate_secs:
+            continue
+        ask["ts"] = now
+        ask["reminded"] = True
+        changed = True
+        question = str(ask.get("question") or "")
+        seat = str(ask.get("seat") or "")
+        ticket = str(ask.get("ticket") or "")
+        try:
+            send_message(cfg, cfg.channel_id, f"{mention(cfg)} Sigue sin respuesta: {question}")
+        except Exception as exc:
+            log(f"escalate send fallo: {exc}")
+        emit(cfg, "ask-reminder", question, ticket=ticket, seat=seat)
+        try:
+            subprocess.run([cfg.escalate_cmd, "--remind", question, "--seat", seat,
+                            "--ticket", ticket, "--priority", "alta"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        except Exception as exc:
+            log(f"escalate remind fallo: {exc}")
+    if changed:
+        save_pending(cfg, pending)
+    return len(pending)
 
 
 def forward_loop(cfg: Config, stop: threading.Event) -> None:
@@ -266,6 +409,10 @@ def forward_loop(cfg: Config, stop: threading.Event) -> None:
             forward_replies(cfg)
         except Exception as exc:
             log(f"forward fallo: {exc}")
+        try:
+            escalate_pending(cfg)
+        except Exception as exc:
+            log(f"escalate fallo: {exc}")
         stop.wait(FORWARD_INTERVAL)
 
 
@@ -588,6 +735,32 @@ def selftest() -> int:
         again = forward_replies(cfg)
         if again != 0:
             failures.append(f"reenvio duplicado: {again}")
+
+        ask = {"ts": "2026-01-01T00:00:01-05:00", "kind": "ask", "actor": "work-x",
+               "ticket": "T-1", "seat": "work-x", "area": "meta",
+               "summary": "necesito el dato",
+               "data": {"message": "necesito el dato", "priority": "normal", "awaiting": True}}
+        with events.open("a") as fh:
+            fh.write(json.dumps(ask) + "\n")
+        posted = forward_replies(cfg)
+        if posted != 1:
+            failures.append(f"ask no posteado: {posted}")
+        if not any("necesito el dato" in s for s in state["sends"]):
+            failures.append("la pregunta no llego al canal")
+        if not any("<@555>" in s for s in state["sends"]):
+            failures.append("la pregunta no menciona al usuario")
+        if not load_pending(cfg):
+            failures.append("no registro la pregunta pendiente")
+
+        handle_message(cfg, {"channel_id": "999", "content": "aqui va la respuesta",
+                             "author": {"id": "555", "bot": False}})
+        sent = [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]
+        if not any(a[:3] == ["send", "work-x", "[dc] [respuesta] aqui va la respuesta"] for a in sent):
+            failures.append(f"la respuesta no fue a la silla que pregunto: {sent}")
+        if load_pending(cfg):
+            failures.append("no limpio la pregunta pendiente tras responder")
+        if not any(a[:3] == ["ticket", "set", "T-1"] for a in sent):
+            failures.append("no desbloqueo el ticket T-1")
     except Exception as exc:
         failures.append(f"excepcion: {exc}")
     finally:
@@ -632,8 +805,13 @@ def main(argv: list[str]) -> int:
         print("rig-discord-bot [--selftest] [--once]\n"
               "  puente Discord <-> main: mensajes del canal entran a la silla (rig send),\n"
               "  las respuestas (rig say, kind=reply) vuelven al canal.\n"
+              "  escalado: un evento kind=ask se publica en el canal mencionando al usuario;\n"
+              "  al responder, la respuesta viaja a la silla que pregunto (inject del seat),\n"
+              "  emite kind=answer, desbloquea el ticket y limpia la pregunta pendiente.\n"
+              "  sin respuesta en RIG_DISCORD_ESCALATE_MIN (default 10) min, repite y sube.\n"
               "  Config por EnvironmentFile: DISCORD_BOT_TOKEN, DISCORD_ALLOWED_USER_IDS,\n"
-              "  DISCORD_CHANNEL_ID, RIG_SEAT, RIG_EVENTS_FILE, RIG_BIN, RIG_STT_CMD (opcional).")
+              "  DISCORD_CHANNEL_ID, RIG_SEAT, RIG_EVENTS_FILE, RIG_BIN, RIG_STT_CMD,\n"
+              "  RIG_DISCORD_ESCALATE_MIN, RIG_ESCALATE_BIN (opcionales).")
         return 0
     cfg = Config()
     if "--once" in argv:

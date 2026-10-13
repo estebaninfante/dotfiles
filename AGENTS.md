@@ -353,6 +353,25 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
   `~/.config/rig/discord.env`. Paso a paso en `docs/main-bridge.md`.
 - **Regla para `main`**: un mensaje que empieza con `[dc]` se responde al usuario con
   `rig say "<respuesta>"`.
+- **Escalado al humano (bidireccional)**: el canal tambien sirve para que **cualquier flujo que
+  se trabe llame al usuario**. La silla pregunta con
+  `rig-escalate "<pregunta>" --ticket X --seat S --priority alta|normal` (o `rig ask`, subcomando
+  que integra `work-rig-reconcile` como wrapper delgado del script; este ticket NO edita `rig`).
+  El script: (1) emite `kind=ask` (`data.awaiting`) en el registro; (2) marca el ticket `blocked`
+  con motivo; (3) avisa por escritorio (`notify-send`) y por voz (TTS `voice`); (4) el bot de
+  Discord publica la pregunta con **mencion** `<@user_id>` (dispara push del telefono). El retorno
+  es el punto clave: la respuesta del usuario (texto o nota de voz) viaja de vuelta a la silla
+  que pregunto (`rig send <seat> "[dc] [respuesta] ..."`), la **desbloquea** (`rig ticket set
+  --status in-progress`) y queda como evento `kind=answer`; la cola vive en
+  `pending-asks.json` (LIFO). Con una pregunta pendiente, el texto del canal se trata como
+  respuesta (prefijo `!` para hablarle a `main` igual).
+- **Urgencia/reintento**: si un `ask` sigue sin respuesta mas de `RIG_DISCORD_ESCALATE_MIN`
+  minutos (default 10), el bot republica con mencion + re-dispara escritorio/voz
+  (`rig-escalate --remind`) y emite `kind=ask-reminder`.
+- **Aviso al telefono (opciones, documentadas)**: la mencíon/DM de Discord disparan el push de su
+  app; el `ntfy` local ya existe. Una **llamada telefonica real** requiere proveedor externo
+  (Twilio/Vonage) con costo por minuto y numero; un bot de Discord **no** puede iniciar llamada
+  de voz ni timbre. Sin implementar telefonia (ver `docs/main-bridge.md`, tabla de costos/fases).
 - **Unit**: `linux/system/systemd-user/rig-discord-bot.service` (`Restart=always`,
   `EnvironmentFile`, `ConditionPathExists=%h/.config/rig/discord.env`; sin token queda
   `condition failed`, no arranca).

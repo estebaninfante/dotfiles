@@ -18,6 +18,8 @@ DC_LINK="$HOME/.local/bin/rig-discord-bot"
 DC_UNIT_SRC="$HOME/dotfiles/linux/system/systemd-user/rig-discord-bot.service"
 DC_UNIT_LIVE="$HOME/.config/systemd/user/rig-discord-bot.service"
 DC_ENV="$HOME/.config/rig/discord.env"
+ES_SRC="$HOME/dotfiles/linux/bin/rig-escalate"
+ES_LINK="$HOME/.local/bin/rig-escalate"
 DOC="$HOME/dotfiles/docs/main-bridge.md"
 
 for arg in "$@"; do
@@ -30,6 +32,7 @@ for arg in "$@"; do
     */rig-discord-bot) DC_SRC="$arg" ;;
     *rig-telegram-bot.service) TG_UNIT_SRC="$arg" ;;
     */rig-telegram-bot) TG_SRC="$arg" ;;
+    */rig-escalate) ES_SRC="$arg" ;;
     *main-bridge.md) DOC="$arg" ;;
   esac
 done
@@ -100,10 +103,41 @@ check_bot() {
 check_bot discord "$DC_SRC" "$DC_LINK" "$DC_UNIT_SRC" "$DC_UNIT_LIVE" "$DC_ENV"
 check_bot telegram "$TG_SRC" "$TG_LINK" "$TG_UNIT_SRC" "$TG_UNIT_LIVE" "$TG_ENV"
 
-if [[ -f "$DOC" ]] && grep -q 'rig-discord-bot' "$DOC" && grep -q 'rig-telegram-bot' "$DOC"; then
-  ok "docs" "main-bridge.md documenta ambos puentes"
+if [[ -f "$ES_SRC" ]]; then
+  if bash -n "$ES_SRC"; then
+    ok "escalate:syntax" "bash -n OK"
+  else
+    fail "escalate:syntax" "bash -n fallo"
+  fi
+  if command -v shellcheck >/dev/null 2>&1; then
+    if shellcheck -S warning "$ES_SRC"; then
+      ok "escalate:shellcheck" "limpio"
+    else
+      fail "escalate:shellcheck" "avisos de shellcheck"
+    fi
+  else
+    skip "escalate:shellcheck" "shellcheck ausente"
+  fi
+  if out="$("$ES_SRC" --selftest 2>&1)"; then
+    ok "escalate:selftest" "evento ask + blocked + remind OK"
+  else
+    fail "escalate:selftest" "$(printf '%s' "$out" | tail -c 300)"
+  fi
+  if [[ -L "$ES_LINK" ]]; then
+    ok "escalate:symlink" "$ES_LINK -> $(readlink "$ES_LINK")"
+  elif [[ -e "$ES_LINK" ]]; then
+    fail "escalate:symlink" "$ES_LINK existe y no es symlink"
+  else
+    skip "escalate:symlink" "aun no instalado (correr link-dotfiles.sh)"
+  fi
 else
-  skip "docs" "falta $DOC o no documenta ambos puentes"
+  skip "escalate:src" "falta $ES_SRC"
+fi
+
+if [[ -f "$DOC" ]] && grep -q 'rig-discord-bot' "$DOC" && grep -q 'rig-telegram-bot' "$DOC" && grep -q 'rig-escalate' "$DOC"; then
+  ok "docs" "main-bridge.md documenta puentes y escalado"
+else
+  skip "docs" "falta $DOC o no documenta puentes/escalado"
 fi
 
 exit "$rc"

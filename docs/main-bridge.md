@@ -4,6 +4,10 @@ Puente para que el dueno hable con su agente primario `main` (opencode, `deepsee
 desde el celular/escritorio por Discord, sin exponer puertos y sin PWA. El agente vive en un
 **canal dedicado** del servidor; ahi se le escribe y ahi responde.
 
+Es **bidireccional**: (a) el usuario le habla a `main` y (b) **cualquier flujo que se trabe
+escala al humano** por el mismo canal (pregunta + avisos por escritorio/voz + espera de
+respuesta). Ver "Escalado al humano" abajo.
+
 ## Arquitectura (fase 1: Discord)
 
 ```
@@ -98,6 +102,75 @@ ensucia el journal): es intencional.
   fuera de la allowlist.
 - Voz: nota de voz -> STT local -> texto (ver abajo).
 
+## Escalado al humano (cualquier flujo te llama a TI)
+
+El canal no es solo para hablarle a `main`: **cualquier silla o flujo que se trabe puede
+escalar al humano**. La forma es preguntar y quedar esperando, sin que nadie mire pantallas.
+
+```bash
+rig-escalate "¿confirmo borrar el branch viejo?" --ticket FOO-3 --seat work-foo --priority alta
+```
+
+(el subcomando equivalente en `rig` sera `rig ask "..." --ticket X --seat S --priority alta|normal`,
+ver "Coordinacion" abajo).
+
+Efecto del escalado, en capas:
+
+1. **Evento**: escribe `kind=ask` en `~/.local/state/rig/events.jsonl` con
+   `data={message, priority, awaiting:true}`, `actor` y `seat` de quien pregunta.
+2. **Ticket**: si hay `--ticket`, lo marca `blocked` con evidencia `ask: <pregunta>` via
+   `rig ticket set --status blocked`.
+3. **Aviso de escritorio**: `notify-send` (urgencia `critical` si `--priority alta`).
+4. **Voz**: lee la pregunta en voz alta con el TTS del escritorio (`voice speak`).
+5. **Discord**: el bot ve el `kind=ask` en el registro y publica en el canal dedicado un
+   mensaje con la pregunta, el `ticket`, la `silla` que pregunto y una **mencion** al usuario
+   (`<@user_id>`, que dispara el push del telefono). Queda claro que espera respuesta.
+
+**Retorno (el punto clave)**: cuando el usuario contesta en el canal (texto o nota de voz), el
+bot **rutea la respuesta a la silla que pregunto** (`rig send <seat> "[dc] [respuesta] <texto>"`),
+la **desbloquea** (`rig ticket set --status in-progress --evidence "answer(discord): ..."`) y
+registra el evento `kind=answer`. El bot mantiene la cola de preguntas pendientes en
+`~/.local/state/rig/discord/pending-asks.json` (LIFO: la respuesta va a la ultima pregunta).
+
+Mientras hay una pregunta pendiente, lo que el usuario escriba en el canal se interpreta como
+**respuesta** (no como mensaje a `main`); para hablarle a `main` igual, prefijar `!`.
+
+### Reintento y urgencia
+
+- `escalate_pending` corre cada segundo: si una pregunta lleva mas de `RIG_DISCORD_ESCALATE_MIN`
+  minutos sin respuesta (default **10**), **republica** el aviso en el canal con mencion y
+  re-dispara escritorio + voz (`rig-escalate --remind ...`), y emite `kind=ask-reminder`.
+- `--priority alta` marca el aviso como urgente desde el primer mensaje.
+
+### Opciones reales para el futuro proximo (comparadas, sin implementar)
+
+| Via | Que puede hoy | Costo | Limite/r real |
+|-----|---------------|-------|---------------|
+| Canal de Discord + mencion `<@id>` | publica la pregunta y menciona al usuario; dispara **push** en la app de Discord del telefono | gratis | requiere que Discord este instalado/notification on en el telefono |
+| **DM** de Discord al usuario | el bot **si** puede abrir un DM (`POST /users/@me/channels` con el user id) y mandar ahi; mismo push | gratis | igual que arriba; el DM es por user id (allowlist) |
+| Notificacion push del telefono | via Discord (app) o via el `ntfy` que ya existe en la maquina | gratis | depende de la app |
+| **Llamada telefonica real** | requiere **proveedor externo** (Twilio, Vonage) + numero + voz sintetizada | **por minuto** (Twilio ~US$0.013/min salida a movil + numero ~US$1.15/mes; Vonage similar) | no es gratis, monta un numero y un flujo de voz |
+| Timbre/llamada de **Discord** iniciada por un bot | **no se puede**: un bot no puede iniciar una llamada de voz ni "ringgear"; si puede DM + mention (que ya disparan push) | — | Discord no expone iniciar llamada de voz a bots |
+
+**Recomendacion por fases** (nada de telefonia aun): fase actual = canal + mention + push
+Discord + voz local + reintento. Fase proxima = DM de Discord al usuario para los avisos
+criticos. Fase futura (opcional) = llamada por Twilio/Vonage si el usuario acepta costo y numero.
+
+### Coordinacion con `rig` (owner: work-rig-reconcile)
+
+La silla `work-rig-reconcile` es la **unica autorizada** a integrar en la base, asi que el
+subcomando `rig ask` **no lo escribe este ticket**. El mecanismo vive en el script propio
+`linux/bin/rig-escalate`; el subcomando de `rig` debe ser un wrapper delgado que lo invoca. El
+pedido exacto al owner es:
+
+- **Firma**: `rig ask "<pregunta>" [--ticket ID] [--seat SILLA] [--priority alta|normal]`.
+- **Comportamiento**: delega en `rig-escalate` (mismo `--ticket/--seat/--priority`); sin flags,
+  `rig-escalate` resuelve la silla con `rig whoami`.
+- **Verifier** (checks nuevos en `rig.sh`): `ask-cli` (usage), `ask-delegates` (un fake
+  `rig-escalate` en PATH recibe los args), `ask-priority-guard` (`--priority` invalida → rc 2).
+- **Selftest**: con `RIG_ESCALATE_BIN` apuntando a un fake, `rig ask "x" --ticket T --seat S`
+  debe invocar el fake con `x --ticket T --seat S` y rc 0.
+
 ## Variables de entorno (discord.env)
 
 | Variable | Default | Uso |
@@ -113,6 +186,8 @@ ensucia el journal): es intencional.
 | `RIG_DISCORD_PREFIX` | `[dc]` | prefijo del mensaje inyectado |
 | `RIG_DISCORD_STATE_DIR` | `~/.local/state/rig/discord` | cursor de eventos + sesion de gateway |
 | `RIG_STT_CMD` | vacio | comando de transcripcion (fase 2), recibe la ruta del audio |
+| `RIG_DISCORD_ESCALATE_MIN` | `10` | minutos sin respuesta antes de repetir el aviso de un `ask` |
+| `RIG_ESCALATE_BIN` | `rig-escalate` en PATH o `~/.local/bin/rig-escalate` | script de avisos (escritorio+voz) que dispara el reintento |
 
 ## Verificacion
 
@@ -142,7 +217,9 @@ cambiar de transporte: misma inyeccion (`rig send`), misma salida (`rig say` -> 
 
 **No correr ambos a la vez**: los dos reenvian los mismos eventos `kind=reply` al chat/canal, y
 el default de `rig say --to` es `telegram` (el bot de Discord acepta `to` en
-`discord|telegram|hub|all|vacio`). Dejar habilitado **solo uno**.
+`discord|telegram|hub|all|vacio`). Dejar habilitado **solo uno**. Nota: el **escalado al humano**
+(`kind=ask`) hoy lo publica **solo el bot de Discord**; el de Telegram reenvia `kind=reply`. Si
+se migrara a Telegram, habria que portar el manejo de `kind=ask` a ese bot.
 
 ## Fase 2 — WhatsApp (no implementado; opciones y riesgo)
 

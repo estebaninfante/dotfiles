@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+rig-escalate - escalado al humano: una silla pide una decision y queda esperando
+
+uso:
+  rig-escalate "pregunta" [--ticket ID] [--seat SILLA] [--priority alta|normal]
+  rig-escalate --remind "pregunta" [--seat SILLA] [--ticket ID]
+
+efecto:
+  1. escribe un evento kind=ask (data: message, priority, awaiting) en el registro
+  2. marca el ticket como blocked con el motivo (si --ticket)
+  3. avisa en capas: notificacion de escritorio y voz (TTS del escritorio)
+  el puente de Discord publica el ask en el canal y rutea la respuesta de vuelta.
+
+opciones:
+  --ticket ID        ticket a bloquear (rig ticket set --status blocked)
+  --seat SILLA       silla que pregunta (default: rig whoami en tmux)
+  --priority P       alta | normal (default normal; alta sube el aviso)
+  --no-notify        no lanzar notificacion de escritorio
+  --no-voice         no leer en voz alta
+  --remind           solo re-dispara avisos (desktop+voz), sin evento ni ticket
+  --selftest         prueba deterministica
+  --help, -h         esta ayuda
+
+env: RIG_EVENTS_FILE, RIG_EVENTS_LOCK, RIG_BIN (default rig), RIG_ACTOR,
+     RIG_ESCALATE_NOTIFY (0 lo apaga), RIG_ESCALATE_VOICE (0 lo apaga)
+
+dueño: supervisor (doctrina) + dotfiles (script); ver: verify run bridge
+EOF
+}
+
+QUESTION=""
+TICKET=""
+SEAT="${RIG_SEAT:-}"
+PRIORITY="normal"
+DO_NOTIFY=1
+DO_VOICE=1
+REMIND=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ticket) TICKET="${2:-}"; shift 2 ;;
+    --seat) SEAT="${2:-}"; shift 2 ;;
+    --priority) PRIORITY="${2:-}"; shift 2 ;;
+    --no-notify) DO_NOTIFY=0; shift ;;
+    --no-voice) DO_VOICE=0; shift ;;
+    --remind) REMIND=1; shift ;;
+    --selftest) SELFTEST=1; shift ;;
+    --help|-h) usage; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "opcion desconocida: $1" >&2; usage >&2; exit 2 ;;
+    *) QUESTION="${QUESTION:+$QUESTION }$1"; shift ;;
+  esac
+done
+if [ $# -gt 0 ]; then
+  QUESTION="${QUESTION:+$QUESTION }$*"
+fi
+
+SELFTEST="${SELFTEST:-0}"
+
+case "$PRIORITY" in
+  alta|normal) ;;
+  *) echo "priority invalida: $PRIORITY (alta|normal)" >&2; exit 2 ;;
+esac
+
+[ "${RIG_ESCALATE_NOTIFY:-1}" = "0" ] && DO_NOTIFY=0
+[ "${RIG_ESCALATE_VOICE:-1}" = "0" ] && DO_VOICE=0
+
+RIG_BIN="${RIG_BIN:-rig}"
+EVENTS="${RIG_EVENTS_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/rig/events.jsonl}"
+LOCK="${RIG_EVENTS_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/rig-events.lock}"
+
+resolve_seat() {
+  if [ -z "$SEAT" ] && command -v "$RIG_BIN" >/dev/null 2>&1; then
+    SEAT="$(timeout 10 "$RIG_BIN" whoami 2>/dev/null || true)"
+  fi
+  [ -n "$SEAT" ] || SEAT="${RIG_ACTOR:-unknown}"
+  ACTOR="${RIG_ACTOR:-$SEAT}"
+}
+
+emit_event() {
+  local kind="$1" summary="$2" data_json="$3"
+  local line
+  if command -v jq >/dev/null 2>&1; then
+    line="$(jq -nc \
+      --arg ts "$(date -Iseconds)" --arg kind "$kind" --arg actor "$ACTOR" \
+      --arg ticket "$TICKET" --arg seat "$SEAT" --arg area "" \
+      --arg summary "$summary" --argjson data "$data_json" \
+      '{ts:$ts,kind:$kind,actor:$actor,ticket:$ticket,seat:$seat,area:$area,summary:$summary,data:$data}')"
+  else
+    line="{\"ts\":\"$(date -Iseconds)\",\"kind\":\"$kind\",\"actor\":\"$ACTOR\",\"ticket\":\"$TICKET\",\"seat\":\"$SEAT\",\"area\":\"\",\"summary\":\"$summary\",\"data\":{}}"
+  fi
+  mkdir -p "$(dirname "$EVENTS")" 2>/dev/null || true
+  if command -v flock >/dev/null 2>&1; then
+    ( flock 9; printf '%s\n' "$line" >>"$EVENTS" ) 9>"$LOCK"
+  else
+    printf '%s\n' "$line" >>"$EVENTS"
+  fi
+}
+
+mark_blocked() {
+  [ -n "$TICKET" ] || return 0
+  command -v "$RIG_BIN" >/dev/null 2>&1 || return 0
+  timeout 20 "$RIG_BIN" ticket set "$TICKET" --status blocked \
+    --evidence "ask: ${QUESTION:0:160}" >/dev/null 2>&1 || true
+}
+
+notify_desktop() {
+  [ "$DO_NOTIFY" = "1" ] || return 0
+  command -v notify-send >/dev/null 2>&1 || return 0
+  local urgency="normal"
+  [ "$PRIORITY" = "alta" ] && urgency="critical"
+  timeout 15 notify-send -a "opencode" -u "$urgency" \
+    "Pregunta de ${SEAT}" "$QUESTION" >/dev/null 2>&1 || true
+}
+
+speak_question() {
+  [ "$DO_VOICE" = "1" ] || return 0
+  command -v voice >/dev/null 2>&1 || return 0
+  timeout 90 voice speak "$QUESTION" >/dev/null 2>&1 || true
+}
+
+run_main() {
+  if [ -z "$QUESTION" ]; then
+    usage >&2
+    exit 2
+  fi
+  resolve_seat
+  if [ "$REMIND" = "1" ]; then
+    notify_desktop
+    speak_question
+    return 0
+  fi
+  emit_event "ask" "$QUESTION" \
+    "$(jq -nc --arg m "$QUESTION" --arg p "$PRIORITY" \
+      '{message:$m, priority:$p, awaiting:true}' 2>/dev/null || echo '{}')"
+  mark_blocked
+  notify_desktop
+  speak_question
+  printf 'rig-escalate: pregunta enviada (ticket=%s seat=%s prioridad=%s)\n' \
+    "${TICKET:--}" "$SEAT" "$PRIORITY"
+}
+
+selftest() {
+  local tmp failures=0
+  tmp="$(mktemp -d)"
+  local ev="$tmp/events.jsonl"
+  local bin="$tmp/bin"
+  mkdir -p "$bin"
+  cat >"$bin/rig" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FAKE_RIG_LOG"
+exit 0
+FAKE
+  chmod +x "$bin/rig"
+  : >"$ev"
+  : >"$tmp/rig.log"
+  local out rc
+  out="$(RIG_EVENTS_FILE="$ev" RIG_EVENTS_LOCK="$tmp/lock" RIG_BIN="$bin/rig" \
+    FAKE_RIG_LOG="$tmp/rig.log" RIG_ESCALATE_NOTIFY=0 RIG_ESCALATE_VOICE=0 \
+    PATH="$bin:$PATH" "$0" "necesito el dato del ticket" --ticket T-9 --seat work-x --priority alta 2>&1)" || rc=$?
+  rc="${rc:-0}"
+  [ "$rc" = "0" ] || { echo "selftest FAIL: rc=$rc out=$out" >&2; failures=1; }
+  local n
+  n="$(wc -l <"$ev" | tr -d ' ')"
+  [ "$n" = "1" ] || { echo "selftest FAIL: eventos=$n (esperaba 1)" >&2; failures=1; }
+  local kind seat ticket msg pri
+  kind="$(jq -r '.kind' "$ev")"
+  seat="$(jq -r '.seat' "$ev")"
+  ticket="$(jq -r '.ticket' "$ev")"
+  msg="$(jq -r '.data.message' "$ev")"
+  pri="$(jq -r '.data.priority' "$ev")"
+  [ "$kind" = "ask" ] || { echo "selftest FAIL: kind=$kind" >&2; failures=1; }
+  [ "$seat" = "work-x" ] || { echo "selftest FAIL: seat=$seat" >&2; failures=1; }
+  [ "$ticket" = "T-9" ] || { echo "selftest FAIL: ticket=$ticket" >&2; failures=1; }
+  [ "$pri" = "alta" ] || { echo "selftest FAIL: priority=$pri" >&2; failures=1; }
+  case "$msg" in *"necesito el dato"*) ;; *) echo "selftest FAIL: message=$msg" >&2; failures=1 ;; esac
+  grep -q "ticket set T-9 --status blocked" "$tmp/rig.log" \
+    || { echo "selftest FAIL: no marco blocked" >&2; failures=1; }
+  local before after
+  before="$(wc -l <"$ev" | tr -d ' ')"
+  RIG_EVENTS_FILE="$ev" RIG_BIN="$bin/rig" FAKE_RIG_LOG="$tmp/rig.log" \
+    RIG_ESCALATE_NOTIFY=0 RIG_ESCALATE_VOICE=0 PATH="$bin:$PATH" \
+    "$0" --remind "otra" --seat work-x >/dev/null 2>&1 || true
+  after="$(wc -l <"$ev" | tr -d ' ')"
+  [ "$before" = "$after" ] || { echo "selftest FAIL: --remind escribio evento" >&2; failures=1; }
+  rm -rf "$tmp"
+  if [ "$failures" = "0" ]; then
+    echo "rig-escalate selftest OK"
+    return 0
+  fi
+  return 1
+}
+
+if [ "$SELFTEST" = "1" ]; then
+  selftest
+  exit $?
+fi
+run_main
