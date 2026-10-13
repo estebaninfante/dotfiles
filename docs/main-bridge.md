@@ -124,7 +124,14 @@ Efecto del escalado, en capas:
 4. **Voz**: lee la pregunta en voz alta con el TTS del escritorio (`voice speak`).
 5. **Discord**: el bot ve el `kind=ask` en el registro y publica en el canal dedicado un
    mensaje con la pregunta, el `ticket`, la `silla` que pregunto y una **mencion** al usuario
-   (`<@user_id>`, que dispara el push del telefono). Queda claro que espera respuesta.
+   (`<@user_id>`, que dispara el push del telefono). Queda claro que espera respuesta. El
+   mensaje cierra con un pie `-# <hora ISO> · fuente <seat>` (marca de tiempo + origen), para
+   que el reporte se pueda reconstruir en el momento sin mirar el reloj a ojo.
+
+**Marca de tiempo y fuente (regla)**: todo mensaje que el puente publica en el canal
+lleva su hora y su origen. El **ask** cierra con `-# <hora ISO> · fuente <actor|seat>`; las
+**respuestas de `main`** salen con `-# <hora ISO> · main`. Las horas son las del evento
+(`ts`), no las del momento del reenvio.
 
 **Retorno (el punto clave)**: cuando el usuario contesta en el canal (texto o nota de voz), el
 bot **rutea la respuesta a la silla que pregunto** (`rig send <seat> "[dc] [respuesta] <texto>"`),

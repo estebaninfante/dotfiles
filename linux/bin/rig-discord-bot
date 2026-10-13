@@ -197,6 +197,9 @@ def post_ask(cfg: Config, event: dict[str, Any]) -> None:
     if ticket:
         lines.append(f"Ticket: {ticket}")
     lines += ["", question, "", "Responde en este canal y te la hago llegar."]
+    stamp = str(event.get("ts") or "")
+    if stamp:
+        lines.append(f"-# {stamp} · fuente {event.get('actor') or seat or '?'}")
     send_message(cfg, cfg.channel_id, "\n".join(lines))
     emit(cfg, "discord-ask", question, ticket=ticket, seat=seat)
     pending = load_pending(cfg)
@@ -353,7 +356,9 @@ def forward_replies(cfg: Config) -> int:
         if reply_targets(event):
             text = (event.get("data") or {}).get("message") or event.get("summary") or ""
             if text:
-                send_message(cfg, cfg.channel_id, text)
+                stamp = str(event.get("ts") or "")
+                body = text + (f"\n-# {stamp} · {event.get('actor') or 'main'}" if stamp else "")
+                send_message(cfg, cfg.channel_id, body)
                 emit(cfg, "discord-out", text)
                 count += 1
             continue
@@ -728,7 +733,7 @@ def selftest() -> int:
         forwarded = forward_replies(cfg)
         if forwarded != 1:
             failures.append(f"forward conto {forwarded}, esperaba 1")
-        if "respuesta dc" not in state["sends"]:
+        if not any(s.startswith("respuesta dc") for s in state["sends"]):
             failures.append(f"respuesta no llego al canal: {state['sends']}")
         if not any(p.endswith("/channels/999/messages") for p in state["paths"]):
             failures.append(f"ruta REST inesperada: {state['paths']}")

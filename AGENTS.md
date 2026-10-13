@@ -368,6 +368,10 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
 - **Urgencia/reintento**: si un `ask` sigue sin respuesta mas de `RIG_DISCORD_ESCALATE_MIN`
   minutos (default 10), el bot republica con mencion + re-dispara escritorio/voz
   (`rig-escalate --remind`) y emite `kind=ask-reminder`.
+- **Marca de tiempo y fuente (regla)**: todo mensaje que el puente publica en el canal expone su
+  hora y su origen. El ask cierra con `-# <hora ISO> · fuente <actor|seat>`; las respuestas de
+  `main` salen con `-# <hora ISO> · main`. Las horas son las del evento (`ts`). El reporte del
+  punto de entrada se reconstruye en el momento citando hora y fuente, sin mirar el reloj a ojo.
 - **Aviso al telefono (opciones, documentadas)**: la mencíon/DM de Discord disparan el push de su
   app; el `ntfy` local ya existe. Una **llamada telefonica real** requiere proveedor externo
   (Twilio/Vonage) con costo por minuto y numero; un bot de Discord **no** puede iniciar llamada
