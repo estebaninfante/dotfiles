@@ -112,6 +112,9 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
                                      registra un evento propio (decision/diagnostico) en el feed
   rig say "<mensaje>" [--to telegram|hub] [--ticket X]
                                      buzon de salida de main: respuesta al usuario (kind=reply)
+  rig ask "<pregunta>" [--ticket X] [--seat S] [--priority alta|normal]
+                                     una silla pide una decision y queda esperando: delega en
+                                     rig-escalate (evento kind=ask + bloqueo + avisos)
 
   rig work new <ticket-id> [--agent A] [--cwd DIR] [--base REF] [--session SES] [--prompt TEXTO]
                              [--model M] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--spawn] [--attach]
@@ -2476,6 +2479,47 @@ cmd_say() {
   info "respuesta enviada a $to"
 }
 
+ask_usage() {
+  cat >&2 <<'EOF'
+rig ask - una silla pide una decision al humano y queda esperando la respuesta
+
+  rig ask "<pregunta>" [--ticket ID] [--seat SILLA] [--priority alta|normal]
+
+  Delega en rig-escalate (override: RIG_ESCALATE_BIN). Escribe un evento
+  kind=ask (data: message, priority, awaiting) en el feed, marca el ticket
+  como blocked (si --ticket) y avisa en capas: notificacion de escritorio y
+  voz. El puente de Discord publica el ask y rutea la respuesta de vuelta a
+  la silla que pregunto. --priority default normal (alta sube el aviso).
+EOF
+}
+
+cmd_ask() {
+  local bin="${RIG_ESCALATE_BIN:-rig-escalate}" pri="" seat="" ticket=""
+  local -a parts=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help|help) ask_usage; return 0 ;;
+      --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
+      --seat) [ $# -ge 2 ] || die "--seat requiere valor"; seat="$2"; shift 2 ;;
+      --priority) [ $# -ge 2 ] || die "--priority requiere valor"; pri="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) parts+=("$1"); shift ;;
+    esac
+  done
+  [ ${#parts[@]} -gt 0 ] || die "uso: rig ask \"<pregunta>\" [--ticket ID] [--seat SILLA] [--priority alta|normal]"
+  case "$pri" in
+    ""|alta|normal) ;;
+    *) die "priority invalida: $pri (alta|normal)" ;;
+  esac
+  command -v "$bin" >/dev/null 2>&1 \
+    || die "rig-escalate no encontrado (RIG_ESCALATE_BIN=$bin; mergea el ticket del puente o instalalo)"
+  local -a args=("${parts[*]}")
+  [ -n "$ticket" ] && args+=(--ticket "$ticket")
+  [ -n "$seat" ] && args+=(--seat "$seat")
+  [ -n "$pri" ] && args+=(--priority "$pri")
+  exec "$bin" "${args[@]}"
+}
+
 selftest() {
   need_tmux
   local s="$SELFTEST_SESSION" out tmp rc=0 i edir efile
@@ -2691,6 +2735,32 @@ selftest() {
     printf 'rig selftest FAIL: say no dejo un evento reply de main legible por --kind reply\n' >&2
     rc=1
   fi
+  local abin="$edir/bin" alog="$edir/ask.log"
+  mkdir -p "$abin"
+  cat >"$abin/rig-escalate" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FAKE_ASK_LOG"
+exit 0
+FAKE
+  chmod +x "$abin/rig-escalate"
+  : >"$alog"
+  if ! RIG_ESCALATE_BIN="$abin/rig-escalate" FAKE_ASK_LOG="$alog" \
+      "$SELF" ask "necesito una decision" --ticket T9 --seat work-z --priority alta >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: ask fallo\n' >&2
+    rc=1
+  fi
+  if [ "$(cat "$alog" 2>/dev/null)" != "necesito una decision --ticket T9 --seat work-z --priority alta" ]; then
+    printf 'rig selftest FAIL: ask no delego los args esperados: %s\n' "$(cat "$alog" 2>/dev/null)" >&2
+    rc=1
+  fi
+  if "$SELF" ask "pregunta cualquiera" --priority bogus >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: ask --priority bogus deberia fallar\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" ask --help >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: ask --help fallo\n' >&2
+    rc=1
+  fi
   rm -f "$tmp"
 
   if command -v git >/dev/null 2>&1; then
@@ -2834,6 +2904,7 @@ case "$cmd" in
   events|ev) cmd_events "$@" ;;
   log|note) cmd_log "$@" ;;
   say|reply) cmd_say "$@" ;;
+  ask) cmd_ask "$@" ;;
   agents|a) cmd_agents "$@" ;;
   queue|q) cmd_queue "$@" ;;
   central|center|c) cmd_central "$@" ;;

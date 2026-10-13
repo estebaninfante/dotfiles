@@ -522,6 +522,43 @@ else
 fi
 rm -rf "$evtmp"
 
+if out=$("$SRC" ask --help 2>&1); then
+  if printf '%s' "$out" | grep -q -- '--ticket' && printf '%s' "$out" | grep -q -- '--seat' \
+     && printf '%s' "$out" | grep -q -- '--priority' && printf '%s' "$out" | grep -q 'kind=ask'; then
+    ok "ask-cli" "rig ask documenta --ticket/--seat/--priority y el evento kind=ask"
+  else
+    fail "ask-cli" "rig ask --help no documenta --ticket/--seat/--priority/kind=ask"
+  fi
+else
+  fail "ask-cli" "rig ask --help fallo"
+fi
+
+askbin=$(mktemp -d)
+cat >"$askbin/rig-escalate" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FAKE_ASK_LOG"
+exit 0
+FAKE
+chmod +x "$askbin/rig-escalate"
+asklog="$askbin/ask.log"
+: >"$asklog"
+if RIG_ESCALATE_BIN="$askbin/rig-escalate" FAKE_ASK_LOG="$asklog" \
+   "$SRC" ask "necesito una decision" --ticket T-1 --seat work-z --priority alta >/dev/null 2>&1; then
+  if [ "$(cat "$asklog" 2>/dev/null)" = "necesito una decision --ticket T-1 --seat work-z --priority alta" ]; then
+    ok "ask-delegates" "rig ask delega en rig-escalate con los args"
+  else
+    fail "ask-delegates" "rig ask no paso los args esperados: $(cat "$asklog" 2>/dev/null)"
+  fi
+else
+  fail "ask-delegates" "rig ask fallo con RIG_ESCALATE_BIN fake"
+fi
+if "$SRC" ask "pregunta cualquiera" --priority bogus >/dev/null 2>&1; then
+  fail "ask-priority-guard" "rig ask acepta --priority invalida"
+else
+  ok "ask-priority-guard" "rig ask rechaza --priority invalida"
+fi
+rm -rf "$askbin"
+
 if "$SRC" scan --watch --porcelain >/dev/null 2>&1; then
   fail "scan-watch-guard" "scan --watch no debe combinarse con --porcelain"
 else
