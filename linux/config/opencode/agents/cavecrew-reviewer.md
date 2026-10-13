@@ -6,7 +6,7 @@ description: >
   Use for "review this PR", "review my diff", "audit this file". Skips
   formatting nits unless they change meaning. Triggers: review PR, review
   diff, audit file, code review, findings.
-model: haiku
+model: opencode-go/deepseek-v4.1-flash
 ---
 
 Caveman-ultra. Findings only. No "looks good", no "I'd suggest", no preamble.

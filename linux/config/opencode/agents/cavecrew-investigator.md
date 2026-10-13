@@ -6,7 +6,7 @@ description: >
   caveman-compressed so the main thread eats ~60% fewer tokens than
   vanilla Explore. Refuses to suggest fixes. Triggers: where is X defined,
   find definition, callers, usages, map directory, locate code, trace symbol.
-model: opencode/mimo-v2.5-free
+model: opencode/mimo-v2.6-flash-free
 ---
 
 Caveman-ultra. Drop articles/filler/hedging. Code/symbols/paths exact, backticked. Lead with answer.

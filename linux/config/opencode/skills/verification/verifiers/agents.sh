@@ -2,7 +2,7 @@
 set -uo pipefail
 
 DOMAIN=agents
-AGENTS_DIR="$HOME/.config/opencode/agents"
+AGENTS_DIR="${AGENTS_DIR:-$HOME/.config/opencode/agents}"
 DESC_BUDGET=9000
 
 rc=0
@@ -37,7 +37,7 @@ if [[ ! -d "$AGENTS_DIR" ]]; then
 fi
 ok "agents-dir" "$AGENTS_DIR"
 
-policy_file="$HOME/.config/opencode/AGENTS.md"
+policy_file="${AGENTS_POLICY_MD:-$HOME/.config/opencode/AGENTS.md}"
 if [[ -f "$policy_file" ]] \
    && grep -qF 'Verificacion proporcional al riesgo (E3)' "$policy_file" \
    && grep -qF 'Estimate -> Execute -> Expand' "$policy_file" \
@@ -126,17 +126,18 @@ else
     | [ $tickets[]
         | select(.status == "in-progress")
         | (.worktree // "") as $w
-        | select(($w == "") or (($cwds | index($w)) == null))
+        | select($w != "")
+        | select(($cwds | index($w)) == null)
         | .id ]
     | .[]' 2>/dev/null)"
   if [[ -z "$orphans" ]]; then
-    ok "tickets-live" "todo ticket in-progress tiene silla viva (worktree con seat)"
+    ok "tickets-live" "todo ticket in-progress con worktree tiene silla viva (seat en su worktree)"
   else
-    fail "tickets-live" "in-progress sin silla viva: $(printf '%s' "$orphans" | paste -sd, -) (relanza: rig work new <id> --cwd <repo> --spawn, o marca pending/blocked)"
+    fail "tickets-live" "in-progress con worktree sin silla viva: $(printf '%s' "$orphans" | paste -sd, -) (relanza: rig work new <id> --cwd <repo> --spawn, o marca pending/blocked)"
   fi
 fi
 
-main_file="$HOME/.config/opencode/agents/main.md"
+main_file="$AGENTS_DIR/main.md"
 if [[ -f "$main_file" ]] \
    && grep -qiE 'punto de entrada' "$main_file" \
    && grep -qiE 'prohibido' "$main_file" \
@@ -175,6 +176,51 @@ if [[ -z "$style_reason" ]]; then
   ok "style-policy" "regla de estilo presente y caveman apagado por defecto (defaultMode=off, sin flag)"
 else
   fail "style-policy" "$style_reason"
+fi
+
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'Politica de modelos por tipo de trabajo' "$policy_file" \
+   && grep -qF 'Escalado por senal' "$policy_file" \
+   && grep -qF 'opencode/mimo-v2.6-flash-free' "$policy_file" \
+   && grep -qF 'opencode-go/deepseek-v4.1-flash' "$policy_file" \
+   && grep -qF 'opencode-go/deepseek-v4-pro' "$policy_file"; then
+  ok "model-policy" "AGENTS.md define la politica de modelos (3 niveles: gratis/flash/fuerte) + escalado por senal"
+else
+  fail "model-policy" "falta la politica de modelos de 3 niveles en $policy_file"
+fi
+
+appdev="$AGENTS_DIR/app-dev.md"
+if [[ -f "$appdev" ]] \
+   && grep -qiE 'implementacion de features' "$appdev" \
+   && grep -qF 'app-architect' "$appdev" \
+   && grep -qE '^model: *opencode/(mimo-v2\.6-flash-free|cat-jam-free)' "$appdev" \
+   && grep -qiE 'Frontera' "$appdev" \
+   && grep -qF 'Triggers:' "$appdev" \
+   && grep -qF 'Implementacion de features (apps)' "$policy_file"; then
+  ok "app-dev-owner" "app-dev existe: owner de implementacion, modelo gratuito, frontera con app-architect, fila en AGENTS.md"
+else
+  fail "app-dev-owner" "app-dev falta o no cumple (owner implementacion + modelo gratis + frontera + Triggers + fila en AGENTS.md)"
+fi
+
+models_list=""
+if command -v opencode >/dev/null 2>&1; then
+  models_list="$(opencode models 2>/dev/null | awk '{print $1}')"
+fi
+if [[ -z "$models_list" ]]; then
+  skip "model-valid" "opencode models no disponible"
+else
+  bad_models=""
+  for f in "$AGENTS_DIR"/*.md; do
+    [[ -e "$f" ]] || continue
+    m="$(awk -F':[[:space:]]*' '/^model:/{print $2; exit}' "$f" | tr -d '[:space:]')"
+    [[ -z "$m" ]] && continue
+    printf '%s\n' "$models_list" | grep -qxF "$m" || bad_models="$bad_models $(basename "$f"):$m"
+  done
+  if [[ -z "$bad_models" ]]; then
+    ok "model-valid" "todo model: de agente existe en opencode models"
+  else
+    fail "model-valid" "model invalido (no esta en opencode models):$bad_models"
+  fi
 fi
 
 spec_err=$(mktemp)

@@ -143,11 +143,11 @@ else
   fail "spawn-cmd-harden" "rig spawn --cmd --dry-run fallo: $(printf '%s' "$out" | head -n1)"
 fi
 
-if out=$("$SRC" spawn zz-probe --cwd /tmp --agent app-architect --prompt "hola mundo" --dry-run 2>&1); then
-  if printf '%s' "$out" | grep -q -- '--model opencode-go/deepseek-v4.1-flash'; then
-    ok "seat-model" "spawn pasa --model explicito (default deepseek-v4.1-flash)"
+if out=$("$SRC" spawn zz-probe --cwd /tmp --agent app-dev --prompt "hola mundo" --dry-run 2>&1); then
+  if printf '%s' "$out" | grep -q -- '--model opencode/mimo-v2.6-flash-free'; then
+    ok "seat-model" "spawn pasa --model explicito (default barato gratis, nivel 1)"
   else
-    fail "seat-model" "spawn no fija --model: $out"
+    fail "seat-model" "spawn no fija el modelo barato: $out"
   fi
 else
   fail "seat-model" "rig spawn --dry-run fallo: $(printf '%s' "$out" | head -n1)"
