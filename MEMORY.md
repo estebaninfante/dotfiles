@@ -6,7 +6,8 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 
 - **websockets v17+ API change**: `websockets.serve()` ahora requiere `async with` pattern, no `run_until_complete`. Usar `asyncio.new_event_loop()` en thread separado con `asyncio.Future()` para mantener vivo el loop.
 - **WebSocket server en gesturecontrol**: LandmarkServer corre en thread separado con asyncio loop propio. `publish()` usa `run_coroutine_threadsafe()` para enviar desde el thread principal.
-- **opencode en Omarchy = backend aqua de mise (unico dueno)**: la config `~/.config/mise/config.toml` (hoy versionada en `linux/config/mise/config.toml`) fija `opencode = "1.19.0"`. El binario vive autocontenido en `~/.local/share/mise/installs/opencode/1.19.0/opencode`. El lanzador `linux/bin/opencode` hace `exec mise x opencode@1.19.0 -- opencode "$@"` (NUNCA `mise use -g`). Nada de pacman `opencode-bin` ni npm global `opencode-ai`.
+- **opencode en Omarchy = binario OFICIAL V2 (unico dueno)**: hoy corre OpenCode 2 en `~/.opencode/bin/opencode` (v2.0.28, instalado con `https://opencode.ai/v2/install`; metodo versionado en `linux/bin/opencode-install`). NO se instala por mise: el backend aqua da 404 en las releases 2.0.x (la 2.0 no se publica como GitHub releases de `anomalyco/opencode`). El lanzador `linux/bin/opencode` hace `exec "$HOME/.opencode/bin/opencode" "$@"`. Nada de pacman `opencode-bin` ni npm global `opencode-ai`. El binario V1 (aqua `1.19.0` en `~/.local/share/mise/installs/opencode/1.19.0/opencode`) se conserva SOLO como rollback y como binario de las sillas V1 mientras rig se adapta.
+- **V2 trae servidor de fondo**: `opencode service` (start/restart/status/stop) mantiene un servicio caliente (p.ej. http://127.0.0.1:49374) y la TUI se conecta a el -> el arranque percibido baja de ~3.9s (V1, cold start por TUI) a ~0.1-0.5s (`opencode session list`). El archivo de servicio es `~/.local/state/opencode/service.json` (contiene un password: NO versionar).
 
 ## Errores comunes y soluciones
 
@@ -17,6 +18,11 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - **Backend npm de mise no corre postinstall**: `mise exec -- opencode` falla con `opencode-ai's postinstall script was not run`; el empaquetador (aube) ignora scripts. Evitarlo usando el backend aqua. Si se insiste en npm: `cd .../node_modules/opencode-ai && node postinstall.mjs`.
 - **`pkill -f '<patrón>'` se auto-matchea** y mata la propia shell si el patrón aparece en el comando (p.ej. `pkill -f 'mise use'`). Filtrar por PID.
 - **`grep` en la shell de opencode resuelve a BusyBox** (no soporta `-A`/`-B`): usar `/usr/bin/grep`.
+- **API de plugins V2: los plugins V1 NO corren**: V2 falla con `failed to load plugin ... PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function`. Forma V2: `import { Plugin } from "@opencode/plugin"` + `export default Plugin.define({ id, async setup(ctx) { await ctx.tool.hook("execute.before"|"execute.after", (event) => {...}) } })` (el callback recibe UN evento mutable). Los args del tool estan en `event.input` (ya no `output.args`); para que el modelo vea texto hay que agregarlo a `event.result.content` y marcar `event.result.metadata.<flag>`. NO usar el helper `$` de Bun (V2 no lo provee): usar `spawnSync` de `node:child_process`. La clave de config es `plugins` (plural) y los plugins locales se autodescubren desde `~/.config/opencode/plugins/` (y `plugin/` singular).
+- **`~/.config/opencode` es symlink -> el watcher de V2 falla**: V2 loguea `ERROR failed to subscribe ... inotify_add_watch on '/home/eztvn/.config/opencode' failed: Not a directory`. V2 igual funciona, pero el hot-reload de config no existe: hay que `opencode service restart`.
+- **V2 no acepta `opencode --agent X --model Y`**: esos flags solo existen en `opencode run` (top-level solo hay `--prompt`, `--standalone`, `--server`, `--auto`, `-c/--continue`, `-s/--session`). Por eso `rig spawn` (que lanza `opencode --agent ... --model ...`) falla con `cli process failed cause=ShowHelp` (ticket #98 RIG-LAUNCH-FIABLE).
+- **`/tmp` es tmpfs chico (~1.5G libres)**: para instalaciones/descargas grandes usar `TMPDIR=/var/tmp`.
+- **Leer archivos bajo `~/.config/opencode/` con la tool `read` re-inyecta TODO el AGENTS.md (~60 KB)**: usar `bash cat` para inspeccionarlos.
 
 ## Configuraciones frecuentes
 
@@ -24,7 +30,7 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - `~/.config/gesturecontrol/actions.toml` — mapeo de señales a acciones
 - `~/.local/share/gesturecontrol/gestureControl.py` — engine parcheado (cv2.waitKey fix)
 - **Bedtime timer**: desktop se apaga a las 21:00 (hora Colombia). `bedtime-skip.sh` crea flag `/run/bedtime-skip` para cancelar una noche.
-- **opencode**: `~/.config/mise/config.toml` (→ `linux/config/mise/config.toml`), `~/.local/bin/opencode` (→ `linux/bin/opencode`), skill/plugins en `~/.config/opencode/` (→ `linux/config/opencode/`). `rtk` v1.0.0 en `~/.local/bin/rtk` (instalador oficial, ver `scripts/`). El plugin `plugins/rtk.ts` reescribe comandos bash via `rtk rewrite` cuando `rtk` esta en PATH.
+- **opencode (V2)**: binario `~/.opencode/bin/opencode` (v2.0.28, instalador oficial); lanzador `~/.local/bin/opencode` (→ `linux/bin/opencode`); metodo de instalacion `~/.local/bin/opencode-install` (→ `linux/bin/opencode-install`); config `~/.config/opencode/` (→ `linux/config/opencode/`: `opencode.json`, `cli.json` del cliente TUI, `plugins/` con los 5 ports V2, `plugins-disabled/` con los no portados: btw, caveman, herdr-agent-state, herdr-pane-state, notify-sound, voice, arize-tracing); servidor de fondo con `opencode service`. `rtk` v1.0.0 en `~/.local/bin/rtk`; el plugin `plugins/rtk.js` reescribe comandos bash via `rtk rewrite` cuando `rtk` esta en PATH.
 
 ## Skills creadas
 
@@ -35,6 +41,16 @@ _(Agente: listar skills creadas por auto-mejora)_
 _(agregar aqui pendientes activos)_
 
 ## Historial de sesiones (últimas 5)
+
+### Sesión 2026-10-13: Ticket OPENCODE-V2 — migración a OpenCode 2.0.28 + port de plugins
+- **Pedido del usuario (literal)**: "Migremos a la 2.0 igual, si necesito algún plugin, tú mismo lo haces. Hagamos la migración, y soluciona, que todavía se demora bastante en entrar a opencode, por lo que veo." y luego "Dale" (autorizando portar los 5 plugins de control).
+- **Hallazgo honesto**: OpenCode 2 SÍ es estable/GA (no preview): `@opencode/cli` 2.0.28 en el canal `latest`, docs `opencode.ai/v2`, tag v2.0.28 del 13-oct. NO se instala por mise/aqua (aqua da 404 en las releases 2.0.x); se instala con el instalador oficial `https://opencode.ai/v2/install` (deja `~/.opencode/bin/opencode`, autocontenido, 211 MB). Versionado en `linux/bin/opencode-install` (fija 2.0.28, `--no-modify-path`).
+- **Un solo dueño**: se quitó `opencode` de `~/.config/mise/config.toml` (versionado en `linux/config/mise/config.toml`), se borró el shim de mise y se actualizó el lanzador a `exec "$HOME/.opencode/bin/opencode" "$@"`. El install aqua V1 1.19.0 se conserva a propósito (rollback + binario V1 de las sillas).
+- **Arranque lento RESUELTO**: V2 mantiene un servidor de fondo (`opencode service`, http://127.0.0.1:49374); medido `opencode --version` 0.077s y `opencode session list` 0.10-0.51s contra los ~2.9-3.2s headless y ~3.9s TUI de V1 (la TUI de V1 hacía cold start en cada entrada). `opencode stats` tarda 19s pero NO es arranque: es una agregación pesada sobre la DB de 3.8 GB.
+- **Port de plugins a la API V2**: la API cambió y los plugins V1 no cargan. Se portaron 5 a `Plugin.define({id, async setup(ctx){ ctx.tool.hook(...) }})` con `spawnSync` de `node:child_process`: `verify-hook.js`, `qml-ux-lint.js`, `app-arch-lint.js`, `rtk.js` (antes `rtk.ts`) y `no-comments.js`. Los logs del servicio muestran `loading plugin id=.../plugins/*.js` sin error para los cinco. Los no portados se movieron a `linux/config/opencode/plugins-disabled/` (btw.ts, caveman/, herdr-agent-state.js, herdr-pane-state.js, notify-sound/, rtk.ts, voice/, plugin/arize-tracing.ts). Se quitó la clave `plugin` (V1) de `opencode.json` y el array `plugins` de `cli.json` (apuntaba a `@tarquinen/opencode-dcp@latest`, V1).
+- **Verificación**: `verify run packages` PASS; `node --check` OK en los 5 ports; `opencode --version` = v2.0.28; `which -a opencode` en shell limpio = `~/.opencode/bin/opencode` + `~/.local/bin/opencode` (mismo binario). Commit `227bf06` pusheado.
+- **Limitaciones conocidas (V2)**: el watcher de config falla porque `~/.config/opencode` es symlink (`inotify_add_watch ... Not a directory`); V2 descarta `provider.explabs...reasoning`; MCP supabase sin auth (401); skills duplicadas (diagnose-crash, omarchy, find-skills); y las sillas de rig siguen en V1 porque `opencode --agent/--model` solo existen en `opencode run` (ticket #98).
+- **Acción del usuario**: REINICIAR opencode para que la sesión nueva corra V2 (no hay hot-reload).
 
 ### Sesión 2026-10-13: Ticket MACHINE-OPENCODE-RTK — opencode 1.19.0 (dueño único) + rtk
 - **Pedido**: actualizar opencode a "la 2.0", arreglar el aviso "rtk not found in PATH" y el arranque lento.
@@ -69,13 +85,5 @@ _(agregar aqui pendientes activos)_
 - **`reverse_rows`**: `hyprland.lua` lo seteaba pero la clave no existía en ningún parche (venía de árbol sucio del desktop). Implementado en el fork (flag en computeTileLayout/tileIndexAtPoint, default 0), test headless 9/9, parche v2 (18 archivos). `.so` con reverse compilado en `~/.cache/hyprexpo-src/` — falta `sudo install` (polkit bloqueado con pantalla lockeada) + relogin.
 - **Ojo**: `pkill -f <patrón>` se suicida si el patrón aparece en tu propio comando. Matar nested solo por PID. Los `make test` del plugin tienen 4 FAILs preexistentes de selección (no-layout) en este pin.
 
-### Sesión 2026-09-15: Migración NixOS → Omarchy (Arch)
-- **Qué se hizo**: Eliminado todo el legacy NixOS/Ubuntu (nixos/, flake.nix/lock, setup-nixos.sh, setup-ubuntu.sh, migrate-to-ubuntu.sh, cuda-*, refind-check.sh, rebuild/sync*, auto-sync.sh, linux/bin/cuda-build-notify.sh, gdm/black.png). Repo remoto corregido a `github.com/estebaninfante/dotfiles.git`.
-- **Symlinks**: Nuevo `scripts/link-dotfiles.sh` idempotente (inventario CONFIG_DIRS/CONFIG_FILES/HOME_FILES + lan-mouse machine-specific + bin con clobber=false para no pisar stubs de Omarchy). `~/.config` ahora son symlinks al repo; hypr incluido. `hyprctl reload` OK.
-- **Refs NixOS runtime limpiadas**: `/run/current-system/...` y `/nix/var/...` reemplazados por rutas Arch (`/usr/bin/handy`, `shutil.which(...)`, `/usr/share/piper-voices`, `/usr/share/sounds/...`). Handy = `/usr/bin/handy`. Piper vendorizado en `/opt/piper-tts`.
-- **Seguridad**: `EXPLABS_API_KEY` estaba hardcodeada en `.bashrc` trackeado → movida a `~/.config/dotfiles-secrets.sh` (chmod 600, fuera del repo).
-- **IMPORTANTE**: existía `dotfiles-sync.timer` (systemd user) que auto-commiteaba cada 5 min. Detenido, deshabilitado y units eliminadas. No recrear (setup-omarchy ya no lo instala).
-- **Lección**: Omarchy = Arch; nada de `/run/current-system` ni `nixos-rebuild`/`home-manager`. Paquetes con pacman/yay.
-
 ---
-_Ultima actualización: 2026-10-13 (ticket MACHINE-OPENCODE-RTK: opencode 1.19.0 dueño único via mise + rtk 1.0.0)_
+_Ultima actualización: 2026-10-13 (ticket OPENCODE-V2: OpenCode 2.0.28 binario oficial + servidor de fondo + 5 plugins portados a la API V2)_
