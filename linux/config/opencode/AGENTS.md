@@ -326,6 +326,34 @@ owner. **Nunca** deja el pedido en `"¿lo lanzo?"`: o lo lanza, o lo cierra con 
 - Dueño: `supervisor`. Verificacion: `verify run agents` (checks `launch-policy`,
   `tickets-live`) + `verify run rig` (check `tickets-idle`, senal de sillas in-progress idle).
 
+## Invariante: ciclo de vida de sillas (no cerrar ajenos; el space lo cierra el usuario)
+
+REGLA DURA, pedido directo del usuario: un agente **no cierra sillas, espacios ni tickets ajenos**.
+Un agente solo toca SU unidad; al terminarla, la silla marca su ticket `done`/`blocked`
+y **deja la silla y el espacio vivos** para que el usuario los cierre. Cerrar o matar el trabajo
+de otro agente rompe la trazabilidad y es un fallo grave (caso real: una silla cerro el ticket
+`HERMES-PILOT`, autorizado por el usuario, y mato su silla).
+
+- **Enforcement en `rig`**: `rig ticket set/done/rm` y `rig work finish/rm` se niegan si el actor
+  es una silla distinta de la dueña del ticket (`seat_can_touch_ticket` / `seat_owns_ticket`; la
+  dueña es `work-<id>`, `<id>` normalizado, `ticket.seat`, o la silla cuyo cwd es el worktree).
+  Override explicito y puntual: `--force` (o `RIG_FORCE_CROSS=1`). `close_seat_for_ticket` no
+  cierra una silla ajena. `main` (o el usuario, fuera de tmux) puede operar cualquier ticket.
+- **Cierre del ticket por cierre del space (senal de resolucion)**: cada unidad abre su propio
+  space herdr y el ticket guarda su id (`space`). Cuando el usuario da la cosa por resuelta,
+  **el cierre del espacio por el usuario** es la senal: `rig spaces reconcile` (o `rig spaces
+  --watch`) detecta los spaces que ya no existen y **marca ese ticket done** con evidencia
+  "space cerrado por el usuario". Ninguna silla debe cerrar el space para "terminar".
+- **Estado fiel (nada en working si murio)**: una silla **no puede quedar en working** si su
+  agente murio o nunca arranco. `rig agents` valida que la sesion tmux exista y que el foreground
+  sea un agente (no un shell): si no, reporta estado `dead` (fuente `probe`), y `rig herdr sync`
+  no reporta estado para una silla muerta. Un ticket `in-progress` sin silla viva es **stale**:
+  `main` cierra el bucle (relanza o marca `pending`/`blocked`), nunca se deja huerfano.
+- **Cierre explicito**: `rig work finish --close-seat` / `rig ticket done <id> --close-seat`
+  cierran silla+space solo con intencion explicita; el default **deja todo vivo**.
+- Dueño: `supervisor`. Verificacion: dominio `agents` (check `lifecycle-policy`) + dominio `rig`
+  (checks `no-close-policy`, `state-fidelity`, `spaces-cli`, `space-done-on-close`).
+
 ## Invariante: cambios paralelos con git worktree por ticket
 
 Regla dura: **un escritor por arbol**. Dos agentes jamas escriben el mismo working tree a la

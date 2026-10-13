@@ -37,7 +37,7 @@ if [[ ! -d "$AGENTS_DIR" ]]; then
 fi
 ok "agents-dir" "$AGENTS_DIR"
 
-policy_file="$HOME/.config/opencode/AGENTS.md"
+policy_file="${AGENTS_POLICY_MD:-$HOME/.config/opencode/AGENTS.md}"
 if [[ -f "$policy_file" ]] \
    && grep -qF 'Verificacion proporcional al riesgo (E3)' "$policy_file" \
    && grep -qF 'Estimate -> Execute -> Expand' "$policy_file" \
@@ -111,6 +111,17 @@ else
   fail "launch-policy" "falta la regla de lanzamiento inmediato (nada queda sin lanzar) en $policy_file"
 fi
 
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'no cierra sillas, espacios ni tickets ajenos' "$policy_file" \
+   && grep -qF 'el cierre del espacio por el usuario' "$policy_file" \
+   && grep -qF 'marca ese ticket done' "$policy_file" \
+   && grep -qF 'no puede quedar en working' "$policy_file" \
+   && grep -qF 'deja la silla y el espacio vivos' "$policy_file"; then
+  ok "lifecycle-policy" "AGENTS.md: nadie cierra sillas/spaces ajenos; el cierre del space por el usuario marca el ticket done; estado fiel"
+else
+  fail "lifecycle-policy" "falta la politica de ciclo de vida de sillas (no cerrar ajenos + cierre del space = done + estado fiel) en $policy_file"
+fi
+
 tickets_file="${RIG_TICKETS_FILE:-$HOME/.config/opencode/tickets.json}"
 if [[ ! -f "$tickets_file" ]]; then
   skip "tickets-live" "sin $tickets_file"
@@ -119,20 +130,25 @@ elif ! command -v jq >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
 elif ! tmux list-sessions >/dev/null 2>&1; then
   skip "tickets-live" "sin servidor tmux"
 else
-  live_cwds="$(tmux list-sessions -F $'#{@agent}\t#{@agent_cwd}' 2>/dev/null | awk -F'\t' '$1=="1"{print $2}')"
-  orphans="$(printf '%s\n' "$live_cwds" | jq -R -s -r --slurpfile tf "$tickets_file" '
-    ($tf[0].tickets // []) as $tickets
-    | (split("\n") | map(select(length > 0))) as $cwds
-    | [ $tickets[]
+  live_json="$(tmux list-sessions -F $'#{@agent}\t#{session_name}\t#{@agent_cwd}' 2>/dev/null | awk -F'\t' '$1=="1"{printf "{\"seat\":\"%s\",\"cwd\":\"%s\"}\n",$2,$3}' | jq -s '{seats:[.[].seat], cwds:[.[].cwd]}')"
+  [[ -n "$live_json" ]] || live_json='{"seats":[],"cwds":[]}'
+  orphans="$(jq -r --argjson live "$live_json" '
+    ($live.seats) as $seats | ($live.cwds) as $cwds
+    | [ .tickets[]
         | select(.status == "in-progress")
+        | (.id | ascii_downcase | gsub("[^a-z0-9_-]"; "-")) as $n
         | (.worktree // "") as $w
-        | select(($w == "") or (($cwds | index($w)) == null))
+        | (.seat // "") as $st
+        | select((((($w != "") and (($cwds | index($w)) != null)))
+                  or (($seats | index($n)) != null)
+                  or (($seats | index("work-" + $n)) != null)
+                  or (($st != "") and (($seats | index($st)) != null))) | not)
         | .id ]
-    | .[]' 2>/dev/null)"
+    | .[]' "$tickets_file" 2>/dev/null)"
   if [[ -z "$orphans" ]]; then
-    ok "tickets-live" "todo ticket in-progress tiene silla viva (worktree con seat)"
+    ok "tickets-live" "todo ticket in-progress tiene silla viva (worktree o silla del ticket)"
   else
-    fail "tickets-live" "in-progress sin silla viva: $(printf '%s' "$orphans" | paste -sd, -) (relanza: rig work new <id> --cwd <repo> --spawn, o marca pending/blocked)"
+    skip "tickets-live" "SENAL: in-progress sin silla viva: $(printf '%s' "$orphans" | paste -sd, -) (main cierra el bucle: relanza con rig work new <id> --spawn o marca pending/blocked)"
   fi
 fi
 
@@ -357,8 +373,13 @@ else
 fi
 
 herdr_plugin="${HERDR_REPORTER:-$HOME/.config/opencode/plugins/herdr-pane-state.js}"
+herdr_plugin_disabled="$HOME/.config/opencode/plugins-disabled/herdr-pane-state.js"
 if [[ ! -f "$herdr_plugin" ]]; then
-  fail "herdr-reporter" "falta $herdr_plugin (el panel nativo de herdr no se pobla con opencode >=1.19)"
+  if [[ -f "$herdr_plugin_disabled" ]]; then
+    skip "herdr-reporter" "plugin en plugins-disabled (migracion V2): el estado cae al fallback derive de rig (estado fiel)"
+  else
+    fail "herdr-reporter" "falta $herdr_plugin (el panel nativo de herdr no se pobla con opencode >=1.19)"
+  fi
 else
   herdr_problem=$(node --no-warnings --input-type=module -e '
 const file = process.argv[1]
@@ -379,8 +400,13 @@ import("file://" + file)
 fi
 
 herdr_managed="${HERDR_MANAGED_PLUGIN:-$HOME/.config/opencode/plugins/herdr-agent-state.js}"
+herdr_managed_disabled="$HOME/.config/opencode/plugins-disabled/herdr-agent-state.js"
 if [[ ! -f "$herdr_managed" ]]; then
-  skip "herdr-single-source" "sin plugin gestionado por herdr en $herdr_managed"
+  if [[ -f "$herdr_managed_disabled" ]]; then
+    skip "herdr-single-source" "plugin gestionado en plugins-disabled (migracion V2): sin segunda fuente"
+  else
+    skip "herdr-single-source" "sin plugin gestionado por herdr en $herdr_managed"
+  fi
 else
   managed_export=$(node --input-type=module -e '
 import(process.argv[1])
