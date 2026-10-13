@@ -50,6 +50,13 @@ case "${1:-help}" in
   float)
     hyprctl eval "hl.dispatch(hl.dsp.window.float({ action = 'toggle' }))"
     ;;
+  dpms)
+    STATE="${2:-}"
+    case "$STATE" in
+      on|off) hyprctl eval "hl.dispatch(hl.dsp.dpms('$STATE'))" ;;
+      *) echo "uso: hypr-lua.sh dpms <on|off>" >&2; exit 2 ;;
+    esac
+    ;;
   focus-pid)
     PID="${2:?falta PID}"
     hyprctl eval "hl.dispatch(hl.dsp.focus({ window = 'pid:$PID' }))"
@@ -109,6 +116,7 @@ Uso:
   hypr-lua.sh move <N>                 Mover ventana a workspace N
   hypr-lua.sh fullscreen               Toggle fullscreen
   hypr-lua.sh float                    Toggle floating
+  hypr-lua.sh dpms <on|off>            Encender/apagar pantalla
   hypr-lua.sh focus-pid <PID>          Focus ventana por PID
   hypr-lua.sh focus-address <addr>     Focus ventana por address
   hypr-lua.sh open-in-workspace <app> <N> [class]  Abrir app en workspace

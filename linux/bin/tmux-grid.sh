@@ -127,3 +127,6 @@ layout="$(tmux_checksum "$body"),$body"
 if ! tmux select-layout -t "$TARGET" "$layout" 2>/dev/null; then
     tmux select-layout -t "$TARGET" tiled
 fi
+
+tmux set -w -t "$TARGET" @layout_mode grid
+tmux set -w -t "$TARGET" @layout_panes "$n"

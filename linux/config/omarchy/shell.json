@@ -6,7 +6,7 @@
   },
   "bar": {
     "position": "top",
-    "transparent": true,
+    "transparent": false,
     "centerAnchor": "eztvn.workspaces",
     "layout": {
       "left": [
@@ -14,10 +14,10 @@
           "id": "eztvn.menu"
         },
         {
-          "id": "vm.sysmem"
+          "id": "omarchy.system-update"
         },
         {
-          "id": "omarchy.system-update"
+          "id": "vm.sysmem"
         }
       ],
       "center": [
@@ -41,6 +41,9 @@
           "target": "2027-01-25T00:00:00"
         },
         {
+          "id": "omarchy.tray"
+        },
+        {
           "id": "io.github.keegan-sucks.flowstate",
           "workMinutes": 50,
           "shortBreakMinutes": 10
@@ -54,19 +57,22 @@
           "id": "eztvn.animations"
         },
         {
-          "id": "omarchy.tray"
-        },
-        {
           "id": "omarchy.keyboard-layout"
         },
         {
-          "id": "tomv.battery-usage"
+          "id": "eztvn.power"
         },
         {
           "id": "local.opencode-go"
         },
         {
+          "id": "eztvn.tmux"
+        },
+        {
           "id": "omarchy.agents"
+        },
+        {
+          "id": "eztvn.hypr-remote"
         },
         {
           "id": "omarchy.network"
@@ -81,9 +87,6 @@
           "id": "io.github.dragosol.better-displays-pro"
         },
         {
-          "id": "eztvn.power"
-        },
-        {
           "id": "services",
           "type": "qml"
         }
@@ -93,7 +96,8 @@
   },
   "plugins": [],
   "disabledPlugins": [
-    "omarchy.menu"
+    "omarchy.menu",
+    "tomv.battery-usage"
   ],
   "cloneSourceRestores": [
     "eztvn.menu"

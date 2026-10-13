@@ -3,6 +3,7 @@
 *~
 *.bak
 *.bak.*
+*.bak-*
 *.live-refresh.*
 .DS_Store
 Thumbs.db
@@ -21,3 +22,15 @@ linux/voice/__pycache__/
 
 # gh: hosts.yml contiene tokens de autenticación (NO trackear)
 linux/config/gh/hosts.yml
+
+# caches python (ai-chats, voice, etc.): no versionar
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+
+# estado runtime del tablero de tickets (rig ticket): churn, no versionar
+linux/config/opencode/tickets.json

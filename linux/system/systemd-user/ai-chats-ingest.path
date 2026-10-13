@@ -1,0 +1,9 @@
+[Unit]
+Description=ai-chats: ingesta al caer archivos en el staging
+
+[Path]
+PathChanged=%h/Downloads/AIChats
+Unit=ai-chats-sync.service
+
+[Install]
+WantedBy=default.target

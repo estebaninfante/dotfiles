@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+unit_name="hypr-remote.service"
+sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr-remote/control.sock"
+
+usage() {
+  printf 'usage: hypr-remote-ctl <rotate|forget <device-id>|unpair-all|start|stop|restart|logs>\n' >&2
+  exit 2
+}
+
+socket_call() {
+  local method="$1"
+  local path="$2"
+  curl -sf --max-time 5 -X "$method" --unix-socket "$sock" "http://localhost${path}"
+}
+
+action="${1:-}"
+
+trap 'printf "hypr-remote-ctl: %s fallo\n" "${action:-<sin accion>}" >&2' ERR
+
+case "$action" in
+  rotate)
+    socket_call POST /pairing/rotate
+    ;;
+  forget)
+    device_id="${2:-}"
+    [[ -n "$device_id" ]] || usage
+    [[ "$device_id" =~ ^[A-Za-z0-9._-]+$ ]] || usage
+    socket_call DELETE "/devices/${device_id}"
+    ;;
+  unpair-all)
+    socket_call POST /unpair-all
+    ;;
+  start | stop | restart)
+    systemctl --user "$action" "$unit_name"
+    ;;
+  logs)
+    journalctl --user -u "$unit_name" -n 100 --no-pager
+    ;;
+  *)
+    usage
+    ;;
+esac

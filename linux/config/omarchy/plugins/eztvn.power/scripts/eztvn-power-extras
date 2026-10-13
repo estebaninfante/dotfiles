@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
+
+if [[ -r /proc/uptime ]]; then
+  read -r uptime_seconds _ < /proc/uptime
+  printf 'uptime\t%s\n' "${uptime_seconds%%.*}"
+fi
+
+cpu_temp=""
+gpu_temp=""
+for hwmon in /sys/class/hwmon/hwmon*; do
+  [[ -r "$hwmon/name" && -r "$hwmon/temp1_input" ]] || continue
+  name="$(<"$hwmon/name")"
+  millidegrees="$(<"$hwmon/temp1_input")"
+  case "$name" in
+    k10temp | coretemp) cpu_temp=$((millidegrees / 1000)) ;;
+    amdgpu) gpu_temp=$((millidegrees / 1000)) ;;
+  esac
+done
+[[ -n "$cpu_temp" ]] && printf 'cpu_temp\t%s\n' "$cpu_temp"
+[[ -n "$gpu_temp" ]] && printf 'gpu_temp\t%s\n' "$gpu_temp"
+
+for battery in /sys/class/power_supply/BAT*; do
+  [[ -r "$battery/energy_full" && -r "$battery/energy_full_design" ]] || continue
+  full="$(<"$battery/energy_full")"
+  design="$(<"$battery/energy_full_design")"
+  if ((design > 0)); then
+    printf 'health\t%s\n' "$((full * 100 / design))"
+    break
+  fi
+done

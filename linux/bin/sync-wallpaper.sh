@@ -39,7 +39,8 @@ if pgrep -x hyprpaper >/dev/null 2>&1; then
     hyprctl hyprpaper wallpaper "$mon,$BG" >/dev/null 2>&1 || true
 fi
 
-# 3. hyprexpo/background_image se resuelve desde el symlink en cada reload.
-hyprctl reload >/dev/null 2>&1 || true
+if [ "${SYNC_WALLPAPER_NO_RELOAD:-0}" != "1" ]; then
+    hyprctl reload >/dev/null 2>&1 || true
+fi
 
 echo "wallpaper sincronizado: $BG"

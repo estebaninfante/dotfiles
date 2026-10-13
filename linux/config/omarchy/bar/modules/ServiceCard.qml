@@ -12,11 +12,11 @@ Rectangle {
   readonly property bool busy: module ? module.busySvc === svc.svc : false
   readonly property bool isActive: svc.state === "active"
   readonly property bool starts: module ? module.isEnabled(svc.enabled) : false
-  readonly property string stateLabel: module ? module.labelFor(svc.state) : ""
+  readonly property string stateLabel: module ? module.statusLabel(svc) : ""
 
   readonly property color fg: module ? module.fg : Color.foreground
   readonly property color dim: module ? module.dim : Color.muted
-  readonly property color tone: module ? (busy ? module.warnColor : module.colorFor(svc.state)) : Color.muted
+  readonly property color tone: module ? (busy ? module.warnColor : module.healthColor(svc)) : Color.muted
   readonly property string fontFamily: module ? module.fontFamily : Style.font.family
 
   width: parent ? parent.width : 0
@@ -109,11 +109,12 @@ Rectangle {
 
     Text {
       width: parent.width
-      text: card.svc.desc
-      color: card.dim
+      text: card.stateLabel
+      color: card.tone
       font.family: card.fontFamily
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
+      Behavior on color { ColorAnimation { duration: 150 } }
     }
   }
 
@@ -124,12 +125,6 @@ Rectangle {
     anchors.top: parent.top
     anchors.topMargin: Style.space(12)
     spacing: Style.space(6)
-
-    StateChip {
-      tone: card.tone
-      text: card.stateLabel
-      pulse: card.busy
-    }
 
     IconAction {
       glyph: "󰑓"
@@ -151,57 +146,6 @@ Rectangle {
     starts: card.starts
     active: card.isActive
     busy: card.busy
-  }
-
-  component StateChip: Rectangle {
-    id: chip
-
-    property color tone: card.fg
-    property string text: ""
-    property bool pulse: false
-
-    implicitWidth: chipRow.implicitWidth + Style.space(14)
-    height: Style.space(20)
-    radius: height / 2
-    color: Util.alpha(chip.tone, 0.13)
-    border.width: 1
-    border.color: Util.alpha(chip.tone, 0.30)
-    Behavior on color { ColorAnimation { duration: 150 } }
-    Behavior on border.color { ColorAnimation { duration: 150 } }
-
-    Row {
-      id: chipRow
-      anchors.centerIn: parent
-      spacing: Style.space(5)
-
-      Rectangle {
-        id: chipDot
-        anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(6)
-        height: width
-        radius: width / 2
-        color: chip.tone
-        Behavior on color { ColorAnimation { duration: 150 } }
-
-        SequentialAnimation on opacity {
-          running: chip.pulse
-          loops: Animation.Infinite
-          NumberAnimation { to: 0.3; duration: 450; easing.type: Easing.OutQuad }
-          NumberAnimation { to: 1.0; duration: 450; easing.type: Easing.InOutQuad }
-          onRunningChanged: if (!running) chipDot.opacity = 1
-        }
-      }
-
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        text: chip.text
-        color: chip.tone
-        font.family: card.fontFamily
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        Behavior on color { ColorAnimation { duration: 150 } }
-      }
-    }
   }
 
   component IconAction: Rectangle {

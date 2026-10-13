@@ -43,6 +43,11 @@ colores desordenados (arcoiris), y todo monocromo sin jerarquia. No repitas esos
    compacto.
 9. Las stats NO dominan: el contenido es el foco. Stats inline o compactas.
 10. Animaciones <= 250ms, sutiles. Targets clickeables >= 32px.
+11. NADA de elementos que aparecen/desaparecen sin transicion: toda entrada/salida —por mas
+    chica que sea (badge, chip, caption, fila, tarjeta, toast, tooltip, menu, overlay)— usa
+    fade/transicion; al montar/desmontar listas, animar entrada y salida; respeta
+    `prefers-reduced-motion` (desactiva la animacion, nunca la logica). Un elemento que
+    aparece/desaparece de golpe = defecto penalizado.
 
 ## Rubrica (pesos, cada categoria 0-10)
 
@@ -55,7 +60,7 @@ colores desordenados (arcoiris), y todo monocromo sin jerarquia. No repitas esos
 | Color/Contraste | 15% | neutro + 1 acento, color con proposito, AA (4.5 texto / 3 UI), sin arcoiris |
 | Tipografia | 10% | <= 5 tamanos, escala modular, meta en muted, sin tracking raro |
 | Componentes/Consistencia | 10% | mismo radio/borde/sombra, anatomia de card uniforme, alturas uniformes |
-| Estados/Accesibilidad | 10% | hover/focus visibles, targets >= 32px, empty states, sin cajas gigantes para 0 |
+| Estados/Accesibilidad | 10% | hover/focus visibles, targets >= 32px, empty states, sin cajas gigantes para 0, entrada/salida de UI con fade/transicion y respeta prefers-reduced-motion |
 
 Score final = suma ponderada, 0-10. **>= 8 = aprobado**. < 8 = rediseñar antes de cerrar.
 

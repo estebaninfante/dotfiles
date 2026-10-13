@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+
+UNIT=omarchy-shell.service
+REAL=/usr/bin/omarchy-launch-shell
+
+if ! systemctl --user --quiet is-enabled "$UNIT" 2>/dev/null; then
+  exec "$REAL" "$@"
+fi
+
+systemctl --user reset-failed "$UNIT" 2>/dev/null || true
+exec systemctl --user restart "$UNIT"

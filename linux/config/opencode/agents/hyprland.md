@@ -74,8 +74,10 @@ Hacer que la config de Hyprland sea **extremadamente agent-friendly**:
 | `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` | Compila+instala el `.so` parcheado | No unload/load en vivo |
 | `~/dotfiles/linux/bin/hyprexpo-verify-3d.sh` | Verifica 3D en Hyprland ANIDADO | Seguro |
 | `/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so` | Plugin instalado (root) | Se sobreescribe con hyprpm update |
-| `~/dotfiles/linux/bin/wallpaper-switch.sh` | Fuente del fondo: `use video|static` | Ver abajo |
-| `~/.config/wallpaper-source` | Fuente activa (`video`/`static`) | Lo lee el autostart y el overview transparente |
+| `~/dotfiles/linux/bin/wallpaper-switch.sh` | Fuente del fondo: `use video|static` | En laptop redirige `video`/`set` a `static` |
+| `~/dotfiles/linux/bin/wallpaper-power-guard.sh` | En AC restaura la fuente; en bateria `use frame` | En laptop siempre `static` |
+| `~/dotfiles/linux/bin/wallpaper-daemon.sh` | `ExecStart` del engine (video) | En laptop sale limpio y asegura hyprpaper |
+| `~/.config/wallpaper-source` | Fuente activa (`video`/`static`) | En laptop se ignora: siempre `static` |
 | `~/dotfiles/linux/system/systemd-user/linux-wallpaperengine.service` | Unit del video | `setup-omarchy.sh` Fase 8 la instala |
 
 Configs machine-specific: cada modulo con logica por maquina usa
@@ -225,6 +227,15 @@ wallpaper-switch.sh list         # lista wallpapers de video descargados
 - Estado en `~/.config/wallpaper-source` (`video`/`static`); `hyprland.lua` lo lee
   en el autostart. `use video` para hyprpaper y arranca el servicio; `use static`
   detiene el servicio y arranca hyprpaper.
+- **Regla laptop ⇒ estatico.** En `machine == "laptop"` la fuente efectiva es
+  SIEMPRE `static` y `linux-wallpaperengine.service` nunca corre (ni por autostart,
+  ni por el power-guard, ni por `use video`/`set <id>` manual). `~/.config/wallpaper-source`
+  se ignora en laptop: `autostart.lua` levanta `hyprpaper-laptop.conf` primero,
+  `wallpaper-switch.sh` (`use_video`/`set_wallpaper`) redirige a `use_static` con aviso
+  en stderr y su `effective_source` reporta `static`, `wallpaper-power-guard.sh` aplica
+  `static` en AC y bateria, y `wallpaper-daemon.sh` sale limpio asegurando hyprpaper
+  (nunca deja la pantalla vacia). El paquete y el diseno quedan instalados; solo se
+  bloquea la ejecucion en laptop. Desktop: comportamiento sin cambios.
 - `hyprexpo:background_transparent=1` hace que el overview NO pinte backdrop y
   repinte las layers `BACKGROUND` + `BOTTOM` debajo (asi se ve el video o el
   estatico). Detalle en `hyprexpo-changes.md`.

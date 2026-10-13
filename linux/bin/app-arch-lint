@@ -1,0 +1,325 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+MODE=human
+targets=()
+rc=0
+
+usage() {
+  cat <<'EOF'
+app-arch-lint — arquitectura Agent-Friendly (contrato AFA v1)
+
+Uso:
+  app-arch-lint [--quiet|--tsv] <dir|archivo>...
+  app-arch-lint --help
+  app-arch-lint --selftest
+
+Checks:
+  max-file-lines  fuente <= 300 lineas (FAIL > 400)
+  no-monolith     index.html + app.js/main.js + app.css/style.css > 600 lineas
+  has-tests       tests presentes o script `test`
+  has-linter      config de linter o script `lint`
+  structure       src/ con features|components|lib
+
+Ignora node_modules/.git/dist/.next/build/venv/__pycache__/coverage.
+
+Exit: 0 OK, 1 FAIL. Repos sin senal de app se ignoran (silencioso).
+EOF
+}
+
+report() {
+  local level=$1 check=$2 detail=${3:-}
+  case "$MODE" in
+    tsv) printf '%s\t%s\t%s\n' "$level" "$check" "$detail" ;;
+    quiet)
+      if [ "$level" = "FAIL" ]; then
+        printf 'FAIL %s: %s\n' "$check" "$detail"
+      fi
+      ;;
+    *)
+      case "$level" in
+        OK) printf 'PASS %s%s\n' "$check" "${detail:+ ($detail)}" ;;
+        WARN) printf 'WARN %s%s\n' "$check" "${detail:+ ($detail)}" ;;
+        FAIL) printf 'FAIL %s%s\n' "$check" "${detail:+ ($detail)}" ;;
+      esac
+      ;;
+  esac
+  if [ "$level" = "FAIL" ]; then
+    rc=1
+  fi
+}
+
+list_sources() {
+  find "$1" \
+    \( -name node_modules -o -name .git -o -name dist -o -name .next -o -name build \
+       -o -name venv -o -name .venv -o -name __pycache__ -o -name coverage \) -prune -o \
+    -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' \
+       -o -name '*.tsx' -o -name '*.jsx' -o -name '*.css' -o -name '*.html' \
+       -o -name '*.py' -o -name '*.rs' -o -name '*.go' -o -name '*.vue' \
+       -o -name '*.svelte' \) -print 2>/dev/null
+}
+
+find_root() {
+  local p=$1 d first_html=""
+  if [ -d "$p" ]; then
+    d=$p
+  else
+    d=$(dirname "$p")
+  fi
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    if [ -f "$d/package.json" ] || [ -f "$d/pyproject.toml" ] || [ -f "$d/Cargo.toml" ] \
+      || [ -f "$d/go.mod" ] || [ -d "$d/.git" ]; then
+      printf '%s\n' "$d"
+      return 0
+    fi
+    if [ -z "$first_html" ] && { [ -f "$d/index.html" ] || [ -f "$d/public/index.html" ] \
+      || [ -f "$d/static/index.html" ]; }; then
+      first_html=$d
+    fi
+    d=$(dirname "$d")
+  done
+  if [ -n "$first_html" ]; then
+    printf '%s\n' "$first_html"
+  else
+    printf '%s\n' "$d"
+  fi
+}
+
+is_app() {
+  local r=$1
+  [ -f "$r/index.html" ] && return 0
+  [ -f "$r/public/index.html" ] && return 0
+  [ -f "$r/static/index.html" ] && return 0
+  if [ -f "$r/package.json" ] \
+    && grep -Eq '"(react|react-dom|vue|svelte|next|solid-js|preact|astro|@angular/core|vite)"' "$r/package.json"; then
+    return 0
+  fi
+  if find "$r" -maxdepth 3 \
+    \( -name node_modules -o -name .git -o -name dist -o -name .next \) -prune -o \
+    -type f \( -name '*.tsx' -o -name '*.jsx' -o -name '*.vue' -o -name '*.svelte' \) -print -quit 2>/dev/null \
+    | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+rel() {
+  local root=$1 path=$2
+  printf '%s\n' "${path#"$root"/}"
+}
+
+check_max_file_lines() {
+  local root=$1 worst=0 worstf="" f n
+  while IFS= read -r f; do
+    n=$(wc -l < "$f")
+    if [ "$n" -gt "$worst" ]; then
+      worst=$n
+      worstf=$f
+    fi
+  done < <(list_sources "$root")
+  if [ "$worst" -gt 400 ]; then
+    report FAIL max-file-lines "$(rel "$root" "$worstf"): $worst lineas"
+  elif [ "$worst" -gt 300 ]; then
+    report WARN max-file-lines "$(rel "$root" "$worstf"): $worst lineas"
+  else
+    report OK max-file-lines "max $worst lineas"
+  fi
+}
+
+check_no_monolith() {
+  local root=$1 d html js css sum
+  for d in "$root" "$root/public" "$root/static"; do
+    [ -d "$d" ] || continue
+    html="$d/index.html"
+    js=""
+    if [ -f "$d/app.js" ]; then
+      js="$d/app.js"
+    elif [ -f "$d/main.js" ]; then
+      js="$d/main.js"
+    fi
+    css=""
+    if [ -f "$d/app.css" ]; then
+      css="$d/app.css"
+    elif [ -f "$d/style.css" ]; then
+      css="$d/style.css"
+    fi
+    if [ -f "$html" ] && [ -n "$js" ] && [ -n "$css" ]; then
+      sum=$(( $(wc -l < "$html") + $(wc -l < "$js") + $(wc -l < "$css") ))
+      if [ "$sum" -gt 600 ]; then
+        report FAIL no-monolith "$(rel "$root" "$d"): index.html+js+css = $sum lineas"
+        return 0
+      fi
+    fi
+  done
+  report OK no-monolith "sin monolito en raiz"
+}
+
+check_has_tests() {
+  local root=$1 found=0
+  if find "$root" \
+    \( -name node_modules -o -name .git -o -name dist -o -name .next -o -name build -o -name venv \) -prune -o \
+    -type f \( -name '*.test.*' -o -name '*.spec.*' \) -print -quit 2>/dev/null | grep -q .; then
+    found=1
+  fi
+  if [ "$found" -eq 0 ]; then
+    for d in tests __tests__ test; do
+      if [ -d "$root/$d" ] && [ -n "$(ls -A "$root/$d" 2>/dev/null)" ]; then
+        found=1
+      fi
+    done
+  fi
+  if [ "$found" -eq 0 ] && [ -f "$root/package.json" ] && grep -q '"test"' "$root/package.json"; then
+    found=1
+  fi
+  if [ "$found" -eq 0 ] && [ -f "$root/pyproject.toml" ] && grep -Eq 'pytest|\[tool.pytest' "$root/pyproject.toml"; then
+    found=1
+  fi
+  if [ "$found" -eq 1 ]; then
+    report OK has-tests "tests presentes"
+  else
+    report FAIL has-tests "sin tests ni script 'test'"
+  fi
+}
+
+check_has_linter() {
+  local root=$1 found=0
+  for f in .eslintrc .eslintrc.js .eslintrc.cjs .eslintrc.json eslint.config.js \
+    eslint.config.mjs eslint.config.ts biome.json biome.jsonc .ruff.toml ruff.toml \
+    .golangci.yml .golangci.yaml; do
+    if [ -f "$root/$f" ]; then
+      found=1
+    fi
+  done
+  if [ "$found" -eq 0 ] && [ -f "$root/package.json" ] && grep -q '"lint"' "$root/package.json"; then
+    found=1
+  fi
+  if [ "$found" -eq 0 ] && [ -f "$root/pyproject.toml" ] && grep -Eq '\[tool\.(ruff|mypy)' "$root/pyproject.toml"; then
+    found=1
+  fi
+  if [ "$found" -eq 0 ] && [ -f "$root/Cargo.toml" ] && grep -q 'clippy' "$root/Cargo.toml"; then
+    found=1
+  fi
+  if [ "$found" -eq 1 ]; then
+    report OK has-linter "linter configurado"
+  else
+    report FAIL has-linter "sin config de linter ni script 'lint'"
+  fi
+}
+
+check_structure() {
+  local root=$1
+  if [ -d "$root/src" ] \
+    && { [ -d "$root/src/features" ] || [ -d "$root/src/components" ] || [ -d "$root/src/lib" ]; }; then
+    report OK structure "src/ con features|components|lib"
+    return
+  fi
+  local feat parent
+  feat=$(find "$root" -maxdepth 5 -type d -name features \
+    -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/.venv/*' 2>/dev/null | head -1)
+  if [ -n "$feat" ]; then
+    parent=$(dirname "$feat")
+    if [ -d "$parent/lib" ] || [ -d "$parent/components" ]; then
+      report OK structure "$(basename "$parent")/ con features+lib|components"
+      return
+    fi
+  fi
+  report FAIL structure "falta features/ con lib|components (src/ o layout js propio)"
+}
+
+check_root() {
+  local root=$1
+  check_max_file_lines "$root"
+  check_no_monolith "$root"
+  check_has_tests "$root"
+  check_has_linter "$root"
+  check_structure "$root"
+}
+
+run_selftest() {
+  local tmp good mono good_rc mono_rc i status=0
+  tmp=$(mktemp -d)
+  good="$tmp/good"
+  mkdir -p "$good/src/features/hello" "$good/src/lib"
+  printf '{"name":"good","scripts":{"test":"node --test","lint":"eslint ."}}\n' > "$good/package.json"
+  printf 'export const value = 1\n' > "$good/src/features/hello/ui.ts"
+  printf 'export const id = (x: number): number => x\n' > "$good/src/lib/util.ts"
+  printf 'export const t = 1\n' > "$good/src/lib/util.test.ts"
+  printf 'export default []\n' > "$good/eslint.config.js"
+  printf '<!doctype html>\n<html><body></body></html>\n' > "$good/index.html"
+
+  mono="$tmp/mono"
+  mkdir -p "$mono"
+  printf '<!doctype html>\n' > "$mono/index.html"
+  : > "$mono/app.js"
+  : > "$mono/app.css"
+  for i in $(seq 1 250); do
+    printf 'const x%d = %d\n' "$i" "$i" >> "$mono/app.js"
+    printf '.c%d { color: #fff }\n' "$i" >> "$mono/app.css"
+    printf '<p>%d</p>\n' "$i" >> "$mono/index.html"
+  done
+
+  MODE=quiet rc=0
+  check_root "$good"
+  good_rc=$rc
+  MODE=quiet rc=0
+  check_root "$mono"
+  mono_rc=$rc
+
+  if [ "$good_rc" -eq 0 ]; then
+    printf 'OK selftest app-cumple\n'
+  else
+    printf 'FAIL selftest app-cumple\n'
+    status=1
+  fi
+  if [ "$mono_rc" -ne 0 ]; then
+    printf 'OK selftest mono-falla\n'
+  else
+    printf 'FAIL selftest mono-falla\n'
+    status=1
+  fi
+
+  rm -rf "$tmp"
+  return $status
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --selftest) run_selftest; exit $? ;;
+    --quiet|-q) MODE=quiet; shift ;;
+    --tsv) MODE=tsv; shift ;;
+    --) shift; while [ $# -gt 0 ]; do targets+=("$1"); shift; done ;;
+    -*) printf 'opcion desconocida: %s\n' "$1" >&2; exit 2 ;;
+    *) targets+=("$1"); shift ;;
+  esac
+done
+
+if [ "${#targets[@]}" -eq 0 ]; then
+  usage >&2
+  exit 2
+fi
+
+for target in "${targets[@]}"; do
+  if [ ! -e "$target" ]; then
+    report FAIL target "no existe: $target"
+    continue
+  fi
+  root=$(find_root "$target")
+  if [ -z "$root" ] || [ ! -d "$root" ]; then
+    continue
+  fi
+  if ! is_app "$root"; then
+    continue
+  fi
+  check_root "$root"
+done
+
+if [ "$MODE" = "human" ]; then
+  if [ "$rc" -eq 0 ]; then
+    printf 'app-arch-lint: OK\n'
+  else
+    printf 'app-arch-lint: FAIL\n'
+  fi
+fi
+
+exit "$rc"

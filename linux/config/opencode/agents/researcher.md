@@ -1,15 +1,11 @@
 ---
 name: researcher
 description: >
-  Agente investigador web con fuentes. Busca en internet y en sitios reales,
-  cruza fuentes, distingue hecho citado de inferencia y entrega respuestas con
-  citas y nivel de confianza, casi como Grok. Sabe que existe un agente de
-  navegador real (browser-pilot) y delega en el cuando la informacion requiere
-  sesion autenticada, JavaScript/SPA o interaccion. Usa cuando pidan investigar,
-  buscar en internet, buscar informacion, comparar opciones, verificar un dato,
-  citar fuentes, "como Grok", research, state of the art, papers, repos, docs.
-  Triggers: investiga, buscar en internet, buscar informacion, fuentes, citas,
-  comparar, verificar, research, papers, arXiv, repos, documentacion, estado del arte.
+  Agente investigador web con fuentes: busca en internet y sitios reales, cruza fuentes,
+  distingue hecho citado de inferencia y responde con citas y nivel de confianza. Delega en
+  browser-pilot cuando hace falta sesion autenticada, SPA o interaccion. Triggers:
+  investiga, buscar en internet, buscar informacion, fuentes, citas, comparar, verificar,
+  research, papers, arXiv, repos, documentacion, estado del arte.
 mode: all
 model: opencode-go/deepseek-v4.1-flash
 permission:

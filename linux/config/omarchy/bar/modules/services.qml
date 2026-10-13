@@ -1,6 +1,4 @@
 import QtQuick
-import Quickshell
-import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -23,31 +21,47 @@ Item {
 
   readonly property var unitIds: [
     "openclaw-gateway.service",
-    "app-dev.lizardbyte.app.Sunshine.service",
+    "sunshine.service",
     "voice-daemon.service",
-    "lan-mouse.service"
+    "lan-mouse.service",
+    "hypr-remote.service"
   ]
 
-  property string ocState: ""
-  property string sunState: ""
-  property string ttsState: ""
-  property string lanState: ""
-  property string ocEnabled: ""
-  property string sunEnabled: ""
-  property string ttsEnabled: ""
-  property string lanEnabled: ""
+  readonly property string lanUnit: "lan-mouse.service"
+  readonly property int lanIndex: unitIds.indexOf(lanUnit)
+
+  readonly property var unitStates: statusProbe.unitStates
+  readonly property var unitEnabled: statusProbe.unitEnabled
+  readonly property string lanState: lanIndex >= 0 ? String(unitStates[lanIndex] || "") : ""
+  readonly property int lanEstab: statusProbe.lanEstab
+  readonly property int lanDegradedMarkers: statusProbe.lanDegradedMarkers
+
+  readonly property bool lanLinkUp: lanEstab > 0
+  readonly property bool lanConnected: lanLinkUp && lanDegradedMarkers === 0
 
   property string busySvc: ""
   property bool menuOpen: false
+  readonly property bool opened: menuOpen
 
   property var manualStopped: ({})
 
-  readonly property var services: [
-    { label: "OC", desc: "openclaw", glyph: "󰚩", svc: root.unitIds[0], state: root.ocState, enabled: root.ocEnabled },
-    { label: "SUN", desc: "sunshine", glyph: "󰖨", svc: root.unitIds[1], state: root.sunState, enabled: root.sunEnabled },
-    { label: "TTS", desc: "voice", glyph: "󰕾", svc: root.unitIds[2], state: root.ttsState, enabled: root.ttsEnabled },
-    { label: "LAN", desc: "lan-mouse", glyph: "󰈀", svc: root.unitIds[3], state: root.lanState, enabled: root.lanEnabled }
+  readonly property var serviceDefs: [
+    { label: "OpenClaw Gateway", glyph: "󰚩" },
+    { label: "Sunshine (streaming)", glyph: "󰖨" },
+    { label: "Síntesis de voz", glyph: "󰕾" },
+    { label: "LAN Mouse (KVM)", glyph: "󰈀" },
+    { label: "Hypr Remote (móvil)", glyph: "󰑔" }
   ]
+
+  readonly property var services: serviceDefs.map(function(def, index) {
+    return {
+      label: def.label,
+      glyph: def.glyph,
+      svc: unitIds[index],
+      state: String(unitStates[index] || ""),
+      enabled: String(unitEnabled[index] || "")
+    }
+  })
 
   readonly property real hPad: Style.spaceReal(8.75)
   readonly property bool hasData: services.some(function(s) { return s.state !== "" })
@@ -60,17 +74,19 @@ Item {
   readonly property int downCount: services.filter(function(s) {
     return isEnabled(s.enabled) && s.state !== "active" && root.manualStopped[s.svc] !== true
   }).length
+  readonly property bool lanDegraded: lanState === "active" && !lanConnected
   readonly property bool settling: busySvc !== "" || transitioning
 
   readonly property color ledColor: settling
     ? warnColor
-    : (hasData ? (anyDown ? downColor : okColor) : unknownColor)
+    : (hasData ? (anyDown ? downColor : (lanDegraded ? warnColor : okColor)) : unknownColor)
   readonly property color globalColor: ledColor
 
   readonly property string globalText: {
     if (!hasData) return "Consultando unidades…"
     if (settling) return "Aplicando cambios…"
     if (downCount > 0) return downCount === 1 ? "1 servicio caído" : downCount + " servicios caídos"
+    if (lanDegraded) return lanLinkUp ? "LAN Mouse sin control" : "LAN Mouse sin conexión"
     if (activeCount === services.length) return "Todo al día"
     return activeCount + " de " + services.length + " activos"
   }
@@ -110,11 +126,26 @@ Item {
     return s === "" ? "desconocido" : s
   }
 
+  function isLanUnit(svc) { return svc === root.lanUnit }
+
+  function healthColor(s) {
+    if (isLanUnit(s.svc) && s.state === "active" && !lanConnected) return warnColor
+    return colorFor(s.state)
+  }
+
+  function statusLabel(s) {
+    if (isLanUnit(s.svc) && s.state === "active") {
+      if (lanConnected) return "conectado"
+      return lanLinkUp ? "activo · sin control" : "activo · sin conexión"
+    }
+    return labelFor(s.state)
+  }
+
   function tooltipText() {
     var parts = []
     for (var i = 0; i < services.length; i++) {
       var s = services[i]
-      parts.push(s.label + " " + labelFor(s.state) + (isEnabled(s.enabled) ? " (inicio)" : ""))
+      parts.push(s.label + " " + statusLabel(s) + (isEnabled(s.enabled) ? " (inicio)" : ""))
     }
     return "Servicios: " + parts.join(" · ")
   }
@@ -141,43 +172,16 @@ Item {
     run(svc, "systemctl --user " + (isEnabled(enabled) ? "disable " : "enable ") + svc)
   }
 
-  Process {
-    id: probe
-    command: ["bash", "-lc",
-      "systemctl --user is-active " + root.unitIds.join(" ") + " 2>/dev/null; "
-      + "echo '::enabled'; systemctl --user is-enabled " + root.unitIds.join(" ") + " 2>/dev/null"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var lines = String(text).replace(/\s+$/, "").split("\n")
-        var mark = lines.indexOf("::enabled")
-        var act = mark >= 0 ? lines.slice(0, mark) : []
-        var en = mark >= 0 ? lines.slice(mark + 1) : []
-        root.ocState = (act[0] || "").trim()
-        root.sunState = (act[1] || "").trim()
-        root.ttsState = (act[2] || "").trim()
-        root.lanState = (act[3] || "").trim()
-        root.ocEnabled = (en[0] || "").trim()
-        root.sunEnabled = (en[1] || "").trim()
-        root.ttsEnabled = (en[2] || "").trim()
-        root.lanEnabled = (en[3] || "").trim()
-      }
-    }
-  }
-
-  Timer {
-    interval: 3000
-    running: true
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: if (!probe.running) probe.running = true
+  ServicesProbe {
+    id: statusProbe
+    unitIds: root.unitIds
   }
 
   Timer {
     id: settleA
     interval: 500
     onTriggered: {
-      if (!probe.running) probe.running = true
+      statusProbe.refresh()
       settleB.restart()
     }
   }
@@ -187,7 +191,7 @@ Item {
     interval: 2500
     onTriggered: {
       busySvc = ""
-      if (!probe.running) probe.running = true
+      statusProbe.refresh()
     }
   }
 

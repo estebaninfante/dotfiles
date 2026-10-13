@@ -1,0 +1,1080 @@
+diff --git i/README.md w/README.md
+index 918548a..34eedfb 100644
+--- i/README.md
++++ w/README.md
+@@ -51,10 +51,13 @@ hl.bind("SUPER + F12", hl.plugin.hypr3d.toggle)
+ | Input                         | Action                                         |
+ | -------------------------------| ------------------------------------------------|
+ | Mouse move                    | Look around                                    |
+-| WASD                          | Move                                           |
++| O / U / ntilde / E           | Move left / right / forward / back (WASD fallback) |
+ | Space                         | Move up (flying) / Jump                        |
+ | Shift                         | Move down (flying)                             |
+ | Ctrl                          | Sprint                                         |
++| Super (hold)                  | Move the aimed window by looking               |
++| Super + Shift (hold)          | Resize the aimed window by looking             |
++| Super + Space                 | Open launcher when no window is aimed          |
+ | Super + Left click            | Drag window                                    |
+ | Super + Right click           | Resize window                                  |
+ | Super + Mouse wheel click     | rotate window                                  |
+@@ -79,6 +82,7 @@ if hl.plugin.hypr3d then
+         windows = {
+             window_scale = 0.5,   -- window size multiplier (real px at 100 px/m)
+             spawn_distance = 5,   -- distance from the camera new windows spawn at
++            focus_on_aim = true,  -- false: keyboard focus only on click
+         },
+         player = {
+             look_sensitivity = 0.0025, -- mouse look, radians per pointer count
+diff --git i/src/HyprlandCompat/WindowsCompat.cpp w/src/HyprlandCompat/WindowsCompat.cpp
+index 4f0b169..453bc7b 100644
+--- i/src/HyprlandCompat/WindowsCompat.cpp
++++ w/src/HyprlandCompat/WindowsCompat.cpp
+@@ -191,15 +191,15 @@ void restoreWindowLayout(SWindowLayoutSave& save) {
+     if (!WINDOW || !WINDOW->m_target)
+         return;
+ 
+-    // Put the target back into its space while it is still floating. For a
+-    // window that was floating before 3D, retain the real box produced by the
+-    // 3D resize. Tiled windows deliberately return to their original layout.
+     const CBox RESTORE_BOX = save.wasFloating ? WINDOW->m_target->position() : save.box;
+ 
+-    if (save.space)
++    const auto SAVED_WORKSPACE = save.space ? save.space->workspace() : nullptr;
++    const bool CAN_RESTORE = SAVED_WORKSPACE && SAVED_WORKSPACE->m_monitor;
++
++    WINDOW->m_target->assignToSpace(nullptr);
++
++    if (CAN_RESTORE)
+         WINDOW->m_target->assignToSpace(save.space);
+-    else
+-        WINDOW->m_target->setSpaceGhost(nullptr);
+ 
+     WINDOW->m_target->setFloating(true);
+     WINDOW->m_target->setPositionGlobal(RESTORE_BOX);
+diff --git i/src/Input/AimFocus.hpp w/src/Input/AimFocus.hpp
+index 478b44a..f1376c4 100644
+--- i/src/Input/AimFocus.hpp
++++ w/src/Input/AimFocus.hpp
+@@ -4,39 +4,63 @@
+ 
+ namespace H3D {
+ 
+-// Decides which window should own keyboard focus, given which window the
+-// crosshair (screen centre / camera axis) currently points at.
+-//
+-// Rules:
+-//  - aiming at a window focuses it immediately (Minecraft-style target block);
+-//  - aiming at nothing keeps the previous target for `lostGraceSeconds`, then
+-//    drops focus entirely. The short grace period stops focus from flickering
+-//    off and on while the crosshair sweeps across a thin gap or a window edge.
+-//
+-// Pure logic, no Hyprland dependencies: id 0 means "no window".
+ class AimFocus {
+   public:
+-    explicit AimFocus(float lostGraceSeconds = 0.08f) : m_lostGrace(lostGraceSeconds) {}
++    explicit AimFocus(float dwellSeconds = 0.4f, float lostGraceSeconds = 0.08f) :
++        m_dwell(dwellSeconds), m_lostGrace(lostGraceSeconds) {}
+ 
+     void reset() {
+-        m_current   = 0;
+-        m_lostTimer = 0.0f;
++        m_current    = 0;
++        m_candidate  = 0;
++        m_dwellTimer = 0.0f;
++        m_lostTimer  = 0.0f;
+     }
+ 
+-    // Call once per frame. Returns the window id that should hold focus (0 = none).
+-    std::uintptr_t update(std::uintptr_t aimedId, float dtSeconds) {
+-        if (aimedId != 0) {
+-            m_current   = aimedId;
+-            m_lostTimer = 0.0f;
++    void release() {
++        reset();
++    }
++
++    std::uintptr_t update(std::uintptr_t aimedId, float dtSeconds, bool still, bool instant = false) {
++        if (instant && aimedId != 0) {
++            m_current    = aimedId;
++            m_candidate  = 0;
++            m_dwellTimer = 0.0f;
++            m_lostTimer  = 0.0f;
+             return m_current;
+         }
+ 
+-        if (m_current != 0) {
+-            m_lostTimer += dtSeconds;
+-            if (m_lostTimer >= m_lostGrace) {
+-                m_current   = 0;
+-                m_lostTimer = 0.0f;
+-            }
++        if (aimedId == m_current) {
++            m_candidate  = 0;
++            m_dwellTimer = 0.0f;
++            m_lostTimer  = 0.0f;
++            return m_current;
++        }
++
++        m_lostTimer += dtSeconds;
++
++        if (m_current != 0 && m_lostTimer < m_lostGrace)
++            return m_current;
++
++        m_current   = 0;
++        m_lostTimer = 0.0f;
++
++        if (aimedId == 0 || !still) {
++            m_candidate  = 0;
++            m_dwellTimer = 0.0f;
++            return 0;
++        }
++
++        if (aimedId != m_candidate) {
++            m_candidate  = aimedId;
++            m_dwellTimer = 0.0f;
++        }
++
++        m_dwellTimer += dtSeconds;
++
++        if (m_dwellTimer >= m_dwell) {
++            m_current    = aimedId;
++            m_candidate  = 0;
++            m_dwellTimer = 0.0f;
+         }
+ 
+         return m_current;
+@@ -45,9 +69,12 @@ class AimFocus {
+     std::uintptr_t current() const { return m_current; }
+ 
+   private:
+-    float          m_lostGrace = 0.08f;
+-    float          m_lostTimer = 0.0f;
+-    std::uintptr_t m_current   = 0;
++    float          m_dwell       = 0.4f;
++    float          m_lostGrace   = 0.08f;
++    float          m_dwellTimer  = 0.0f;
++    float          m_lostTimer   = 0.0f;
++    std::uintptr_t m_current     = 0;
++    std::uintptr_t m_candidate   = 0;
+ };
+ 
+-} // namespace H3D
++}
+diff --git i/src/Input/LauncherDelegate.hpp w/src/Input/LauncherDelegate.hpp
+new file mode 100644
+index 0000000..db82ced
+--- /dev/null
++++ w/src/Input/LauncherDelegate.hpp
+@@ -0,0 +1,25 @@
++#pragma once
++
++#include <cstdint>
++
++namespace H3D::LauncherDelegate {
++
++enum class EAction : std::uint8_t {
++    Handle,
++    Delegate,
++    FinishDelegation,
++};
++
++constexpr EAction actionFor(
++    bool pressed,
++    bool superHeld,
++    bool windowFocused,
++    bool delegated
++) {
++    if (pressed)
++        return superHeld && !windowFocused ? EAction::Delegate : EAction::Handle;
++
++    return delegated ? EAction::FinishDelegation : EAction::Handle;
++}
++
++}
+diff --git i/src/Input/MovementKeys.hpp w/src/Input/MovementKeys.hpp
+new file mode 100644
+index 0000000..9f15bcf
+--- /dev/null
++++ w/src/Input/MovementKeys.hpp
+@@ -0,0 +1,45 @@
++#pragma once
++
++#include <xkbcommon/xkbcommon.h>
++
++#include <cstdint>
++
++namespace H3D::MovementKeys {
++
++enum class Axis : std::uint8_t {
++    None,
++    Forward,
++    Back,
++    Left,
++    Right,
++    Up,
++    Down,
++    Sprint,
++};
++
++constexpr Axis axisFor(xkb_keysym_t sym) {
++    switch (sym) {
++        case XKB_KEY_ntilde:
++        case XKB_KEY_w: return Axis::Forward;
++        case XKB_KEY_e:
++        case XKB_KEY_s: return Axis::Back;
++        case XKB_KEY_o:
++        case XKB_KEY_a: return Axis::Left;
++        case XKB_KEY_u:
++        case XKB_KEY_d: return Axis::Right;
++        case XKB_KEY_space: return Axis::Up;
++        case XKB_KEY_Shift_L:
++        case XKB_KEY_Shift_R: return Axis::Down;
++        case XKB_KEY_Control_L:
++        case XKB_KEY_Control_R: return Axis::Sprint;
++        default: return Axis::None;
++    }
++}
++
++constexpr bool isConsumed(xkb_keysym_t sym) {
++    return axisFor(sym) != Axis::None ||
++        sym == XKB_KEY_Super_L ||
++        sym == XKB_KEY_Super_R;
++}
++
++}
+diff --git i/src/main.cpp w/src/main.cpp
+index bac9fa5..af0d84e 100644
+--- i/src/main.cpp
++++ w/src/main.cpp
+@@ -32,6 +32,8 @@ extern "C" {
+ 
+ #include "Render/GLScene.hpp"
+ #include "Input/AimFocus.hpp"
++#include "Input/LauncherDelegate.hpp"
++#include "Input/MovementKeys.hpp"
+ #include "Input/InputController.hpp"
+ #include "World/MapCollision.hpp"
+ #include "World/World3D.hpp"
+@@ -170,6 +172,9 @@ static double         s_zoomTarget = 0.0;
+ // captured, cursor hidden. The real window is forced to the monitor box
+ // during 2D so the compositor shows it truly fullscreened.
+ static void resetPointerGesture();
++static World3D::SHit aimHit();
++static bool beginMoveDrag(const World3D::SHit& hit);
++static bool beginResize(const World3D::SHit& hit);
+ 
+ enum class EFullscreenPhase : uint8_t { None, To2D, In2D, To3D };
+ static EFullscreenPhase g_fsPhase = EFullscreenPhase::None;
+@@ -226,16 +231,21 @@ static constexpr float kSpawnDistance = 10.0f;
+ static SP<CEventLoopTimer> g_framePump;
+ static constexpr auto kFramePumpInterval = std::chrono::milliseconds(8);
+ 
+-// Two keyboard modes, toggled with Super + Left Alt:
+-//   Space  -- WASD/Space/Shift/Ctrl drive the camera;
+-//   Window -- every key reaches the focused window for typing.
+-// The mouse behaves identically in both: it always looks around, drags
+-// windows (Super+LMB), resizes (Super+RMB) and clicks through to clients.
+ enum class EKeyboardMode : uint8_t { Space, Window };
++enum class EKeyboardLock : uint8_t { Auto, ForceSpace, ForceWindow };
+ static EKeyboardMode g_keyboardMode = EKeyboardMode::Space;
++static EKeyboardLock g_keyboardLock = EKeyboardLock::Auto;
+ static bool          g_altHeld      = false;
++static bool          g_launcherDelegated = false;
++
++static constexpr float kAimDwellSeconds    = 0.4f;
++static constexpr float kCameraStillEpsilon = 0.002f;
++static float g_stillSeconds = 0.0f;
++
++enum class EAutoGesture : uint8_t { None, Move, Resize };
++static EAutoGesture   g_autoGesture   = EAutoGesture::None;
++static std::uintptr_t g_autoGestureId = 0;
+ 
+-// Camera movement keys, set only while the 3D view owns the keyboard.
+ static bool g_keyFwd = false;
+ static bool g_keyBack = false;
+ static bool g_keyLeft = false;
+@@ -246,6 +256,8 @@ static bool g_keySprint = false;
+ 
+ static bool g_hookInstalled = false;
+ 
++static bool g_cfgFocusOnAim = true;
++
+ // Plugin settings, set from lua via hl.plugin.hypr3d.config({...}). Missing
+ // keys keep their current value, so a partial config only touches what it
+ // names; wrong-typed keys raise a lua error. Everything is clamped on set.
+@@ -409,23 +421,53 @@ static void resetMovementKeys() {
+     g_keyFwd = g_keyBack = g_keyLeft = g_keyRight = false;
+     g_keyUp = g_keyDown = g_keySprint = false;
+     g_superHeld = false;
++    g_launcherDelegated = false;
+ }
+ 
+-// Clears only the camera keys, keeping the gesture modifiers honest -- used
+-// when switching into window mode while keys are physically held.
+ static void resetCameraKeys() {
+     g_keyFwd = g_keyBack = g_keyLeft = g_keyRight = false;
+     g_keyUp = g_keyDown = g_keySprint = false;
+ }
+ 
+-// True while the 3D view owns the pointer and the keyboard.
++static void releaseAutoGesture() {
++    if (g_autoGesture == EAutoGesture::None)
++        return;
++
++    g_world.stopDrag();
++    resetPointerGesture();
++    g_autoGesture   = EAutoGesture::None;
++    g_autoGestureId = 0;
++}
++
+ static bool ownsInput() {
+-    // In2D is the fullscreen passthrough: Hyprland owns everything.
+     return g_active && g_transition >= 0.9f &&
+         g_fsPhase != EFullscreenPhase::In2D;
+ }
+ 
++static std::uint32_t liveModifiers() {
++    if (!g_pSeatManager || g_pSeatManager->m_keyboard.expired())
++        return 0;
++
++    const auto KEYBOARD = g_pSeatManager->m_keyboard.lock();
++    return KEYBOARD ? KEYBOARD->getModifiers() : 0;
++}
++
++static bool superHeld() {
++    return (liveModifiers() & HL_MODIFIER_META) != 0;
++}
++
++static bool shiftHeld() {
++    return (liveModifiers() & HL_MODIFIER_SHIFT) != 0;
++}
++
++static void syncHeldModifiers() {
++    const std::uint32_t MODS = liveModifiers();
++    g_superHeld = (MODS & HL_MODIFIER_META) != 0;
++    g_altHeld   = (MODS & HL_MODIFIER_ALT) != 0;
++}
++
+ static void clearAimFocus() {
++    releaseAutoGesture();
+     g_aim.reset();
+     g_lastFocusId = 0;
+     Compat::clearFocus();
+@@ -673,36 +715,76 @@ static void serviceCapture() {
+     g_capturing = false;
+ }
+ 
+-// Handoff the keyboard to whatever the crosshair is on -- and to nothing else.
+-// Aiming at empty space drops focus entirely rather than leaving the last
+-// window typed into.
+-static void updateAimFocus(float dt) {
+-    if (g_pointerDown || g_clientButtonDown)
++static void applyEffectiveKeyboardMode() {
++    EKeyboardMode mode = EKeyboardMode::Space;
++
++    switch (g_keyboardLock) {
++        case EKeyboardLock::ForceSpace:  mode = EKeyboardMode::Space;  break;
++        case EKeyboardLock::ForceWindow: mode = EKeyboardMode::Window; break;
++        case EKeyboardLock::Auto:
++            mode = g_aim.current() != 0 ? EKeyboardMode::Window :
++                                           EKeyboardMode::Space;
++            break;
++    }
++
++    if (mode == g_keyboardMode)
+         return;
+ 
+-    const auto& cam = g_scene.camera();
++    g_keyboardMode = mode;
+ 
+-    const World3D::SHit HIT =
+-        g_world.pick(cam.position, cam.centerRay());
++    if (mode == EKeyboardMode::Window)
++        resetCameraKeys();
++}
+ 
++static void updateAimFocus(float dt) {
++    if ((g_pointerDown && g_autoGesture == EAutoGesture::None) || g_clientButtonDown)
++        return;
++
++    const World3D::SHit HIT = aimHit();
+     const std::uintptr_t AIMED = HIT.hit ? HIT.id : 0;
+     g_lastAimedId = AIMED;
+ 
+-    const std::uintptr_t FOCUS = g_aim.update(AIMED, dt);
++    const bool GRABBING = g_autoGesture != EAutoGesture::None;
++    const bool SUPER    = superHeld();
++    const std::uintptr_t AIM_TARGET = GRABBING ? g_autoGestureId : AIMED;
+ 
+-    if (FOCUS == g_lastFocusId)
++    const std::uintptr_t FOCUS = g_aim.update(
++        AIM_TARGET, dt, g_stillSeconds >= kAimDwellSeconds,
++        SUPER && !GRABBING);
++
++    if (g_cfgFocusOnAim && FOCUS != g_lastFocusId) {
++        const auto WINDOW =
++            FOCUS != 0 ? Compat::findWindowById(FOCUS) : nullptr;
++
++        if (WINDOW) {
++            Compat::focusWindow(WINDOW);
++            g_lastFocusId = FOCUS;
++        }
++        else {
++            Compat::clearFocus();
++            g_lastFocusId = 0;
++        }
++    }
++
++    if (!SUPER || FOCUS == 0 || !HIT.hit) {
++        releaseAutoGesture();
++        return;
++    }
++
++    const EAutoGesture WANT =
++        shiftHeld() ? EAutoGesture::Resize : EAutoGesture::Move;
++
++    if (g_autoGesture == WANT && g_autoGestureId == FOCUS)
+         return;
+ 
+-    const auto WINDOW =
+-        FOCUS != 0 ? Compat::findWindowById(FOCUS) : nullptr;
++    releaseAutoGesture();
+ 
+-    if (WINDOW) {
+-        Compat::focusWindow(WINDOW);
+-        g_lastFocusId = FOCUS;
+-    }
+-    else {
+-        Compat::clearFocus();
+-        g_lastFocusId = 0;
++    const bool STARTED =
++        WANT == EAutoGesture::Resize ? beginResize(HIT) : beginMoveDrag(HIT);
++
++    if (STARTED) {
++        g_autoGesture   = WANT;
++        g_autoGestureId = FOCUS;
+     }
+ }
+ 
+@@ -1595,6 +1677,69 @@ static void resetPointerGesture() {
+     s_wheelRot.active = false;
+ }
+ 
++static bool beginMoveDrag(const World3D::SHit& hit) {
++    if (!hit.hit)
++        return false;
++
++    const auto TARGET = targetFromHit(hit.id);
++    const auto& CAM   = g_scene.camera();
++
++    if (TARGET.window)
++        Compat::focusWindow(TARGET.window);
++
++    if (!g_world.startDrag(hit.id, hit, CAM.position, CAM.forward()))
++        return false;
++
++    s_zoomId = 0;
++
++    if (g_fsAssertFrames > 0 && hit.id == Compat::windowId(TARGET.window)) {
++        g_fsAssertFrames = 0;
++        g_fsWindow       = {};
++    }
++
++    g_pointerGesture = EPointerGesture::Move3D;
++    g_pointerButton  = BTN_LEFT;
++    g_pointerDown    = true;
++    g_resize         = {};
++
++    return true;
++}
++
++static bool beginResize(const World3D::SHit& hit) {
++    if (!hit.hit)
++        return false;
++
++    const auto TARGET = targetFromHit(hit.id);
++    if (!TARGET.window)
++        return false;
++
++    const auto* ENTITY = g_world.find(hit.id);
++    if (!ENTITY)
++        return false;
++
++    Compat::focusWindow(TARGET.window);
++
++    g_resize = {};
++    g_resize.active = true;
++    g_resize.id = hit.id;
++    g_resize.window = TARGET.window;
++    g_resize.startBox = Compat::currentWindowBox(TARGET.window);
++    g_resize.startCenter = ENTITY->center;
++    g_resize.startWorldWidth = ENTITY->width;
++    g_resize.startWorldHeight = ENTITY->height;
++    g_resize.planePoint = ENTITY->center;
++    g_resize.planeNormal = g_world.normalOf(hit.id);
++    g_resize.edgeX = hit.u < 0.5f ? -1 : 1;
++    g_resize.edgeY = hit.v < 0.5f ? 1 : -1;
++    g_resize.grabPx = worldPointToGlobalPx(targetMonitor(), hit.point);
++
++    g_pointerGesture = EPointerGesture::ResizeReal;
++    g_pointerButton = BTN_RIGHT;
++    g_pointerDown = true;
++
++    return true;
++}
++
+ static void finishClientButton(uint32_t timeMs) {
+     if (!g_clientButtonDown)
+         return;
+@@ -1788,8 +1933,12 @@ static void enter3D() {
+     g_grounded    = false;
+     g_verticalVel = 0.0f;
+ 
++    g_keyboardLock = EKeyboardLock::Auto;
+     g_keyboardMode = EKeyboardMode::Space;
+     g_altHeld      = false;
++    g_stillSeconds = 0.0f;
++    g_autoGesture   = EAutoGesture::None;
++    g_autoGestureId = 0;
+     s_zoomId       = 0;
+ 
+     // A fullscreen window that already exists: it joins the room as a
+@@ -2055,6 +2204,10 @@ static void update3D(float dt) {
+         g_mapCollisionSetup = SETUP;
+     }
+ 
++    const Vec3  PREPOSE = g_scene.camera().position;
++    const float PREYAW  = g_scene.camera().yaw;
++    const float PREPITCH = g_scene.camera().pitch;
++
+     if (g_input.consumeLook(yawDelta, pitchDelta, dt)) {
+         g_scene.rotateView(yawDelta, pitchDelta);
+         damageCurrentMonitor();
+@@ -2094,6 +2247,20 @@ static void update3D(float dt) {
+         g_grounded = false;
+     }
+ 
++    {
++        const auto& CAM  = g_scene.camera();
++        const Vec3  DP   = CAM.position - PREPOSE;
++        const float DMOVE = std::fabs(DP.x) + std::fabs(DP.y) +
++            std::fabs(DP.z);
++        const float DROT = std::fabs(CAM.yaw - PREYAW) +
++            std::fabs(CAM.pitch - PREPITCH);
++
++        if (DMOVE > kCameraStillEpsilon || DROT > kCameraStillEpsilon)
++            g_stillSeconds = 0.0f;
++        else
++            g_stillSeconds += dt;
++    }
++
+     // decoration:blur feeds the frost overlay on transparent windows
+     // (CConfigValue binds by name and works with both hyprland.conf and
+     // hyprland.lua -- the same accessor Hyprland's own renderer uses).
+@@ -2183,6 +2350,9 @@ static void update3D(float dt) {
+ 
+     syncWorld(MON, dt);
+ 
++    syncHeldModifiers();
++    applyEffectiveKeyboardMode();
++
+     applyFullscreenAnimation();
+ 
+     // Normal client interaction is a virtual pointer located exactly at the
+@@ -2619,7 +2789,7 @@ static void onMouseAxis(
+     // Any other time: Super + wheel over a window zooms it along the ray
+     // from the camera through the window. Without Super the wheel reaches
+     // the focused client unchanged (scroll).
+-    if (!g_superHeld)
++    if (!superHeld())
+         return;
+ 
+     const auto HIT = aimHit();
+@@ -2670,8 +2840,13 @@ static void onMouseButton(
+     const bool PRESSED =
+         event.state == WL_POINTER_BUTTON_STATE_PRESSED;
+ 
+-    // Release the plugin gesture that owns this physical button.
+-    if (!PRESSED && g_pointerDown && event.button == g_pointerButton) {
++    if (PRESSED && g_autoGesture != EAutoGesture::None) {
++        releaseAutoGesture();
++        damageCurrentMonitor();
++    }
++
++    if (!PRESSED && g_autoGesture == EAutoGesture::None && g_pointerDown &&
++        event.button == g_pointerButton) {
+         resetPointerGesture();
+         info.cancelled = true;
+         damageCurrentMonitor();
+@@ -2681,7 +2856,7 @@ static void onMouseButton(
+     // Super + wheel-press: grab the aimed window's roll around its normal.
+     // Sweeping the crosshair around the window center then rotates the
+     // window by the swept angle; release ends it. Never reaches the client.
+-    if (PRESSED && g_superHeld && g_fsPhase == EFullscreenPhase::None &&
++    if (PRESSED && superHeld() && g_fsPhase == EFullscreenPhase::None &&
+         event.button == BTN_MIDDLE) {
+         const World3D::SHit HIT = aimHit();
+         const auto* ENTITY = HIT.hit ? g_world.find(HIT.id) : nullptr;
+@@ -2718,7 +2893,7 @@ static void onMouseButton(
+     // to the client for these physical button events. Layer surfaces can be
+     // dragged like windows, but not resized -- their real geometry is owned
+     // by the shell that anchored them.
+-    if (PRESSED && g_superHeld && g_fsPhase == EFullscreenPhase::None &&
++    if (PRESSED && superHeld() && g_fsPhase == EFullscreenPhase::None &&
+         (event.button == BTN_LEFT || event.button == BTN_RIGHT)) {
+         const World3D::SHit HIT = aimHit();
+         const auto TARGET = HIT.hit ? targetFromHit(HIT.id) : SHitTarget{};
+@@ -2728,8 +2903,6 @@ static void onMouseButton(
+             return;
+         }
+ 
+-        const auto& CAM = g_scene.camera();
+-
+         if (TARGET.window)
+             Compat::focusWindow(TARGET.window);
+ 
+@@ -2739,59 +2912,14 @@ static void onMouseButton(
+         }
+ 
+         if (event.button == BTN_LEFT) {
+-            if (!g_world.startDrag(
+-                    HIT.id, HIT, CAM.position, CAM.forward())) {
+-                info.cancelled = true;
+-                return;
+-            }
+-            s_zoomId = 0; // the drag owns this window's distance now
++            beginMoveDrag(HIT);
+ 
+-            // A drag on the assert window: the drag wins, stop fighting.
+-            if (g_fsAssertFrames > 0 && HIT.id == Compat::windowId(TARGET.window)) {
+-                g_fsAssertFrames = 0;
+-                g_fsWindow = {};
+-            }
+-
+-            g_pointerGesture = EPointerGesture::Move3D;
+-            g_pointerButton = BTN_LEFT;
+-            g_pointerDown = true;
+-            g_resize = {};
++            info.cancelled = true;
++            damageCurrentMonitor();
++            return;
+         }
+-        else {
+-            const auto ENTITY = g_world.find(HIT.id);
+-            if (!ENTITY) {
+-                info.cancelled = true;
+-                return;
+-            }
+ 
+-            g_resize = {};
+-            g_resize.active = true;
+-            g_resize.id = HIT.id;
+-            g_resize.window = TARGET.window;
+-            g_resize.startBox = Compat::currentWindowBox(TARGET.window);
+-            g_resize.startCenter = ENTITY->center;
+-            g_resize.startWorldWidth = ENTITY->width;
+-            g_resize.startWorldHeight = ENTITY->height;
+-            g_resize.planePoint = ENTITY->center;
+-            g_resize.planeNormal = g_world.normalOf(HIT.id);
+-
+-            // The grab point only seeds which edge follows the crosshair;
+-            // updateRealResize re-evaluates that every frame from the aim's
+-            // side relative to the window centre, so the grab lands anywhere
+-            // on the window and the pull direction decides the rest. As the
+-            // camera turns, the current centre ray is intersected with this
+-            // same window plane, so the real window stretches exactly toward
+-            // the point being aimed at.
+-            // RayHit::v is already top-to-bottom. Top half follows +1,
+-            // bottom half follows -1 in the CBox edge convention below.
+-            g_resize.edgeX = HIT.u < 0.5f ? -1 : 1;
+-            g_resize.edgeY = HIT.v < 0.5f ? 1 : -1;
+-            g_resize.grabPx = worldPointToGlobalPx(targetMonitor(), HIT.point);
+-
+-            g_pointerGesture = EPointerGesture::ResizeReal;
+-            g_pointerButton = BTN_RIGHT;
+-            g_pointerDown = true;
+-        }
++        beginResize(HIT);
+ 
+         info.cancelled = true;
+         damageCurrentMonitor();
+@@ -2855,41 +2983,64 @@ static void onMouseButton(
+     damageCurrentMonitor();
+ }
+ 
+-// Space mode: only the camera movement keys are swallowed -- everything else
+-// still reaches the window the crosshair is aiming at. Minecraft creative-
+-// flight scheme: Space ascends, Shift descends, Ctrl sprints.
+ static bool isMovementSym(xkb_keysym_t sym) {
+-    switch (sym) {
+-        case XKB_KEY_w:
+-        case XKB_KEY_a:
+-        case XKB_KEY_s:
+-        case XKB_KEY_d:
+-        case XKB_KEY_space:
+-        case XKB_KEY_Shift_L:
+-        case XKB_KEY_Shift_R:
+-        case XKB_KEY_Control_L:
+-        case XKB_KEY_Control_R:
+-        case XKB_KEY_Super_L:
+-        case XKB_KEY_Super_R: return true;
+-        default: return false;
+-    }
++    return MovementKeys::isConsumed(sym);
+ }
+ 
+ static void setMovementSym(xkb_keysym_t sym, bool down) {
+-    switch (sym) {
+-        case XKB_KEY_w: g_keyFwd = down; break;
+-        case XKB_KEY_s: g_keyBack = down; break;
+-        case XKB_KEY_a: g_keyLeft = down; break;
+-        case XKB_KEY_d: g_keyRight = down; break;
+-        case XKB_KEY_space: g_keyUp = down; break;
+-        case XKB_KEY_Shift_L:
+-        case XKB_KEY_Shift_R: g_keyDown = down; break;
+-        case XKB_KEY_Control_L:
+-        case XKB_KEY_Control_R: g_keySprint = down; break;
+-        default: break;
++    switch (MovementKeys::axisFor(sym)) {
++        case MovementKeys::Axis::Forward: g_keyFwd = down; break;
++        case MovementKeys::Axis::Back: g_keyBack = down; break;
++        case MovementKeys::Axis::Right: g_keyRight = down; break;
++        case MovementKeys::Axis::Left: g_keyLeft = down; break;
++        case MovementKeys::Axis::Up: g_keyUp = down; break;
++        case MovementKeys::Axis::Down: g_keyDown = down; break;
++        case MovementKeys::Axis::Sprint: g_keySprint = down; break;
++        case MovementKeys::Axis::None: break;
+     }
+ }
+ 
++static void cycleKeyboardMode() {
++    switch (g_keyboardLock) {
++        case EKeyboardLock::Auto:
++            g_keyboardLock = EKeyboardLock::ForceSpace;
++            break;
++        case EKeyboardLock::ForceSpace:
++            g_keyboardLock = EKeyboardLock::ForceWindow;
++            break;
++        case EKeyboardLock::ForceWindow:
++            g_keyboardLock = EKeyboardLock::Auto;
++            break;
++    }
++
++    applyEffectiveKeyboardMode();
++
++    const std::string LABEL =
++        g_keyboardLock == EKeyboardLock::Auto       ? "auto" :
++        g_keyboardLock == EKeyboardLock::ForceSpace ? "space" : "window";
++
++    notify(
++        "[hypr3d] keyboard: " + LABEL,
++        CHyprColor{0.2f, 0.8f, 0.4f, 1.0f}
++    );
++}
++
++static void toggleSpaceWindow() {
++    g_keyboardLock =
++        g_keyboardMode == EKeyboardMode::Space ?
++            EKeyboardLock::ForceWindow :
++            EKeyboardLock::ForceSpace;
++
++    applyEffectiveKeyboardMode();
++
++    notify(
++        g_keyboardMode == EKeyboardMode::Space ?
++            "[hypr3d] keyboard: space" :
++            "[hypr3d] keyboard: window",
++        CHyprColor{0.2f, 0.8f, 0.4f, 1.0f}
++    );
++}
++
+ static void onKeyboardKey(
+     IKeyboard::SKeyEvent event,
+     Event::SCallbackInfo& info
+@@ -2920,10 +3071,30 @@ static void onKeyboardKey(
+     else if (SYM == XKB_KEY_Alt_L)
+         g_altHeld = PRESSED;
+ 
++    if (event.keycode == KEY_SPACE) {
++        const auto ACTION = H3D::LauncherDelegate::actionFor(
++            PRESSED,
++            superHeld(),
++            g_aim.current() != 0,
++            g_launcherDelegated
++        );
++
++        if (ACTION == H3D::LauncherDelegate::EAction::Delegate) {
++            g_launcherDelegated = true;
++            return;
++        }
++
++        if (ACTION == H3D::LauncherDelegate::EAction::FinishDelegation) {
++            g_launcherDelegated = false;
++            return;
++        }
++    }
++
+     // Walking mode: Space jumps off whatever the capsule stands on. The
+     // held state still reaches setMovementSym, but the walking movement
+     // path zeroes the vertical input, so holding Space does not fly.
+-    if (PRESSED && SYM == XKB_KEY_space && !g_playerFlying && g_grounded) {
++    if (PRESSED && event.keycode == KEY_SPACE && !g_playerFlying && g_grounded &&
++        g_keyboardMode == EKeyboardMode::Space) {
+         g_verticalVel = 5.5f;
+         g_grounded    = false;
+     }
+@@ -2940,34 +3111,40 @@ static void onKeyboardKey(
+         return;
+     }
+ 
+-    if (PRESSED && g_superHeld && g_altHeld &&
+-        (SYM == XKB_KEY_Alt_L || SYM == XKB_KEY_Super_L)) {
+-        g_keyboardMode =
+-            g_keyboardMode == EKeyboardMode::Space ?
+-                EKeyboardMode::Window :
+-                EKeyboardMode::Space;
+-
+-        if (g_keyboardMode == EKeyboardMode::Window)
+-            resetCameraKeys(); // held camera keys must not keep walking
+-
+-        notify(
+-            g_keyboardMode == EKeyboardMode::Space ?
+-                "[hypr3d] keyboard: space (wasd / space / shift / ctrl)" :
+-                "[hypr3d] keyboard: window (typing reaches the focused window)",
+-            CHyprColor{0.2f, 0.8f, 0.4f, 1.0f}
+-        );
++    if (PRESSED && SYM == XKB_KEY_F12) {
++        cycleKeyboardMode();
+ 
+         info.cancelled = true;
+         return;
+     }
+ 
+-    // Window mode: every key reaches the focused window untouched.
+-    if (g_keyboardMode == EKeyboardMode::Window)
++    if (PRESSED && g_superHeld && event.keycode == KEY_APOSTROPHE) {
++        toggleSpaceWindow();
++
++        info.cancelled = true;
+         return;
++    }
++
++    if (PRESSED && g_superHeld && g_altHeld &&
++        (SYM == XKB_KEY_Alt_L || SYM == XKB_KEY_Super_L)) {
++        cycleKeyboardMode();
++
++        info.cancelled = true;
++        return;
++    }
++
++    if (superHeld() &&
++        (event.keycode == KEY_LEFTSHIFT || event.keycode == KEY_RIGHTSHIFT)) {
++        info.cancelled = true;
++        return;
++    }
+ 
+     if (!isMovementSym(SYM))
+         return;
+ 
++    if (g_keyboardMode == EKeyboardMode::Window)
++        return;
++
+     setMovementSym(SYM, PRESSED);
+ 
+     info.cancelled = true;
+@@ -3125,6 +3302,8 @@ static int luaConfig(lua_State* L) {
+         if (!SET_NUM(idx, "spawn_distance", g_cfgSpawnDistance, 1.0f, 100.0f,
+                      "windows.spawn_distance"))
+             return luaL_error(L, "hypr3d.config: windows.spawn_distance must be a number");
++        if (!SET_BOOL(idx, "focus_on_aim", g_cfgFocusOnAim, "windows.focus_on_aim"))
++            return luaL_error(L, "hypr3d.config: windows.focus_on_aim must be a boolean");
+         lua_pop(L, 1);
+     }
+ 
+@@ -3345,6 +3524,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+ 
+ APICALL EXPORT void PLUGIN_EXIT() {
+     g_active = false;
++    g_launcherDelegated = false;
+     stopFramePump();
+     g_transition = 0.0f;
+     g_transitionTarget = 0.0f;
+diff --git i/tests/test_logic.cpp w/tests/test_logic.cpp
+new file mode 100644
+index 0000000..ceec308
+--- /dev/null
++++ w/tests/test_logic.cpp
+@@ -0,0 +1,173 @@
++#include "Input/AimFocus.hpp"
++#include "Input/LauncherDelegate.hpp"
++#include "Input/MovementKeys.hpp"
++
++#include <xkbcommon/xkbcommon.h>
++
++#include <cmath>
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++
++namespace {
++
++int g_failures = 0;
++
++void expect(bool condition, const char* label) {
++    if (condition)
++        return;
++
++    std::fprintf(stderr, "FAIL: %s\n", label);
++    ++g_failures;
++}
++
++void expectAxis(xkb_keysym_t sym, H3D::MovementKeys::Axis expected,
++                const char* label) {
++    expect(H3D::MovementKeys::axisFor(sym) == expected, label);
++}
++
++void testMovementKeys() {
++    expectAxis(XKB_KEY_o, H3D::MovementKeys::Axis::Left, "o -> left");
++    expectAxis(XKB_KEY_u, H3D::MovementKeys::Axis::Right, "u -> right");
++    expectAxis(XKB_KEY_ntilde, H3D::MovementKeys::Axis::Forward,
++               "ntilde -> forward");
++    expectAxis(XKB_KEY_e, H3D::MovementKeys::Axis::Back, "e -> back");
++    expectAxis(XKB_KEY_w, H3D::MovementKeys::Axis::Forward, "w -> forward");
++    expectAxis(XKB_KEY_s, H3D::MovementKeys::Axis::Back, "s -> back");
++    expectAxis(XKB_KEY_a, H3D::MovementKeys::Axis::Left, "a -> left");
++    expectAxis(XKB_KEY_d, H3D::MovementKeys::Axis::Right, "d -> right");
++    expectAxis(XKB_KEY_space, H3D::MovementKeys::Axis::Up, "space -> up");
++    expectAxis(XKB_KEY_Shift_L, H3D::MovementKeys::Axis::Down, "lshift -> down");
++    expectAxis(XKB_KEY_Shift_R, H3D::MovementKeys::Axis::Down, "rshift -> down");
++    expectAxis(XKB_KEY_Control_L, H3D::MovementKeys::Axis::Sprint,
++               "lctrl -> sprint");
++    expectAxis(XKB_KEY_Control_R, H3D::MovementKeys::Axis::Sprint,
++               "rctrl -> sprint");
++    expectAxis(XKB_KEY_p, H3D::MovementKeys::Axis::None, "p -> none");
++    expectAxis(XKB_KEY_f, H3D::MovementKeys::Axis::None, "f -> none");
++
++    expect(H3D::MovementKeys::isConsumed(XKB_KEY_o), "o consumed");
++    expect(H3D::MovementKeys::isConsumed(XKB_KEY_Super_L), "lsuper consumed");
++    expect(H3D::MovementKeys::isConsumed(XKB_KEY_Super_R), "rsuper consumed");
++    expect(!H3D::MovementKeys::isConsumed(XKB_KEY_p), "p not consumed");
++    expect(!H3D::MovementKeys::isConsumed(XKB_KEY_f), "f not consumed");
++}
++
++void testAimFocusDwell() {
++    H3D::AimFocus aim;
++
++    expect(aim.update(5, 0.1f, true) == 0, "no focus before dwell");
++    expect(aim.update(5, 0.3f, true) == 5, "focus after dwell");
++    expect(aim.current() == 5, "current is 5");
++}
++
++void testAimFocusStillRequired() {
++    H3D::AimFocus aim;
++
++    expect(aim.update(5, 5.0f, false) == 0, "moving never acquires");
++    expect(aim.current() == 0, "no focus while moving");
++}
++
++void testAimFocusLostGrace() {
++    H3D::AimFocus aim;
++
++    aim.update(5, 0.4f, true);
++    expect(aim.current() == 5, "focused 5");
++
++    expect(aim.update(0, 0.05f, true) == 5, "grace keeps focus");
++    expect(aim.update(0, 0.05f, true) == 0, "grace expires");
++}
++
++void testAimFocusCandidateReset() {
++    H3D::AimFocus aim;
++
++    expect(aim.update(5, 0.3f, true) == 0, "candidate 5 not yet");
++    expect(aim.update(6, 0.3f, true) == 0, "switch resets dwell");
++    expect(aim.update(6, 0.3f, true) == 6, "candidate 6 adopted");
++}
++
++void testAimFocusRelease() {
++    H3D::AimFocus aim;
++
++    aim.update(5, 0.4f, true);
++    aim.release();
++    expect(aim.current() == 0, "release drops focus");
++}
++
++void testAimFocusInstant() {
++    H3D::AimFocus aim;
++
++    expect(aim.update(7, 0.016f, false, true) == 7,
++           "instant acquires without dwell or stillness");
++    expect(aim.current() == 7, "instant current is 7");
++
++    H3D::AimFocus idle;
++    expect(idle.update(0, 0.016f, false, true) == 0,
++           "instant never invents focus on empty aim");
++}
++
++void expectAction(bool pressed, bool super, bool focused, bool delegated,
++                  H3D::LauncherDelegate::EAction expected, const char* label) {
++    expect(H3D::LauncherDelegate::actionFor(
++               pressed, super, focused, delegated) == expected,
++           label);
++}
++
++void testLauncherDelegate() {
++    using H3D::LauncherDelegate::EAction;
++
++    expectAction(true, true, false, false, EAction::Delegate,
++                 "press super no-focus not-delegated delegates");
++    expectAction(true, true, false, true, EAction::Delegate,
++                 "press super no-focus delegated keeps delegating");
++    expectAction(true, true, true, false, EAction::Handle,
++                 "press super focused not-delegated handled");
++    expectAction(true, true, true, true, EAction::Handle,
++                 "press super focused delegated handled");
++    expectAction(true, false, false, false, EAction::Handle,
++                 "press no-super no-focus not-delegated handled");
++    expectAction(true, false, false, true, EAction::Handle,
++                 "press no-super no-focus delegated handled");
++    expectAction(true, false, true, false, EAction::Handle,
++                 "press no-super focused not-delegated handled");
++    expectAction(true, false, true, true, EAction::Handle,
++                 "press no-super focused delegated handled");
++
++    expectAction(false, true, false, true, EAction::FinishDelegation,
++                 "release super no-focus delegated finishes");
++    expectAction(false, true, true, true, EAction::FinishDelegation,
++                 "release super focused delegated finishes");
++    expectAction(false, false, false, true, EAction::FinishDelegation,
++                 "release no-super no-focus delegated finishes");
++    expectAction(false, false, true, true, EAction::FinishDelegation,
++                 "release no-super focused delegated finishes");
++    expectAction(false, true, false, false, EAction::Handle,
++                 "release super no-focus not-delegated handled");
++    expectAction(false, true, true, false, EAction::Handle,
++                 "release super focused not-delegated handled");
++    expectAction(false, false, false, false, EAction::Handle,
++                 "release no-super no-focus not-delegated handled");
++    expectAction(false, false, true, false, EAction::Handle,
++                 "release no-super focused not-delegated handled");
++}
++
++}
++
++int main() {
++    testMovementKeys();
++    testAimFocusDwell();
++    testAimFocusStillRequired();
++    testAimFocusLostGrace();
++    testAimFocusCandidateReset();
++    testAimFocusRelease();
++    testAimFocusInstant();
++    testLauncherDelegate();
++
++    if (g_failures != 0) {
++        std::fprintf(stderr, "%d check(s) failed\n", g_failures);
++        return EXIT_FAILURE;
++    }
++
++    std::printf("all hypr3d logic checks passed\n");
++    return EXIT_SUCCESS;
++}

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr-remote/control.sock"
+unit_name="hypr-remote.service"
+
+emit_degraded() {
+  local unit
+  unit="$(systemctl --user is-active "$unit_name" 2>/dev/null || true)"
+  case "$unit" in
+    active | activating | deactivating | reloading | inactive | failed) ;;
+    *) unit="unknown" ;;
+  esac
+  printf '{"running":false,"unit":"%s"}\n' "$unit"
+}
+
+if [[ -S "$sock" ]]; then
+  if body="$(curl -sf --max-time 3 --unix-socket "$sock" http://localhost/status 2>/dev/null)"; then
+    printf '%s\n' "$body"
+    exit 0
+  fi
+fi
+
+emit_degraded
+exit 0

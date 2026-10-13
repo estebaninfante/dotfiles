@@ -55,7 +55,11 @@ fi
 
 # opencode
 export PATH=/home/eztvn/.opencode/bin:$PATH
+export OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true
 alias opencode="script -q -c \"opencode\" /dev/null"
+
+alias dk='ssh desktop-ts'
+alias dl='ssh desktop-lan'
 
 # Arize Phoenix tracing (LLM observability)
 export PHOENIX_ENDPOINT="http://localhost:6006"
@@ -67,6 +71,10 @@ if [[ -n "$KITTY_WINDOW_ID" ]]; then
     stty susp ^-
 fi
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+case ":$PATH:" in
+    *":$HOME/.cargo/bin:"*) ;;
+    *) export PATH="$HOME/.cargo/bin:$PATH" ;;
+esac
 
 # zoxide (smarter cd)
 eval "$(zoxide init bash)"

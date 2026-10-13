@@ -43,4 +43,9 @@ if ! grep -q "startLiveRefresh" "$SRC/OverviewInteraction.cpp"; then
     exit 1
 fi
 
+if ! grep -q "background_transparent" "$SRC/PluginConfig.cpp" || ! grep -q "backgroundTransparent" "$SRC/OverviewRender.cpp"; then
+    echo "SUMMARY: FAIL patch-sin-background_transparent (fondo transparente perdido)" >&2
+    exit 1
+fi
+
 exec "$SRC/scripts/verify-3d.sh"

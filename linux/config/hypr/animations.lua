@@ -1,0 +1,132 @@
+local function animations_enabled()
+    local handle = io.open(os.getenv("HOME") .. "/.local/state/omarchy/animations-enabled", "r")
+    if handle then
+        local value = handle:read("*l")
+        handle:close()
+        if value == "0" then return false end
+        if value == "1" then return true end
+    end
+    return true
+end
+
+hl.config({
+    animations = {
+        enabled = animations_enabled()
+    }
+})
+
+hl.curve("expoSmooth", {
+    type = "bezier",
+    points = { { 0.16, 1.0 }, { 0.30, 1.0 } }
+})
+
+hl.animation({
+    leaf = "global",
+    enabled = true,
+    speed = 8,
+    bezier = "default"
+})
+
+hl.animation({
+    leaf = "windowsMove",
+    enabled = true,
+    speed = 4,
+    bezier = "expoSmooth"
+})
+
+hl.curve("expoOpen", {
+    type = "bezier",
+    points = { { 0.22, 0.61 }, { 0.36, 1.0 } }
+})
+
+hl.animation({
+    leaf = "zoomFactor",
+    enabled = true,
+    speed = 4,
+    bezier = "expoOpen"
+})
+
+hl.animation({
+    leaf = "specialWorkspace",
+    enabled = false
+})
+
+hl.animation({
+    leaf = "specialWorkspaceIn",
+    enabled = false
+})
+
+hl.animation({
+    leaf = "specialWorkspaceOut",
+    enabled = false
+})
+
+hl.config({
+    misc = {
+        animate_manual_resizes = false,
+        animate_mouse_windowdragging = false,
+        force_default_wallpaper = -1,
+        disable_hyprland_logo = true,
+        on_focus_under_fullscreen = 1
+    }
+})
+
+hl.animation({
+    leaf = "workspaces",
+    enabled = true,
+    speed = 4,
+    bezier = "expoSmooth",
+    style = "slide"
+})
+
+hl.animation({
+    leaf = "windowsIn",
+    enabled = true,
+    speed = 4,
+    bezier = "default",
+    style = "slide"
+})
+
+hl.animation({
+    leaf = "windowsOut",
+    enabled = true,
+    speed = 2,
+    bezier = "default",
+    style = "slide"
+})
+
+hl.animation({
+    leaf = "layers",
+    enabled = true,
+    speed = 6,
+    bezier = "default",
+    style = "popin"
+})
+hl.animation({
+    leaf = "layersIn",
+    enabled = true,
+    speed = 6,
+    bezier = "default",
+    style = "popin"
+})
+hl.animation({
+    leaf = "layersOut",
+    enabled = true,
+    speed = 6,
+    bezier = "default",
+    style = "popin"
+})
+hl.animation({
+    leaf = "fadeLayersIn",
+    enabled = true,
+    speed = 6,
+    bezier = "default"
+})
+hl.animation({
+    leaf = "fadeLayersOut",
+    enabled = true,
+    speed = 6,
+    bezier = "default"
+})
+
+return true

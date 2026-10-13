@@ -281,6 +281,15 @@ else
     warn "keyd no encontrado — instalar con: yay -S keyd"
 fi
 
+if [[ -f "$DOTFILES_SYSTEM/system-sleep/keyd-resume.sh" ]]; then
+    sudo install -o root -g root -m 755 \
+        "$DOTFILES_SYSTEM/system-sleep/keyd-resume.sh" \
+        /usr/lib/systemd/system-sleep/keyd-resume.sh
+    ok "hook system-sleep keyd-resume instalado (re-inicia keyd al despertar)"
+else
+    warn "Falta $DOTFILES_SYSTEM/system-sleep/keyd-resume.sh"
+fi
+
 # Layout XKB custom (dvk_prog): hyprland.lua lo usa como layout principal
 # (kb_layout = "dvk_prog,es,us"). Sin el archivo de simbolos instalado,
 # Hyprland cae a "us" (teclado roto tras fresh install).
@@ -437,6 +446,35 @@ if [[ -f "$DOTFILES_SYSTEM/systemd-user/power-session-guard.service" ]]; then
     ok "power-session-guard (user) habilitado"
 else
     warn "Falta $DOTFILES_SYSTEM/systemd-user/power-session-guard.service"
+fi
+
+if [[ -f "$DOTFILES_SYSTEM/systemd-user/linux-wallpaperengine.service" ]]; then
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/linux-wallpaperengine.service" "$SYSTEMD_DIR/linux-wallpaperengine.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    ok "linux-wallpaperengine.service instalado (arranca con: wallpaper-switch.sh use video)"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd-user/linux-wallpaperengine.service"
+fi
+
+if [[ -f "$DOTFILES_SYSTEM/systemd-user/wallpaper-power-guard.service" ]] && [[ -f "$DOTFILES_SYSTEM/systemd-user/wallpaper-power-guard.timer" ]]; then
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/wallpaper-power-guard.service" "$SYSTEMD_DIR/wallpaper-power-guard.service"
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/wallpaper-power-guard.timer" "$SYSTEMD_DIR/wallpaper-power-guard.timer"
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now wallpaper-power-guard.timer 2>/dev/null || true
+    ok "wallpaper-power-guard (user) habilitado (bateria -> frame, AC -> fuente)"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd-user/wallpaper-power-guard.service/.timer"
+fi
+
+if [[ -f "$DOTFILES_SYSTEM/systemd-user/ai-chats-sync.service" ]] && [[ -f "$DOTFILES_SYSTEM/systemd-user/ai-chats-sync.timer" ]] && [[ -f "$DOTFILES_SYSTEM/systemd-user/ai-chats-ingest.path" ]]; then
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/ai-chats-sync.service" "$SYSTEMD_DIR/ai-chats-sync.service"
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/ai-chats-sync.timer" "$SYSTEMD_DIR/ai-chats-sync.timer"
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/ai-chats-ingest.path" "$SYSTEMD_DIR/ai-chats-ingest.path"
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now ai-chats-sync.timer ai-chats-ingest.path 2>/dev/null || true
+    ok "ai-chats (user) habilitado (ingesta + embeddings periodicos)"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd-user/ai-chats-sync.service/.timer/.path"
 fi
 
 # Sudoers: permite al panel de bateria (eztvn.power) reiniciar el guard al

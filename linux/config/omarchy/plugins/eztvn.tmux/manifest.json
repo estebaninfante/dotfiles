@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.tmux",
+  "name": "tmux sessions",
+  "version": "1.1.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Bar widget with the live count of tmux sessions on this machine plus a popup listing every session with its window count, idle age and two actions per row: attach it in a terminal or eliminate it after an explicit confirmation (two steps for sessions someone is attached to). A header action eliminates every session after a confirmation that spells out how many sessions and which attached ones would be lost.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "tmux",
+    "description": "Session count in the bar, popup list of tmux sessions with one-click attach and confirmed elimination.",
+    "category": "System",
+    "aliases": ["tmux", "sesion", "sesiones", "terminal", "shell"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 5
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "description": "How often the widget re-reads the tmux session list.",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      }
+    ]
+  }
+}

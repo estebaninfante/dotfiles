@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VAULT="${ALICIA_VAULT:-$HOME/alicia}"
+INBOX="$VAULT/Inbox"
+
+die() { echo "obsidian-note: $*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+usage: obsidian-note <comando> [args]
+
+comandos:
+  add <titulo> [--body <texto>] [--tipo idea|tarea|recordatorio|pensamiento] [--tags a,b]
+  list [--tipo <t>] [--estado <e>]
+  promote <nota> [--to <subdir>] [--estado <e>]
+  done <nota>
+  path
+  --selftest
+EOF
+}
+
+require_vault() {
+  [[ -d "$INBOX" ]] || die "vault no encontrado: $VAULT (abre Obsidian y elige 'Open folder as vault')"
+}
+
+slugify() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9ñ]\+/-/g; s/--\+/-/g; s/^-//; s/-$//' | cut -c1-60
+}
+
+unique_path() {
+  local candidate="$1" n=2
+  if [[ ! -e "$candidate" ]]; then
+    echo "$candidate"
+    return
+  fi
+  while [[ -e "${candidate%.md}-$n.md" ]]; do n=$((n + 1)); done
+  echo "${candidate%.md}-$n.md"
+}
+
+resolve_note() {
+  local ref="$1" match count=0
+  if [[ -f "$ref" ]]; then
+    echo "$ref"
+    return
+  fi
+  if [[ -f "$VAULT/$ref" ]]; then
+    echo "$VAULT/$ref"
+    return
+  fi
+  while IFS= read -r match; do
+    [[ -z "$match" ]] && continue
+    count=$((count + 1))
+    [[ $count -eq 1 ]] && ref="$match"
+  done < <(find "$VAULT" -type f -name "*$1*.md" ! -path "*/Archivo/*" 2>/dev/null)
+  [[ $count -eq 1 ]] || die "referencia '$1': $count coincidencias (sé más específico)"
+  echo "$ref"
+}
+
+get_field() {
+  sed -n "s/^$2: *//p" "$1" | head -1
+}
+
+set_field() {
+  local file="$1" key="$2" value="$3"
+  grep -q "^$key: " "$file" || die "campo '$key' ausente en $file"
+  sed -i "s/^$key: .*/$key: $value/" "$file"
+}
+
+cmd_add() {
+  local title="" body="" tipo="idea" tags=""
+  [[ $# -ge 1 ]] || die "add requiere título"
+  title="$1"
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --body) body="${2:-}"; shift 2 ;;
+      --tipo) tipo="${2:-}"; shift 2 ;;
+      --tags) tags="${2:-}"; shift 2 ;;
+      *) die "flag desconocido: $1" ;;
+    esac
+  done
+  [[ "$tipo" =~ ^(idea|tarea|recordatorio|pensamiento)$ ]] || die "tipo inválido: $tipo"
+  require_vault
+  local slug file yaml_tags
+  slug="$(slugify "$title")"
+  [[ -n "$slug" ]] || die "título vacío tras slugify"
+  file="$(unique_path "$INBOX/$(date +%Y-%m%d)-$slug.md")"
+  yaml_tags="[]"
+  if [[ -n "$tags" ]]; then
+    tags="${tags// /}"
+    yaml_tags="[${tags//,/, }]"
+  fi
+  {
+    echo "---"
+    echo "tipo: $tipo"
+    echo "estado: pendiente"
+    echo "fecha: $(date +%Y-%m-%dT%H:%M)"
+    echo "tags: $yaml_tags"
+    echo "---"
+    echo ""
+    echo "# $title"
+    echo ""
+    if [[ -n "$body" ]]; then
+      echo "$body"
+      echo ""
+    fi
+  } >"$file"
+  echo "$file"
+}
+
+cmd_list() {
+  local tipo="" estado="" file t e title
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --tipo) tipo="${2:-}"; shift 2 ;;
+      --estado) estado="${2:-}"; shift 2 ;;
+      *) die "flag desconocido: $1" ;;
+    esac
+  done
+  require_vault
+  while IFS= read -r file; do
+    t="$(get_field "$file" tipo)"
+    e="$(get_field "$file" estado)"
+    [[ -n "$tipo" && "$t" != "$tipo" ]] && continue
+    [[ -n "$estado" && "$e" != "$estado" ]] && continue
+    title="$(sed -n 's/^# //p' "$file" | head -1)"
+    printf '%s\t%s\t%s\t%s\n' "${file#"$VAULT"/}" "$t" "$e" "$title"
+  done < <(find "$VAULT/Inbox" "$VAULT/Proyectos" "$VAULT/Areas" -type f -name '*.md' 2>/dev/null | sort)
+}
+
+cmd_promote() {
+  local ref="$1" dest="${2:-Proyectos}" estado="${3:-en-curso}"
+  require_vault
+  local file target
+  file="$(resolve_note "$ref")"
+  [[ -d "$VAULT/$dest" ]] || die "destino inexistente: $VAULT/$dest"
+  target="$(unique_path "$VAULT/$dest/$(basename "$file")")"
+  mv "$file" "$target"
+  set_field "$target" estado "$estado"
+  echo "$target"
+}
+
+cmd_done() {
+  local file
+  file="$(resolve_note "$1")"
+  set_field "$file" estado "hecha"
+  echo "$file"
+}
+
+selftest() {
+  local tmp expected actual
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  mkdir -p "$tmp/Inbox" "$tmp/Proyectos" "$tmp/Areas"
+  VAULT="$tmp"
+  INBOX="$tmp/Inbox"
+
+  expected="$tmp/Inbox/$(date +%Y-%m%d)-tarea-de-prueba.md"
+  actual="$(cmd_add "Tarea de prueba" --body "cuerpo de prueba" --tipo tarea --tags "test, prueba")"
+  [[ "$actual" == "$expected" ]] || { echo "FAIL add: $actual"; return 1; }
+  grep -q "^tipo: tarea$" "$actual" || { echo "FAIL frontmatter tipo"; return 1; }
+  grep -q "^estado: pendiente$" "$actual" || { echo "FAIL frontmatter estado"; return 1; }
+  grep -q "cuerpo de prueba" "$actual" || { echo "FAIL body"; return 1; }
+
+  actual="$(cmd_list --tipo tarea --estado pendiente)"
+  [[ "$actual" == *"tarea-de-prueba"* ]] || { echo "FAIL list"; return 1; }
+
+  actual="$(cmd_promote "tarea-de-prueba" Proyectos)"
+  [[ "$actual" == "$tmp/Proyectos/$(basename "$expected")" ]] || { echo "FAIL promote: $actual"; return 1; }
+  [[ "$(get_field "$actual" estado)" == "en-curso" ]] || { echo "FAIL promote estado"; return 1; }
+
+  actual="$(cmd_done "tarea-de-prueba")"
+  [[ "$(get_field "$actual" estado)" == "hecha" ]] || { echo "FAIL done"; return 1; }
+
+  unset ALICIA_VAULT
+  echo "OK obsidian-note selftest"
+}
+
+cmd="${1:-}"
+[[ $# -gt 0 ]] && shift
+case "$cmd" in
+  add) cmd_add "$@" ;;
+  list) cmd_list "$@" ;;
+  promote)
+    [[ $# -ge 1 ]] || die "promote requiere nota"
+    ref="$1"; shift
+    dest="Proyectos"; estado="en-curso"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --to) dest="${2:-}"; shift 2 ;;
+        --estado) estado="${2:-}"; shift 2 ;;
+        *) die "flag desconocido: $1" ;;
+      esac
+    done
+    cmd_promote "$ref" "$dest" "$estado"
+    ;;
+  done)
+    [[ $# -ge 1 ]] || die "done requiere nota"
+    cmd_done "$1"
+    ;;
+  path) echo "$VAULT" ;;
+  --selftest) selftest ;;
+  "") usage; exit 1 ;;
+  *) die "comando desconocido: $cmd" ;;
+esac

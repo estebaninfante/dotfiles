@@ -1,0 +1,4 @@
+#!/home/eztvn/ai-chats/.venv/bin/python
+from ai_chats.search import main
+
+raise SystemExit(main())

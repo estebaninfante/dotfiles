@@ -129,6 +129,34 @@ function pageProbe() {
   });
   if (hues.size > 5) add("too-many-colors", "warn", `${hues.size} familias de color saturadas detectadas`, "paleta neutra + 1 acento; color solo con proposito");
 
+  let hasMotion = false;
+  for (const el of els) {
+    const s = getComputedStyle(el);
+    if (s.animationName && s.animationName !== "none") {
+      hasMotion = true;
+      break;
+    }
+    if (s.transitionDuration && s.transitionDuration.split(",").some((d) => parseFloat(d) > 0)) {
+      hasMotion = true;
+      break;
+    }
+  }
+  let hasReduced = false;
+  for (const sheet of document.styleSheets) {
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    for (const rule of rules) {
+      if ((rule.cssText || "").includes("prefers-reduced-motion")) hasReduced = true;
+    }
+  }
+  if (hasMotion && !hasReduced) {
+    add("reduced-motion", "warn", "hay animaciones/transiciones sin @media (prefers-reduced-motion: reduce)", "respetar prefers-reduced-motion: desactivar la animacion, no la logica");
+  }
+
   return { issues, metrics: { surfaces: surfaces.length, elements: els.length, fontSizes: fontSizes.size, hues: hues.size } };
 }
 
@@ -139,6 +167,7 @@ const WEIGHT = {
   misaligned: 0.8,
   "font-scale": 0.6,
   "small-target": 0.6,
+  "reduced-motion": 0.5,
 };
 
 function scoreOf(issues) {
@@ -163,6 +192,7 @@ function report(url, result) {
 }
 
 const SELFTEST_DIRTY = `<!doctype html><html><body style="margin:0;font-family:sans-serif">
+<style>@keyframes pulse{from{transform:scale(1)}to{transform:scale(1.05)}}</style>
 <div style="width:600px;height:120px;background:#222;border-radius:8px;padding:0"><span style="color:#eee;font-size:30px;padding:0">23</span></div>
 <div style="width:600px;height:220px;background:#222;border-radius:8px;padding:18px"><span style="color:#eee;font-size:30px">0</span></div>
 <div style="width:500px;height:100px;background:#2a2a2a;border-radius:8px;padding:16px"><span style="color:#eee;font-size:24px">23</span><span style="color:#aaa;font-size:10px">NOTAS</span></div>
@@ -175,6 +205,7 @@ const SELFTEST_DIRTY = `<!doctype html><html><body style="margin:0;font-family:s
 <div style="font-size:40px;color:#0af;padding:4px">b</div>
 <span style="font-size:9px;color:#0af">c</span>
 <button style="width:20px;height:20px">x</button>
+<div style="animation:pulse .2s infinite;font-size:12px;color:#0af">m</div>
 </body></html>`;
 
 const SELFTEST_CLEAN = `<!doctype html><html><body style="margin:0;font-family:sans-serif;background:#1e1e2e">
@@ -204,7 +235,7 @@ async function selftest() {
   await browser.close();
 
   const got = new Set(dirty.issues.map((i) => i.type));
-  const need = ["content-flush", "empty-box", "font-scale", "small-target"];
+  const need = ["content-flush", "empty-box", "font-scale", "small-target", "reduced-motion"];
   const missing = need.filter((t) => !got.has(t));
   const badClean = clean.issues.filter((i) => i.type === "content-flush" || i.type === "empty-box");
   const ok = missing.length === 0 && badClean.length === 0;

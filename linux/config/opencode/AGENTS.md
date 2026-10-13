@@ -84,16 +84,16 @@ Cualquier cambio, bug, feature, refactor o pregunta que toque Quickshell (barra,
 paneles, overlays, menus, OSD, notificaciones, lock, idle, plugins, `shell.json`, o cualquier
 QML bajo `~/.config/omarchy/`) **debe** pasar por el agente **`omarchy-shell`**. Ese agente es
 el **dueño exclusivo** de Quickshell. No se permiten cambios directos de otros agentes ni
-desde el hilo principal: delega con la tool `task` (`subagent_type: omarchy-shell`) o cambia
-a ese agente.
+desde el hilo principal: delega en una **silla** del owner (`rig spawn <silla> --agent
+omarchy-shell` / `rig work new <ticket> --spawn --agent omarchy-shell`) o cambia a ese agente.
 
 ## Enrutamiento por dominio: agentes owners
 
 Cada dominio de sistema tiene UN agente **dueño**. `main` —el unico agente primario y
-`default_agent`— **NO implementa** cambios de un dominio con owner: **delega** con la tool
-`task` (`subagent_type: <owner>`) o cambia a ese agente. Los owners tienen `mode: all`, asi
-que `main` los ve y puede invocarlos. `main` si hace directo lo trivial o sin owner (docs,
-glue, preguntas, coordinacion); `build` queda deshabilitado.
+`default_agent`— es **punto de entrada puro**: **NO implementa** y **NO delega con la tool
+`task`**; abre una **silla visible** del owner (`rig spawn` / `rig work new <ticket> --spawn`)
+o cambia a ese agente. Los owners tienen `mode: all`. `main` si hace directo lo trivial sin
+friccion (leer, clasificar, coordinar, tablero); `build` queda deshabilitado.
 
 | Dominio | Agente owner | Alcance |
 |---------|--------------|---------|
@@ -104,9 +104,236 @@ glue, preguntas, coordinacion); `build` queda deshabilitado.
 | Dotfiles / maquina | `dotfiles` | repo `~/dotfiles/`, symlinks `~/.local/bin/`, units systemd de usuario genericas, scripts de mantenimiento, skill `verification`, paquetes de sistema (`pacman`/`yay`/AUR) |
 | Computer use | `computer-use` | automatizacion de GUI/escritorio |
 | UI/UX (evaluacion visual) | `ui-ux` | puntuar/diagnosticar cualquier UI o screenshot contra el gusto visual del usuario (skill `ui-ux-scorer`); NO implementa, reporta y delega al owner del dominio |
+| Arquitectura/scaffolding de apps | `app-architect` | estructura feature-first, tamanos de archivo, boundaries, capas, tests, agent-friendliness; scaffold `new-app`, linter `app-arch-lint`, verify `app-arch`. NO UI/UX (`ui-ux`) ni navegador (`browser-pilot`) |
 
 Si un pedido toca un dominio **sin owner**, eso es un hueco: crea el owner antes de tocar
 nada (ver regla meta).
+
+## Invariante: unidades chicas + steering (`main` no bloquea al usuario)
+
+El usuario solo habla con `main`. En el TUI de opencode el **steering ya es nativo**: un
+mensaje enviado mientras el agente trabaja se inyecta al turno activo como steering, no se
+descarta. Evidencia (binario `opencode` 1.18.32): default `general.followup="steer"`, i18n
+`settings.general.row.followup.option.steer` ("steer immediately"), dock
+`session.followupDock.send`, y el codigo fuerza `queue` -> `steer`. Interrumpir = tecla `Esc`
+(keybind `session_interrupt`). **No hace falta ningun plugin**: esto ya funciona.
+
+El cuello de botella es otro: un `task` en **foreground** bloquea a `main` hasta que el
+subagente termina. Mientras corre, el mensaje del usuario se encola y `main` no lo procesa
+hasta que el `task` retorna; y a un subagente en curso **no** se le puede hablar desde el TUI
+(issues #42670 / PR #32425 sin merge; plugin de terceros aun no fiable). Por eso la regla es
+de FLUJO, no de config:
+
+- **Delegar en unidades chicas**: cada `task` es un paso acotado (un owner, un cambio, su
+  `verify`). Prohibido encadenar dentro de un solo `task` tareas largas o multi-owner.
+- **Volver al usuario entre unidades**: al cerrar cada unidad, `main` reporta y devuelve el
+  control ANTES de lanzar la siguiente. El usuario redirige entre unidades.
+- **Paraleliza lo independiente**; no lo encadenes esperando.
+- Unidad larga **e independiente** (research, build, scan) -> **background HABILITADO**:
+  `task(background=true)` + `task_status` (env `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true`
+  ya seteado en el launcher `~/.local/bin/opencode` y en `.bashrc`). `main` vuelve enseguida y
+  puede mandar contexto adicional al task en curso (`task` + mismo `task_id`). **Caveats**: al
+  interrumpir `main` con `Esc` el background task NO se cancela (issue #28738); ante un 429 el
+  task puede colgar en silencio sin avisar (issue #44931) -> solo para trabajo realmente
+  independiente, y confirma su estado con `task_status` antes de cerrar la unidad.
+- **Nunca** dejes a `main` atado a un `task` foreground largo: si la unidad es larga, partila.
+
+Config nueva (agentes, reglas, plugin) **no se hot-reloadea**: reinicia opencode.
+Dueño: `supervisor`. Verificacion: dominio `agents` (check `interrupt-policy`).
+
+## Coordinacion entre agentes: sillas tmux (`rig`)
+
+Los agentes top-level de opencode pueden correr en **sillas**: una sesion tmux nombrada = una
+terminal propia. `rig` (`~/.local/bin/rig`, fuente `~/dotfiles/linux/bin/rig`) es el canal simple
+para hablarse entre sillas, sin APIs ni servidores (bash + tmux; `tmux` es el registry).
+
+- **Alcance**: las sillas son **sesiones top-level de opencode** en panes/windows de tmux. Los
+  **subagentes in-process** (tool `task`) NO tienen terminal propia ni son direccionables; para
+  coordinarse, cada agente top-level vive en su propia silla. Una silla = una sesion tmux marcada
+  con `@agent 1` (+ `@agent_cmd`, `@agent_cwd`); no hay archivo de estado.
+- **Comandos**: `rig seats [--porcelain]` (lista sillas), `rig spawn <nombre> [--agent A]
+  [--cwd DIR]` (crea la silla corriendo opencode; idempotente), `rig send <silla> [--force]
+  [--no-enter] "<mensaje>"` (inyecta texto + Enter), `rig read <silla> [--lines N]` (captura el
+  output reciente), `rig whoami` (silla actual, dentro de tmux).
+- **Mensajes multilinea**: `send` usa bracketed paste (`paste-buffer -p`) para no partir el
+  mensaje en varios submits; una linea usa `send-keys -l` + Enter.
+- **Seguridad**: `send` solo inyecta en sillas marcadas y **se niega** si el pane esta en
+  copy-mode o si el foreground es un shell (evita ejecutar el mensaje como comando); `--force`
+  salta el guard solo con intencion explicita. No inyectar en sillas ajenas ni exfiltrar.
+- **Higiene**: no dejar sillas de prueba vivas; las sesiones idle se reapean solas a las 2h.
+- Dueño: `supervisor` (meta/coordinacion) + `dotfiles` (script en `~/dotfiles/`).
+  Verificacion: `verify run rig` (syntax, shellcheck, selftest, symlink) en **PASS**.
+
+### Tablero de tickets en vivo (`rig ticket` / `rig board`)
+
+Los subagentes `task` de opencode corren **in-process**: no son terminales, no aparecen en
+`rig seats` ni en `herdr`. Por eso el seguimiento de tickets es una herramienta propia:
+un store + un render en vivo, ambos en `rig` (bash + jq + coreutils, sin daemon).
+
+- **Store (fuente de verdad)**: `~/.config/opencode/tickets.json`
+  (`{version, tickets:[{id, project, title, status, owner, created, updated, evidence}]}`).
+  Override para pruebas: `RIG_TICKETS_FILE`. Escritura atomica (`mktemp`+`mv`) bajo `flock`.
+- **Estados**: `pending | in-progress | blocked | done`. Un ticket por `id` (unico,
+  case-insensitive).
+- **CLI**: `rig ticket add <id> --project P --title T [--status S] [--owner O] [--evidence E]`,
+  `rig ticket list [--project P] [--status S] [--porcelain]`,
+  `rig ticket set <id> [--status --owner --evidence --title --project]`, `rig ticket done <id>`,
+  `rig ticket rm <id>`.
+- **Vista viva**: `rig board [--watch] [--porcelain] [--project P] [--status S] [--interval SEG]`.
+  Render agrupado por proyecto y ordenado por estado (`in-progress` -> `blocked` -> `pending`
+  -> `done`); `--porcelain` = JSON array (tool-friendly); `--watch` refresca cada `--interval`
+  seg (default 1.5s) con ANSI limpio (Ctrl-C sale y restaura el cursor). Dejar abierta en una
+  terminal/pane es el uso previsto.
+- **Regla**: al abrir/cerrar/actualizar un ticket, reflejarlo en el store con `rig ticket`
+  (no editar el JSON a mano). Al cerrar una unidad de trabajo, marcar el ticket `done` con su
+  `--evidence` (ruta/test/commit).
+- **Abrir el board en herdr** (opcional; lo corre el usuario, ningun agente maneja herdr desde
+  afuera): `p=$(herdr pane split --current --direction down --ratio 0.35); herdr pane run "$p" rig board --watch`.
+- Dueño: `supervisor` (store/doctrina) + `dotfiles` (script en `~/dotfiles/`).
+  Verificacion: `verify run rig` (agrega `jq`, `tickets-store`, `tickets-shape`,
+  `tickets-status`, `tickets-unique`, `board-porcelain`, `board-render`) y `rig --selftest`
+  (cubre el store con `RIG_TICKETS_FILE` temporal) en **PASS**.
+
+### Doctrina sillas-first: main libre, el trabajo largo corre en sillas
+
+Los `task` in-process de opencode no tienen tty (invisibles en `rig seats`/herdr), **bloquean a
+`main`** hasta terminar, **mueren** al reiniciar opencode y un mensaje del usuario los aborta. Por
+eso el trabajo **no** corre in-process en `main`, y **esta prohibido delegar con la tool `task`**:
+
+- **main es el punto de entrada y se mantiene libre**: no implementa ni ejecuta trabajo; spawnea
+  sillas y sigue disponible para el usuario. Endurecido: `main.md` lleva `permission.task: deny`
+  (no puede ni llamar `task`) y `permission.edit/write: deny` (no implementa a mano).
+- **Toda delegacion es visible**: una **silla tmux** (`rig spawn`, `rig work new <ticket> --spawn`)
+  o un **pane/workspace de herdr**, para que el usuario la vea e interrumpa. Nunca un subagente
+  in-process.
+- El trabajo largo corre en una **silla tmux**: `rig work new <ticket> --spawn` (worktree + branch
+  `ticket/<id>` + silla `work-<id>`), y se le habla con `rig send <silla> "..."`. **Un escritor por
+  arbol** (ver el invariante de worktree).
+- **Herramientas visibles por defecto**: al spawnear, `rig` arma el **workspace herdr del
+  proyecto** (workspace = proyecto git -- un worktree cae en el workspace de su repo; tab = agente,
+  pane = attach a la silla; `--no-herdr` para omitir, `RIG_HERDR=0`) y la **ventana espejo** en una
+  sesion tmux de agentes (`--no-mirror`).
+- **Estado real del agente en herdr (panel de trazabilidad)**: la silla sigue siendo **una sola
+  sesion tmux con UN proceso opencode** (nada de duplicar). Al spawnear, `rig` crea primero el
+  tab/pane herdr y arranca la sesion tmux con `-e HERDR_ENV=1 -e HERDR_PANE_ID=<pane> -e
+  HERDR_SOCKET_PATH=<sock> -e HERDR_WORKSPACE_ID=<ws> -e HERDR_TAB_ID=<tab>`; con eso el plugin
+  `herdr-agent-state.js` reporta `working | idle | blocked` (permiso pendiente = `blocked`). El
+  panel de agentes de herdr se puebla solo; el pane herdr solo hace `tmux attach` al mismo
+  proceso. Para sillas viejas (spawneadas sin env) o tras recrear panes: `rig herdr sync`
+  (registra workspace/tab/pane + titulo `agente · silla`, y reporta estado **derivado** del
+  contenido del pane, source `rig:derive`); `rig herdr sync --watch` mantiene el estado al dia.
+  Nunca reportar dos fuentes sobre el mismo pane (herdr hace last-write-wins): si el seat tiene
+  `HERDR_PANE_ID` en su env, manda el plugin.
+- **Limites de herdr 0.8.2** (documentados, no bugs nuestros): no hay clave de config para
+  badge/color **por space** en el sidebar (`herdr api schema` solo expone `agent_status` y el
+  evento `pane_agent_status_changed`); `report-metadata --title` no cambia `terminal_title`
+  (usar `pane rename` para el label). Anidar herdr requiere `[experimental] allow_nested=true`
+  en `~/.config/herdr/config.toml` + `herdr config check` + `herdr server reload-config`.
+  Actualizar a 0.9.x solo con confirmacion del usuario (hay sillas adjuntas).
+- **Modelo explicito siempre**: toda silla arranca con `--model` (default
+  `opencode-go/deepseek-v4.1-flash`, override `RIG_SEAT_MODEL`) para no heredar el ultimo modelo y
+  caer en un provider sin auth.
+- **Ciclo de vida**: al cerrar el ticket (`rig work finish` / `rig ticket done`) se libera la RAM:
+  se mata la silla del ticket, su tab en herdr y la ventana espejo (`--keep-open` /
+  `--no-close-seat` lo evitan). Nunca mata `main` ni sillas sin ticket; ante duda, deja el ticket
+  `blocked` en vez de matar.
+- Se lee el avance con `rig read <silla>` y, para un vistazo completo, con `rig scan`: ticket/
+  proyecto/agente, ruta del worktree, **archivos modificados** (`git status` + `git diff --numstat`,
+  incluye untracked), **ultima actividad** (mtime mas reciente), las ultimas ~40 lineas del pane y
+  **tokens/costo/tiempo** del ticket (`--porcelain` = JSON).
+- Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
+  (`scan-cli`, `scan-porcelain`, `scan-empty`, `scan-empty-render`, `seat-model`, `seat-model-env`,
+  `herdr-hooks`, `lifecycle-cli`) y anti-rot `verify run agents` (checks `sillas-policy`,
+  `main-pure`); `rig --selftest` cubre `scan`/herdr/lifecycle con un worktree temporal.
+
+## Invariante: ningun pedido de trabajo queda sin lanzar
+
+REGLA DURA: cuando el usuario pide trabajo (una feature, un fix, una tarea de sistema que se
+va a ejecutar), `main` **abre el ticket y la silla en el momento** (`rig work new <id> --cwd
+<repo> --spawn` + `rig send`, o `rig ticket add <id> ...` + `rig spawn`), o cambia al agente
+owner. **Nunca** deja el pedido en `"¿lo lanzo?"`: o lo lanza, o lo cierra con estado explicito
+(`pending`/`blocked`) y motivo. Un pedido sin desarrollar es un fallo de flujo.
+
+- **Pregunta solo si hay bloqueo real**: accion riesgosa/irreversible, falta un dato que cambia
+  el resultado, o dos caminos validos excluyentes. La duda de "lanzar o no" NO es bloqueo: se
+  lanza (visible e interrumpible) y el usuario redirige.
+- **Estado honesto**: `in-progress` significa "hay una silla viva trabajando el ticket". Un
+  ticket in-progress sin silla viva (ni worktree vivo) es **stale**: se relanza
+  (`rig work new <id> --cwd <repo> --spawn`) o se marca `pending`/`blocked`, jamas se deja
+  `in-progress` huerfano.
+- Dueño: `supervisor`. Verificacion: `verify run agents` (checks `launch-policy`,
+  `tickets-live`).
+
+## Invariante: cambios paralelos con git worktree por ticket
+
+Regla dura: **un escritor por arbol**. Dos agentes jamas escriben el mismo working tree a la
+vez. Para paralelizar en un mismo repo, cada ticket corre en su propio **git worktree** +
+**branch** (`ticket/<id>`), nunca en el arbol principal. Eso elimina la carrera (p.ej. dos
+subagentes tocando `static/` de foldertinder) y deja **trazabilidad** completa
+(ticket -> branch -> worktree -> commits -> evidencia -> verify).
+
+- **Herramienta**: `rig work` (fuente `~/dotfiles/linux/bin/rig`; owner `supervisor`+`dotfiles`).
+  - `rig work new <id> [--agent A] [--cwd DIR] [--base REF] [--spawn] [--attach]`: crea el
+    worktree en `<parent-del-repo>/.rig-worktrees/<repo>/<id>` y el branch `ticket/<id>`;
+    registra `repo/branch/worktree/base` en el ticket y lo pone `in-progress`. `--spawn` abre
+    una silla (`rig spawn work-<id>`) en el worktree. Ubicacion: override `RIG_WORKTREE_DIR`.
+  - `rig work list [--porcelain]`: tickets con worktree (branch, commits, si el arbol vive).
+  - `rig work finish <id> [--no-verify] [--no-commit] [--keep-open] [--force]`: corre
+    `verify auto` sobre lo cambiado, commitea el branch y cierra el ticket (`done`) con
+    evidencia `branch:<b> commit:<sha> verify:<PASS|SKIP|FAIL>`. **No mergea.**
+  - `rig work rm <id> [--delete-branch] [--force]`: elimina el worktree (conserva el branch
+    salvo `--delete-branch`).
+- **Tablero**: `rig board` muestra `BRANCH` y `COMMITS` por ticket (con la ruta del worktree
+  debajo de la fila); `rig work list` agrega el estado real del arbol.
+- **Merge explicito y serial**: integrar es el unico paso que toca la base (compartida), asi
+  que se hace a mano y de a uno: `git -C <repo> merge --no-ff ticket/<id>`. Un conflicto de
+  merge es una senal de coordinacion real, no de paralelismo roto.
+- **Cuando NO hace falta worktree**: un solo agente en el repo (o cambios triviales) puede
+  commitear directo en la base. Si hay **2+ escritores** en el repo, el worktree es
+  obligatorio. El reparto por archivos disjuntos es un complemento (menos choques), no una
+  garantia: las capas compartidas (`static/css/`, `app/globals.css`, entrypoints) se tocan
+  igual, y mas granularidad reduce pero nunca elimina el choque.
+- **Casos reales**:
+  - `foldertinder`: el servicio (systemd, puerto 8777) sirve **en vivo** el arbol principal.
+    Un worktree es un **staging**: nada se ve en 8777 hasta el merge; un cambio `.py` pide
+    `systemctl --user restart foldertinder.service` despues del merge, no antes.
+  - `agentes-platform` (Next.js): cada worktree necesita su propio `node_modules`/`.next`
+    (deps no compartidas); el worktree aisla pero no es gratis.
+- **Por que worktree y no branch-only o reparto por archivos**: un branch sin worktree
+  comparte un solo working tree -> sigue siendo serial; el reparto por archivos no garantiza
+  nada ante capas compartidas. El worktree es la unica opcion que da aislamiento real (un
+  indice/arbol por ticket) y usa git estandar.
+- Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
+  (checks `git`, `work-cli`, `tickets-work-shape`, `worktree-link` + selftest que crea
+  worktree+branch, commitea via `work finish` y limpia via `work rm`) y anti-rot
+  `verify run agents` (check `worktree-policy`). Config nueva -> reinicia opencode.
+
+## Metricas por ticket (tokens/costo/tiempo) — trazabilidad de costo
+
+Cada ticket puede llevar el rastro de **costo real**: tokens, dinero y tiempo. Fuente de
+verdad: `~/.local/share/opencode/opencode.db` (sqlite, por `session.id`); opencode guarda por
+sesion `cost`, `tokens_input/output/reasoning/cache_read/cache_write` y
+`time_created/time_updated`. Los `task` subagentes son sesiones con `parent_id` = la sesion que
+los lanzo, asi que el costo de un ticket es su sesion + descendientes.
+
+- **Mapeo ticket -> sesion(es)**: al lanzar el trabajo de un ticket, registra el id con
+  `rig ticket set <id> --session ses_xxx` (append, dedup), `rig ticket add ... --session`, o
+  `rig work new <id> --session ses_xxx`. Ademas `rig` auto-vincula las sesiones cuyo
+  `directory` == worktree del ticket (una silla `--spawn` queda ligada sola).
+- **Lectura (solo-lectura, sin deps nuevas)**: `sqlite3 -readonly` (CLI) + `jq`; override del
+  DB con `RIG_DB`; desactivar con `RIG_METRICS=0`.
+- **CLI**:
+  - `rig board` agrega la columna `METRICS` por ticket: `<total> $<costo> <duracion>` (total =
+    input+output+reasoning; cache aparte). `--no-metrics` para omitir.
+  - `rig board --porcelain` agrega `metrics{tokens{...},cost,time{duration_ms}}` por ticket
+    (API lista para el cockpit).
+  - `rig ticket metrics [<id>...] [--porcelain]`: desglose in/out/reasoning/cache.read/
+    cache.write/total, costo, creado/actualizado/duracion y nº de sesiones.
+- **Cockpit (`agentes-platform`)**: consumir `rig board --porcelain` / `rig ticket metrics
+  --porcelain` (no re-implementar la lectura del DB). Ese repo NO se edita desde aca.
+- Dueño: `supervisor` (doctrina) + `dotfiles`. Verificacion: `verify run rig` (checks
+  `sqlite3`, `metrics-cli`, `db-schema`, `tickets-sessions-shape` + selftest con sqlite
+  temporal) y anti-rot `verify run agents` (check `metrics-policy`).
 
 ## Invariante: sesiones tmux idle se auto-reapan (2h)
 
@@ -214,6 +441,31 @@ tapar codigo poco claro.
   `// @ts-`, `//go:build`, etc.).
 - Enforcement: el plugin `no-comments.js` **bloquea** la edicion si detecta un comentario nuevo.
   Override explicito y puntual del usuario: `OPENCODE_ALLOW_COMMENTS=1`.
+
+## Arquitectura de apps: agent-friendly (obligatorio)
+
+Toda app que se construya en esta maquina sale **agent-friendly** (contrato **AFA v1**): 1
+responsabilidad por archivo, estructura feature-first, tipos en los boundaries, logica en
+funciones puras, linter + typecheck + tests. Regla aprobada formalmente por el usuario. El
+objetivo es escribir **menos y mas claro**, no mas LOC.
+
+- **Contrato (fijo, no negociable)**: archivo fuente (`js/ts/tsx/jsx/css/scss/py/rs/go/html/...`)
+  **> 400 lineas = HARD FAIL**, WARN > 300. **Monolito prohibido**: repo cuya unica app sea
+  `index.html` + `app.js`/`main.js` + `style.css`/`app.css` en la raiz sumando **> 600 lineas**.
+  Tipos en boundaries (sin `any` sin justificar), tests obligatorios, `AGENTS.md` por proyecto.
+- **Estructura**: `src/features/<f>/{ui,model,api,types}`, `src/components/`, `src/lib/`,
+  `src/types/`, `src/hooks/`, `tests/`. Una feature no importa el `model/` ni la `ui/` de otra.
+- **Scaffold por defecto**: `new-app <nombre> <tipo>` (nunca arrancar un repo a mano).
+- **Linter on-edit**: `app-arch-lint` corre automatico en cada edit (plugin) y marca
+  `file-too-long`, `root-monolith`, `bad-structure`, boundaries rotos. Corregir TODO ERROR.
+- **Owner**: agente `app-architect` (dueño exclusivo de como se estructura/scaffoldea una app).
+  NO implementa UI/UX (eso es `ui-ux`) ni automatiza navegador (eso es `browser-pilot`).
+- **Verificacion determinista**: `verify run app-arch` (estructura, tamanos, boundaries,
+  `AGENTS.md` del proyecto, linter/typecheck/tests) en **PASS** para cerrar. El contrato AFA v1
+  y los principios portados de pstack viven en la skill `agent-friendly-app`.
+- **Deuda conocida** (motivo de la regla): `foldertinder/static` (`app.js` 3548 + `app.css` 3060
+  + `index.html` 291), `hypr-remote/public/app.js` 4266, `noteriv` `globals.css` 9037.
+- Config nueva (agentes, skills, reglas) **no se hot-reloadea**: reinicia opencode.
 
 ## Regla: nunca compilar Qt5 desde fuente (AUR con deps retiradas)
 
@@ -383,6 +635,22 @@ Linter instalado: `~/.local/bin/omarchy-qml-lint` (o `--all`). El plugin `qml-ux
 automaticamente al editar QML bajo `~/.config/omarchy/` o `~/.config/quickshell/` y agrega el
 resultado al output del tool. Corregir TODO `ERROR` (`bar-padding`, `bar-fill`) antes de terminar.
 
+## Invariante: toda entrada/salida de UI se anima (fade/transicion)
+
+REGLA DURA, global a TODAS las aplicaciones del usuario (web, nativa, Tauri, QML):
+**ningun elemento aparece o desaparece abruptamente**. Toda aparicion/desaparicion de un
+elemento de UI —por mas chico que sea: badge, chip, caption, fila, tarjeta, toast, tooltip,
+menu, overlay— usa **fade/transicion**; nunca un salto seco de `display`/`visibility`/insercion
+en el DOM sin animar. Al montar/desmontar listas animar entrada y salida (fade + transform
+sutil); al alternar visibilidad, transicionar `opacity`/`transform`, no cortar en seco.
+
+Limites: animaciones <= 250ms, sutiles; y SIEMPRE respetar
+`@media (prefers-reduced-motion: reduce)` (desactiva la animacion, nunca la logica).
+
+- Dueño: agente `ui-ux` (evaluacion) + owner del dominio que la implementa.
+- Verificacion: dominio `agents`, check `motion-policy` (falla si esta regla desaparece de
+  este archivo); la rubrica `ui-ux-scorer` la incluye como criterio penalizado.
+
 ## UI/UX: scorer del gusto visual (skill `ui-ux-scorer`)
 
 Toda evaluacion de UI/UX (diseno nuevo, rediseno, o "como se ve esta pantalla") pasa por el
@@ -397,7 +665,8 @@ agente `ui-ux` y su skill `~/.config/opencode/skills/ui-ux-scorer/`.
   dominan; animaciones <= 250ms; targets >= 32px.
 - **Probe determinista** (UIs web): `node ~/.config/opencode/skills/ui-ux-scorer/probe.mjs <url>`
   -> `issues` + `score`. Checks: `content-flush`, `empty-box`, `misaligned`, `font-scale`,
-  `small-target`, `too-many-colors`. Para nativas/Tauri/QML (p.ej. la barra Omarchy, Noteriv) el
+  `small-target`, `too-many-colors`, `reduced-motion` (animaciones sin respetar
+  `prefers-reduced-motion`). Para nativas/Tauri/QML (p.ej. la barra Omarchy, Noteriv) el
   probe no llega: screenshot con `grim` + evaluacion por vision.
 - **Verificacion**: `node .../probe.mjs --selftest` (debe dar `ok: true`) y
   `verify auto ~/.config/opencode/skills/ui-ux-scorer/probe.mjs`.

@@ -169,4 +169,48 @@ if [ "${#qml[@]}" -gt 0 ]; then
   fi
 fi
 
+js=()
+for target in "${targets[@]}"; do
+  case "$target" in
+    *.js)
+      js+=("$target")
+      ;;
+  esac
+done
+
+tested=""
+for target in "${js[@]}"; do
+  [ -f "$target" ] || continue
+  probe="$target"
+  plugin=""
+  while [ "$probe" != "/" ] && [ "$probe" != "$HOME" ]; do
+    probe=$(dirname "$probe")
+    if [ -f "$probe/manifest.json" ]; then
+      plugin="$probe"
+      break
+    fi
+  done
+  [ -n "$plugin" ] || continue
+  plugin=$(cd "$plugin" 2>/dev/null && pwd -P)
+  [ -n "$plugin" ] || continue
+  case "$tested" in
+    *" $plugin "*) continue ;;
+  esac
+  tested="$tested $plugin "
+  if [ ! -d "$plugin/tests" ]; then
+    skip "plugin-tests" "$(basename "$plugin") sin tests/"
+    continue
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    skip "plugin-tests" "node ausente"
+    continue
+  fi
+  if out=$(node --test "$plugin/tests/" 2>&1); then
+    pass_n=$(printf '%s\n' "$out" | grep -Eo 'pass[[:space:]]+[0-9]+' | tail -n1 | grep -Eo '[0-9]+' || true)
+    ok "plugin-tests" "$(basename "$plugin"): ${pass_n:-0} tests en PASS"
+  else
+    fail "plugin-tests" "$(basename "$plugin"): $(printf '%s' "$out" | grep -E 'not ok|✖|fail [0-9]' | head -n3 | tr '\n' ' ')"
+  fi
+done
+
 exit "$rc"

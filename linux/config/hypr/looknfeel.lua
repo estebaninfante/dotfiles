@@ -1,50 +1,64 @@
--- Change the default Omarchy look'n'feel.
+local power = require("base.power")
 
--- https://wiki.hypr.land/Configuring/Basics/Variables/#general
--- hl.config({
---   general = {
---     -- No gaps between windows or borders.
---     gaps_in = 0,
---     gaps_out = 0,
---     border_size = 0,
---
---     -- Change to niri-like side-scrolling layout.
---     layout = "scrolling",
---   },
--- })
+local border_cache
 
--- https://wiki.hypr.land/Configuring/Basics/Variables/#decoration
--- hl.config({
---   decoration = {
---     -- Use round window corners.
---     rounding = 8,
---
---     -- Dim unfocused windows (0.0 = no dim, 1.0 = fully dimmed).
---     dim_inactive = true,
---     dim_strength = 0.15,
---   },
--- })
+local function active_border(fallback)
+    if border_cache then return border_cache end
+    local home = os.getenv("HOME") or ""
+    local handle = io.popen("readlink -f '" .. home .. "/.local/state/omarchy/current/background' 2>/dev/null")
+    local image = handle and handle:read("*l") or nil
+    if handle then handle:close() end
+    if image and #image > 0 then
+        local program = '{ if (match($0,/\\(([0-9]+),([0-9]+),([0-9]+)/,m)) { r=m[1]+0; g=m[2]+0; b=m[3]+0; l=0.299*r+0.587*g+0.114*b; if (l>ml) { ml=l; br=r; bg=g; bb=b } } } END { printf "%d %d %d", br, bg, bb }'
+        local command = "magick '" .. image .. "' -colorspace sRGB -depth 8 -resize 64x64 txt:- 2>/dev/null | sed 1d | awk '" .. program .. "' 2>/dev/null"
+        local query = io.popen(command)
+        if query then
+            local r, g, b = query:read("*a"):match("(%d+)%s+(%d+)%s+(%d+)")
+            query:close()
+            if r then
+                r, g, b = tonumber(r), tonumber(g), tonumber(b)
+                local maximum = math.max(r, g, b)
+                if maximum > 0 then
+                    local factor = (maximum < 205) and (205 / maximum) or 1
+                    border_cache = string.format("rgba(%02x%02x%02xf2)",
+                        math.min(255, math.floor(r * factor + 0.5)),
+                        math.min(255, math.floor(g * factor + 0.5)),
+                        math.min(255, math.floor(b * factor + 0.5)))
+                    return border_cache
+                end
+            end
+        end
+    end
+    border_cache = fallback
+    return fallback
+end
 
--- https://wiki.hypr.land/Configuring/Basics/Variables/#animations
--- hl.config({
---   animations = {
---     -- Disable all animations.
---     enabled = false,
---   },
--- })
+local blur_enabled = not power.low_power()
 
--- https://wiki.hypr.land/Configuring/Basics/Variables/#layout
--- hl.config({
---   layout = {
---     -- Avoid overly wide single-window layouts on wide screens.
---     single_window_aspect_ratio = { 1, 1 },
---   },
--- })
+hl.config({
+    general = {
+        gaps_in = 10,
+        gaps_out = 10,
+        border_size = 2,
+        ["col.active_border"] = active_border("rgba(cdcdcdf2)"),
+        ["col.inactive_border"] = "rgba(00000000)"
+    },
+    decoration = {
+        rounding = 3,
+        blur = {
+            enabled = blur_enabled,
+            size = 8,
+            passes = 3
+        }
+    }
+})
 
--- https://wiki.hypr.land/Configuring/Layouts/Scrolling-Layout/
--- hl.config({
---   scrolling = {
---     -- See only one column per screen instead of two.
---     column_width = 0.97,
---   },
--- })
+hl.config({
+    cursor = {
+        no_hardware_cursors = 1
+    }
+})
+
+return {
+    blur_enabled = blur_enabled
+}

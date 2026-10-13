@@ -100,6 +100,8 @@ session_trigger() {
   [ -S "$USER_RT/bus" ] || return 0
   runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$USER_RT" \
     systemctl --user restart power-session-guard.service >/dev/null 2>&1 || true
+  runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$USER_RT" \
+    systemctl --user --no-block start wallpaper-power-guard.service >/dev/null 2>&1 || true
 }
 
 if low_power; then

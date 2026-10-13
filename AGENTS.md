@@ -306,6 +306,21 @@ Experiencia consola en PC: el gamepad controla el escritorio y la UI.
 - **Auto modo juego**: `linux/bin/gamepad-watch.sh` detecta conexion/desconexion de pads → `game-mode.sh` / `exit`.
 - **Evitar doble input**: `linux/bin/hypr-input-bridge.sh` escucha Hyprland socket y para/input-remapper segun foco.
 
+## Privacidad de red: servicios solo por loopback + Tailscale
+
+Los servicios que no necesitan LAN escuchan **solo en `127.0.0.1`** y se exponen
+al usuario remoto por **Tailscale** (tailnet-only). Nada de `0.0.0.0` en apps sin auth.
+
+- **`foldertinder.service`** (`~/.config/systemd/user/foldertinder.service`, puerto 8777):
+  `ExecStart` con `--host 127.0.0.1` (el default del CLI en `ft/cli.py` es loopback; se deja
+  explicito). `--share` en el CLI abre `0.0.0.0` a proposito: no usarlo en la unit.
+  El celular entra por `https://laptopmarchy.tail77dc99.ts.net` -> `tailscale serve` (443,
+  tailnet-only) proxy a `http://127.0.0.1:8777`.
+- El **Funnel `:8443` -> `127.0.0.1:3000`** es otra app (público por diseno): no tocarlo.
+- Verificacion: `ss -ltn | grep 8777` = `127.0.0.1:8777`; `curl http://192.168.1.240:8777/`
+  debe fallar (000) y `curl -k https://laptopmarchy.tail77dc99.ts.net/` = 200; `verify auto
+  <unit>` (dominio systemd). La unit es machine-local (systemd/user), no vive en este repo.
+
 ## Lo que NO se gestiona
 
 Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes.

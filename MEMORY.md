@@ -11,6 +11,7 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 
 - **gesturecontrol engine camera busy**: Proceso zombie retenía /dev/video0. Kill manual resolvió.
 - **websockets RuntimeError: no running event loop**: API v17 cambió. Solución: `asyncio.new_event_loop()` + `run_until_complete(asyncio.Future())`.
+- **Nautilus "no abre" (Files)**: el servicio D-Bus `dbus-:1.1-org.gnome.Nautilus@0.service` (`nautilus --gapplication-service`) se queda wedged → `gtk-launch org.gnome.Nautilus.desktop` retorna exit 0 pero no crea ventana. Diagnóstico: `systemctl --user status 'dbus-:1.1-org.gnome.Nautilus@0.service'` (RSS >1GB, decenas de tasks) + `coredumpctl list | grep nautilus`. Fix: `pkill -x nautilus` (el servicio D-Bus lo relanza limpio en el próximo launch). Causa raíz: fuga de thumbnailers glycin (`glycin-image-rs` en bwrap) que nunca salen y revientan el proceso con SEGV. Si reaparece: limpiar bwrap huérfanos y considerar desactivar thumbnails nautilus.
 
 ## Configuraciones frecuentes
 
@@ -28,6 +29,21 @@ _(Agente: listar skills creadas por auto-mejora)_
 _(agregar aqui pendientes activos)_
 
 ## Historial de sesiones (últimas 5)
+
+### Sesión 2026-10-13: Ticket rig-focus — rig spawn enfoca el herdr
+- **Síntoma**: `rig spawn` creaba workspace+tab herdr sin foco → el usuario (kitty) no veía la silla aparecer.
+- **Fix (`~/dotfiles/linux/bin/rig`)**: nuevo helper `herdr_focus_seat <ws> <tid>` (workspace focus + tab focus, best-effort). `cmd_spawn`: foco ON por defecto (`focus_flag="${RIG_FOCUS:-1}"`), flags `--focus`/`--no-focus`. `work_new`: pasa `--focus`/`--no-focus` a spawn (`--spawn`). Uso actualizado en las 3 usage strings + help herdr.
+- **Bug colateral arreglado**: `work_finish` (línea 1107) llamaba `verify auto ... --quiet`; este `verify` exige `--quiet` ANTES del subcomando → `unrecognized arguments: --quiet` → `rig work finish` fallaba siempre. Cambiado a `verify --quiet auto ...`.
+- **Verifier**: `verifiers/rig.sh` nuevo check `herdr-focus` (grep `herdr_focus_seat` + `--help` con `--no-focus`).
+- **Evidencia**: `verify run rig` PASS; test real spawn enfocó ws+tab (limpiado); `rig work finish rig-focus --no-close-seat` → `commit c1993c3`, ticket done `verify:PASS`.
+- **Gotcha**: el worktree NO contenía `linux/bin/rig` — rig vive UNTRACKED solo en `~/dotfiles` (árbol sucio, ~116 archivos). El verifier hardcodea `$HOME/dotfiles/...`, así que `verify run rig` siempre prueba el árbol principal. Copiar rig+verifier al worktree para commitear.
+
+### Sesión 2026-10-08: Nautilus "no abre"
+- **Síntoma**: `gtk-launch org.gnome.Nautilus.desktop` (menú Omarchy) salía exit 0 sin ventana.
+- **Causa**: servicio D-Bus `dbus-:1.1-org.gnome.Nautilus@0.service` wedged (PID 1406306, 1.4G RSS, 101 tasks, 2h vivo). `gdbus Activate` respondía `()` pero no abría ventana. A las 17:13:46 el proceso hizo SEGV (`coredumpctl` presente, stack en `g_signal_emit` desde `g_application_run`); hilos glycin-lib en el coredump.
+- **Fix**: `pkill -x nautilus` → servicio D-Bus relanzó limpio → `gtk-launch` abre ventana en workspace activo (verificado 2 veces: 1ª creación + 2ª con servicio vivo). Tambien matados 3 `bwrap`/`glycin-image-rs` huérfanos de 4h45 (padre `nm-applet`).
+- **Nota**: nautilus 50.3.1, glycin-loaders = thumbnailers sandbox en bwrap. Fuga conocida del estilo. Recurrencia → desactivar thumbnails o actualizar paquete.
+- **Diagnostic**: no confiar en "exit 0" de launchers D-Bus; verificar ventana con `hyprctl clients -j`.
 
 ### Sesión 2026-09-25: Terminar migración desktop → laptop (fresh install)
 - **hyprexpo**: upstream borró el pin `e95ef2e` (historial reescrito, 404 en GitHub) y `master` cambió a layout `src/`. Rebaseado a `5891014c` = pin oficial de `hyprpm.toml` para Hyprland 0.56.2. Parche regenerado (mismos 16 archivos), verificado en sesión anidada (grilla 3D OK en PNG). Hunk de live-refresh descartado (esa función upstream no existe en el nuevo pin; expo = snapshots + damage, como stock). `.so` instalado en `/var/cache/hyprpm/eztvn/hyprexpo/` vía pkexec; aplica al próximo login. PIN actualizado en `hyprexpo-rebuild.sh`, `hyprexpo-verify-3d.sh` y SKILL.md. Nota en `hyprexpo-changes.md`.
@@ -52,4 +68,4 @@ _(agregar aqui pendientes activos)_
 - **Acción**: Revertí DashboardService.qml, Bar.qml, eliminé SystemBar.qml. Restauré omarchy-launch-shell.
 
 ---
-_Ultima actualización: 2026-09-25 (fin migración a laptop)_
+_Ultima actualización: 2026-10-13 (ticket rig-focus: spawn enfoca herdr)_

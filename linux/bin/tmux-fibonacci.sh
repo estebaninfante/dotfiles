@@ -79,3 +79,6 @@ done
 for ((i = 0; i < n; i++)); do
     tmux resize-pane -t "${panes[$i]}" "-$axis" "${sizes[$i]}" 2>/dev/null || true
 done
+
+tmux set -w -t "$TARGET" @layout_mode fib
+tmux set -w -t "$TARGET" @layout_panes "$n"

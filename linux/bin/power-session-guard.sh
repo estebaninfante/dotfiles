@@ -66,15 +66,30 @@ if ! wait_hypr; then
   exit 0
 fi
 
-if low_power; then
-  log "ahorro (bateria o power-saver): recargando config de ahorro"
-  hyprctl reload >/dev/null 2>&1 || true
-  systemctl --user stop sunshine.service >/dev/null 2>&1 || true
-  notify-send -u low -a "Energia" "Modo ahorro: 60Hz, sin blur, Sunshine off" 2>/dev/null || true
+desired=performance
+low_power && desired=save
+
+state_file="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/power-session-guard.mode"
+applied="$(cat "$state_file" 2>/dev/null || true)"
+
+if [ "$applied" = "$desired" ]; then
+  log "estado '$desired' sin cambios; no recargo Hyprland"
 else
-  log "AC/rendimiento: recargando config completa"
-  hyprctl reload >/dev/null 2>&1 || true
-  sleep 4
+  if [ "$desired" = save ]; then
+    log "ahorro (bateria o power-saver): recargando config de ahorro"
+    hyprctl reload >/dev/null 2>&1 || true
+    notify-send -u low -a "Energia" "Modo ahorro: 60Hz, sin blur, Sunshine off" 2>/dev/null || true
+  else
+    log "AC/rendimiento: recargando config completa"
+    hyprctl reload >/dev/null 2>&1 || true
+    sleep 4
+    notify-send -u low -a "Energia" "Rendimiento completo: 120Hz, Sunshine on" 2>/dev/null || true
+  fi
+  printf '%s\n' "$desired" >"$state_file" 2>/dev/null || true
+fi
+
+if [ "$desired" = save ]; then
+  systemctl --user stop sunshine.service >/dev/null 2>&1 || true
+else
   systemctl --user start sunshine.service >/dev/null 2>&1 || true
-  notify-send -u low -a "Energia" "Rendimiento completo: 120Hz, Sunshine on" 2>/dev/null || true
 fi

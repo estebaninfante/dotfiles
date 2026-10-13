@@ -47,6 +47,18 @@ if ! grep -q "startLiveRefresh" "$SRC/OverviewInteraction.cpp"; then
     exit 1
 fi
 
+if ! grep -q "hoverSelectParked" "$SRC/OverviewInteraction.cpp" || ! grep -q "armHoverSelectPark" "$SRC/Overview.cpp"; then
+    echo "error: el patch perdio el park timer de hover-select (seleccion al abrir por la esquina)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
+if ! grep -q "background_transparent" "$SRC/PluginConfig.cpp" || ! grep -q "backgroundTransparent" "$SRC/OverviewRender.cpp" || ! grep -q "background_transparent" "$SRC/main.cpp"; then
+    echo "error: el patch perdio background_transparent (fondo transparente para video de linux-wallpaperengine)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
 make -C "$SRC" -j"$(nproc)"
 
 sudo install -Dm755 "$SRC/hyprexpo.so" "$INSTALL_SO"

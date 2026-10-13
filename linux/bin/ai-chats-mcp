@@ -1,0 +1,4 @@
+#!/home/eztvn/ai-chats/.venv/bin/python
+from ai_chats.mcp_server import main
+
+raise SystemExit(main())

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.hypr-remote",
+  "name": "hypr-remote",
+  "version": "0.1.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Phone remote control for Hyprland: bar widget with the hypr-remote server status and live phone count, plus a popup with the pairing QR, the paired phone list and service controls.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "hypr-remote",
+    "description": "hypr-remote server status, pairing QR, paired phones and service controls.",
+    "category": "Network",
+    "aliases": ["hyprremote", "remote", "phone", "telefono", "movil"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 2
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "description": "How often the widget reads the hypr-remote control socket.",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 2
+      }
+    ]
+  }
+}

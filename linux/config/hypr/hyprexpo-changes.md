@@ -11,6 +11,86 @@ Config del overview/grilla de workspaces (`SUPER + Y`). Todo vive en
   Omarchy activo via `theme_color(...)`.
 - Recarga: `hyprctl reload` (auto-reload al guardar, pero validar).
 
+## Cambio 2026-10-09i — morph del overview: leaf de animacion dedicada (`zoomFactor`)
+
+**Sintoma**: al elegir un workspace desde la grilla (`SUPER+<n>`, hover-select, click o
+`SUPER+Y`), la transicion grilla -> workspace salia seca/brusca, sin morph.
+
+**Causa raiz**: el plugin anima su zoom con la leaf indicada por
+`plugin:hyprexpo:animation`. `plugins/hyprexpo.lua` la fijaba en `specialWorkspace`,
+pero la migracion a modulos dejo `specialWorkspace` (y `In`/`Out`) en
+`enabled = false` (`animations.lua`) — necesario para que el scratchpad de Moonlight
+cambie en seco. Con la leaf deshabilitada, `Hyprutils::Animation` hace warp inmediato
+(`AnimatedVariable.hpp`: `!enabled()` -> warp), asi que `size`/`pos`/`tiltAnim` del
+overview saltaban al goal en un frame: sin frames intermedios = sin morph.
+Ruta: `plugins/hyprexpo.lua:84` apuntaba a `animations.lua:42-55` (leaf off).
+
+**Fix** (solo config, SIN rebuild del `.so`; `hyprctl reload` basta):
+
+- `animations.lua`: nueva leaf libre `zoomFactor` con `enabled = true`, `speed = 4`,
+  `bezier = "expoOpen"` (misma curva/velocidad que usaba `specialWorkspace` antes).
+- `plugins/hyprexpo.lua`: `config.animation = "zoomFactor"` (antes `"specialWorkspace"`).
+- Se conserva `specialWorkspace`/`In`/`Out` en `enabled = false` (invariante Moonlight).
+
+**Regla**: no reutilizar `specialWorkspace` para el overview. Moonlight la mantiene
+seca; el plugin necesita su propia leaf enabled. `zoomFactor` esta libre en este setup
+(solo la usa el zoom de pantalla, que no se usa).
+
+**Anti-regresion**: `hyprland.sh` (verificador del dominio `hyprland`) agrega el check
+`hyprexpo-anim-leaf`: si `plugin:hyprexpo:animation` apunta a una leaf con `enabled=0`,
+FALLA. Detecta exactamente esta regresion.
+
+**Aplicar**: `hyprctl reload && hyprctl configerrors` (vacio) + `verify run hyprland`.
+
+### Revertir
+`config.animation = "specialWorkspace"` en `plugins/hyprexpo.lua`, quitar la leaf
+`zoomFactor` de `animations.lua`, `hyprctl reload` (vuelve a quedar sin morph).
+
+## Cambio 2026-10-09h — guard anti-crash de pointer lock (`block_pointer_lock`)
+
+Motivo: Hyprland 0.56.2 se cae (SIGSEGV de core) al activar un `zwp_pointer_constraints_v1.lock_pointer`.
+La recursion reportada es `onLockPointer -> activate -> simulateMouseMovement -> mouseMoveUnified
+-> rawSurfaceFocus -> activate`. El fix upstream `5e04ae1` (`desktop/constraint: move to controller
+and state`, #16494, +1276/-180, 19 archivos) NO esta en 0.56.2 y recompilar Hyprland es inviable aqui.
+
+Mitigacion elegida (persistente, sin recompilar Hyprland): **negar las solicitudes de pointer lock**
+a nivel de la activacion de la constraint. Se hookea `CPointerConstraint::activate` (simbolo exportado
+`_ZN18CPointerConstraint8activateEv`, resuelto con `findFunctionsByName("CPointerConstraint8activateEv")`).
+Si `isLocked()` y `plugin:hyprexpo:block_pointer_lock != 0`, el hook NO llama al original -> el lock nunca
+se activa -> no hay recursion -> no hay crash. Se registra un WARN rate-limited (>=2s entre lineas).
+
+Por que esta variante y no el guard de profundidad en `simulateMouseMovement`: `onLockPointer` es un
+metodo privado/no exportado de `CPointerConstraintsProtocol`, no hookeable de forma estable desde el
+plugin; `activate` es la frontera efectiva protocolo->compositor y es un simbolo global exportado.
+Resulta mas acotado que meter un contador de re-entrada en la zona caliente (`simulateMouseMovement`).
+
+Archivos: `main.cpp` (hook + `PLUGIN_INIT`), `PluginConfig.cpp`
+(`plugin:hyprexpo:block_pointer_lock`, `CIntValue` default **1**, min 0 max 1).
+`plugins/hyprexpo.lua` fija `config.block_pointer_lock = 1` solo si `hl.get_config(...) ~= nil`
+(evita `configerrors` unknown-key antes del relogin; se activa solo tras reiniciar Hyprland).
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` + **logout/login** (el `.so` recien cargado
+tiene efecto al arrancar Hyprland; `hyprctl reload` NO recarga el `.so`).
+
+**Revertir (sin recompilar, inmediato)**: poner `config.block_pointer_lock = 0` en
+`plugins/hyprexpo.lua` (o `hyprctl keyword plugin:hyprexpo:block_pointer_lock 0`) y `hyprctl reload`.
+Para eliminar el codigo, revertir el hunk de `main.cpp`/`PluginConfig.cpp` en
+`linux/patches/hyprexpo-local.patch` + `hyprexpo-rebuild.sh` + logout/login.
+
+**Riesgo**: bloquea TODO pointer lock mientras este ON (juegos FPS, mouse-capture de Moonlight /
+lan-mouse). Es el trade-off aceptado (Hyprland estable > lock relativo). Se desactiva por config.
+
+**Verificado** (harness anidado, NUNCA sesion viva):
+- Sin guard: cliente Wayland minimo (`/tmp/opencode/plock/lock_client.c`) pide
+  `lock_pointer` -> recibe el evento `locked` (activate corrio normal).
+- Con guard: mismo cliente -> NO recibe `locked` (lock ignorado) y el log del instance anidado tiene
+  el WARN `zwp_pointer_constraints lock request ignored`.
+- Overview 3D intacto (`hyprexpo-verify-3d.sh`: tiles en perspectiva, `nested_alive=yes`,
+  plugin cargado) y `hyprctl configerrors` vacio.
+- Limite conocido: el cliente minimo NO reproduce el SIGSEGV de core en 0.56.2 (para un lock de
+  ventana enfocada el guard `m_active`/early-return de `mouseMoveUnified` acota la recursion). El
+  guard se valida por su efecto: intercepta exactamente `activate`, el frame de la recursion reportada.
+
 ## Cambio 2026-09-24g — laptop = desktop (mismo `.so` parcheado)
 
 Antes `hyprland.lua` gateaba el 3D con `EXPO_3D = (machine == "desktop")`: la
@@ -422,6 +502,140 @@ hover-select; `hyprctl reload` no recarga el `.so`).
 `expo_cfg.edge_passthrough = 0` en `hyprland.lua` + `hyprctl reload` (o quitar la
 clave). Para quitar el codigo, revertir el parche y `hyprexpo-rebuild.sh`.
 
+## Cambio 2026-09-25b — hover-select con park timer (abrir por esquina ya no selecciona)
+
+**Motivo**: al abrir la grilla con el hot corner (esquina superior izquierda) el
+puntero aterrizaba sobre el tile top-left (distinto al workspace actual) y el
+hover-select lo seleccionaba apenas pasaba `hover_select_delay`, cerrando la
+grilla de inmediato. Con SUPER+Y no pasaba porque el puntero arrancaba sobre el
+tile de origen (`openedID`, que el plugin ya ignoraba).
+
+**Comportamiento nuevo** (gate por TIEMPO, no por distancia):
+
+- Al abrir se ancla el puntero (`hoverSelectAnchor`) y el tile mas cercano
+  (`hoverSelectAnchorTile`, cubre el caso del margen/esquina fuera de todo tile);
+  arranca un timer de `hover_select_park_ms` (T).
+- Si el puntero **sale rapido** de la zona de la esquina (transito, <T): el timer
+  NO marca parked y el hover-select arma normal → al tirar el mouse a un tile el
+  cambio procede agil (dwell `hover_select_delay`).
+- Si el puntero **se queda** dentro de 64px del punto de apertura pasado T: se
+  marca `parked` y el hover-select queda desarmado mientras el puntero siga en
+  ese tile → la grilla se queda fija. Al moverse a **otro** tile se desarma el
+  park y se puede elegir.
+- Aterrizar/reposar en la esquina al abrir nunca selecciona (radio de 64px).
+- Click sobre un tile y atajos de teclado siguen igual.
+
+**Clave nueva** (`plugin:hyprexpo:`, default apagado/stock):
+
+| Clave | Default `.so` | Que |
+|-------|---------------|-----|
+| `hover_select_park_ms` | `300` | ms de permanencia en la esquina antes de fijar la grilla; menor = fija antes, mayor = deja pasar mas transitos |
+
+NO se cablea todavia en `hyprland.lua` a proposito: el `.so` vivo no conoce la
+clave hasta el logout/login y `hl.config` con una clave desconocida ensucia
+`hyprctl configerrors`. Tras reiniciar, agregarla en `expo_style` +
+`expo_cfg` (bloque `EXPO_3D`) para tunear T; el default 300 ya aplica.
+
+**Implementacion (fork local, `linux/patches/hyprexpo-local.patch`)**:
+
+- `HyprexpoConfig.hpp` / `PluginConfig.cpp`: `HOVER_SELECT_PARK_*` + registro.
+- `Overview.hpp`: `hoverSelectAnchor`, `hoverSelectAnchorTile`,
+  `hoverSelectParked`, `hoverSelectParkTimer`; `armHoverSelectPark()`.
+- `Overview.cpp` (apertura de `COverview`): ancla, tile mas cercano, arranca el
+  park timer; el destructor lo cancela.
+- `OverviewInteraction.cpp`: `armHoverSelectPark()` (timer T -> `parked` solo si
+  el puntero sigue a <=64px del ancla) y `armHoverSelect()` (suprime si esta
+  cerca del ancla o si `parked` y sigue en el tile de apertura).
+- `scripts/run-nested.sh`: knobs `HYPREXPO_DEV_HOVERSELECT[_DELAY]` y
+  `HYPREXPO_DEV_HOVERSELECT_PARK` (default off) para probar en sesion anidada.
+- `tests/OverviewSourceTests.cpp`: asserts del park timer y del gate.
+- `hyprexpo-rebuild.sh`: el guard del instalador falla si el patch pierde
+  `hoverSelectParked`/`armHoverSelectPark` (ademas de `startLiveRefresh`).
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` + logout/login (el `.so`
+solo se carga al arrancar Hyprland; `hyprctl reload` no lo recarga).
+
+**Verificado**: build limpio desde el patch + tests de fuente del gate OK; harness
+anidado en sesiones frescas con `HYPREXPO_DEV_HOVERSELECT=1`: (landing) abrir en
+la esquina y reposar deja `submap=hyprexpo`; (park) reposar >T, nudge dentro del
+tile de apertura sigue en `hyprexpo`, moverse a otro tile -> `default`; (transit)
+moverse a otro tile <T -> `default`. El harness anidado es flaky con la geometria
+(cursor se clampa al tamano de la ventana host), asi que la logica queda ademas
+cubierta por los tests de fuente. Pendiente logout/login para que la sesion viva
+cargue el `.so`.
+
+## Cambio 2026-09-25c — fondo transparente (video de linux-wallpaperengine detras de la grilla)
+
+**Motivo**: el usuario quiere un fondo **animado/video** detras del overview y poder
+elegir entre video (`linux-wallpaperengine`) y estatico (`hyprpaper`/omarchy). El
+overview pintaba su propio backdrop (`bg_col` + `background_image`/`M_background`),
+tapando lo que el compositor ya hubiera dibujado.
+
+**Comportamiento**: `plugin:hyprexpo:background_transparent` (default 0 = conservador).
+En 1 el plugin **no pinta backdrop**: salta el `clearWithColor(bg_col)` (clear con
+alpha 0) y todo el bloque de fondo. La grilla queda flotando sobre la capa
+`BACKGROUND` real del compositor. Y como el hook `renderWorkspace` **reemplaza** a
+Hyprland (no corre el render normal antes del pass), cuando el flag esta activo el
+hook **redibuja las layer surfaces `BACKGROUND`** debajo de la grilla (si no, solo
+quedaria lo que dejo el clear transparente = nada). Funciona con hyprpaper,
+omarchy-background o un cliente de video (linux-wallpaperengine escribe solo su
+region; el damage box no se limpia porque `blocksDamageReporting` lo suprime).
+
+**Coordinacion con `tile_transparent`**: el guard de tiles transparentes
+(`CTransparentTileGuard`) ahora se activa con `tile_transparent=1` Y
+(`background_image` no vacio **O** `background_transparent=1`). Antes, con
+`tile_transparent` sin `background_image`, caia al fallback `wallpaper_bg` (dibujaba
+el wallpaper del monitor → el video/estatico se "duplicaba" por tile). Ahora con el
+flag nuevo los tiles quedan transparentes y no se duplica el fondo.
+
+**Clave nueva** (`plugin:hyprexpo:`):
+
+| Clave | Default `.so` | En `hyprland.lua` | Que |
+|-------|---------------|-------------------|-----|
+| `background_transparent` | `0` | `1` | salta el backdrop y deja ver la capa BACKGROUND real (video/estatico) |
+
+**Implementacion (fork local, `linux/patches/hyprexpo-local.patch`)**:
+
+- `HyprexpoConfig.hpp`: `BACKGROUND_TRANSPARENT_DEFAULT = 0`.
+- `PluginConfig.cpp`: registra la clave (0/1).
+- `OverviewRender.cpp` (`fullRender`): `clearWithColor(backgroundTransparent ? rgba(0,0,0,0) : BG_COLOR)` y el bloque de backdrop envuelto en `if (!backgroundTransparent)`.
+- `OverviewCapture.cpp` (`CTransparentTileGuard`): gate extendido (arriba).
+- `main.cpp` (`hkRenderWorkspace`): con el flag, redibuja las layer surfaces `BACKGROUND` antes de las `TOP`.
+- `HyprlandConfigCompat.hpp` / `Overview.cpp`: helper `intValuePtr` para leer la clave desde `main.cpp` (que no incluye `OverviewInternal.hpp`).
+- `scripts/run-nested.sh`: knobs `HYPREXPO_DEV_BG_TRANSPARENT` y `HYPREXPO_DEV_TILE_TRANSPARENT`.
+- `tests/OverviewSourceTests.cpp`: asserts del clear/backdrop/render-hook.
+- `hyprexpo-rebuild.sh` y `hyprexpo-verify-3d.sh`: guard anti-regresion (fallan si el patch pierde `background_transparent`).
+
+**Fuente del fondo (video vs estatico)** — un solo comando:
+
+```
+wallpaper-switch.sh use video    # linux-wallpaperengine.service (AUR linux-wallpaperengine-git)
+wallpaper-switch.sh use static   # hyprpaper sobre el fondo canonico de Omarchy
+```
+
+- Estado persistente en `~/.config/wallpaper-source` (`video`/`static`).
+- `wallpaper-switch.sh use video` para hyprpaper y arranca el servicio; `use static`
+  detiene el servicio y reactiva hyprpaper.
+- `hyprland.lua` (autostart) lee `~/.config/wallpaper-source` y arranca el que
+  corresponda (antes el desktop no arrancaba hyprpaper y la laptop lo forzaba).
+- `wallpaper-switch.sh <id>` ahora activa video automaticamente (y lista con `list`).
+- Unit nueva: `linux/system/systemd-user/linux-wallpaperengine.service`
+  (instalada por `setup-omarchy.sh` Fase 8; tambien copiada a `~/.config/systemd/user/`).
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` + **logout/login** (el `.so`
+solo se carga al arrancar Hyprland). `hyprland.lua` cablea la clave solo si
+`hl.get_config("plugin:hyprexpo:background_transparent") ~= nil` (evita
+`configerrors` unknown-key antes del reinicio; se activa sola tras relogin).
+
+**Verificado**: `hyprctl configerrors` vacio + `luac -p` OK; tests de fuente OK
+(solo los 10 fallos preexistentes de `Dispatchers`); harness anidado con el patch:
+`background_transparent=1` NO dibuja el backdrop (control `=0` si lo dibuja) y la
+grilla 3D renderiza. **Pendiente logout/login** para la sesion viva + screenshot real.
+
+### Revertir
+`expo_style.background_transparent = 0` (o quitar la clave) + `hyprctl reload`.
+Para quitar el codigo, revertir el parche y `hyprexpo-rebuild.sh`.
+
 ## Backups (en este mismo directorio)
 
 - `hyprland.lua.bak.1790228045` — estado **antes** del cambio de hyprexpo
@@ -431,6 +645,12 @@ clave). Para quitar el codigo, revertir el parche y `hyprexpo-rebuild.sh`.
 
 ## Notas
 
+- `make test` en `~/.cache/hyprexpo-src` arrastra **10 fallos preexistentes** de
+  `tests/OverviewSourceTests.cpp` (selector de workspace en `Dispatchers.cpp`:
+  `kb_selectn`, skip-empty/padding, foco de monitor). NO son del hover-select:
+  el pin puro pasa 0, el patch viejo y el nuevo fallan los mismos 10. Pendiente
+  actualizar esas aserciones a la logica local. Por eso `hyprexpo-rebuild.sh`
+  usa guards de `grep` (startLiveRefresh + hoverSelectMoveGate) en vez de `make test`.
 - Este directorio es symlink a `~/dotfiles/linux/config/hypr/`, asi que el cambio
   esta versionado en git dentro del repo `dotfiles`.
 - `omarchy refresh hyprland` sobrescribe el archivo; los backups de arriba son el

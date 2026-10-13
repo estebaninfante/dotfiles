@@ -53,6 +53,15 @@ PYEOF
         fail "sh:$base" "$(bash -n "$target" 2>&1 | head -n1)"
       fi
       ;;
+    *.desktop)
+      if ! command -v desktop-file-validate >/dev/null 2>&1; then
+        skip "desktop:$base" "desktop-file-validate ausente"
+      elif out="$(desktop-file-validate "$target" 2>&1)"; then
+        ok "desktop:$base" "valido"
+      else
+        fail "desktop:$base" "$(printf '%s\n' "$out" | head -n1)"
+      fi
+      ;;
     *.py)
       if python3 -m py_compile "$target" 2>/dev/null; then
         ok "py:$base" "compila"

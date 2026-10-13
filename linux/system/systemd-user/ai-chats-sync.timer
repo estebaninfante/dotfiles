@@ -1,0 +1,10 @@
+[Unit]
+Description=ai-chats: sincroniza conversaciones cada 10 min (y al arrancar la sesion)
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

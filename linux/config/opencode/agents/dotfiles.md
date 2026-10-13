@@ -52,6 +52,9 @@ cada edición: `verify auto <archivo>` + `shellcheck` en todo `.sh`.
   inactividad (`TMUX_REAP_HOURS` para tuning, `TMUX_REAP_FILTER` para acotar).
   Script: `~/dotfiles/linux/bin/tmux-reap.sh`. Selftest: `tmux-reap.sh --selftest`
   (crea sesión `_reap_selftest` y la mata con HOURS=0 + filtro; no toca sesiones reales).
+- `rig` (sillas de agentes sobre tmux): script `~/dotfiles/linux/bin/rig`, verifier
+  `rig.sh` (dominio `rig`, priority 14). Selftest crea y mata `_rig_selftest`. Doctrina
+  de coordinación en `AGENTS.md` (sección "sillas tmux").
 - Verifier `systemd.sh` valida units (`systemd-analyze verify` + estado) y para
   targets `.sh` corre `shellcheck` + `--selftest`. Registrar glob nuevo en
   `scripts/registry.json` cuando se añada un `.sh` con selftest.

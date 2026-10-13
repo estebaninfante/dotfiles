@@ -1,0 +1,4 @@
+#!/home/eztvn/ai-chats/.venv/bin/python
+from ai_chats.embed import main
+
+raise SystemExit(main())

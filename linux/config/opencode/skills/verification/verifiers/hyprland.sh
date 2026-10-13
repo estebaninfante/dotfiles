@@ -43,6 +43,16 @@ else
   fail "configerrors" "$(printf '%s' "$errors" | head -n3 | tr '\n' ' ')"
 fi
 
+anim_leaf=$(hyprctl getoption plugin:hyprexpo:animation 2>/dev/null | awk -F': ' '/^str:/{print $2; exit}')
+if [ -n "$anim_leaf" ] && [ "$anim_leaf" != "unset" ]; then
+  leaf_state=$(hyprctl animations 2>/dev/null | awk -v want="$anim_leaf" '$1=="name:"{n=$2} /enabled:/{if(n==want){print $2; exit}}')
+  case "$leaf_state" in
+    1) ok "hyprexpo-anim-leaf" "$anim_leaf enabled (morph con animacion)" ;;
+    0) fail "hyprexpo-anim-leaf" "$anim_leaf disabled -> morph sin animacion" ;;
+    *) skip "hyprexpo-anim-leaf" "leaf '$anim_leaf' no encontrada" ;;
+  esac
+fi
+
 config_dir="${HYPR_CONFIG_DIR:-$HOME/.config/hypr}"
 if [ -d "$config_dir" ]; then
   missing=""

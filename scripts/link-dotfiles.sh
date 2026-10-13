@@ -98,7 +98,7 @@ else
 fi
 MACHINE="$(cat "${HOME}/.config/machine-type" 2>/dev/null || echo desktop)"
 
-mkdir -p "${HOME}/.config" "${HOME}/.local/bin"
+mkdir -p "${HOME}/.config" "${HOME}/.local/bin" "${HOME}/.local/share/applications" "${HOME}/.local/share/icons"
 
 header "Config dirs (~/.config)"
 for name in "${CONFIG_DIRS[@]}"; do
@@ -132,6 +132,30 @@ if [ -d "$BIN_SRC" ]; then
         [ -e "$f" ] || continue
         link_path "$f" "${HOME}/.local/bin/$(basename "$f")" false
     done
+fi
+
+header "Desktop entries (~/.local/share/applications)"
+DESKTOP_SRC="${CONFIG_SRC}/applications"
+if [ -d "$DESKTOP_SRC" ]; then
+    for f in "$DESKTOP_SRC"/*.desktop; do
+        [ -e "$f" ] || continue
+        link_path "$f" "${HOME}/.local/share/applications/$(basename "$f")" true
+    done
+else
+    warn "no existe $DESKTOP_SRC"
+fi
+
+header "Iconos (~/.local/share/icons)"
+ICONS_SRC="${REPO}/linux/share/icons"
+if [ -d "$ICONS_SRC" ]; then
+    while IFS= read -r -d '' f; do
+        rel="${f#"$ICONS_SRC"/}"
+        dst="${HOME}/.local/share/icons/${rel}"
+        mkdir -p "$(dirname "$dst")"
+        link_path "$f" "$dst" true
+    done < <(find "$ICONS_SRC" -type f -print0)
+else
+    warn "no existe $ICONS_SRC"
 fi
 
 header "Copias (no symlink)"
@@ -180,6 +204,9 @@ while IFS= read -r l; do
     case "$tgt" in
         "$HOME/dotfiles"/*) err "symlink roto: $l -> $tgt"; broken=$((broken+1)) ;;
     esac
-done < <(find "${HOME}/.config" "${HOME}/.local/bin" "${HOME}/.config/Code/User" -maxdepth 1 -xtype l 2>/dev/null)
+done < <(
+    find "${HOME}/.config" "${HOME}/.local/bin" "${HOME}/.config/Code/User" "${HOME}/.local/share/applications" -maxdepth 1 -xtype l 2>/dev/null
+    find "${HOME}/.local/share/icons" -xtype l 2>/dev/null
+)
 [ "$broken" -eq 0 ] && ok "Sin symlinks rotos hacia el repo." || err "$broken symlink(s) roto(s)."
 exit 0

@@ -43,7 +43,8 @@ monocromo sin jerarquía. Sé exigente: **>= 8/10 para aprobar**.
    `ok: true`). Y `verify auto ~/.config/opencode/skills/ui-ux-scorer/probe.mjs`.
 3. **Diagnostica contra las reglas duras de la skill** (contenido pegado al borde, cajas
    casi vacías, grillas desalineadas, fechas ISO, snippet que repite título, arcoíris,
-   todo-monocromo, divisor largo, stats dominantes, animaciones lentas, targets chicos).
+   todo-monocromo, divisor largo, stats dominantes, animaciones lentas, targets chicos,
+   entrada/salida de UI sin fade/transición o sin respetar `prefers-reduced-motion`).
 4. **Salida obligatoria**:
    ```
    Score: X.X/10  (aprobado | rediseñar)

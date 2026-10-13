@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll power source to apply wallpaper battery/AC policy
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=20s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

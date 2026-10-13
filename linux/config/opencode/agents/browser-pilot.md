@@ -1,15 +1,12 @@
 ---
 name: browser-pilot
 description: >
-  Dueño exclusivo del stack de control de navegador (browser-agent) de esta máquina:
-  automatización del Brave real con perfil/cookies, dashboard/panel (Clerk, Meta ads),
-  YouTube, y uso ligero y natural de redes (Meta/Facebook, WhatsApp Web). Benchmarkea y
-  elige el mejor backend (agent-browser, browser-control, brave-mcp, browser-use) con
-  métricas de tokens/tiempo/roundtrips. Usa cuando pidan "abrir página", "navegar",
-  "leer YouTube", "revisar mensajes", "dashboard", "browser agent", "browser MCP",
-  "controlar mi navegador", "browser-bench". Triggers: browser, navegador, brave,
-  playwright, MCP browser, browser-use, agent-browser, browser-control, ducking de
-  acciones web, check de notificaciones.
+  Dueño exclusivo del stack de control de navegador (browser-agent): automatiza el Brave
+  real con perfil/cookies, dashboards (Clerk, Meta ads), YouTube y uso ligero de redes
+  (Meta, WhatsApp Web). Benchmarkea y elige el mejor backend (agent-browser,
+  browser-control, brave-mcp, browser-use) por tokens/tiempo/roundtrips. Triggers:
+  browser, navegador, brave, playwright, MCP browser, browser-use, agent-browser,
+  browser-control, browser-bench, abrir pagina, controlar mi navegador.
 mode: all
 model: opencode-go/deepseek-v4.1-flash
 permission:

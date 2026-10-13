@@ -1,0 +1,439 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_TYPE="vanilla-web"
+APP_DIR=""
+APP_NAME=""
+FORCE=0
+
+usage() {
+  cat <<'EOF'
+new-app — genera una app Agent-Friendly (contrato AFA v1)
+
+Uso:
+  new-app <dir> [--type vanilla-web|next] [--name <pkg>] [--force]
+  new-app --help
+  new-app --selftest
+
+Tipos:
+  vanilla-web  Vite + TypeScript, modulos por feature (default)
+  next         Next.js + TypeScript, estructura features/
+
+Garantias AFA v1:
+  - 1 responsabilidad por archivo; fuente <= 300 lineas (HARD FAIL > 400)
+  - src/features/<f>/{ui,model,api,types}, src/components, src/lib, src/types, src/hooks
+  - linter + typecheck + test runner configurados
+  - AGENTS.md del proyecto con el contrato AFA
+  - un test que pasa con `node --test` (sin instalar dependencias)
+
+Idempotente: reejecutar solo crea lo que falta.
+EOF
+}
+
+emit() {
+  local dest=$1
+  mkdir -p "$(dirname "$dest")"
+  if [ -e "$dest" ]; then
+    return 0
+  fi
+  cat > "$dest"
+  sed -i "s|@@NAME@@|$APP_NAME|g" "$dest"
+}
+
+keep_dir() {
+  mkdir -p "$1"
+  if [ -z "$(ls -A "$1" 2>/dev/null)" ]; then
+    : > "$1/.gitkeep"
+  fi
+}
+
+write_shared() {
+  local dir=$1
+  emit "$dir/.gitignore" <<'EOF'
+node_modules
+dist
+.next
+build
+coverage
+*.log
+.DS_Store
+.env
+EOF
+
+  emit "$dir/src/lib/greet.ts" <<'EOF'
+export function greet(name: string): string {
+  const trimmed = name.trim()
+  return trimmed.length === 0 ? "Hello, stranger" : `Hello, ${trimmed}`
+}
+EOF
+
+  emit "$dir/src/lib/greet.test.ts" <<'EOF'
+import { test } from "node:test"
+import assert from "node:assert/strict"
+import { greet } from "./greet.ts"
+
+test("greet names the target", () => {
+  assert.equal(greet("Ada"), "Hello, Ada")
+})
+
+test("greet falls back for blanks", () => {
+  assert.equal(greet("   "), "Hello, stranger")
+})
+EOF
+
+  emit "$dir/src/features/hello/types.ts" <<'EOF'
+export interface Greeting {
+  readonly text: string
+}
+EOF
+
+  emit "$dir/src/features/hello/model.ts" <<'EOF'
+import { greet } from "../../lib/greet.ts"
+import type { Greeting } from "./types.ts"
+
+export function buildGreeting(name: string): Greeting {
+  return { text: greet(name) }
+}
+EOF
+
+  keep_dir "$dir/src/components"
+  keep_dir "$dir/src/types"
+  keep_dir "$dir/src/hooks"
+}
+
+write_agents_md() {
+  local dir=$1
+  emit "$dir/AGENTS.md" <<'EOF'
+# @@NAME@@ — Agent-Friendly App (AFA v1)
+
+Este repo cumple el contrato **App Agent-Friendly v1**. Codigo agent-first: nada
+ad-hoc, todo verificable de forma determinista.
+
+## Reglas duras
+- 1 responsabilidad por archivo. Fuente (js/css/ts/tsx/py/rs/go/html) <= 300 lineas;
+  HARD FAIL > 400.
+- Estructura: `src/features/<feature>/{ui,model,api,types}`, `src/components/`,
+  `src/lib/`, `src/types/`, `src/hooks/`.
+- Prohibido el monolito `index.html` + `app.js/main.js` + `style.css/app.css` en la
+  raiz sumando > 600 lineas.
+- Tipos en los boundaries; sin `any`. Logica en funciones puras.
+- Linter + typecheck + tests obligatorios.
+- Codigo sin comentarios: nombres y tipos explican.
+
+## Comandos
+- `npm run dev`
+- `npm run build`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test`
+
+## Verificacion determinista
+- `app-arch-lint .`  — arquitectura (max-file-lines, no-monolith, tests, linter, estructura)
+- `verify run app-arch`
+EOF
+}
+
+write_vanilla() {
+  local dir=$1
+  emit "$dir/package.json" <<'EOF'
+{
+  "name": "@@NAME@@",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^6.0.0"
+  }
+}
+EOF
+
+  emit "$dir/tsconfig.json" <<'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}
+EOF
+
+  emit "$dir/vite.config.ts" <<'EOF'
+import { defineConfig } from "vite"
+
+export default defineConfig({
+  server: { port: 5173 },
+})
+EOF
+
+  emit "$dir/eslint.config.js" <<'EOF'
+import tseslint from "typescript-eslint"
+
+export default tseslint.config(
+  { ignores: ["dist", "node_modules"] },
+  ...tseslint.configs.recommended,
+)
+EOF
+
+  emit "$dir/index.html" <<'EOF'
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@@NAME@@</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+EOF
+
+  emit "$dir/src/main.ts" <<'EOF'
+import { mountHello } from "./features/hello/ui.ts"
+
+const root = document.querySelector<HTMLDivElement>("#app")
+if (!root) throw new Error("#app missing")
+mountHello(root)
+EOF
+
+  emit "$dir/src/features/hello/api.ts" <<'EOF'
+import type { Greeting } from "./types.ts"
+
+export async function fetchGreeting(name: string): Promise<Greeting> {
+  const response = await fetch(`/api/greet?name=${encodeURIComponent(name)}`)
+  if (!response.ok) throw new Error(`greet failed: ${response.status}`)
+  return (await response.json()) as Greeting
+}
+EOF
+
+  emit "$dir/src/features/hello/ui.ts" <<'EOF'
+import { buildGreeting } from "./model.ts"
+
+export function mountHello(root: HTMLElement): void {
+  const heading = document.createElement("h1")
+  heading.textContent = buildGreeting("world").text
+  root.append(heading)
+}
+EOF
+
+  write_shared "$dir"
+}
+
+write_next() {
+  local dir=$1
+  emit "$dir/package.json" <<'EOF'
+{
+  "name": "@@NAME@@",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.0.0",
+    "typescript": "^5.6.0"
+  }
+}
+EOF
+
+  emit "$dir/tsconfig.json" <<'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+EOF
+
+  emit "$dir/next.config.ts" <<'EOF'
+import type { NextConfig } from "next"
+
+const nextConfig: NextConfig = {}
+
+export default nextConfig
+EOF
+
+  emit "$dir/eslint.config.mjs" <<'EOF'
+import { dirname } from "node:path"
+import { fileURLToPath } from "node:url"
+import { FlatCompat } from "@eslint/eslintrc"
+
+const compat = new FlatCompat({
+  baseDirectory: dirname(fileURLToPath(import.meta.url)),
+})
+
+export default [...compat.extends("next/core-web-vitals", "next/typescript")]
+EOF
+
+  emit "$dir/next-env.d.ts" <<'EOF'
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+EOF
+
+  emit "$dir/app/layout.tsx" <<'EOF'
+import type { ReactNode } from "react"
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+EOF
+
+  emit "$dir/app/page.tsx" <<'EOF'
+import { GreetingCard } from "../src/features/hello/ui"
+
+export default function Page() {
+  return (
+    <main>
+      <GreetingCard name="world" />
+    </main>
+  )
+}
+EOF
+
+  emit "$dir/src/features/hello/ui.tsx" <<'EOF'
+import { buildGreeting } from "./model.ts"
+
+export function GreetingCard({ name }: { name: string }) {
+  return <h1>{buildGreeting(name).text}</h1>
+}
+EOF
+
+  write_shared "$dir"
+}
+
+run_selftest() {
+  local tmp status
+  tmp=$(mktemp -d)
+  status=0
+  for t in vanilla-web next; do
+    local out="$tmp/$t"
+    if ! "$0" "$out" --type "$t" >/dev/null 2>&1; then
+      printf 'FAIL selftest scaffold %s\n' "$t"
+      status=1
+      continue
+    fi
+    if [ ! -f "$out/AGENTS.md" ] || [ ! -f "$out/src/features/hello/model.ts" ]; then
+      printf 'FAIL selftest layout %s\n' "$t"
+      status=1
+      continue
+    fi
+    if "$0" "$out" --type "$t" >/dev/null 2>&1; then
+      printf 'OK selftest idempotent %s\n' "$t"
+    else
+      printf 'FAIL selftest idempotent %s\n' "$t"
+      status=1
+    fi
+  done
+  if node --test "$tmp/vanilla-web/src/lib/greet.test.ts" >/dev/null 2>&1; then
+    printf 'OK selftest test-passes\n'
+  else
+    printf 'FAIL selftest test-passes\n'
+    status=1
+  fi
+  rm -rf "$tmp"
+  return $status
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --type) APP_TYPE=${2:-}; shift 2 ;;
+    --type=*) APP_TYPE=${1#*=}; shift ;;
+    --name) APP_NAME=${2:-}; shift 2 ;;
+    --name=*) APP_NAME=${1#*=}; shift ;;
+    --force) FORCE=1; shift ;;
+    --help|-h) usage; exit 0 ;;
+    --selftest) run_selftest; exit $? ;;
+    -*) printf 'opcion desconocida: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+    *) APP_DIR=$1; shift ;;
+  esac
+done
+
+case "$APP_TYPE" in
+  vanilla-web|next) ;;
+  *) printf 'tipo invalido: %s (vanilla-web|next)\n' "$APP_TYPE" >&2; exit 2 ;;
+esac
+
+if [ -z "$APP_DIR" ]; then
+  usage >&2
+  exit 2
+fi
+
+if [ -z "$APP_NAME" ]; then
+  APP_NAME=$(basename "$APP_DIR")
+fi
+APP_NAME=$(printf '%s' "$APP_NAME" | tr '[:upper:]' '[:lower:]' | sed 's|[^a-z0-9].*||')
+
+if [ -e "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ] && [ ! -f "$APP_DIR/.afa" ] && [ "$FORCE" -ne 1 ]; then
+  printf 'dir no vacio y sin marca AFA: %s (usa --force)\n' "$APP_DIR" >&2
+  exit 1
+fi
+
+mkdir -p "$APP_DIR"
+
+case "$APP_TYPE" in
+  vanilla-web) write_vanilla "$APP_DIR" ;;
+  next) write_next "$APP_DIR" ;;
+esac
+
+write_agents_md "$APP_DIR"
+emit "$APP_DIR/.afa" <<'EOF'
+agent-friendly-app v1
+EOF
+
+printf 'new-app: %s listo (%s)\n' "$APP_DIR" "$APP_TYPE"
+printf 'siguiente: cd %s && npm install && npm run test\n' "$APP_DIR"

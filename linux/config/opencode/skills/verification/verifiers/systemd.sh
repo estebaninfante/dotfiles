@@ -42,16 +42,25 @@ for target in "${targets[@]}"; do
     else
       skip "shellcheck:$base" "shellcheck no instalado"
     fi
-    selftest_out=$("$target" --selftest 2>&1)
-    if [ $? -eq 0 ]; then
+    if selftest_out=$("$target" --selftest 2>&1); then
       ok "selftest:$base" "ok"
     else
       fail "selftest:$base" "$(printf '%s' "$selftest_out" | head -n2 | tr '\n' ' ')"
     fi
     continue
   fi
-  verify_out=$(systemd-analyze verify "$target" 2>&1)
-  if [ $? -eq 0 ]; then
+  if [[ "$base" == *.conf ]]; then
+    conf_out=$(systemd-analyze cat-config systemd/sleep.conf 2>&1)
+    for key in AllowHibernation AllowSuspendThenHibernate AllowHybridSleep; do
+      if printf '%s\n' "$conf_out" | grep -qE "^${key}=no$"; then
+        ok "sleep:$key" "no"
+      else
+        fail "sleep:$key" "esperado no"
+      fi
+    done
+    continue
+  fi
+  if verify_out=$(systemd-analyze verify "$target" 2>&1); then
     ok "unit:$base" "valido"
   else
     fail "unit:$base" "$(printf '%s' "$verify_out" | head -n2 | tr '\n' ' ')"

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LAN_ADDR=192.168.1.241
+LAN_PORT=22
+PROBE_SECONDS=2
+TS_CONNECT_TIMEOUT=10
+
+if timeout "$PROBE_SECONDS" bash -c "exec 3<>/dev/tcp/${LAN_ADDR}/${LAN_PORT}" 2>/dev/null; then
+  exec ssh desktop-lan
+fi
+
+exec ssh -o ConnectTimeout="$TS_CONNECT_TIMEOUT" desktop-ts

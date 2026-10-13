@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/eztvn.power"
+db="$state_dir/power.db"
+supply_root="${BATTERY_POWER_SUPPLY_ROOT:-/sys/class/power_supply}"
+
+discharge_microwatts=0
+charge_microwatts=0
+found=false
+record_sample=false
+
+for battery in "$supply_root"/BAT*; do
+  [[ -d "$battery" ]] || continue
+  found=true
+
+  status=""
+  [[ -r "$battery/status" ]] && status="$(<"$battery/status")"
+
+  battery_microwatts=""
+  if [[ -r "$battery/power_now" ]]; then
+    battery_microwatts="$(<"$battery/power_now")"
+  elif [[ -r "$battery/current_now" && -r "$battery/voltage_now" ]]; then
+    current="$(<"$battery/current_now")"
+    voltage="$(<"$battery/voltage_now")"
+    battery_microwatts=$((current * voltage / 1000000))
+  fi
+  [[ -n "$battery_microwatts" ]] || continue
+  battery_microwatts="${battery_microwatts#-}"
+
+  if [[ "$status" == "Charging" ]]; then
+    charge_microwatts=$((charge_microwatts + battery_microwatts))
+    record_sample=true
+  elif [[ "$status" == "Discharging" || -z "$status" ]]; then
+    discharge_microwatts=$((discharge_microwatts + battery_microwatts))
+    record_sample=true
+  fi
+done
+
+"$found" || exit 0
+
+read -r discharge_watts charge_watts < <(
+  awk -v d="$discharge_microwatts" -v c="$charge_microwatts" \
+    'BEGIN { printf "%.1f %.1f\n", d / 1000000, c / 1000000 }'
+)
+
+epoch="$(date +%s)"
+
+if "$record_sample"; then
+  mkdir -p "$state_dir"
+  sqlite3 "$db" "
+    PRAGMA journal_mode=WAL;
+    CREATE TABLE IF NOT EXISTS samples (
+      epoch INTEGER PRIMARY KEY,
+      discharge_watts REAL NOT NULL,
+      charge_watts REAL NOT NULL
+    );
+    INSERT INTO samples(epoch, discharge_watts, charge_watts)
+      VALUES($epoch, $discharge_watts, $charge_watts)
+      ON CONFLICT(epoch) DO UPDATE SET
+        discharge_watts = excluded.discharge_watts,
+        charge_watts = excluded.charge_watts;
+  " >/dev/null 2>&1 || true
+fi
+
+printf '%s %s %s\n' "$epoch" "$discharge_watts" "$charge_watts"
