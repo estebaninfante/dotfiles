@@ -270,8 +270,21 @@ owner. **Nunca** deja el pedido en `"¿lo lanzo?"`: o lo lanza, o lo cierra con 
   ticket in-progress sin silla viva (ni worktree vivo) es **stale**: se relanza
   (`rig work new <id> --cwd <repo> --spawn`) o se marca `pending`/`blocked`, jamas se deja
   `in-progress` huerfano.
+- **Ciclo completo, nunca entregable parcial**: si el pedido admite diagnostico + fix, el
+  encargo es el ciclo entero (diagnostico -> fix -> `verify` -> evidencia -> ticket
+  `done`/`blocked`). Prohibido cerrar una delegacion con un entregable parcial (p.ej. solo el
+  diagnostico) dejando el ticket `in-progress`.
+- **La silla cierra su ticket**: al terminar su unidad, la silla DEBE reflejar el resultado en
+  el store en el momento (`rig ticket done <id> --evidence ...` o `rig ticket set <id> --status
+  blocked --evidence ...`). Silla que termino y quedo idle con el ticket `in-progress` = fallo
+  de flujo.
+- **main cierra los bucles**: tras CADA interaccion del usuario y antes de cerrar cualquier
+  unidad, `main` corre `rig scan` / `rig board`, detecta los tickets `in-progress` con silla sin
+  actividad reciente (`stale`, ver check `tickets-idle`) y los cierra: relanza
+  (`rig work new <id> --cwd <repo> --spawn`) o marca `pending`/`blocked`. `main` nunca asume que
+  la silla aviso.
 - Dueño: `supervisor`. Verificacion: `verify run agents` (checks `launch-policy`,
-  `tickets-live`).
+  `tickets-live`) + `verify run rig` (check `tickets-idle`, senal de sillas in-progress idle).
 
 ## Invariante: cambios paralelos con git worktree por ticket
 

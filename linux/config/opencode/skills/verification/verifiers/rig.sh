@@ -2,7 +2,11 @@
 set -uo pipefail
 
 DOMAIN=rig
-SRC="${RIG_SRC:-$HOME/dotfiles/linux/bin/rig}"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_RIG="$SCRIPT_DIR/../../../../../bin/rig"
+if [ -n "${RIG_SRC:-}" ]; then SRC="$RIG_SRC"
+elif [ -f "$REPO_RIG" ]; then SRC="$(readlink -f "$REPO_RIG")"
+else SRC="$HOME/dotfiles/linux/bin/rig"; fi
 LINK="$HOME/.local/bin/rig"
 STORE="$HOME/.config/opencode/tickets.json"
 
@@ -336,5 +340,27 @@ else
   fail "scan-empty-render" "rig scan vacio fallo"
 fi
 rm -f "$etmp"
+
+idle_max="${RIG_IDLE_MAX_MIN:-60}"
+[[ "$idle_max" =~ ^[0-9]+$ ]] || idle_max=60
+if command -v jq >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1 && tmux list-sessions >/dev/null 2>&1; then
+  if out=$(RIG_IDLE_MAX_MIN="$idle_max" "$SRC" scan --porcelain --no-metrics 2>&1); then
+    now=$(date +%s)
+    stale=$(printf '%s' "$out" | jq -r --argjson now "$now" --argjson im "$idle_max" '
+      [ .[] | select(.kind=="ticket") | select(.status=="in-progress")
+        | select((.seat // "") != "") | select(.live == true) | select((.activity // 0) > 0)
+        | select((($now - .activity) / 60) > $im)
+        | "\(.id)=\((($now - .activity) / 60) | floor)min" ] | join(", ")' 2>/dev/null)
+    if [ -z "$stale" ]; then
+      ok "tickets-idle" "ninguna silla in-progress lleva mas de ${idle_max}min sin actividad"
+    else
+      skip "tickets-idle" "SENAL: sillas in-progress idle > ${idle_max}min: ${stale} (cierra el bucle: relanza o marca pending/blocked)"
+    fi
+  else
+    skip "tickets-idle" "rig scan fallo"
+  fi
+else
+  skip "tickets-idle" "tmux/jq no disponible"
+fi
 
 exit "$rc"

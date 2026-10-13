@@ -1482,6 +1482,7 @@ cmd_herdr() {
 cmd_scan() {
   need_jq
   local porcelain=0 lines=40 project="" status="" no_metrics=0 no_seats=0
+  local idle_max="${RIG_IDLE_MAX_MIN:-60}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --porcelain|-p) porcelain=1; shift ;;
@@ -1496,6 +1497,7 @@ cmd_scan() {
     esac
   done
   [[ "$lines" =~ ^[0-9]+$ ]] || die "lines invalido: $lines"
+  [[ "$idle_max" =~ ^[0-9]+$ ]] || die "RIG_IDLE_MAX_MIN invalido: $idle_max"
   if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
   store_ensure
 
@@ -1527,7 +1529,7 @@ cmd_scan() {
   tw=$(jv_file "$wts")
   sf=$(jv_file "$sessions")
   full=$(jq -cn --rawfile tickets "$tf" --rawfile seats "$ts" \
-    --rawfile wts "$tw" --rawfile sj "$sf" \
+    --rawfile wts "$tw" --rawfile sj "$sf" --argjson idle_max "$idle_max" \
     "$METRICS_DEFS"'
     ($tickets | fromjson) as $tickets
     | ($seats | fromjson) as $seats
@@ -1541,6 +1543,7 @@ cmd_scan() {
           | ($wtm[$wp] // {path:$wp,live:false,branch:"",files:[],insertions:0,deletions:0,activity:0}) as $w
           | ($seatm[$wp] // null) as $s
           | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
+          | ([($w.activity // 0), (if $s then $s.activity else 0 end)] | max) as $act
           | {kind:"ticket", id:$t.id, project:$t.project, owner:$t.owner, status:$t.status,
              branch:(if $w.branch!="" then $w.branch else ($t.branch // "") end),
              worktree:$wp, live:($w.live // false),
@@ -1548,7 +1551,9 @@ cmd_scan() {
              seat_mode:(if $s then $s.mode else 0 end),
              pane:(if $s then $s.pane else "" end),
              files:($w.files // []), insertions:($w.insertions // 0), deletions:($w.deletions // 0),
-             activity:([($w.activity // 0), (if $s then $s.activity else 0 end)] | max),
+             activity:$act,
+             idle_min:(if $act > 0 then ((now - $act) / 60 | floor) else null end),
+             stale:( ($t.status == "in-progress") and ($s != null) and (($w.live // false) == true) and ($act > 0) and (((now - $act) / 60) > $idle_max) ),
              metrics:{sessions:$m.n,
                tokens:{input:$m.tin,output:$m.tout,reasoning:$m.trea,cache_read:$m.tcr,cache_write:$m.tcw,total:($m.tin+$m.tout+$m.trea)},
                cost:$m.cost, time:{created:$m.created,updated:$m.updated,duration_ms:($m.updated-$m.created)}} }
@@ -1579,9 +1584,9 @@ cmd_scan() {
   printf '%s%s%s\n' "$C_HEAD" "$(printf '%-10s %-10s %-10s %-14s %-8s %-12s %-5s %-22s %s' "ID" "PROJECT" "OWNER" "SEAT" "STATE" "ACTIVITY" "FILES" "METRICS" "BRANCH")" "$C_OFF"
   printf '%s' "$full" | jq -r '
     .[] as $e
-    | ("E\u001f" + $e.id + "\u001f" + ($e.project // "") + "\u001f" + ($e.owner // "")
+    | ("E\u001f" + (if ($e.stale // false) then "!" else "" end) + $e.id + "\u001f" + ($e.project // "") + "\u001f" + ($e.owner // "")
        + "\u001f" + ($e.seat // "")
-       + "\u001f" + (if ($e.live and ($e.seat // "")!="") then "live" elif $e.live then "idle" else "missing" end)
+       + "\u001f" + (if ($e.stale // false) then "stale" elif ($e.live and ($e.seat // "")!="") then "live" elif $e.live then "idle" else "missing" end)
        + "\u001f" + (($e.activity // 0)|tostring)
        + "\u001f" + (($e.files|length)|tostring)
        + "\u001f" + ((($e.metrics.sessions) // 0)|tostring)
