@@ -360,8 +360,7 @@ herdr_plugin="${HERDR_REPORTER:-$HOME/.config/opencode/plugins/herdr-pane-state.
 if [[ ! -f "$herdr_plugin" ]]; then
   fail "herdr-reporter" "falta $herdr_plugin (el panel nativo de herdr no se pobla con opencode >=1.19)"
 else
-  herdr_err=$(mktemp)
-  node --input-type=module -e '
+  herdr_problem=$(node --no-warnings --input-type=module -e '
 const file = process.argv[1]
 import("file://" + file)
   .then((mod) => {
@@ -369,9 +368,7 @@ import("file://" + file)
     else console.log("default export no es funcion: usa la API V1 y no reporta en opencode 1.19")
   })
   .catch((error) => console.log("no carga: " + String((error && error.message) || error)))
-' "$herdr_plugin" >"$herdr_err" 2>&1
-  herdr_problem="$(cat "$herdr_err")"
-  rm -f "$herdr_err"
+' "$herdr_plugin" 2>/dev/null)
   if [[ -n "$herdr_problem" ]]; then
     fail "herdr-reporter" "$herdr_problem"
   elif ! grep -qF 'pane.report_agent' "$herdr_plugin" || ! grep -qF 'HERDR_PANE_ID' "$herdr_plugin" || ! grep -qF 'HERDR_ENV' "$herdr_plugin"; then
