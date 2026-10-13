@@ -396,6 +396,29 @@ if grep -q 'cmd_events' "$SRC" && grep -q 'event_emit' "$SRC" && grep -q -- 'eve
 else
   fail "central-events" "central sin pane de eventos en vivo"
 fi
+if "$SRC" say --help >/dev/null 2>&1 && "$SRC" say --help 2>&1 | grep -q -- '--to' && "$SRC" say --help 2>&1 | grep -q 'reply'; then
+  ok "say-cli" "rig say documenta --to y kind=reply"
+else
+  fail "say-cli" "rig say --help no documenta --to/reply"
+fi
+if "$SRC" say "x" --to bogus >/dev/null 2>&1; then
+  fail "say-to-guard" "rig say acepta un --to invalido"
+else
+  ok "say-to-guard" "rig say rechaza --to invalido"
+fi
+if command -v jq >/dev/null 2>&1; then
+  if RIG_EVENTS_FILE="$evfile" "$SRC" say "verifier respuesta al usuario" --to hub --ticket T13 >/dev/null 2>&1; then
+    if RIG_EVENTS_FILE="$evfile" "$SRC" events --kind reply --since 10m --porcelain 2>/dev/null | jq -e 'select(.kind=="reply" and .actor=="main" and .data.to=="hub" and .summary=="verifier respuesta al usuario")' >/dev/null 2>&1; then
+      ok "say-reply" "say deja un evento reply de main leible por --kind reply"
+    else
+      fail "say-reply" "el evento reply de main no aparece con --kind reply --since 10m --porcelain"
+    fi
+  else
+    fail "say-reply" "rig say fallo"
+  fi
+else
+  skip "say-reply" "jq no disponible"
+fi
 rm -rf "$evtmp"
 
 if "$SRC" scan --watch --porcelain >/dev/null 2>&1; then

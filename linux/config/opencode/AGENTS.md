@@ -454,6 +454,12 @@ vivo. Si una accion no deja evento, es un hueco que hay que cerrar.
   abrir la central (`log`). Nunca rompen el comando: emiten fail-soft.
 - **Actor sin tool de rig**: `rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]`
   registra decisiones, diagnosticos y hallazgos (`main` lo usa con `bash`).
+- **Buzon de salida de main**: `rig say "<mensaje>" [--to telegram|hub] [--ticket X]` escribe
+  un evento `kind=reply` con `actor=main` en el **mismo** store (no hay archivo aparte): asi
+  `main` le responde al usuario por fuera de la terminal. El puente de mensajeria
+  (ticket MAIN-BRIDGE) y el hub web lo consumen con
+  `rig events --kind reply --since 10m --porcelain` (ordenado, JSON lines). `--to` default
+  `telegram` y viaja en `data.to` junto al texto (`data.message`, `data.len`).
 - **Vista viva**: `rig events [--watch] [--interval SEG] [--ticket X] [--seat S] [--kind K]`
   `[--since 30m] [--limit N] [--porcelain]`. Render legible por hora, coloreado por area
   (proyecto), sin desbordar el ancho. `--porcelain` = JSON lines (para el hub web);
@@ -464,5 +470,6 @@ vivo. Si una accion no deja evento, es un hueco que hay que cerrar.
   (`events`) + `board`/`scan`/`agents`/`queue`.
 - Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
   (checks `events-append`, `events-shape`, `events-porcelain`, `events-watch-guard`,
-  `events-cli`, `log-cli`, `central-events`) + `rig --selftest` + `verify selftest`.
+  `events-cli`, `log-cli`, `say-cli`, `say-to-guard`, `say-reply`, `central-events`) +
+  `rig --selftest` + `verify selftest`.
 

@@ -104,6 +104,8 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
                                      (~/.local/state/rig/events.jsonl); --watch refresca
   rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]
                                      registra un evento propio (decision/diagnostico) en el feed
+  rig say "<mensaje>" [--to telegram|hub] [--ticket X]
+                                     buzon de salida de main: respuesta al usuario (kind=reply)
 
   rig work new <ticket-id> [--agent A] [--cwd DIR] [--base REF] [--session SES] [--prompt TEXTO]
                              [--model M] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--spawn] [--attach]
@@ -2020,12 +2022,14 @@ rig events - feed en vivo de lo que hacen main y las sillas (~/.local/state/rig/
              [--porcelain] [--interval SEG]
 
   Cada linea es un evento append-only: spawn, send, ticket-add, ticket-set, ticket-done,
-  ticket-rm, work-new, work-finish, work-rm, herdr-sync, log. Columnas:
+  ticket-rm, work-new, work-finish, work-rm, herdr-sync, log, reply. Columnas:
   HORA  KIND  ACTOR  TICKET  AREA  RESUMEN (el AREA da el color).
   --since acepta 30m, 2h, 90s, 7d o una fecha (date -d). --limit default 40.
   --porcelain emite JSON lines (para el hub web) y no combina con --watch.
   --watch refresca en el lugar (Ctrl-C sale); --interval default 2 seg.
   Registra tus propios eventos con: rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]
+  El buzon de salida de main es: rig say "<mensaje>" [--to telegram|hub] (kind=reply);
+  el puente y el hub lo leen con: rig events --kind reply --since 10m --porcelain
 EOF
 }
 
@@ -2193,6 +2197,42 @@ cmd_log() {
   info "evento $kind registrado"
 }
 
+say_usage() {
+  cat >&2 <<'EOF'
+rig say - buzon de salida de main: respuesta al usuario fuera de la terminal
+
+  rig say "<mensaje>" [--to telegram|hub] [--ticket X]
+
+  Escribe un evento kind=reply con actor=main en el mismo store append-only
+  (~/.local/state/rig/events.jsonl). El puente de mensajeria y el hub lo leen con:
+
+    rig events --kind reply --since 10m --porcelain
+
+  --to default "telegram" (valores: telegram|hub); viaja en data.to junto al texto.
+EOF
+}
+
+cmd_say() {
+  need_jq
+  local msg="" to="telegram" ticket=""
+  local -a parts=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --to) [ $# -ge 2 ] || die "--to requiere valor"; to="$2"; shift 2 ;;
+      --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
+      -h|--help|help) say_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) parts+=("$1"); shift ;;
+    esac
+  done
+  case "$to" in telegram|hub) ;; *) die "to invalido: $to (telegram|hub)" ;; esac
+  [ ${#parts[@]} -gt 0 ] || die "uso: rig say \"<mensaje>\" [--to telegram|hub] [--ticket X]"
+  msg="${parts[*]}"
+  RIG_ACTOR=main event_emit reply "$msg" --ticket "$ticket" --area "" \
+    --data "$(jq -nc --arg m "$msg" --arg t "$to" '{message:$m,to:$t,len:($m|length)}' 2>/dev/null)"
+  info "respuesta enviada a $to"
+}
+
 selftest() {
   need_tmux
   local s="$SELFTEST_SESSION" out tmp rc=0 i edir efile
@@ -2345,6 +2385,23 @@ selftest() {
     printf 'rig selftest FAIL: events no muestra el evento log\n' >&2
     rc=1
   fi
+  if ! "$SELF" say --help >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say --help fallo\n' >&2
+    rc=1
+  fi
+  if "$SELF" say "selftest respuesta" --to bogus >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say --to bogus deberia fallar\n' >&2
+    rc=1
+  fi
+  if ! "$SELF" say "selftest respuesta al usuario" --to hub --ticket T9 >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say fallo\n' >&2
+    rc=1
+  fi
+  out=$("$SELF" events --kind reply --since 10m --porcelain 2>/dev/null)
+  if ! printf '%s' "$out" | jq -e 'select(.kind=="reply" and .actor=="main" and .data.to=="hub" and .summary=="selftest respuesta al usuario")' >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: say no dejo un evento reply de main legible por --kind reply\n' >&2
+    rc=1
+  fi
   rm -f "$tmp"
 
   if command -v git >/dev/null 2>&1; then
@@ -2487,6 +2544,7 @@ case "$cmd" in
   board) cmd_board "$@" ;;
   events|ev) cmd_events "$@" ;;
   log|note) cmd_log "$@" ;;
+  say|reply) cmd_say "$@" ;;
   agents|a) cmd_agents "$@" ;;
   queue|q) cmd_queue "$@" ;;
   central|center|c) cmd_central "$@" ;;
