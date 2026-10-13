@@ -1,0 +1,1846 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+SELF="$(readlink -f "$0")"
+SELFTEST_SESSION=_rig_selftest
+SHELLS_COMMANDS="bash zsh fish sh dash ksh"
+SEAT_MODEL="${RIG_SEAT_MODEL:-opencode-go/deepseek-v4.1-flash}"
+TICKETS_FILE="${RIG_TICKETS_FILE:-$HOME/.config/opencode/tickets.json}"
+TICKETS_LOCK="${RIG_TICKETS_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/rig-tickets.lock}"
+TICKET_STATUSES="pending in-progress blocked done"
+
+if [ -t 1 ]; then
+  C_OFF=$'\033[0m'; C_DONE=$'\033[32m'; C_PROG=$'\033[33m'; C_BLOCK=$'\033[31m'
+  C_PEND=$'\033[2m'; C_PROJ=$'\033[1;36m'; C_HEAD=$'\033[1m'
+else
+  C_OFF=""; C_DONE=""; C_PROG=""; C_BLOCK=""; C_PEND=""; C_PROJ=""; C_HEAD=""
+fi
+C_HIDE=$'\033[?25l'; C_SHOW=$'\033[?25h'
+
+die() { printf 'rig: %s\n' "$1" >&2; exit 1; }
+info() { printf '%s\n' "$1"; }
+need_tmux() { command -v tmux >/dev/null 2>&1 || die "tmux no instalado"; }
+need_jq() { command -v jq >/dev/null 2>&1 || die "jq no instalado (requerido por el store de tickets)"; }
+
+DB_PATH="${RIG_DB:-$HOME/.local/share/opencode/opencode.db}"
+SEP=$'\x1f'
+
+metrics_enabled() {
+  [ "${RIG_METRICS:-1}" = "1" ] || return 1
+  command -v sqlite3 >/dev/null 2>&1 || return 1
+  [ -f "$DB_PATH" ] || return 1
+}
+
+db_sessions_json() {
+  if ! metrics_enabled; then printf '[]'; return 0; fi
+  local out
+  out=$(sqlite3 -readonly -separator "$SEP" "$DB_PATH" \
+    "SELECT id, COALESCE(parent_id,''), COALESCE(directory,''), cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write, time_created, time_updated FROM session" 2>/dev/null \
+    | jq -Rn '[inputs | split("\u001f") | {id:.[0],parent:.[1],dir:.[2],cost:(.[3]|tonumber),tin:(.[4]|tonumber),tout:(.[5]|tonumber),trea:(.[6]|tonumber),tcr:(.[7]|tonumber),tcw:(.[8]|tonumber),created:(.[9]|tonumber),updated:(.[10]|tonumber)}]' 2>/dev/null)
+  printf '%s' "${out:-[]}"
+}
+
+jv_file() {
+  local f
+  f=$(mktemp "${TMPDIR:-/tmp}/rig-jv.XXXXXX") || die "no pude crear temporal"
+  printf '%s' "${1:-[]}" >"$f"
+  printf '%s' "$f"
+}
+
+# shellcheck disable=SC2016
+METRICS_DEFS='def descendants($kids; $id): ($kids[$id] // []) as $c | $c + ([ $c[] | descendants($kids; .) ] | add // []);
+def ticket_metrics($t; $byid; $kids; $sessions): ($t.worktree // "") as $wt
+  | ((($t.sessions // []) + (if $wt=="" then [] else [ $sessions[] | select(.dir==$wt) | .id ] end)) | unique) as $roots
+  | (($roots + [ $roots[] as $r | $r, (descendants($kids; $r)[]) ]) | unique) as $set
+  | ( [ $set[] | $byid[.] | select(.!=null) ] ) as $rows
+  | { n: ($rows|length), tin: (($rows|map(.tin)|add)//0), tout: (($rows|map(.tout)|add)//0),
+      trea: (($rows|map(.trea)|add)//0), tcr: (($rows|map(.tcr)|add)//0),
+      tcw: (($rows|map(.tcw)|add)//0), cost: (($rows|map(.cost)|add)//0),
+      created: (($rows|map(.created)|min)//0), updated: (($rows|map(.updated)|max)//0) };
+def metrics_index($sessions): { byid: ($sessions | reduce .[] as $s ({}; .[$s.id]=$s)),
+  kids: ($sessions | reduce .[] as $s ({}; if $s.parent=="" then . else .[$s.parent]=((.[$s.parent]//[])+[$s.id]) end)) };'
+
+
+usage() {
+  cat >&2 <<'EOF'
+rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
+
+  rig seats [--porcelain]            listar sillas (sesiones tmux marcadas)
+  rig ls                             alias de seats
+  rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID]
+                   [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--herdr-cwd DIR] [--attach] [--dry-run]
+  rig send <silla> [--force] [--no-enter] <mensaje...>
+  rig read <silla> [--lines N]       capturar el output reciente
+  rig whoami                         silla actual (dentro de tmux)
+  rig herdr sync [--watch] [--interval S] [--quiet]
+                                     registra cada silla en herdr (ws/tab/pane+titulo) y
+                                     reporta estado derivado si el opencode no trae el plugin
+  rig scan [--porcelain] [--lines N] [--project P] [--status S]
+           [--no-metrics] [--no-seats]   vistazo de sillas/worktrees activos
+
+  rig ticket add <id> --project P --title T [--status S] [--owner O] [--evidence E] [--session SES]
+  rig ticket list [--project P] [--status S] [--porcelain]
+  rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES]
+  rig ticket done <id> [--close-seat]
+  rig ticket rm <id>
+  rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
+  rig board [--watch] [--porcelain] [--no-metrics] [--project P] [--status S] [--interval SEG]
+
+  rig work new <ticket-id> [--agent A] [--cwd DIR] [--base REF] [--session SES] [--prompt TEXTO]
+                             [--model M] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--spawn] [--attach]
+  rig work <ticket-id>               alias de 'work new'
+  rig work list [--project P] [--status S] [--porcelain]
+  rig work finish <ticket-id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]
+  rig work rm <ticket-id> [--delete-branch] [--force]
+
+  rig --selftest                     autotest (tmux + store de tickets)
+
+Las sillas son sesiones top-level de opencode corriendo en tmux. Los subagentes
+in-process de opencode no tienen terminal propia y no son direccionables.
+El tablero de tickets vive en ~/.config/opencode/tickets.json (override: RIG_TICKETS_FILE).
+Estados: pending | in-progress | blocked | done.
+worktree: cada ticket corre en su propio arbol git (branch ticket/<id>) -> cambios
+paralelos sin carrera; merge a la base es explicito. Override de ubicacion: RIG_WORKTREE_DIR.
+modelo: toda silla arranca con --model explicito (default opencode-go/deepseek-v4.1-flash).
+  Override: RIG_SEAT_MODEL.
+herdr: workspace = proyecto (git repo), tab = ticket, pane = agente (attach a la silla). Si el
+  ticket ya tiene tab, un 2do agente abre un pane nuevo (split), no una tab nueva; sin ticket,
+  la tab se llama como la silla. Se crea/reusa al spawnear y se ENFOCA por defecto
+  (--no-focus lo evita, RIG_FOCUS=0 global).
+  Desactivar: RIG_HERDR=0 o --no-herdr.
+espejo tmux: ventana extra en la sesion de espejos (RIG_MIRROR_SESSION; autodetectada).
+  Desactivar: --no-mirror.
+ciclo de vida: al cerrar un ticket (work finish / ticket done) se matan TODAS las sillas de su
+  tab (todos los agentes del ticket) y la tab en herdr, mas su ventana espejo (--keep-open /
+  --no-close-seat lo evita). Nunca mata main ni sillas sin ticket asociado; ante duda deja el
+  ticket blocked.
+EOF
+}
+
+valid_name() { [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]]; }
+session_exists() { tmux has-session -t "$1" 2>/dev/null; }
+is_seat() { [ "$(tmux show-options -t "$1" -v @agent 2>/dev/null || true)" = "1" ]; }
+
+mark_seat() {
+  local name="$1" cmd="$2" cwd="$3" created="$4"
+  tmux set-option -t "$name" @agent 1
+  tmux set-option -t "$name" @agent_name "$name"
+  tmux set-option -t "$name" @agent_cmd "$cmd"
+  tmux set-option -t "$name" @agent_cwd "$cwd"
+  tmux set-option -t "$name" @agent_created "$created"
+}
+
+opencode_launcher() {
+  local bin=""
+  if command -v mise >/dev/null 2>&1; then
+    bin=$(mise which opencode 2>/dev/null | head -n1 || true)
+  fi
+  if [ -n "$bin" ] && [ -x "$bin" ]; then printf '"%s"' "$bin"; return 0; fi
+  if command -v mise >/dev/null 2>&1; then printf 'mise x opencode -- opencode'; return 0; fi
+  printf 'opencode'
+}
+
+harden_opencode_cmd() {
+  local custom="$1"
+  case "$custom" in
+    opencode) opencode_launcher ;;
+    "opencode "*) printf '%s %s' "$(opencode_launcher)" "${custom#opencode }" ;;
+    *) printf '%s' "$custom" ;;
+  esac
+}
+
+build_spawn_cmd() {
+  local agent="$1" prompt="$2" custom="$3" model="$4"
+  if [ -n "$custom" ]; then
+    harden_opencode_cmd "$custom"
+    return 0
+  fi
+  local cmd
+  cmd=$(opencode_launcher)
+  if [ -n "$agent" ]; then cmd="$cmd --agent $(printf '%q' "$agent")"; fi
+  if [ -n "$model" ]; then cmd="$cmd --model $(printf '%q' "$model")"; fi
+  if [ -n "$prompt" ]; then cmd="$cmd --prompt $(printf '%q' "$prompt")"; fi
+  printf '%s' "$cmd"
+}
+
+herdr_ok() {
+  [ "${RIG_HERDR:-1}" = "1" ] || return 1
+  command -v herdr >/dev/null 2>&1 || return 1
+  herdr workspace list >/dev/null 2>&1
+}
+
+herdr_enabled() {
+  case "${herdr_flag:-auto}" in
+    0) return 1 ;;
+    *) herdr_ok ;;
+  esac
+}
+
+mirror_enabled() {
+  [ "${mirror_flag:-1}" = "1" ]
+}
+
+herdr_ws_for_cwd() {
+  local dir="$1" ws pcwd key pkey
+  key=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  for ws in $(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[].workspace_id' 2>/dev/null); do
+    [ -n "$ws" ] || continue
+    for pcwd in $(herdr pane list --workspace "$ws" 2>/dev/null | jq -r '.result.panes[].cwd // empty' 2>/dev/null); do
+      [ -n "$pcwd" ] || continue
+      if [ "$pcwd" = "$dir" ]; then printf '%s' "$ws"; return 0; fi
+      if [ -n "$key" ]; then
+        pkey=$(git -C "$pcwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+        if [ -n "$pkey" ] && [ "$pkey" = "$key" ]; then printf '%s' "$ws"; return 0; fi
+      fi
+    done
+  done
+  return 1
+}
+
+herdr_ensure_ws() {
+  local dir="$1" label="$2" ws out
+  ws=$(herdr_ws_for_cwd "$dir") || true
+  if [ -n "$ws" ]; then printf '%s  \n' "$ws"; return 0; fi
+  out=$(herdr workspace create --cwd "$dir" --label "$label" --no-focus 2>/dev/null) || return 1
+  printf '%s %s %s\n' \
+    "$(printf '%s' "$out" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null)" \
+    "$(printf '%s' "$out" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)" \
+    "$(printf '%s' "$out" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)"
+}
+
+herdr_tab_for_label() {
+  local ws="$1" label="$2"
+  herdr tab list --workspace "$ws" 2>/dev/null | jq -r --arg l "$label" '.result.tabs[]|select(.label==$l)|.tab_id' 2>/dev/null
+}
+
+herdr_first_pane() {
+  herdr pane list --workspace "$1" 2>/dev/null \
+    | jq -r --arg t "$2" '[.result.panes[]|select(.tab_id==$t)]|.[0].pane_id // empty' 2>/dev/null
+}
+
+herdr_split_pane() {
+  local ws="$1" tid="$2" anchor before after pid
+  anchor=$(herdr_first_pane "$ws" "$tid")
+  [ -n "$anchor" ] || return 0
+  before=$(herdr pane list --workspace "$ws" 2>/dev/null | jq -r '.result.panes[].pane_id' 2>/dev/null | sort)
+  herdr pane split --pane "$anchor" --direction right --no-focus >/dev/null 2>&1 || true
+  after=$(herdr pane list --workspace "$ws" 2>/dev/null | jq -r '.result.panes[].pane_id' 2>/dev/null | sort)
+  pid=$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n1)
+  printf '%s' "$pid"
+}
+
+seat_ticket_label() {
+  local seat="$1" ticket="$2" canon
+  if [ -z "$ticket" ]; then
+    case "$seat" in work-*) ticket="${seat#work-}" ;; *) return 1 ;; esac
+  fi
+  canon=""
+  if [ -f "$TICKETS_FILE" ]; then canon=$(store_key "$ticket" 2>/dev/null || true); fi
+  [ -n "$canon" ] || canon="$ticket"
+  printf '%s' "$canon"
+}
+
+tab_label_for_seat() {
+  local seat="$1" ticket_lbl
+  ticket_lbl=$(seat_ticket_label "$seat" "${2:-}") || { printf '%s' "$seat"; return 0; }
+  printf '%s' "$ticket_lbl"
+}
+
+herdr_tab_id_for_seat() {
+  tmux show-environment -t "$1" HERDR_TAB_ID 2>/dev/null | sed -n 's/^HERDR_TAB_ID=//p'
+}
+
+herdr_socket_path() {
+  printf '%s' "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}"
+}
+
+herdr_open_seat() {
+  local ws="$1" seat="$2" dir="$3" ex_tid="${4:-}" label="${5:-$2}"
+  local out tid="" pid=""
+  if [ -n "$ex_tid" ]; then
+    herdr tab rename "$ex_tid" "$label" >/dev/null 2>&1 || true
+    tid="$ex_tid"; pid=$(herdr_first_pane "$ws" "$tid")
+    [ -n "$tid" ] && printf '%s %s\n' "$tid" "$pid"; return 0
+  fi
+  tid=$(herdr_tab_for_label "$ws" "$label")
+  if [ -z "$tid" ]; then
+    out=$(herdr tab create --workspace "$ws" --cwd "$dir" --label "$label" --no-focus 2>/dev/null) || return 1
+    tid=$(printf '%s' "$out" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)
+    pid=$(printf '%s' "$out" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
+  else
+    pid=$(herdr_pane_for_seat "$seat")
+    [ -n "$pid" ] || pid=$(herdr_split_pane "$ws" "$tid")
+  fi
+  [ -n "$tid" ] && printf '%s %s\n' "$tid" "$pid"
+}
+
+herdr_attach_seat() {
+  local pid="$1" seat="$2"
+  [ -n "$pid" ] || return 0
+  herdr pane run "$pid" env -u TMUX tmux attach -t "$seat" >/dev/null 2>&1 || true
+}
+
+herdr_set_title() {
+  local pid="$1" agent="$2" seat="$3" pane_label="$3" label="$3"
+  [ -n "$pid" ] || return 0
+  [ -n "$agent" ] && pane_label="$agent" && label="$agent · $seat"
+  herdr pane rename "$pid" "$pane_label" >/dev/null 2>&1 || true
+  herdr pane report-metadata "$pid" --source rig --title "$label" >/dev/null 2>&1 || true
+}
+
+herdr_pane_for_seat() {
+  local seat="$1" pid
+  pid=$(tmux show-environment -t "$seat" HERDR_PANE_ID 2>/dev/null | sed -n 's/^HERDR_PANE_ID=//p')
+  [ -n "$pid" ] || return 0
+  herdr pane list 2>/dev/null | jq -e --arg p "$pid" 'any(.result.panes[]; .pane_id==$p)' >/dev/null 2>&1 && printf '%s' "$pid"
+}
+
+seat_has_agent_env() {
+  local seat="$1"
+  tmux show-environment -t "$seat" HERDR_PANE_ID >/dev/null 2>&1
+}
+
+seat_activity_state() {
+  local seat="$1" tail
+  tail=$(tmux capture-pane -p -t "$seat" -S -12 2>/dev/null)
+  if printf '%s' "$tail" | grep -qiE 'esc (to )?interrupt|esc interrupt'; then
+    printf '%s' working; return 0
+  fi
+  if printf '%s' "$tail" | grep -qiE '(allow|deny|permission).*(esc|enter|y/n)|\bpermission\b.*\?'; then
+    printf '%s' blocked; return 0
+  fi
+  printf '%s' idle
+}
+
+herdr_sync_seat() {
+  local seat="$1" quiet="$2" cwd agent ws tid pid state isnew=0 ex_tid env_tab label
+  cwd=$(tmux show-options -t "$seat" -v @agent_cwd 2>/dev/null)
+  [ -n "$cwd" ] || cwd=$(tmux display-message -p -t "$seat" '#{pane_current_path}' 2>/dev/null)
+  [ -n "$cwd" ] && [ -d "$cwd" ] || return 0
+  agent=$(tmux show-options -t "$seat" -v @agent_cmd 2>/dev/null | sed -n 's/.*--agent[ =]\+\([A-Za-z0-9_.-]\+\).*/\1/p' | head -1)
+  herdr_ok || return 0
+  env_tab=$(herdr_tab_id_for_seat "$seat")
+  if [ -n "$env_tab" ]; then
+    pid=$(herdr_pane_for_seat "$seat")
+    [ -n "$pid" ] && herdr_set_title "$pid" "$agent" "$seat"
+    [ "$quiet" = "1" ] || info "  $seat -> $env_tab [plugin herdr]"
+    return 0
+  fi
+  read -r ws ex_tid _ < <(herdr_ensure_ws "$cwd" "$(basename "$cwd")") || true
+  [ -n "$ws" ] || return 0
+  label=$(tab_label_for_seat "$seat")
+  if [ -z "$ex_tid" ] && [ -z "$(herdr_tab_for_label "$ws" "$label")" ]; then isnew=1; fi
+  read -r tid pid < <(herdr_open_seat "$ws" "$seat" "$cwd" "$ex_tid" "$label")
+  if [ -n "$pid" ]; then
+    [ "$isnew" = "1" ] && herdr_attach_seat "$pid" "$seat"
+    herdr_set_title "$pid" "$agent" "$seat"
+  fi
+  if [ -n "$pid" ] && ! seat_has_agent_env "$seat"; then
+    state=$(seat_activity_state "$seat")
+    herdr pane report-agent "$pid" --source rig:derive --agent "${agent:-opencode}" --state "$state" >/dev/null 2>&1 || true
+    [ "$quiet" = "1" ] || info "  $seat -> $ws/$tid [$state derivado]"
+  else
+    [ "$quiet" = "1" ] || info "  $seat -> $ws/$tid [plugin herdr]"
+  fi
+  return 0
+}
+
+herdr_focus_seat() {
+  local ws="$1" tid="$2"
+  if [ -n "$ws" ]; then herdr workspace focus "$ws" >/dev/null 2>&1 || true; fi
+  if [ -n "$tid" ]; then herdr tab focus "$tid" >/dev/null 2>&1 || true; fi
+  return 0
+}
+
+herdr_kill_seats_on_tab() {
+  local tid="$1" self="$2" s
+  [ -n "$tid" ] || return 0
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    [ "$s" = "$self" ] && continue
+    is_seat "$s" || continue
+    [ "$(herdr_tab_id_for_seat "$s")" = "$tid" ] || continue
+    if session_exists "$s"; then tmux kill-session -t "$s" 2>/dev/null && info "silla cerrada: $s"; fi
+    mirror_rm "$s"
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+}
+
+herdr_close_seat() {
+  local seat="$1" dir="$2" ws tid label
+  herdr_ok || return 0
+  tid=$(herdr_tab_id_for_seat "$seat")
+  if [ -z "$tid" ]; then
+    ws=$(herdr_ws_for_cwd "$dir") || true
+    [ -n "$ws" ] || return 0
+    label=$(tab_label_for_seat "$seat")
+    tid=$(herdr_tab_for_label "$ws" "$label")
+  fi
+  [ -n "$tid" ] || return 0
+  herdr_kill_seats_on_tab "$tid" "$seat"
+  herdr tab close "$tid" >/dev/null 2>&1 || true
+  return 0
+}
+
+mirror_session() {
+  local s best="" bestn=0 n
+  if [ -n "${RIG_MIRROR_SESSION:-}" ]; then printf '%s' "$RIG_MIRROR_SESSION"; return 0; fi
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    n=$(tmux list-windows -t "$s" -F '#{window_name}' 2>/dev/null | while IFS= read -r w; do is_seat "$w" 2>/dev/null && printf 'x\n'; done | wc -l | tr -d ' ')
+    if [ "${n:-0}" -gt "$bestn" ]; then bestn="$n"; best="$s"; fi
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+  if [ "$bestn" -ge 2 ]; then printf '%s' "$best"; fi
+}
+
+mirror_add() {
+  local seat="$1" sess
+  sess=$(mirror_session)
+  [ -n "$sess" ] || return 0
+  if tmux list-windows -t "$sess" -F '#{window_name}' 2>/dev/null | grep -qx -- "$seat"; then return 0; fi
+  tmux new-window -d -t "$sess:" -n "$seat" "env -u TMUX tmux attach -t $(printf '%q' "$seat")" 2>/dev/null || true
+  return 0
+}
+
+mirror_rm() {
+  local seat="$1" sess
+  sess=$(mirror_session)
+  [ -n "$sess" ] || return 0
+  if tmux list-windows -t "$sess" -F '#{window_name}' 2>/dev/null | grep -qx -- "$seat"; then
+    tmux kill-window -t "$sess:$seat" 2>/dev/null || true
+  fi
+  return 0
+}
+
+seat_for_ticket() {
+  printf 'work-%s' "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')"
+}
+
+close_seat_for_ticket() {
+  local key="$1" wt="$2" seat self=""
+  seat=$(seat_for_ticket "$key")
+  if [ -n "${TMUX:-}" ]; then self=$(tmux display-message -p '#{session_name}' 2>/dev/null || true); fi
+  if [ "$self" = "$seat" ]; then
+    info "silla $seat en uso (no me auto-mato); cierrala a mano o usa --keep-open"
+    return 0
+  fi
+  if session_exists "$seat" && is_seat "$seat"; then
+    tmux kill-session -t "$seat" 2>/dev/null && info "silla cerrada: $seat"
+    herdr_close_seat "$seat" "$wt"
+    mirror_rm "$seat"
+  else
+    info "sin silla que cerrar (esperada: $seat)"
+  fi
+  return 0
+}
+
+cmd_seats() {
+  need_tmux
+  local porcelain=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --porcelain|-p) porcelain=1; shift ;;
+      *) die "opcion desconocida: $1" ;;
+    esac
+  done
+  local fmt name marker cmd cwd wins att state count=0
+  fmt=$'#{session_name}\x1f#{@agent}\x1f#{@agent_cmd}\x1f#{@agent_cwd}\x1f#{session_windows}\x1f#{session_attached}'
+  if [ "$porcelain" = "0" ]; then
+    printf '%-18s %-4s %-4s %-28s %s\n' "SEAT" "WIN" "ATT" "CWD" "AGENT"
+  fi
+  while IFS=$'\x1f' read -r name marker cmd cwd wins att; do
+    [ "$marker" = "1" ] || continue
+    if [ "${att:-0}" = "0" ]; then state="-"; else state="yes"; fi
+    if [ "$porcelain" = "1" ]; then
+      printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$wins" "$state" "$cwd" "$cmd"
+    else
+      printf '%-18s %-4s %-4s %-28s %s\n' "$name" "$wins" "$state" "$cwd" "$cmd"
+    fi
+    count=$((count + 1))
+  done < <(tmux list-sessions -F "$fmt" 2>/dev/null || true)
+  if [ "$count" -eq 0 ] && [ "$porcelain" = "0" ]; then
+    info "no hay sillas (crea una con: rig spawn <nombre>)"
+  fi
+}
+
+cmd_spawn() {
+  [ $# -ge 1 ] || die "uso: rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--attach] [--dry-run]"
+  local name="$1"; shift
+  local agent="" cwd="$PWD" custom="" prompt="" model="$SEAT_MODEL" attach=0 dry_run=0 ticket=""
+  local herdr_flag="auto" mirror_flag="1" herdr_cwd="" focus_flag="${RIG_FOCUS:-1}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --agent) [ $# -ge 2 ] || die "--agent requiere valor"; agent="$2"; shift 2 ;;
+      --cwd) [ $# -ge 2 ] || die "--cwd requiere valor"; cwd="$2"; shift 2 ;;
+      --cmd) [ $# -ge 2 ] || die "--cmd requiere valor"; custom="$2"; shift 2 ;;
+      --prompt) [ $# -ge 2 ] || die "--prompt requiere valor"; prompt="$2"; shift 2 ;;
+      --model) [ $# -ge 2 ] || die "--model requiere valor"; model="$2"; shift 2 ;;
+      --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
+      --herdr-cwd) [ $# -ge 2 ] || die "--herdr-cwd requiere valor"; herdr_cwd="$2"; shift 2 ;;
+      --herdr) herdr_flag=1; shift ;;
+      --no-herdr) herdr_flag=0; shift ;;
+      --focus) focus_flag=1; shift ;;
+      --no-focus) focus_flag=0; shift ;;
+      --mirror) mirror_flag=1; shift ;;
+      --no-mirror) mirror_flag=0; shift ;;
+      --attach) attach=1; shift ;;
+      --dry-run|--print-cmd) dry_run=1; shift ;;
+      *) die "opcion desconocida: $1" ;;
+    esac
+  done
+  valid_name "$name" || die "nombre invalido: $name"
+  if [ -n "$agent" ] && ! valid_name "$agent"; then die "agent invalido: $agent"; fi
+  [ -d "$cwd" ] || die "cwd no existe: $cwd"
+  cwd=$(cd "$cwd" && pwd)
+  local cmd
+  cmd=$(build_spawn_cmd "$agent" "$prompt" "$custom" "$model")
+  if [ "$dry_run" = "1" ]; then
+    printf '%s\n' "$cmd"
+    return 0
+  fi
+  need_tmux
+  if session_exists "$name"; then
+    info "ya existe la silla: $name"
+    return 0
+  fi
+  [ -n "$herdr_cwd" ] || herdr_cwd="$cwd"
+  local ws="" tid="" pid="" ex_tid="" tab_label=""
+  tab_label=$(tab_label_for_seat "$name" "$ticket")
+  if herdr_enabled; then
+    read -r ws ex_tid _ < <(herdr_ensure_ws "$herdr_cwd" "$(basename "$herdr_cwd")") || true
+    if [ -n "$ws" ]; then read -r tid pid < <(herdr_open_seat "$ws" "$name" "$herdr_cwd" "$ex_tid" "$tab_label"); fi
+  fi
+  local env_args=()
+  if [ -n "$ws" ] && [ -n "$pid" ]; then
+    env_args=(-e HERDR_ENV=1 -e "HERDR_PANE_ID=$pid" -e "HERDR_SOCKET_PATH=$(herdr_socket_path)" -e "HERDR_WORKSPACE_ID=$ws" -e "HERDR_TAB_ID=$tid")
+  fi
+  tmux new-session -d -s "$name" -c "$cwd" "${env_args[@]}" || die "no se pudo crear la sesion $name"
+  mark_seat "$name" "$cmd" "$cwd" "$(date +%s)"
+  tmux set-option -t "$name" set-titles-string "$name" 2>/dev/null || true
+  tmux send-keys -t "$name" -l -- "$cmd"
+  tmux send-keys -t "$name" Enter
+  info "silla $name creada en $cwd"
+  info "  comando: $cmd"
+  if [ -n "$pid" ]; then
+    herdr_attach_seat "$pid" "$name"
+    herdr_set_title "$pid" "$agent" "$name"
+    if [ "$focus_flag" = "1" ]; then herdr_focus_seat "$ws" "$tid"; fi
+    info "  herdr: workspace $ws, tab $tab_label (agente reporta estado via plugin)"
+  fi
+  if mirror_enabled; then mirror_add "$name"; fi
+  if [ "$attach" = "1" ]; then
+    if [ -n "${TMUX:-}" ]; then tmux switch-client -t "$name"; else tmux attach -t "$name"; fi
+  fi
+}
+
+cmd_send() {
+  need_tmux
+  local force=0 no_enter=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force) force=1; shift ;;
+      --no-enter) no_enter=1; shift ;;
+      --) shift; break ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) break ;;
+    esac
+  done
+  [ $# -ge 1 ] || die "uso: rig send <silla> [--force] [--no-enter] <mensaje...>"
+  local seat="$1"; shift
+  local msg="$*"
+  valid_name "$seat" || die "silla invalida: $seat"
+  [ -n "$msg" ] || die "mensaje vacio"
+  session_exists "$seat" || die "no existe la silla: $seat"
+  if [ "$force" != "1" ]; then
+    is_seat "$seat" || die "$seat no es una silla rig (usa --force para inyectar igual)"
+    if [ "$(tmux display-message -p -t "$seat" '#{pane_in_mode}' 2>/dev/null)" = "1" ]; then
+      die "$seat esta en copy-mode; sal de ahi o usa --force"
+    fi
+    local fg
+    fg=$(tmux display-message -p -t "$seat" '#{pane_current_command}' 2>/dev/null)
+    case " $SHELLS_COMMANDS " in
+      *" $fg "*) die "$seat esta en el shell ($fg); arranca el agente o usa --force" ;;
+    esac
+  fi
+  if [[ "$msg" == *$'\n'* ]]; then
+    tmux set-buffer -b rig_send -- "$msg"
+    tmux paste-buffer -b rig_send -t "$seat" -p
+    sleep 0.15
+  else
+    tmux send-keys -t "$seat" -l -- "$msg"
+  fi
+  if [ "$no_enter" != "1" ]; then
+    tmux send-keys -t "$seat" Enter
+  fi
+  info "enviado a $seat"
+}
+
+cmd_read() {
+  need_tmux
+  local seat="" lines=80
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --lines|-n) [ $# -ge 2 ] || die "--lines requiere valor"; lines="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *)
+        [ -z "$seat" ] || die "sobra argumento: $1"
+        seat="$1"; shift
+        ;;
+    esac
+  done
+  [ -n "$seat" ] || die "uso: rig read <silla> [--lines N]"
+  valid_name "$seat" || die "silla invalida: $seat"
+  session_exists "$seat" || die "no existe la silla: $seat"
+  [[ "$lines" =~ ^[0-9]+$ ]] || die "lines invalido: $lines"
+  tmux capture-pane -p -J -t "$seat" -S "-$lines"
+}
+
+cmd_whoami() {
+  need_tmux
+  [ -n "${TMUX:-}" ] || die "no estas dentro de tmux"
+  local name
+  name=$(tmux display-message -p '#{session_name}')
+  if is_seat "$name"; then
+    info "seat $name"
+  else
+    info "session $name (no es silla rig)"
+  fi
+}
+
+valid_status() {
+  case " $TICKET_STATUSES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+now_date() { date +%Y-%m-%d; }
+
+trunc() {
+  local s="$1" n="$2"
+  if [ "${#s}" -le "$n" ]; then printf '%s' "$s"; else printf '%s…' "${s:0:$((n - 1))}"; fi
+}
+
+store_lock() {
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$TICKETS_LOCK"
+    flock 9
+  fi
+}
+
+store_ensure() {
+  local dir
+  dir=$(dirname "$TICKETS_FILE")
+  [ -d "$dir" ] || mkdir -p "$dir"
+  [ -f "$TICKETS_FILE" ] || printf '{"version":1,"tickets":[]}\n' >"$TICKETS_FILE"
+  jq -e '.tickets' "$TICKETS_FILE" >/dev/null 2>&1 || die "store invalido: $TICKETS_FILE"
+}
+
+store_write() {
+  local tmp
+  tmp=$(mktemp "${TICKETS_FILE}.tmp.XXXXXX") || die "no pude crear temporal"
+  cat >"$tmp" || { rm -f "$tmp"; die "no pude escribir temporal"; }
+  mv -f "$tmp" "$TICKETS_FILE" || { rm -f "$tmp"; die "no pude reemplazar store"; }
+}
+
+store_key() {
+  jq -r --arg id "$1" '.tickets[]|select((.id|ascii_downcase)==($id|ascii_downcase))|.id' "$TICKETS_FILE" | head -n1
+}
+
+# shellcheck disable=SC2016
+filter_prog() {
+  local project="$1" status="$2"
+  if [ -n "$project" ] && [ -n "$status" ]; then
+    printf '[.tickets[]|select(.project==$p and .status==$s)]'
+  elif [ -n "$project" ]; then
+    printf '[.tickets[]|select(.project==$p)]'
+  elif [ -n "$status" ]; then
+    printf '[.tickets[]|select(.status==$s)]'
+  else
+    printf '.tickets'
+  fi
+}
+
+fmt_tokens() { awk -v n="${1:-0}" 'BEGIN{ n=n+0; if (n>=1000000) printf "%.1fM", n/1000000; else if (n>=1000) printf "%.0fk", n/1000; else printf "%d", n }'; }
+fmt_cost() { awk -v c="${1:-0}" 'BEGIN{ c=c+0; if (c>=1) printf "$%.2f", c; else if (c>=0.01) printf "$%.3f", c; else printf "$%.4f", c }'; }
+fmt_dur() { awk -v ms="${1:-0}" 'BEGIN{ s=int((ms+0)/1000); if (s<60) printf "%ds", s; else if (s<3600) printf "%dm", int(s/60); else printf "%dh%02dm", int(s/3600), int((s%3600)/60) }'; }
+
+render_row() {
+  local id="$1" status="$2" owner="$3" branch="$4" commits="$5" updated="$6" title="$7" evidence="$8" worktree="$9"
+  local ns="${10:-0}" toks="${11:-0}" cost="${12:-0}" durms="${13:-0}" sc="" metr="-"
+  if [ -n "$C_OFF" ]; then
+    case "$status" in
+      done) sc="$C_DONE" ;;
+      in-progress) sc="$C_PROG" ;;
+      blocked) sc="$C_BLOCK" ;;
+      *) sc="$C_PEND" ;;
+    esac
+  fi
+  [ -n "$commits" ] || commits="-"
+  if [ "${ns:-0}" -gt 0 ] 2>/dev/null; then
+    metr="$(fmt_tokens "$toks") $(fmt_cost "$cost") $(fmt_dur "$durms")"
+  fi
+  printf '  %-9s %s%-11s%s %-12s %-16s %-7s %-10s %-34s %-24s %s\n' \
+    "$id" "$sc" "$status" "$C_OFF" "$(trunc "$owner" 12)" "$(trunc "$branch" 16)" \
+    "$commits" "$(trunc "$updated" 10)" "$(trunc "$title" 34)" "$(trunc "$metr" 24)" "$(trunc "$evidence" 26)"
+  if [ -n "$worktree" ]; then
+    printf '  %-9s %s%s%s\n' "" "$C_PEND" "└ $(trunc "$worktree" 84)" "$C_OFF"
+  fi
+}
+
+render_tickets() {
+  local data count
+  data=$(cat)
+  count=$(printf '%s' "$data" | jq 'length' 2>/dev/null || echo 0)
+  if [ "${count:-0}" = "0" ]; then
+    info "sin tickets"
+    return 0
+  fi
+  [ -n "${SESSIONS_JSON+x}" ] || SESSIONS_JSON=$(db_sessions_json)
+  local sf
+  sf=$(jv_file "${SESSIONS_JSON:-[]}")
+  printf '%s%s%s\n' "$C_HEAD" "$(printf '%-9s %-11s %-12s %-16s %-7s %-10s %-34s %-24s %s' "ID" "ESTADO" "OWNER" "BRANCH" "COMMITS" "UPDATED" "TITULO" "METRICS" "EVIDENCIA")" "$C_OFF"
+  printf '%s' "$data" | jq -r --rawfile sj "$sf" "$METRICS_DEFS"'
+    ($sj | fromjson) as $sessions
+    | (metrics_index($sessions)) as $mi
+    | (["in-progress","blocked","pending","done"]) as $so
+    | sort_by([.project, (.status as $st | (($so | index($st)) // 99)), .id])
+    | group_by(.project) | .[]
+    | ("P\u001f" + .[0].project + "\u001f" + (length | tostring)),
+      (.[] | . as $t | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
+        | "T\u001f" + .id + "\u001f" + .status + "\u001f" + .owner + "\u001f"
+          + (.branch // "") + "\u001f"
+          + ((.commits // "") | split(" ") | map(select(length>0)) | length | tostring) + "\u001f"
+          + .updated + "\u001f" + .title + "\u001f" + .evidence + "\u001f" + (.worktree // "")
+          + "\u001f" + ($m.n | tostring)
+          + "\u001f" + (($m.tin + $m.tout + $m.trea) | tostring)
+          + "\u001f" + ($m.cost | tostring)
+          + "\u001f" + (($m.updated - $m.created) | tostring))
+  ' | while IFS=$'\x1f' read -r kind f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13; do
+    case "$kind" in
+      P) printf '\n%s%s%s (%s)\n' "$C_PROJ" "$f1" "$C_OFF" "$f2" ;;
+      T) render_row "$f1" "$f2" "$f3" "$f4" "$f5" "$f6" "$f7" "$f8" "$f9" "$f10" "$f11" "$f12" "$f13" ;;
+    esac
+  done
+  rm -f "$sf"
+}
+
+ticket_usage() {
+  cat >&2 <<'EOF'
+rig ticket - store de tickets (~/.config/opencode/tickets.json)
+
+  rig ticket add <id> --project P --title T [--status S] [--owner O] [--evidence E] [--session SES]
+  rig ticket list [--project P] [--status S] [--porcelain]
+  rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES]
+  rig ticket done <id> [--close-seat]
+  rig ticket rm <id>
+  rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
+
+Estados: pending | in-progress | blocked | done.
+--session <ses_id> asocia la sesion de opencode al ticket (append, dedup). Las metricas
+(tokens in/out/reasoning/cache, costo, tiempo) salen de opencode.db (override: RIG_DB).
+EOF
+}
+
+ticket_add() {
+  local id="" project="" title="" status="pending" owner="" evidence="" ses=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --title) [ $# -ge 2 ] || die "--title requiere valor"; title="$2"; shift 2 ;;
+      --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
+      --owner) [ $# -ge 2 ] || die "--owner requiere valor"; owner="$2"; shift 2 ;;
+      --evidence) [ $# -ge 2 ] || die "--evidence requiere valor"; evidence="$2"; shift 2 ;;
+      --session) [ $# -ge 2 ] || die "--session requiere valor"; ses="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) [ -z "$id" ] || die "sobra argumento: $1"; id="$1"; shift ;;
+    esac
+  done
+  [ -n "$id" ] || die "uso: rig ticket add <id> --project P --title T [--status S] [--owner O] [--evidence E] [--session SES]"
+  [ -n "$project" ] || die "falta --project"
+  [ -n "$title" ] || die "falta --title"
+  valid_status "$status" || die "status invalido: $status"
+  store_lock
+  store_ensure
+  [ -z "$(store_key "$id")" ] || die "ticket ya existe: $id"
+  local d out
+  d=$(now_date)
+  out=$(jq --arg id "$id" --arg p "$project" --arg t "$title" --arg s "$status" \
+    --arg o "$owner" --arg e "$evidence" --arg ses "$ses" --arg d "$d" \
+    '.tickets += [{id:$id,project:$p,title:$t,status:$s,owner:$o,created:$d,updated:$d,evidence:$e,sessions:(if $ses=="" then [] else [$ses] end)}]' \
+    "$TICKETS_FILE") || die "jq fallo al agregar $id"
+  store_write <<<"$out"
+  info "ticket $id agregado ($status)"
+}
+
+ticket_list() {
+  local porcelain=0 project="" status=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --porcelain|-p) porcelain=1; shift ;;
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  store_ensure
+  if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
+  if [ "$porcelain" = "1" ]; then
+    jq --arg p "$project" --arg s "$status" "$(filter_prog "$project" "$status")" "$TICKETS_FILE"
+  else
+    jq --arg p "$project" --arg s "$status" "$(filter_prog "$project" "$status")" "$TICKETS_FILE" | render_tickets
+  fi
+}
+
+ticket_set() {
+  local ref="" status="" owner="" evidence="" title="" project="" ses=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
+      --owner) [ $# -ge 2 ] || die "--owner requiere valor"; owner="$2"; shift 2 ;;
+      --evidence) [ $# -ge 2 ] || die "--evidence requiere valor"; evidence="$2"; shift 2 ;;
+      --title) [ $# -ge 2 ] || die "--title requiere valor"; title="$2"; shift 2 ;;
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --session) [ $# -ge 2 ] || die "--session requiere valor"; ses="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) [ -z "$ref" ] || die "sobra argumento: $1"; ref="$1"; shift ;;
+    esac
+  done
+  [ -n "$ref" ] || die "uso: rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES]"
+  if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
+  store_lock
+  store_ensure
+  local key d out
+  key=$(store_key "$ref")
+  [ -n "$key" ] || die "ticket no encontrado: $ref"
+  d=$(now_date)
+  out=$(jq --arg id "$key" --arg s "$status" --arg o "$owner" --arg e "$evidence" \
+    --arg t "$title" --arg p "$project" --arg ses "$ses" --arg d "$d" '
+    .tickets |= map(if .id==$id then . + ({}
+      + (if $s=="" then {} else {status:$s} end)
+      + (if $o=="" then {} else {owner:$o} end)
+      + (if $e=="" then {} else {evidence:$e} end)
+      + (if $t=="" then {} else {title:$t} end)
+      + (if $p=="" then {} else {project:$p} end)
+      + (if $ses=="" then {} else {sessions:((.sessions // []) + [$ses] | unique)} end)
+      + {updated:$d}) else . end)' "$TICKETS_FILE") || die "jq fallo al actualizar $key"
+  store_write <<<"$out"
+  info "ticket $key actualizado"
+}
+
+ticket_rm() {
+  local ref="${1:-}"
+  [ -n "$ref" ] || die "uso: rig ticket rm <id>"
+  store_lock
+  store_ensure
+  local key out
+  key=$(store_key "$ref")
+  [ -n "$key" ] || die "ticket no encontrado: $ref"
+  out=$(jq --arg id "$key" '.tickets |= map(select(.id!=$id))' "$TICKETS_FILE") || die "jq fallo"
+  store_write <<<"$out"
+  info "ticket $key eliminado"
+}
+
+ticket_metrics() {
+  need_jq
+  local porcelain=0 project="" status="" ids=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --porcelain|-p) porcelain=1; shift ;;
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) ids+=("$1"); shift ;;
+    esac
+  done
+  store_ensure
+  if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
+  local ids_json='[]'
+  if [ ${#ids[@]} -gt 0 ]; then
+    ids_json=$(printf '%s\n' "${ids[@]}" | jq -R . | jq -s 'map(ascii_downcase)')
+  fi
+  local sessions sf
+  sessions=$(db_sessions_json)
+  sf=$(jv_file "$sessions")
+  if [ "$porcelain" = "1" ]; then
+    jq --rawfile sj "$sf" --argjson ids "$ids_json" --arg p "$project" --arg s "$status" "$METRICS_DEFS"'
+      ($sj | fromjson) as $sessions
+      | (metrics_index($sessions)) as $mi
+      | .tickets
+      | map(select((($ids|length)==0) or ((.id|ascii_downcase) as $x | ($ids|index($x)) != null))
+            | select($p=="" or .project==$p)
+            | select($s=="" or .status==$s))
+      | map(. as $t | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
+          | {id:$t.id, project:$t.project, status:$t.status, owner:$t.owner,
+             worktree:($t.worktree // ""), sessions:($t.sessions // []), count:$m.n,
+             tokens:{input:$m.tin, output:$m.tout, reasoning:$m.trea, cache_read:$m.tcr, cache_write:$m.tcw, total:($m.tin+$m.tout+$m.trea)},
+             cost:$m.cost,
+             time:{created:$m.created, updated:$m.updated, duration_ms:($m.updated-$m.created)}})' "$TICKETS_FILE"
+    local prc=$?
+    rm -f "$sf"
+    return "$prc"
+  fi
+  local rows
+  rows=$(jq -r --rawfile sj "$sf" --argjson ids "$ids_json" --arg p "$project" --arg s "$status" "$METRICS_DEFS"'
+    ($sj | fromjson) as $sessions
+    | (metrics_index($sessions)) as $mi
+    | .tickets
+    | map(select((($ids|length)==0) or ((.id|ascii_downcase) as $x | ($ids|index($x)) != null))
+          | select($p=="" or .project==$p)
+          | select($s=="" or .status==$s))
+    | sort_by(.project, .id)
+    | .[] | . as $t | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
+    | [ $t.id, $t.project, ($t.sessions // [] | length), $m.n,
+        $m.tin, $m.tout, $m.trea, $m.tcr, $m.tcw, ($m.tin+$m.tout+$m.trea), $m.cost,
+        (if $m.created>0 then ($m.created/1000|strflocaltime("%Y-%m-%d %H:%M")) else "-" end),
+        (if $m.updated>0 then ($m.updated/1000|strflocaltime("%Y-%m-%d %H:%M")) else "-" end),
+        ($m.updated-$m.created) ]
+    | map(tostring) | join("\u001f")' "$TICKETS_FILE")
+  if [ -z "$rows" ]; then
+    info "sin tickets que matcheen"
+    return 0
+  fi
+  printf '%s' "$C_HEAD"
+  printf '%-9s %-13s %-4s %-4s %-8s %-8s %-8s %-8s %-8s %-8s %-9s %-16s %-16s %-7s\n' \
+    "ID" "PROJECT" "SES" "N" "IN" "OUT" "REAM" "CACHER" "CACHEW" "TOTAL" "COST" "CREATED" "UPDATED" "DUR"
+  printf '%s\n' "$C_OFF"
+  while IFS=$'\x1f' read -r id proj ns n tin tout trea tcr tcw total cost cr up durms; do
+    [ -n "$id" ] || continue
+    if [ "${n:-0}" = "0" ]; then
+      printf '%-9s %-13s %-4s %-4s %-8s %-8s %-8s %-8s %-8s %-8s %-9s %-16s %-16s %-7s\n' \
+        "$id" "$(trunc "$proj" 13)" "$ns" "0" "-" "-" "-" "-" "-" "-" "-" "$cr" "$up" "-"
+    else
+      printf '%-9s %-13s %-4s %-4s %-8s %-8s %-8s %-8s %-8s %-8s %-9s %-16s %-16s %-7s\n' \
+        "$id" "$(trunc "$proj" 13)" "$ns" "$n" "$(fmt_tokens "$tin")" "$(fmt_tokens "$tout")" \
+        "$(fmt_tokens "$trea")" "$(fmt_tokens "$tcr")" "$(fmt_tokens "$tcw")" "$(fmt_tokens "$total")" \
+        "$(fmt_cost "$cost")" "$cr" "$up" "$(fmt_dur "$durms")"
+    fi
+  done <<<"$rows"
+  rm -f "$sf"
+}
+
+cmd_ticket() {
+  need_jq
+  local action="${1:-}"
+  [ $# -gt 0 ] && shift
+  case "$action" in
+    add) ticket_add "$@" ;;
+    list|ls) ticket_list "$@" ;;
+    set) ticket_set "$@" ;;
+    done)
+      local close=0 tid="" a
+      local -a dargs=()
+      for a in "$@"; do
+        case "$a" in
+          --close-seat) close=1 ;;
+          *) dargs+=("$a"); [ -z "$tid" ] && tid="$a" ;;
+        esac
+      done
+      ticket_set "${dargs[@]}" --status 'done'
+      if [ "$close" = "1" ] && [ -n "$tid" ]; then
+        store_ensure
+        local key wt
+        key=$(store_key "$tid")
+        if [ -n "$key" ]; then
+          wt=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree // ""' "$TICKETS_FILE" 2>/dev/null)
+          close_seat_for_ticket "$key" "$wt"
+        fi
+      fi
+      ;;
+    rm|remove) ticket_rm "$@" ;;
+    metrics|cost) ticket_metrics "$@" ;;
+    ''|-h|--help|help) ticket_usage; [ -z "$action" ] && exit 1 || exit 0 ;;
+    *) die "ticket: accion desconocida: $action" ;;
+  esac
+}
+
+board_render() {
+  local prog="$1" data summary now
+  if [ "${watch:-0}" = "1" ] && [ "${no_metrics:-0}" != "1" ]; then SESSIONS_JSON=$(db_sessions_json); fi
+  data=$(jq --arg p "$project" --arg s "$status" "$prog" "$TICKETS_FILE" 2>/dev/null) || data='[]'
+  if [ "$watch" = "1" ]; then
+    printf '\033[H\033[2J'
+    now=$(date '+%Y-%m-%d %H:%M:%S')
+    printf '%srig board%s  %s  (Ctrl-C para salir)\n' "$C_HEAD" "$C_OFF" "$now"
+  fi
+  summary=$(printf '%s' "$data" | jq -r 'group_by(.status)|map("\(.[0].status)=\(length)")|join("  ")' 2>/dev/null)
+  printf 'total=%s  %s\n' "$(printf '%s' "$data" | jq 'length' 2>/dev/null || echo 0)" "${summary:-}"
+  printf '%s' "$data" | render_tickets
+}
+
+cmd_board() {
+  need_jq
+  local porcelain=0 project="" status="" interval=1.5
+  watch=0
+  no_metrics=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --watch|-w) watch=1; shift ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      --no-metrics) no_metrics=1; shift ;;
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  [ -n "$status" ] && { valid_status "$status" || die "status invalido: $status"; }
+  store_ensure
+  local prog
+  prog=$(filter_prog "$project" "$status")
+  if [ "$no_metrics" = "1" ]; then SESSIONS_JSON='[]'; else SESSIONS_JSON=$(db_sessions_json); fi
+  if [ "$porcelain" = "1" ]; then
+    local sf
+    sf=$(jv_file "${SESSIONS_JSON:-[]}")
+    jq --arg p "$project" --arg s "$status" "$prog" "$TICKETS_FILE" \
+      | jq --rawfile sj "$sf" "$METRICS_DEFS"'
+        ($sj | fromjson) as $sessions
+        | (metrics_index($sessions)) as $mi
+        | map(. as $t | . + {metrics: ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)
+            | {sessions:.n,
+               tokens:{input:.tin,output:.tout,reasoning:.trea,cache_read:.tcr,cache_write:.tcw,total:(.tin+.tout+.trea)},
+               cost:.cost,
+               time:{created:.created,updated:.updated,duration_ms:(.updated-.created)}})})'
+    local brc=$?
+    rm -f "$sf"
+    return "$brc"
+  fi
+  if [ "$watch" = "1" ]; then
+    trap 'printf "%s\n" "$C_SHOW"; exit 0' INT TERM
+    printf '%s' "$C_HIDE"
+    while true; do
+      board_render "$prog"
+      sleep "$interval"
+    done
+  else
+    board_render "$prog"
+  fi
+}
+
+need_git() { command -v git >/dev/null 2>&1 || die "git no instalado (requerido por rig work)"; }
+
+valid_ticket_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
+
+git_root() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
+
+branch_for_id() {
+  printf '%s/%s' "${RIG_BRANCH_PREFIX:-ticket}" "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
+}
+
+worktree_path() {
+  local repo="$1" id="$2" name
+  name=$(basename "$repo")
+  if [ -n "${RIG_WORKTREE_DIR:-}" ]; then
+    printf '%s/%s/%s' "$RIG_WORKTREE_DIR" "$name" "$id"
+  else
+    printf '%s/.rig-worktrees/%s/%s' "$(dirname "$repo")" "$name" "$id"
+  fi
+}
+
+git_is_worktree() {
+  local repo="$1" path="$2"
+  git -C "$repo" worktree list --porcelain 2>/dev/null | grep -qxF "worktree $path"
+}
+
+work_usage() {
+  cat >&2 <<'EOF'
+rig work - cambios paralelos y trazables: un git worktree + branch por ticket
+
+  rig work new <id> [--agent A] [--cwd DIR] [--base REF] [--session SES] [--prompt TEXTO]
+                [--model M] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--spawn] [--attach]
+      crea worktree (branch ticket/<id>) para el ticket <id>, lo marca in-progress
+      y guarda repo/branch/worktree/base en el ticket. --spawn abre una silla
+      (con --prompt <texto> arranca el agente con ese primer mensaje).
+      --session <ses_id> asocia una sesion de opencode (para metricas por ticket).
+      --model M fija el modelo de la silla (default $RIG_SEAT_MODEL o
+      opencode-go/deepseek-v4.1-flash). --herdr crea/reusa el workspace del proyecto
+      (workspace=proyecto, tab=ticket, pane=agente; un 2do agente del mismo ticket
+      se abre como pane nuevo de la tab) y --mirror abre la ventana espejo en tmux.
+  rig work list [--project P] [--status S] [--porcelain]
+      tickets con worktree: branch, commits y si el arbol sigue vivo.
+  rig work finish <id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]
+      corre 'verify auto' sobre lo cambiado, commitea en el branch y cierra el
+      ticket (done) con evidencia branch/commit/verify. No mergea. Al cerrar,
+      mata TODAS las sillas de la tab del ticket, su tab herdr y sus ventanas
+      espejo (--keep-open o --no-close-seat lo evitan). Nunca mata main ni sillas
+      sin ticket.
+  rig work rm <id> [--delete-branch] [--force]
+      elimina el worktree (conserva el branch salvo --delete-branch).
+
+  El merge a la base es explicito y serial: git -C <repo> merge --no-ff ticket/<id>
+  Ubicacion por defecto: <parent-del-repo>/.rig-worktrees/<repo>/<id> (override: RIG_WORKTREE_DIR).
+EOF
+}
+
+work_new() {
+  need_jq; need_git
+  local id="" cwd="$PWD" agent="" base="HEAD" spawn=0 attach=0 porcelain=0 ses="" prompt=""
+  local model="$SEAT_MODEL" herdr_flag="auto" mirror_flag="1" focus_flag=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --cwd) [ $# -ge 2 ] || die "--cwd requiere valor"; cwd="$2"; shift 2 ;;
+      --agent) [ $# -ge 2 ] || die "--agent requiere valor"; agent="$2"; shift 2 ;;
+      --base) [ $# -ge 2 ] || die "--base requiere valor"; base="$2"; shift 2 ;;
+      --session) [ $# -ge 2 ] || die "--session requiere valor"; ses="$2"; shift 2 ;;
+      --prompt) [ $# -ge 2 ] || die "--prompt requiere valor"; prompt="$2"; shift 2 ;;
+      --model) [ $# -ge 2 ] || die "--model requiere valor"; model="$2"; shift 2 ;;
+      --herdr) herdr_flag=1; shift ;;
+      --no-herdr) herdr_flag=0; shift ;;
+      --focus) focus_flag=1; shift ;;
+      --no-focus) focus_flag=0; shift ;;
+      --mirror) mirror_flag=1; shift ;;
+      --no-mirror) mirror_flag=0; shift ;;
+      --spawn) spawn=1; shift ;;
+      --attach) spawn=1; attach=1; shift ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) [ -z "$id" ] || die "sobra argumento: $1"; id="$1"; shift ;;
+    esac
+  done
+  [ -n "$id" ] || die "uso: rig work new <ticket-id> [--agent A] [--cwd DIR] [--base REF] [--spawn]"
+  valid_ticket_id "$id" || die "ticket id invalido: $id"
+  [ -d "$cwd" ] || die "cwd no existe: $cwd"
+  cwd=$(cd "$cwd" && pwd)
+  local repo
+  repo=$(git_root "$cwd")
+  [ -n "$repo" ] || die "no es repo git: $cwd"
+  git -C "$repo" rev-parse --verify -q HEAD >/dev/null 2>&1 || die "repo sin commits (HEAD inexistente): $repo"
+
+  store_lock
+  store_ensure
+  local key
+  key=$(store_key "$id")
+  [ -n "$key" ] || die "ticket no encontrado: $id (crea con: rig ticket add $id --project P --title T)"
+
+  local branch wt
+  branch=$(branch_for_id "$key")
+  wt=$(worktree_path "$repo" "$key")
+  if git_is_worktree "$repo" "$wt"; then
+    info "worktree ya existe: $wt"
+  else
+    [ -e "$wt" ] && die "ruta ocupada (no es worktree): $wt"
+    mkdir -p "$(dirname "$wt")" || die "no pude crear $(dirname "$wt")"
+    if git -C "$repo" rev-parse --verify -q "refs/heads/$branch" >/dev/null 2>&1; then
+      git -C "$repo" worktree add "$wt" "$branch" >/dev/null || die "worktree add fallo ($branch)"
+    else
+      git -C "$repo" worktree add -b "$branch" "$wt" "$base" >/dev/null || die "worktree add -b fallo ($branch)"
+    fi
+    info "worktree creado: $wt"
+  fi
+  info "branch: $branch"
+
+  local d out
+  d=$(now_date)
+  out=$(jq --arg id "$key" --arg r "$repo" --arg b "$branch" --arg w "$wt" --arg base "$base" \
+    --arg o "$agent" --arg ses "$ses" --arg d "$d" '
+    .tickets |= map(if .id==$id then . + {repo:$r, branch:$b, worktree:$w, base:$base,
+      commits:(.commits // ""), status:"in-progress"}
+      + (if $o=="" then {} else {owner:$o} end)
+      + (if $ses=="" then {} else {sessions:((.sessions // []) + [$ses] | unique)} end)
+      + {updated:$d} else . end)' \
+    "$TICKETS_FILE") || die "jq fallo al registrar el worktree"
+  store_write <<<"$out"
+  info "ticket $key -> in-progress (repo $repo, branch $branch)"
+
+  if [ "$porcelain" = "1" ]; then
+    jq -nc --arg id "$key" --arg repo "$repo" --arg branch "$branch" --arg worktree "$wt" \
+      '{id:$id,repo:$repo,branch:$branch,worktree:$worktree}'
+  fi
+
+  if [ "$spawn" = "1" ]; then
+    local seat
+    seat=$(seat_for_ticket "$key")
+    local -a sargs=(--cwd "$wt" --herdr-cwd "$repo" --model "$model" --ticket "$key")
+    [ -n "$agent" ] && sargs+=(--agent "$agent")
+    [ -n "$prompt" ] && sargs+=(--prompt "$prompt")
+    if [ "$herdr_flag" = "0" ]; then sargs+=(--no-herdr); elif [ "$herdr_flag" = "1" ]; then sargs+=(--herdr); fi
+    if [ "$focus_flag" = "0" ]; then sargs+=(--no-focus); elif [ "$focus_flag" = "1" ]; then sargs+=(--focus); fi
+    [ "$mirror_flag" = "0" ] && sargs+=(--no-mirror)
+    [ "$attach" = "1" ] && sargs+=(--attach)
+    cmd_spawn "$seat" "${sargs[@]}"
+  fi
+}
+
+work_list() {
+  need_jq
+  local porcelain=0 project="" status=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --porcelain|-p) porcelain=1; shift ;;
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  store_ensure
+  if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
+  local prog
+  if [ -n "$project" ] && [ -n "$status" ]; then
+    prog="[.tickets[]|select(.project==\$p and .status==\$s and ((.worktree//\"\")!=\"\"))]"
+  elif [ -n "$project" ]; then
+    prog="[.tickets[]|select(.project==\$p and ((.worktree//\"\")!=\"\"))]"
+  elif [ -n "$status" ]; then
+    prog="[.tickets[]|select(.status==\$s and ((.worktree//\"\")!=\"\"))]"
+  else
+    prog="[.tickets[]|select((.worktree//\"\")!=\"\")]"
+  fi
+  if [ "$porcelain" = "1" ]; then
+    jq --arg p "$project" --arg s "$status" "$prog" "$TICKETS_FILE"
+    return 0
+  fi
+  local rows count=0
+  rows=$(jq -r --arg p "$project" --arg s "$status" "
+    $prog
+    | sort_by(.project, .id)[]
+    | [ .id, .project, .status, .owner, (.branch//\"\"), (.worktree//\"\"), (.commits//\"\") ]
+    | join(\"\u001f\")" "$TICKETS_FILE")
+  if [ -z "$rows" ]; then
+    info "sin worktrees (crea con: rig work new <ticket-id>)"
+    return 0
+  fi
+  printf '%s%-9s %-13s %-11s %-16s %-16s %-7s %s%s\n' \
+    "$C_HEAD" "ID" "PROJECT" "ESTADO" "BRANCH" "OWNER" "COMMITS" "WORKTREE" "$C_OFF"
+  while IFS=$'\x1f' read -r tid tproj tstat towner tbranch twt tcommits; do
+    [ -n "$tid" ] || continue
+    local ncommits=0 state="missing"
+    [ -n "$tcommits" ] && ncommits=$(printf '%s' "$tcommits" | wc -w | tr -d ' ')
+    [ -n "$twt" ] && [ -e "$twt/.git" ] && state="live"
+    printf '%-9s %-13s %-11s %-16s %-16s %-7s %s\n' \
+      "$tid" "$(trunc "$tproj" 13)" "$tstat" "$(trunc "$tbranch" 16)" \
+      "$(trunc "$towner" 16)" "$ncommits" "$twt [$state]"
+    count=$((count + 1))
+  done <<<"$rows"
+  info "$count worktree(s)"
+}
+
+work_finish() {
+  need_jq; need_git
+  local id="" message="" do_verify=1 do_commit=1 keep_open=0 force=0 porcelain=0 close_seat=1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --message|-m) [ $# -ge 2 ] || die "--message requiere valor"; message="$2"; shift 2 ;;
+      --no-verify) do_verify=0; shift ;;
+      --no-commit) do_commit=0; shift ;;
+      --keep-open) keep_open=1; close_seat=0; shift ;;
+      --no-close-seat) close_seat=0; shift ;;
+      --force) force=1; shift ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) [ -z "$id" ] || die "sobra argumento: $1"; id="$1"; shift ;;
+    esac
+  done
+  [ -n "$id" ] || die "uso: rig work finish <ticket-id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]"
+  valid_ticket_id "$id" || die "ticket id invalido: $id"
+
+  store_lock
+  store_ensure
+  local key
+  key=$(store_key "$id")
+  [ -n "$key" ] || die "ticket no encontrado: $id"
+  local wt branch project title repo
+  wt=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree // ""' "$TICKETS_FILE")
+  branch=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.branch // ""' "$TICKETS_FILE")
+  project=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.project // ""' "$TICKETS_FILE")
+  title=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.title // ""' "$TICKETS_FILE")
+  repo=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.repo // ""' "$TICKETS_FILE")
+  [ -n "$wt" ] && [ -d "$wt" ] || die "worktree no existe para $key (${wt:-<sin worktree>}); corre: rig work new $key"
+  [ -n "$branch" ] || die "ticket $key sin branch registrado"
+  git_root "$wt" >/dev/null || die "worktree no es repo git: $wt"
+  [ -n "$repo" ] || repo=$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null | sed 's:/\.git$::')
+
+  local vstatus="SKIP"
+  if [ "$do_verify" = "1" ]; then
+    local vbin=""
+    vbin="${RIG_VERIFY_BIN:-}"
+    [ -z "$vbin" ] && vbin=$(command -v verify 2>/dev/null || true)
+    [ -z "$vbin" ] && [ -x "$HOME/.local/bin/verify" ] && vbin="$HOME/.local/bin/verify"
+    local -a changed=() rel abs
+    while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
+      abs="$wt/$rel"
+      changed+=("$abs")
+    done < <({ git -C "$wt" diff --name-only; git -C "$wt" diff --name-only --cached; git -C "$wt" ls-files --others --exclude-standard; } | sort -u)
+    if [ -z "$vbin" ]; then
+      vstatus="SKIP"
+      info "verify no disponible; salta verificacion"
+    elif [ ${#changed[@]} -eq 0 ]; then
+      vstatus="SKIP"
+      info "sin cambios; nada que verificar"
+    else
+      local vout vrc
+      vout=$(cd "$wt" && "$vbin" --quiet auto "${changed[@]}" 2>&1); vrc=$?
+      if [ "$vrc" = "0" ]; then
+        vstatus="PASS"
+      else
+        vstatus="FAIL"
+        if [ "$force" != "1" ]; then
+          die "verify FAIL en $wt: $(printf '%s' "$vout" | head -n3 | tr '\n' ' ')"
+        fi
+        info "verify FAIL (--force): $(printf '%s' "$vout" | head -n2 | tr '\n' ' ')"
+      fi
+    fi
+  fi
+
+  local shac=""
+  if [ "$do_commit" = "1" ]; then
+    git -C "$wt" add -A || die "git add fallo en $wt"
+    if git -C "$wt" diff --cached --quiet; then
+      info "sin cambios para commitear en $wt"
+    else
+      local msg
+      msg="${message:-$project: $title [$key]}"
+      git -C "$wt" commit -q -m "$msg" || die "git commit fallo en $wt (identidad git configurada?)"
+      shac=$(git -C "$wt" rev-parse --short HEAD)
+      info "commit $shac en $branch"
+    fi
+  fi
+
+  local prev_commits commits evidence status d out
+  prev_commits=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.commits // ""' "$TICKETS_FILE")
+  commits="$prev_commits"
+  [ -n "$shac" ] && commits="${commits:+$commits }$shac"
+  evidence="branch:$branch"
+  [ -n "$shac" ] && evidence="$evidence commit:$shac"
+  evidence="$evidence verify:$vstatus"
+  if [ "$keep_open" = "1" ]; then status="in-progress"; else status="done"; fi
+  d=$(now_date)
+  out=$(jq --arg id "$key" --arg c "$commits" --arg e "$evidence" --arg s "$status" \
+    --arg b "$branch" --arg w "$wt" --arg d "$d" '
+    .tickets |= map(if .id==$id then . + {commits:$c, evidence:$e, status:$s, branch:$b, worktree:$w, updated:$d} else . end)' \
+    "$TICKETS_FILE") || die "jq fallo al cerrar el ticket"
+  store_write <<<"$out"
+  info "ticket $key -> $status ($evidence)"
+
+  if [ "$status" = "done" ] && [ "$close_seat" = "1" ]; then
+    close_seat_for_ticket "$key" "$wt"
+  fi
+
+  if [ "$porcelain" = "1" ]; then
+    jq -c --arg id "$key" '.tickets[]|select(.id==$id)' "$TICKETS_FILE"
+  fi
+  info "merge cuando quieras: git -C $repo merge --no-ff $branch"
+}
+
+work_rm() {
+  need_jq; need_git
+  local id="" delete_branch=0 force=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --delete-branch) delete_branch=1; shift ;;
+      --force) force=1; shift ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) [ -z "$id" ] || die "sobra argumento: $1"; id="$1"; shift ;;
+    esac
+  done
+  [ -n "$id" ] || die "uso: rig work rm <ticket-id> [--delete-branch] [--force]"
+  valid_ticket_id "$id" || die "ticket id invalido: $id"
+
+  store_lock
+  store_ensure
+  local key
+  key=$(store_key "$id")
+  [ -n "$key" ] || die "ticket no encontrado: $id"
+  local wt branch repo
+  wt=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree // ""' "$TICKETS_FILE")
+  branch=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.branch // ""' "$TICKETS_FILE")
+  repo=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.repo // ""' "$TICKETS_FILE")
+
+  if [ -n "$wt" ] && [ -e "$wt/.git" ]; then
+    [ -n "$repo" ] || repo=$(git_root "$wt")
+    if [ -n "$repo" ]; then
+      if [ "$force" = "1" ]; then
+        git -C "$repo" worktree remove --force "$wt" || die "worktree remove fallo"
+      else
+        git -C "$repo" worktree remove "$wt" || die "worktree remove fallo (usa --force si hay cambios sin commitear)"
+      fi
+      info "worktree eliminado: $wt"
+    else
+      die "no pude resolver el repo del worktree $wt"
+    fi
+  else
+    info "worktree ya ausente: ${wt:-<sin worktree>}"
+  fi
+
+  if [ "$delete_branch" = "1" ] && [ -n "$branch" ] && [ -n "$repo" ]; then
+    if git -C "$repo" branch -D "$branch" >/dev/null 2>&1; then
+      info "branch eliminado: $branch"
+    else
+      info "branch no eliminado: $branch"
+    fi
+  fi
+
+  local d out
+  d=$(now_date)
+  out=$(jq --arg id "$key" --arg d "$d" '
+    .tickets |= map(if .id==$id then . + {worktree:""} + {updated:$d} else . end)' "$TICKETS_FILE") || die "jq fallo"
+  store_write <<<"$out"
+  info "ticket $key: worktree desregistrado"
+}
+
+cmd_work() {
+  need_jq; need_git
+  local action="${1:-}"
+  case "$action" in
+    new|create) shift; work_new "$@" ;;
+    list|ls) shift; work_list "$@" ;;
+    finish|done) shift; work_finish "$@" ;;
+    rm|remove) shift; work_rm "$@" ;;
+    ''|-h|--help|help) work_usage; [ -z "$action" ] && exit 1 || exit 0 ;;
+    *) work_new "$@" ;;
+  esac
+}
+
+scan_usage() {
+  cat >&2 <<'EOF'
+rig scan - vistazo de sillas y worktrees activos: que hizo cada uno
+
+  rig scan [--porcelain] [--lines N] [--project P] [--status S] [--no-metrics] [--no-seats]
+
+  Por cada silla/worktree activo muestra: ticket/proyecto/agente, ruta del worktree,
+  archivos modificados (git status + diff --numstat, incluye untracked), ultima actividad
+  (mtime mas reciente del arbol) y las ultimas N lineas del pane (default 40). Suma
+  tokens/costo/tiempo del ticket desde opencode.db. --no-seats omite tmux (solo worktrees);
+  --porcelain devuelve un JSON array. Aguanta silla muerta (worktree sin pane), pane en
+  copy-mode, worktree sin branch y 0 sillas (empty state honesto).
+EOF
+}
+
+scan_worktree_json() {
+  local wt="$1"
+  if [ -z "$wt" ] || [ ! -d "$wt" ] || [ ! -e "$wt/.git" ]; then
+    jq -nc --arg path "${wt:-}" '{path:$path,live:false,branch:"",files:[],insertions:0,deletions:0,activity:0}'
+    return 0
+  fi
+  local branch act=0 ins=0 del=0 files_tsv="" line xy p a d ns m
+  branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    xy="${line:0:2}"; p="${line:3}"
+    case "$p" in
+      \"*\") p="${p#\"}"; p="${p%\"}" ;;
+    esac
+    if [ "$xy" = "??" ]; then
+      a=$(wc -l <"$wt/$p" 2>/dev/null | tr -d ' ' || true); [ -n "$a" ] || a=0; d=0
+    else
+      ns=$(git -C "$wt" diff --numstat HEAD -- "$p" 2>/dev/null | head -n1)
+      a=$(printf '%s' "$ns" | cut -f1); d=$(printf '%s' "$ns" | cut -f2)
+      case "$a" in ''|'-') a=0 ;; esac
+      case "$d" in ''|'-') d=0 ;; esac
+    fi
+    ins=$((ins + a)); del=$((del + d))
+    files_tsv="${files_tsv}${xy}"$'\t'"${a}"$'\t'"${d}"$'\t'"${p}"$'\n'
+    m=$(stat -c %Y "$wt/$p" 2>/dev/null || echo 0)
+    [ "$m" -gt "$act" ] 2>/dev/null && act="$m"
+  done < <(git -C "$wt" status --porcelain 2>/dev/null)
+  m=$(stat -c %Y "$wt" 2>/dev/null || echo 0); [ "$m" -gt "$act" ] 2>/dev/null && act="$m"
+  m=$(git -C "$wt" log -1 --format=%ct 2>/dev/null || echo 0); [ "$m" -gt "$act" ] 2>/dev/null && act="$m"
+  printf '%s' "$files_tsv" | jq -Rsc --arg path "$wt" --arg branch "$branch" \
+    --argjson act "${act:-0}" --argjson ins "$ins" --argjson del "$del" '
+    (split("\n") | map(select(length>0) | split("\t")
+      | {status:.[0], added:(.[1]|tonumber? // 0), removed:(.[2]|tonumber? // 0), path:.[3]})) as $files
+    | {path:$path, live:true, branch:$branch, files:$files,
+       insertions:$ins, deletions:$del, activity:$act}'
+}
+
+scan_seats_json() {
+  local lines="$1" name marker cwd mode act pane
+  while IFS=$'\x1f' read -r name marker cwd; do
+    [ "$marker" = "1" ] || continue
+    mode=$(tmux display-message -p -t "$name" '#{pane_in_mode}' 2>/dev/null || echo 0)
+    act=$(tmux display-message -p -t "$name" '#{session_activity}' 2>/dev/null || echo 0)
+    pane=$(tmux capture-pane -p -J -t "$name" -S "-$lines" 2>/dev/null || true)
+    jq -nc --arg name "$name" --arg cwd "$cwd" --argjson mode "${mode:-0}" \
+      --argjson act "${act:-0}" --arg pane "$pane" \
+      '{name:$name, cwd:$cwd, mode:$mode, activity:$act, pane:$pane}'
+  done < <(tmux list-sessions -F $'#{session_name}\x1f#{@agent}\x1f#{@agent_cwd}' 2>/dev/null || true)
+}
+
+cmd_herdr() {
+  local quiet=0 watch=0 interval=3
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      sync) shift ;;
+      --quiet|-q) quiet=1; shift ;;
+      --watch) watch=1; shift ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      --help|-h) info "uso: rig herdr sync [--watch] [--interval S] [--quiet]"; return 0 ;;
+      *) die "uso: rig herdr sync [--watch] [--interval S] [--quiet]" ;;
+    esac
+  done
+  need_tmux
+  herdr_ok || die "herdr no disponible: revisa el binario y el server (RIG_HERDR=1)"
+  local s
+  while :; do
+    for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
+      is_seat "$s" 2>/dev/null || continue
+      herdr_sync_seat "$s" "$quiet"
+    done
+    [ "$watch" = "1" ] || break
+    sleep "$interval"
+  done
+}
+
+cmd_scan() {
+  need_jq
+  local porcelain=0 lines=40 project="" status="" no_metrics=0 no_seats=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --porcelain|-p) porcelain=1; shift ;;
+      --lines|-n) [ $# -ge 2 ] || die "--lines requiere valor"; lines="$2"; shift 2 ;;
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --status) [ $# -ge 2 ] || die "--status requiere valor"; status="$2"; shift 2 ;;
+      --no-metrics) no_metrics=1; shift ;;
+      --no-seats) no_seats=1; shift ;;
+      -h|--help|help) scan_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  [[ "$lines" =~ ^[0-9]+$ ]] || die "lines invalido: $lines"
+  if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
+  store_ensure
+
+  local seats_json='[]'
+  if [ "$no_seats" = "0" ] && command -v tmux >/dev/null 2>&1 && tmux list-sessions >/dev/null 2>&1; then
+    seats_json=$(scan_seats_json "$lines" | jq -s '.')
+  fi
+
+  local sessions='[]'
+  [ "$no_metrics" = "1" ] || sessions=$(db_sessions_json)
+
+  local tickets
+  tickets=$(jq --arg p "$project" --arg s "$status" \
+    '[.tickets[]|select((.worktree//"")!="") | select($p=="" or .project==$p) | select($s=="" or .status==$s)]' \
+    "$TICKETS_FILE")
+
+  local wt_lines="" path
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    wt_lines="${wt_lines}$(scan_worktree_json "$path")"$'\n'
+  done < <( { jq -r '.[].worktree' <<<"$tickets"; jq -r '.[].cwd' <<<"$seats_json"; } | sort -u )
+  local wts
+  wts=$(printf '%s' "$wt_lines" | jq -s '.')
+
+  # shellcheck disable=SC2016
+  local full tf ts tw sf
+  tf=$(jv_file "$tickets")
+  ts=$(jv_file "$seats_json")
+  tw=$(jv_file "$wts")
+  sf=$(jv_file "$sessions")
+  full=$(jq -cn --rawfile tickets "$tf" --rawfile seats "$ts" \
+    --rawfile wts "$tw" --rawfile sj "$sf" \
+    "$METRICS_DEFS"'
+    ($tickets | fromjson) as $tickets
+    | ($seats | fromjson) as $seats
+    | ($wts | fromjson) as $wts
+    | ($sj | fromjson) as $sessions
+    | ($wts | map({(.path): .}) | add // {}) as $wtm
+    | ($seats | map({(.cwd): .}) | add // {}) as $seatm
+    | (metrics_index($sessions)) as $mi
+    | ( [ $tickets[] as $t
+          | ($t.worktree) as $wp
+          | ($wtm[$wp] // {path:$wp,live:false,branch:"",files:[],insertions:0,deletions:0,activity:0}) as $w
+          | ($seatm[$wp] // null) as $s
+          | ($t | ticket_metrics($t; $mi.byid; $mi.kids; $sessions)) as $m
+          | {kind:"ticket", id:$t.id, project:$t.project, owner:$t.owner, status:$t.status,
+             branch:(if $w.branch!="" then $w.branch else ($t.branch // "") end),
+             worktree:$wp, live:($w.live // false),
+             seat:(if $s then $s.name else "" end),
+             seat_mode:(if $s then $s.mode else 0 end),
+             pane:(if $s then $s.pane else "" end),
+             files:($w.files // []), insertions:($w.insertions // 0), deletions:($w.deletions // 0),
+             activity:([($w.activity // 0), (if $s then $s.activity else 0 end)] | max),
+             metrics:{sessions:$m.n,
+               tokens:{input:$m.tin,output:$m.tout,reasoning:$m.trea,cache_read:$m.tcr,cache_write:$m.tcw,total:($m.tin+$m.tout+$m.trea)},
+               cost:$m.cost, time:{created:$m.created,updated:$m.updated,duration_ms:($m.updated-$m.created)}} }
+        ] ) as $tentries
+    | ( [ $tickets[].worktree ] | unique ) as $wtpaths
+    | ( [ $seats[] as $s
+          | select(($wtpaths | index($s.cwd)) == null)
+          | {kind:"seat", id:$s.name, project:"", owner:"", status:"",
+             branch:"", worktree:$s.cwd, live:true, seat:$s.name, seat_mode:$s.mode,
+             pane:$s.pane, files:[], insertions:0, deletions:0, activity:$s.activity,
+             metrics:null} ] ) as $sentries
+    | ($tentries + $sentries) | sort_by(.project, .id)')
+  local scan_rc=$?
+  rm -f "$tf" "$ts" "$tw" "$sf"
+  [ "$scan_rc" = "0" ] || die "scan: jq fallo al construir el reporte"
+
+  if [ "$porcelain" = "1" ]; then
+    printf '%s\n' "$full"
+    return 0
+  fi
+
+  local count
+  count=$(printf '%s' "$full" | jq 'length')
+  if [ "${count:-0}" = "0" ]; then
+    info "no hay sillas ni worktrees activos"
+    return 0
+  fi
+  printf '%s%s%s\n' "$C_HEAD" "$(printf '%-10s %-10s %-10s %-14s %-8s %-12s %-5s %-22s %s' "ID" "PROJECT" "OWNER" "SEAT" "STATE" "ACTIVITY" "FILES" "METRICS" "BRANCH")" "$C_OFF"
+  printf '%s' "$full" | jq -r '
+    .[] as $e
+    | ("E\u001f" + $e.id + "\u001f" + ($e.project // "") + "\u001f" + ($e.owner // "")
+       + "\u001f" + ($e.seat // "")
+       + "\u001f" + (if ($e.live and ($e.seat // "")!="") then "live" elif $e.live then "idle" else "missing" end)
+       + "\u001f" + (($e.activity // 0)|tostring)
+       + "\u001f" + (($e.files|length)|tostring)
+       + "\u001f" + ((($e.metrics.sessions) // 0)|tostring)
+       + "\u001f" + ((($e.metrics.tokens.total) // 0)|tostring)
+       + "\u001f" + ((($e.metrics.cost) // 0)|tostring)
+       + "\u001f" + ((($e.metrics.time.duration_ms) // 0)|tostring)
+       + "\u001f" + ($e.branch // "")),
+      ( if ($e.worktree // "") != "" then "W\u001f" + $e.worktree else empty end ),
+      ( $e.files[]? | "F\u001f" + $e.id + "\u001f" + .status + "\u001f" + ((.added)|tostring) + "\u001f" + ((.removed)|tostring) + "\u001f" + .path ),
+      ( if ($e.pane // "") != "" then (($e.pane | split("\n"))[] | select(length>0) | "P\u001f" + $e.id + "\u001f" + .) else empty end )
+  ' | while IFS=$'\x1f' read -r kind f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12; do
+    case "$kind" in
+      E)
+        local act="-" metr="-" state="$f5"
+        if [ "${f6:-0}" -gt 0 ] 2>/dev/null; then act=$(date -d "@$f6" '+%m-%d %H:%M' 2>/dev/null || echo "-"); fi
+        if [ "${f8:-0}" -gt 0 ] 2>/dev/null; then
+          metr="$(fmt_tokens "$f9") $(fmt_cost "$f10") $(fmt_dur "$f11")"
+        fi
+        printf '  %-10s %-10s %-10s %-14s %-8s %-12s %-5s %-22s %s\n' \
+          "$f1" "$(trunc "$f2" 10)" "$(trunc "$f3" 10)" "$(trunc "$f4" 14)" \
+          "$state" "$act" "$f7" "$(trunc "$metr" 22)" "$(trunc "$f12" 20)"
+        ;;
+      W) printf '       %s└ %s%s\n' "$C_PEND" "$f1" "$C_OFF" ;;
+      F) printf '         %s%-2s%s %s (+%s/-%s)\n' "$C_PEND" "$f2" "$C_OFF" "$f5" "$f3" "$f4" ;;
+      P) printf '         %s| %s%s\n' "$C_PEND" "$f2" "$C_OFF" ;;
+    esac
+  done
+}
+
+selftest() {
+  need_tmux
+  local s="$SELFTEST_SESSION" out tmp rc=0 i
+  tmux kill-session -t "$s" 2>/dev/null || true
+  if ! tmux new-session -d -s "$s"; then
+    printf 'rig selftest FAIL: no pude crear la sesion de prueba\n' >&2
+    return 1
+  fi
+  tmux set-option -t "$s" @agent 1
+
+  out=$("$SELF" seats --porcelain)
+  if [[ "$out" != *"$s"* ]]; then
+    printf 'rig selftest FAIL: seats no lista la silla de prueba\n' >&2
+    rc=1
+  fi
+
+  out=$("$SELF" spawn zz-probe --cwd /tmp --agent app-architect --prompt "hola mundo" --dry-run 2>&1)
+  case "${out%% *}" in
+    opencode) printf 'rig selftest FAIL: spawn --agent pasa por el alias opencode\n' >&2; rc=1 ;;
+  esac
+  if [[ "$out" != *"--agent app-architect"* ]] || [[ "$out" != *"--prompt"* ]]; then
+    printf 'rig selftest FAIL: spawn no construye --agent/--prompt\n' >&2
+    rc=1
+  fi
+  out=$("$SELF" spawn zz-probe --cwd /tmp --cmd "opencode --agent app-architect" --dry-run 2>&1)
+  case "${out%% *}" in
+    opencode) printf 'rig selftest FAIL: spawn --cmd no endurece el bare opencode\n' >&2; rc=1 ;;
+  esac
+
+  if "$SELF" send "$s" "echo debe-fallar" >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: send no bloqueo la inyeccion en shell\n' >&2
+    rc=1
+  fi
+
+  if ! "$SELF" send --force "$s" "printf 'rig-selftest-ok\\n'" >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: send --force fallo\n' >&2
+    rc=1
+  fi
+  sleep 0.3
+  out=$("$SELF" read "$s" --lines 12)
+  if [[ "$out" != *"rig-selftest-ok"* ]]; then
+    printf 'rig selftest FAIL: read no capturo el eco\n' >&2
+    rc=1
+  fi
+
+  tmp=$(mktemp)
+  tmux send-keys -t "$s" -l -- "'$SELF' whoami > '$tmp' 2>&1"
+  tmux send-keys -t "$s" Enter
+  i=0
+  while [ "$i" -lt 40 ] && [ ! -s "$tmp" ]; do sleep 0.05; i=$((i + 1)); done
+  out=$(cat "$tmp" 2>/dev/null || true)
+  if [[ "$out" != *"$s"* ]]; then
+    printf 'rig selftest FAIL: whoami no reporto la silla\n' >&2
+    rc=1
+  fi
+  rm -f "$tmp"
+
+  tmp=$(mktemp)
+  printf '{"version":1,"tickets":[]}\n' >"$tmp"
+  if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket add T9 --project demo --title "ticket demo" >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: ticket add fallo\n' >&2
+    rc=1
+  fi
+  if RIG_TICKETS_FILE="$tmp" "$SELF" ticket add T9 --project demo --title dup >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: ticket add duplicado no fallo\n' >&2
+    rc=1
+  fi
+  if ! RIG_TICKETS_FILE="$tmp" "$SELF" ticket set T9 --status 'done' --owner supervisor >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: ticket set fallo\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$tmp" "$SELF" board --porcelain 2>/dev/null)
+  if [[ "$out" != *'"T9"'* ]] || [[ "$out" != *'"done"'* ]]; then
+    printf 'rig selftest FAIL: board --porcelain no refleja el ticket\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$tmp" "$SELF" board 2>/dev/null)
+  if [[ "$out" != *"T9"* ]]; then
+    printf 'rig selftest FAIL: board render no muestra el ticket\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$tmp" "$SELF" scan --porcelain --no-seats 2>/dev/null)
+  if [[ "${out//[[:space:]]/}" != "[]" ]]; then
+    printf 'rig selftest FAIL: scan --porcelain vacio no devuelve []\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$tmp" "$SELF" scan --no-seats 2>/dev/null)
+  if [[ "$out" != *'no hay sillas ni worktrees activos'* ]]; then
+    printf 'rig selftest FAIL: scan sin contenido no avisa el empty state\n' >&2
+    rc=1
+  fi
+  rm -f "$tmp"
+
+  if command -v git >/dev/null 2>&1; then
+    local wtmp wrepo wtree tstore
+    wtmp=$(mktemp -d)
+    wrepo="$wtmp/repo"
+    wtree="$wtmp/wt/repo/G1"
+    tstore="$wtmp/tickets.json"
+    printf '{"version":1,"tickets":[]}\n' >"$tstore"
+    git init -q -b main "$wrepo" 2>/dev/null
+    git -C "$wrepo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init 2>/dev/null
+    export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+
+    if ! RIG_TICKETS_FILE="$tstore" RIG_WORKTREE_DIR="$wtmp/wt" "$SELF" ticket add G1 --project demo --title "work test" >/dev/null 2>&1; then
+      printf 'rig selftest FAIL: work setup ticket add fallo\n' >&2
+      rc=1
+    fi
+    if ! RIG_TICKETS_FILE="$tstore" RIG_WORKTREE_DIR="$wtmp/wt" "$SELF" work new G1 --cwd "$wrepo" >/dev/null 2>&1; then
+      printf 'rig selftest FAIL: work new fallo\n' >&2
+      rc=1
+    fi
+    if [ ! -e "$wtree/.git" ]; then
+      printf 'rig selftest FAIL: worktree no creado en %s\n' "$wtree" >&2
+      rc=1
+    fi
+    if ! git -C "$wrepo" rev-parse --verify -q refs/heads/ticket/g1 >/dev/null 2>&1; then
+      printf 'rig selftest FAIL: branch ticket/g1 no existe\n' >&2
+      rc=1
+    fi
+    out=$(RIG_TICKETS_FILE="$tstore" "$SELF" work list --porcelain 2>/dev/null)
+    if [[ "$out" != *'"ticket/g1"'* ]]; then
+      printf 'rig selftest FAIL: work list no muestra el branch\n' >&2
+      rc=1
+    fi
+    out=$(RIG_TICKETS_FILE="$tstore" "$SELF" board 2>/dev/null)
+    if [[ "$out" != *"BRANCH"* ]] || [[ "$out" != *"ticket/g1"* ]]; then
+      printf 'rig selftest FAIL: board no muestra branch/worktree\n' >&2
+      rc=1
+    fi
+    printf 'hello\n' >"$wtree/hello.txt"
+    out=$(RIG_TICKETS_FILE="$tstore" RIG_WORKTREE_DIR="$wtmp/wt" RIG_METRICS=0 "$SELF" scan --porcelain --no-seats 2>/dev/null)
+    if [[ "$out" != *'"G1"'* ]]; then
+      printf 'rig selftest FAIL: scan no reporta el ticket del worktree\n' >&2
+      rc=1
+    fi
+    if [[ "$out" != *'hello.txt'* ]]; then
+      printf 'rig selftest FAIL: scan no reporta el archivo modificado\n' >&2
+      rc=1
+    fi
+    if [[ "$out" != *'"added":1'* ]]; then
+      printf 'rig selftest FAIL: scan no reporta las lineas del archivo\n' >&2
+      rc=1
+    fi
+    out=$(RIG_TICKETS_FILE="$tstore" RIG_WORKTREE_DIR="$wtmp/wt" RIG_METRICS=0 "$SELF" scan --no-seats 2>/dev/null)
+    if [[ "$out" != *'G1'* ]]; then
+      printf 'rig selftest FAIL: scan render no muestra el ticket\n' >&2
+      rc=1
+    fi
+    if ! RIG_TICKETS_FILE="$tstore" "$SELF" work finish G1 --no-verify >/dev/null 2>&1; then
+      printf 'rig selftest FAIL: work finish fallo\n' >&2
+      rc=1
+    fi
+    out=$(RIG_TICKETS_FILE="$tstore" "$SELF" ticket list --porcelain 2>/dev/null)
+    if [[ "$out" != *'"status": "done"'* ]]; then
+      printf 'rig selftest FAIL: work finish no cerro el ticket\n' >&2
+      rc=1
+    fi
+    if [[ "$out" != *'"commits": "'* ]]; then
+      printf 'rig selftest FAIL: work finish no registro commits\n' >&2
+      rc=1
+    fi
+    if ! RIG_TICKETS_FILE="$tstore" "$SELF" work rm G1 --delete-branch >/dev/null 2>&1; then
+      printf 'rig selftest FAIL: work rm fallo\n' >&2
+      rc=1
+    fi
+    if [ -e "$wtree" ]; then
+      printf 'rig selftest FAIL: worktree no eliminado\n' >&2
+      rc=1
+    fi
+    if git -C "$wrepo" rev-parse --verify -q refs/heads/ticket/g1 >/dev/null 2>&1; then
+      printf 'rig selftest FAIL: branch no eliminado tras work rm --delete-branch\n' >&2
+      rc=1
+    fi
+    rm -rf "$wtmp"
+  fi
+
+  if command -v sqlite3 >/dev/null 2>&1; then
+    local mtmp mdb mtstore
+    mtmp=$(mktemp -d)
+    mdb="$mtmp/opencode.db"
+    mtstore="$mtmp/tickets.json"
+    sqlite3 "$mdb" "CREATE TABLE session (id text PRIMARY KEY, parent_id text, directory text, cost real DEFAULT 0, tokens_input integer DEFAULT 0, tokens_output integer DEFAULT 0, tokens_reasoning integer DEFAULT 0, tokens_cache_read integer DEFAULT 0, tokens_cache_write integer DEFAULT 0, time_created integer, time_updated integer);"
+    sqlite3 "$mdb" "INSERT INTO session VALUES ('ses_a','','/wt/fake',0.5,1000,200,300,400,0,1000000,1006000),('ses_b','ses_a','/wt/fake',0.25,500,100,50,0,0,1001000,1036000);"
+    printf '{"version":1,"tickets":[]}\n' >"$mtstore"
+    RIG_TICKETS_FILE="$mtstore" "$SELF" ticket add M1 --project demo --title "metricas" --session ses_a >/dev/null 2>&1
+    out=$(RIG_TICKETS_FILE="$mtstore" RIG_DB="$mdb" "$SELF" ticket metrics M1 --porcelain 2>/dev/null)
+    if [[ "$out" != *'"total": 2150'* ]]; then
+      printf 'rig selftest FAIL: metrics total de tokens incorrecto\n' >&2
+      rc=1
+    fi
+    if [[ "$out" != *'"cost": 0.75'* ]]; then
+      printf 'rig selftest FAIL: metrics costo incorrecto\n' >&2
+      rc=1
+    fi
+    if [[ "$out" != *'"duration_ms": 36000'* ]]; then
+      printf 'rig selftest FAIL: metrics duracion incorrecta\n' >&2
+      rc=1
+    fi
+    out=$(RIG_TICKETS_FILE="$mtstore" RIG_DB="$mdb" "$SELF" board 2>/dev/null)
+    if [[ "$out" != *'0.750'* ]]; then
+      printf 'rig selftest FAIL: board no muestra el costo del ticket\n' >&2
+      rc=1
+    fi
+    rm -rf "$mtmp"
+  fi
+
+  tmux kill-session -t "$s" 2>/dev/null || true
+  if [ "$rc" = "0" ]; then
+    info "rig selftest OK"
+  else
+    info "rig selftest FAIL"
+  fi
+  return "$rc"
+}
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+  seats|ls) cmd_seats "$@" ;;
+  spawn) cmd_spawn "$@" ;;
+  send) cmd_send "$@" ;;
+  read) cmd_read "$@" ;;
+  whoami) cmd_whoami "$@" ;;
+  scan|status) cmd_scan "$@" ;;
+  herdr|hd) cmd_herdr "$@" ;;
+  ticket|tickets) cmd_ticket "$@" ;;
+  work|wt) cmd_work "$@" ;;
+  board) cmd_board "$@" ;;
+  --selftest|selftest) selftest ;;
+  ''|-h|--help|help) usage; [ -z "$cmd" ] && exit 1 || exit 0 ;;
+  *) usage; exit 1 ;;
+esac
