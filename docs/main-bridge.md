@@ -142,10 +142,11 @@ dentro del hilo del pedido.
   (`bajame`, `mandame`, `pasame`, `enviame`, ...) + un sustantivo de contenido (`conversacion`,
   `extraccion`, `transcripcion`, `pensamiento`, `sesion`, ...) y no espera sintaxis exacta.
 - **Ticket**: si el texto trae un numero (`93` / `#93`) o un slug (`FOO-3`), se usa para acotar.
-- **Quien extrae**: el bot invoca el comando de extraccion (env `RIG_EXTRACT_CMD`, default
-  `rig-transcript`), pasandole el ticket (o el texto del pedido) y lee su salida (stdout: el
-  contenido, o una ruta a un archivo). El bot **no** lee la base de opencode por su cuenta: el
-  comando lo construye/posee `work-visibilidad-y-cierre`.
+- **Quien extrae**: el bot invoca la extraccion (env `RIG_EXTRACT_CMD`, default `rig export`),
+  pasandole la *cosa* (ticket `#93`/`93`/slug, nombre de silla o id de sesion `ses_...`).
+  `rig export` imprime en stdout la ruta absoluta del archivo generado y el bot lo sube como
+  adjunto. El bot **no** lee la base de opencode por su cuenta: el comando lo posee
+  `work-visibilidad-y-cierre`. Tambien disponible `rig ticket show <id>` (ficha del ticket).
 - **Entrega**: sube el archivo (`extraccion-<ticket>.md`) como adjunto dentro del hilo, con una
   linea `Sesion: <ticket> · generado: <hora ISO>` y cita al mensaje del usuario.
 - **Sin comando configurado o sin contenido**: responde en el canal pidiendo el comando

@@ -356,9 +356,10 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
 - **Extraccion conversacional (adjuntos)**: se pide conversando ("bajame la conversacion y el
   pensamiento del ticket 93"); el bot detecta verbo de entrega + sustantivo de contenido, saca el
   ticket (`#93` o `FOO-3`) y sube el archivo (`extraccion-<ticket>.md`) como adjunto dentro del
-  hilo con `Sesion: <ticket> · generado: <hora ISO>`. El bot invoca `RIG_EXTRACT_CMD` (default
-  `rig-transcript`, owner `work-visibilidad-y-cierre`) y lee su salida (contenido o ruta); **no**
-  lee la base de opencode por su cuenta.
+  hilo con `Sesion: <ticket> · generado: <hora ISO>`. El bot invoca la extraccion (env
+  `RIG_EXTRACT_CMD`, default `rig export`) con la *cosa* (ticket/silla/sesion) y sube el archivo
+  que `rig export` imprime en stdout (owner `work-visibilidad-y-cierre`; tambien `rig ticket
+  show <id>`); **no** lee la base de opencode por su cuenta.
 - **`main` en silla**: `main` corre como silla tmux (`rig spawn main-seat --agent main`) para
   ser direccionable; el pane de herdr le hace attach para seguir viendolo en el escritorio.
 - **Sin puertos**: el bot abre conexion **saliente** al Gateway (`wss://gateway.discord.gg`);

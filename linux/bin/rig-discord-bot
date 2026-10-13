@@ -90,7 +90,7 @@ class Config:
             os.environ.get("RIG_DISCORD_PROJECTS") or (self.state_dir / "projects.json")
         )
         self.extract_cmd: list[str] = (
-            os.environ.get("RIG_EXTRACT_CMD") or "rig-transcript").split()
+            os.environ.get("RIG_EXTRACT_CMD") or "rig export").split()
 
     def ready(self) -> Optional[str]:
         if not self.token:
