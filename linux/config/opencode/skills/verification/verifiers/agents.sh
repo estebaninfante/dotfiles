@@ -207,8 +207,12 @@ if [[ -f "$policy_file" ]] \
    && grep -qF 'Escalado por senal' "$policy_file" \
    && grep -qF 'opencode/mimo-v2.6-flash-free' "$policy_file" \
    && grep -qF 'opencode-go/deepseek-v4.1-flash' "$policy_file" \
-   && grep -qF 'opencode-go/deepseek-v4-pro' "$policy_file"; then
-  ok "model-policy" "AGENTS.md define la politica de modelos (3 niveles: gratis/flash/fuerte) + escalado por senal"
+   && grep -qF 'opencode-go/deepseek-v4-pro' "$policy_file" \
+   && grep -qF 'Pro solo para pensar, nunca para escribir' "$policy_file" \
+   && grep -qF 'Prohibido escribir codigo con pro' "$policy_file" \
+   && grep -qF 'fase de **ESCRITURA**' "$policy_file" \
+   && grep -qF 'nunca pro' "$policy_file"; then
+  ok "model-policy" "AGENTS.md define la politica de modelos (3 niveles: gratis/flash/fuerte) + escalado por senal + pro solo para pensar (escritura en flash)"
 else
   fail "model-policy" "falta la politica de modelos de 3 niveles en $policy_file"
 fi

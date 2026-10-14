@@ -156,11 +156,19 @@ Toda tarea corre en el nivel **mas barato** que la cubra y escala **UN** nivel s
 |-------|--------|--------|-------|
 | **barato (gratuito)** | `opencode/mimo-v2.6-flash-free` (alterno `opencode/cat-jam-free`) | implementacion mecanica: escribir el codigo de una spec decidida, repetir patrones, escribir tests, conectar una feature | `app-dev`, tickets de implementacion |
 | **normal (flash)** | `opencode-go/deepseek-v4.1-flash` | trabajo normal: analisis, coordinacion, editar config, verificar, delegar, research | `supervisor`, `main`, `dotfiles`, `researcher`, `browser-*` |
-| **fuerte** | `opencode-go/deepseek-v4-pro` | arquitectura, diagnostico dificil, y **todo** lo que toque foco, input, shell/QML o migraciones | `app-architect`, `omarchy-shell`, `hyprland`; escalado |
+| **fuerte** | `opencode-go/deepseek-v4-pro` | **SOLO PENSAR**: diseno, arquitectura, diagnostico dificil, decisiones, y la decision de lo que toque foco, input, shell/QML o migraciones. **Prohibido escribir codigo con pro** | `app-architect`, `omarchy-shell`, `hyprland` (fase de decision); escalado |
 
-- **Default de sillas = barato**: `SEAT_MODEL` en `rig` nace en el modelo gratuito; subir a
-  `normal` o `fuerte` es explicito con `--model` / `RIG_SEAT_MODEL`. No se cambia a mano el
-  modelo de una silla ya trabajando.
+- **Pro solo para pensar, nunca para escribir (REGLA DURA)**: el nivel fuerte
+  (`opencode-go/deepseek-v4-pro`) gasta muchos mas tokens; se usa **solo** para la fase de
+  **PENSAR** (diseno, arquitectura, diagnostico dificil, decisiones). La fase de **ESCRITURA**
+  de un ticket (escribir el codigo, tests, editar config) corre en **normal**
+  (`opencode-go/deepseek-v4.1-flash`) o barato/free, aunque el agente que lidere sea
+  `app-architect`. Subir a pro es por senal y solo para la fase de decision/diseno.
+- **Default de sillas = barato/normal, nunca pro**: `SEAT_MODEL` en `rig` nace en el modelo
+  gratuito y un seat de trabajo arranca en **flash** (`opencode-go/deepseek-v4.1-flash`) para
+  trabajo normal (analisis, coordinacion, editar config, verificar), explicito con `--model` /
+  `RIG_SEAT_MODEL`. `opencode-go/deepseek-v4-pro` **nunca** es el default de un seat: se pasa
+  solo para la fase de **pensar**. No se cambia a mano el modelo de una silla ya trabajando.
 - **Escalado por senal (REGLA DURA)**: una silla sube de nivel **solo** si (a) falla **dos
   veces** la misma tarea, (b) el verificador da **ERROR**, o (c) la tarea toca **foco, input,
   shell/QML o migraciones**. La decision y el motivo quedan como **evidencia** en el ticket
