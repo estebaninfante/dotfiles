@@ -20,6 +20,7 @@ Checks:
   has-tests       tests presentes o script `test`
   has-linter      config de linter o script `lint`
   structure       src/ con features|components|lib
+  field-primitives  campos solo en primitivas con minimo 16px en movil
 
 Ignora node_modules/.git/dist/.next/build/venv/__pycache__/coverage.
 
@@ -226,6 +227,39 @@ check_structure() {
   report FAIL structure "falta features/ con lib|components (src/ o layout js propio)"
 }
 
+check_field_primitives() {
+  local root=$1 prim="" dir f hits=""
+  for candidate in "$root/components/ui/input.tsx" "$root/src/components/ui/input.tsx"; do
+    if [ -f "$candidate" ]; then prim="$candidate"; break; fi
+  done
+  if [ -z "$prim" ]; then
+    report OK field-primitives "sin primitivas de campo"
+    return
+  fi
+  dir=$(dirname "$prim")
+  if ! grep -rq 'text-base sm:text-sm' "$dir" 2>/dev/null; then
+    report FAIL field-primitives "primitiva sin 'text-base sm:text-sm' (minimo 16px movil)"
+    return
+  fi
+  while IFS= read -r f; do
+    case "$f" in
+      */input.tsx|*/select.tsx|*/textarea.tsx) continue ;;
+    esac
+    if grep -qE '<(input|select|textarea)[ />]' "$f" 2>/dev/null; then
+      hits="$f"
+      break
+    fi
+  done < <(find "$root" \
+    \( -name node_modules -o -name .git -o -name dist -o -name .next -o -name build \
+       -o -name venv -o -name .venv \) -prune -o \
+    -type f \( -name '*.tsx' -o -name '*.jsx' -o -name '*.vue' -o -name '*.svelte' \) -print 2>/dev/null)
+  if [ -n "$hits" ]; then
+    report FAIL field-primitives "campo nativo fuera de las primitivas: $(rel "$root" "$hits")"
+  else
+    report OK field-primitives "campos solo en primitivas"
+  fi
+}
+
 check_root() {
   local root=$1
   check_max_file_lines "$root"
@@ -233,6 +267,7 @@ check_root() {
   check_has_tests "$root"
   check_has_linter "$root"
   check_structure "$root"
+  check_field_primitives "$root"
 }
 
 run_selftest() {
@@ -258,6 +293,16 @@ run_selftest() {
     printf '<p>%d</p>\n' "$i" >> "$mono/index.html"
   done
 
+  fields="$tmp/fields"
+  mkdir -p "$fields/src/components/ui" "$fields/src/lib" "$fields/src/features/x"
+  printf '{"name":"fields","scripts":{"test":"node --test","lint":"eslint ."}}\n' > "$fields/package.json"
+  printf 'export default []\n' > "$fields/eslint.config.js"
+  printf 'export const v = 1\n' > "$fields/src/lib/util.ts"
+  printf 'export const t = 1\n' > "$fields/src/lib/util.test.ts"
+  printf 'export const fieldVariants = () => "text-base sm:text-sm"\n' > "$fields/src/components/ui/field.ts"
+  printf 'export const Input = () => null\n' > "$fields/src/components/ui/input.tsx"
+  printf '<input className="text-xs" />\n' > "$fields/src/features/x/bad.tsx"
+
   MODE=quiet rc=0
   check_root "$good"
   good_rc=$rc
@@ -275,6 +320,27 @@ run_selftest() {
     printf 'OK selftest mono-falla\n'
   else
     printf 'FAIL selftest mono-falla\n'
+    status=1
+  fi
+
+  MODE=quiet rc=0
+  check_field_primitives "$fields"
+  fields_bad_rc=$rc
+  printf '<div className="ok" />\n' > "$fields/src/features/x/bad.tsx"
+  MODE=quiet rc=0
+  check_field_primitives "$fields"
+  fields_ok_rc=$rc
+
+  if [ "$fields_bad_rc" -ne 0 ]; then
+    printf 'OK selftest campo-nativo-falla\n'
+  else
+    printf 'FAIL selftest campo-nativo-falla\n'
+    status=1
+  fi
+  if [ "$fields_ok_rc" -eq 0 ]; then
+    printf 'OK selftest campo-primitiva-ok\n'
+  else
+    printf 'FAIL selftest campo-primitiva-ok\n'
     status=1
   fi
 
