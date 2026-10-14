@@ -67,7 +67,9 @@ hl.config({
         animate_mouse_windowdragging = false,
         force_default_wallpaper = -1,
         disable_hyprland_logo = true,
-        on_focus_under_fullscreen = 1
+        on_focus_under_fullscreen = 1,
+        key_press_enables_dpms = true,
+        mouse_move_enables_dpms = true
     }
 })
 
