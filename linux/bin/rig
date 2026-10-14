@@ -93,8 +93,8 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
 
   rig ticket add <id> --project P --title T [--status S] [--owner O] [--evidence E] [--session SES] [--area A]
   rig ticket list [--project P] [--status S] [--area A] [--porcelain]
-  rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES] [--area A]
-  rig ticket done <id> [--close-seat]
+  rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES] [--area A] [--force]
+  rig ticket done <id> [--close-seat] [--force]
   rig ticket rm <id>
   rig ticket backfill              asigna area faltante y numera tickets (migracion)
   rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
@@ -107,6 +107,9 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig central [--interval SEG] [--focus|--no-focus] [--rebuild] [--label L] [--cwd DIR]
                                      abre el workspace herdr "CENTRAL" con 5 panes en vivo
                                      (events/board/scan/agents/queue); idempotente
+  rig spaces [--porcelain] | rig spaces reconcile | rig spaces --watch [--interval SEG]
+                                     mapea ticket<->space herdr y marca done el ticket cuyo
+                                     space el usuario cerro (senal de resolucion)
 
   rig events [--watch] [--ticket X] [--seat S] [--kind K] [--since 30m] [--limit N] [--porcelain]
                                      feed append-only de lo que hacen main y las sillas
@@ -123,7 +126,7 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
                              [--model M] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--spawn] [--attach]
   rig work <ticket-id>               alias de 'work new'
   rig work list [--project P] [--status S] [--porcelain]
-  rig work finish <ticket-id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]
+  rig work finish <ticket-id> [--message M] [--no-verify] [--no-commit] [--close-seat] [--keep-open] [--force]
   rig work rm <ticket-id> [--delete-branch] [--force]
 
   rig --selftest                     autotest (tmux + store de tickets)
@@ -153,16 +156,57 @@ herdr (ESPACIO POR COSA NUEVA): cada unidad de trabajo nueva abre su PROPIO spac
   Desactivar: RIG_HERDR=0 o --no-herdr.
 espejo tmux: ventana extra en la sesion de espejos (RIG_MIRROR_SESSION; autodetectada).
   Desactivar: --no-mirror.
-ciclo de vida: al cerrar un ticket (work finish / ticket done) se matan TODAS las sillas de su
-  space y se cierra el space (solo si el space es de ese ticket), mas sus ventanas espejo
-  (--keep-open / --no-close-seat lo evita). Nunca cierra spaces ajenos ni sillas sin ticket
-  asociado; ante duda deja el ticket blocked.
+ciclo de vida: por defecto NADIE cierra sillas ni spaces. Al terminar su unidad, la silla
+  marca su ticket done/blocked y DEJA la silla y el space vivos; el usuario cierra el space y
+  eso marca el ticket done (rig spaces reconcile). El cierre de silla/space es explicito
+  (--close-seat) y nunca toca sillas ajenas ni spaces ajenos; ante duda deja el ticket blocked.
 EOF
 }
 
 valid_name() { [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]]; }
 session_exists() { tmux has-session -t "$1" 2>/dev/null; }
 is_seat() { [ "$(tmux show-options -t "$1" -v @agent 2>/dev/null || true)" = "1" ]; }
+
+seat_foreground() {
+  tmux display-message -p -t "$1" '#{pane_current_command}' 2>/dev/null
+}
+
+seat_agent_alive() {
+  local seat="$1" fg
+  session_exists "$seat" || return 1
+  fg=$(seat_foreground "$seat")
+  [ -n "$fg" ] || return 1
+  case " $SHELLS_COMMANDS " in
+    *" $fg "*) return 1 ;;
+  esac
+  return 0
+}
+
+seat_owns_ticket() {
+  local seat="$1" key="$2" norm tseat wt cwd
+  norm=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')
+  [ "$seat" = "$norm" ] && return 0
+  [ "$seat" = "work-$norm" ] && return 0
+  tseat=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.seat // ""' "$TICKETS_FILE" 2>/dev/null | head -n1)
+  [ -n "$tseat" ] && [ "$seat" = "$tseat" ] && return 0
+  wt=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree // ""' "$TICKETS_FILE" 2>/dev/null | head -n1)
+  if [ -n "$wt" ]; then
+    cwd=$(tmux show-options -t "$seat" -v @agent_cwd 2>/dev/null)
+    [ "$cwd" = "$wt" ] && return 0
+  fi
+  return 1
+}
+
+seat_can_touch_ticket() {
+  local key="$1" actor
+  [ "$TICKETS_FILE" = "$HOME/.config/opencode/tickets.json" ] || return 0
+  actor=$(events_actor)
+  [ "$actor" = "main" ] && return 0
+  [ "$actor" = "$SELFTEST_SESSION" ] && return 0
+  is_seat "$actor" 2>/dev/null || return 0
+  [ "${RIG_FORCE_CROSS:-0}" = "1" ] && return 0
+  seat_owns_ticket "$actor" "$key"
+}
 
 mark_seat() {
   local name="$1" cmd="$2" cwd="$3" created="$4"
@@ -379,6 +423,7 @@ seat_has_agent_env() {
 
 seat_activity_state() {
   local seat="$1" tail
+  seat_agent_alive "$seat" || { printf '%s' dead; return 0; }
   tail=$(tmux capture-pane -p -t "$seat" -S -12 2>/dev/null)
   if printf '%s' "$tail" | grep -qiE 'esc (to )?interrupt|esc interrupt'; then
     printf '%s' working; return 0
@@ -414,9 +459,13 @@ herdr_sync_seat() {
     herdr_set_title "$pid" "$agent" "$seat"
   fi
   if [ -n "$pid" ] && ! seat_has_agent_env "$seat"; then
-    state=$(seat_activity_state "$seat")
-    herdr pane report-agent "$pid" --source rig:derive --agent "${agent:-opencode}" --state "$state" >/dev/null 2>&1 || true
-    [ "$quiet" = "1" ] || info "  $seat -> $ws/$tid [$state derivado]"
+    if seat_agent_alive "$seat"; then
+      state=$(seat_activity_state "$seat")
+      herdr pane report-agent "$pid" --source rig:derive --agent "${agent:-opencode}" --state "$state" >/dev/null 2>&1 || true
+      [ "$quiet" = "1" ] || info "  $seat -> $ws/$tid [$state derivado]"
+    else
+      [ "$quiet" = "1" ] || info "  $seat -> $ws/$tid [muerta: sin agente, no se reporta estado]"
+    fi
   else
     [ "$quiet" = "1" ] || info "  $seat -> $ws/$tid [plugin herdr]"
   fi
@@ -524,6 +573,10 @@ close_seat_for_ticket() {
   local key="$1" wt="$2" seat self=""
   seat=$(seat_for_ticket "$key")
   if [ -n "${TMUX:-}" ]; then self=$(tmux display-message -p '#{session_name}' 2>/dev/null || true); fi
+  if [ -n "$self" ] && [ "$self" != "$seat" ] && is_seat "$self" 2>/dev/null && [ "${RIG_FORCE_CROSS:-0}" != "1" ]; then
+    info "politica sillas: $self no cierra la silla ajena $seat; el usuario cierra el espacio"
+    return 0
+  fi
   if [ "$self" = "$seat" ]; then
     info "silla $seat en uso (no me auto-mato); cierrala a mano o usa --keep-open"
     return 0
@@ -628,6 +681,17 @@ cmd_spawn() {
   tmux new-session -d -s "$name" -c "$cwd" "${env_args[@]}" || die "no se pudo crear la sesion $name"
   mark_seat "$name" "$cmd" "$cwd" "$(date +%s)"
   if [ -n "$ticket" ]; then tmux set-option -t "$name" @agent_ticket "$ticket" 2>/dev/null || true; fi
+  if [ -n "$ticket" ] && [ -n "$ws" ]; then
+    local tk sout
+    store_lock
+    store_ensure
+    tk=$(resolve_ref "$ticket" 2>/dev/null || true)
+    if [ -n "$tk" ]; then
+      sout=$(jq --arg id "$tk" --arg sp "$ws" --arg sl "$space_lbl" --arg st "$name" \
+        '.tickets |= map(if .id==$id then . + {space:$sp, space_label:$sl, seat:$st} else . end)' "$TICKETS_FILE") \
+        && store_write <<<"$sout"
+    fi
+  fi
   tmux set-option -t "$name" set-titles-string "$name" 2>/dev/null || true
   tmux send-keys -t "$name" -l -- "$cmd"
   tmux send-keys -t "$name" Enter
@@ -1069,11 +1133,22 @@ event_emit() {
   events_append_raw "$line"
 }
 
+STORE_LOCKED=0
 store_lock() {
+  [ "$STORE_LOCKED" = "1" ] && return 0
   if command -v flock >/dev/null 2>&1; then
     exec 9>"$TICKETS_LOCK"
     flock 9
   fi
+  STORE_LOCKED=1
+}
+
+store_unlock() {
+  [ "$STORE_LOCKED" = "1" ] || return 0
+  if command -v flock >/dev/null 2>&1; then
+    flock -u 9 2>/dev/null || true
+  fi
+  STORE_LOCKED=0
 }
 
 store_ensure() {
@@ -1231,8 +1306,8 @@ rig ticket - store de tickets (~/.config/opencode/tickets.json)
 
   rig ticket add <id> --project P --title T [--status S] [--owner O] [--evidence E] [--session SES] [--area A]
   rig ticket list [--project P] [--status S] [--area A] [--porcelain]
-  rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES] [--area A]
-  rig ticket done <id> [--close-seat]
+  rig ticket set <id> [--status S] [--owner O] [--evidence E] [--title T] [--project P] [--session SES] [--area A] [--force]
+  rig ticket done <id> [--close-seat] [--force]
   rig ticket rm <id>
   rig ticket backfill              asigna area faltante y numera tickets (migracion)
   rig ticket metrics [<id>...] [--project P] [--status S] [--porcelain]
@@ -1322,6 +1397,7 @@ ticket_set() {
       --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
       --session) [ $# -ge 2 ] || die "--session requiere valor"; ses="$2"; shift 2 ;;
       --area) [ $# -ge 2 ] || die "--area requiere valor"; area="$2"; shift 2 ;;
+      --force) RIG_FORCE_CROSS=1; shift ;;
       -*) die "opcion desconocida: $1" ;;
       *) [ -z "$ref" ] || die "sobra argumento: $1"; ref="$1"; shift ;;
     esac
@@ -1335,6 +1411,9 @@ ticket_set() {
   local key d out
   key=$(resolve_ref "$ref")
   [ -n "$key" ] || die "ticket no encontrado: $ref"
+  if [ -n "$status" ] && ! seat_can_touch_ticket "$key"; then
+    die "politica sillas: $(events_actor) no cambia el estado del ticket $key (ajeno); deja que su silla o el usuario lo cierren (override explicito: --force)"
+  fi
   d=$(now_date)
   out=$(jq --arg id "$key" --arg s "$status" --arg o "$owner" --arg e "$evidence" \
     --arg t "$title" --arg p "$project" --arg ses "$ses" --arg a "$area" --arg d "$d" '
@@ -1373,6 +1452,7 @@ ticket_rm() {
   local key out
   key=$(resolve_ref "$ref")
   [ -n "$key" ] || die "ticket no encontrado: $ref"
+  seat_can_touch_ticket "$key" || die "politica sillas: $(events_actor) no elimina el ticket $key (ajeno)"
   out=$(jq --arg id "$key" '.tickets |= map(select(.id!=$id))' "$TICKETS_FILE") || die "jq fallo"
   store_write <<<"$out"
   event_emit ticket-rm "ticket $key eliminado" --ticket "$key"
@@ -1500,6 +1580,7 @@ cmd_ticket() {
       for a in "$@"; do
         case "$a" in
           --close-seat) close=1 ;;
+          --force) dargs+=("--force") ;;
           *) dargs+=("$a"); [ -z "$tid" ] && tid="$a" ;;
         esac
       done
@@ -1638,12 +1719,12 @@ rig work - cambios paralelos y trazables: un git worktree + branch por ticket
       ventana espejo en tmux.
   rig work list [--project P] [--status S] [--porcelain]
       tickets con worktree: branch, commits y si el arbol sigue vivo.
-  rig work finish <id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]
+  rig work finish <id> [--message M] [--no-verify] [--no-commit] [--close-seat] [--keep-open] [--force]
       corre 'verify auto' sobre lo cambiado, commitea en el branch y cierra el
-      ticket (done) con evidencia branch/commit/verify. No mergea. Al cerrar,
-      mata TODAS las sillas de su space y cierra el space, mas sus ventanas
-      espejo (--keep-open o --no-close-seat lo evitan). Nunca mata main ni
-      sillas sin ticket.
+      ticket (done) con evidencia branch/commit/verify. No mergea. Por defecto
+      DEJA la silla y el space vivos: el usuario cierra el space y eso marca el
+      ticket done (rig spaces reconcile); --close-seat cierra silla+space de
+      forma explicita. Nunca mata main ni sillas/spaces ajenos.
   rig work rm <id> [--delete-branch] [--force]
       elimina el worktree (conserva el branch salvo --delete-branch).
 
@@ -1807,12 +1888,13 @@ work_list() {
 
 work_finish() {
   need_jq; need_git
-  local id="" message="" do_verify=1 do_commit=1 keep_open=0 force=0 porcelain=0 close_seat=1
+  local id="" message="" do_verify=1 do_commit=1 keep_open=0 force=0 porcelain=0 close_seat=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --message|-m) [ $# -ge 2 ] || die "--message requiere valor"; message="$2"; shift 2 ;;
       --no-verify) do_verify=0; shift ;;
       --no-commit) do_commit=0; shift ;;
+      --close-seat) close_seat=1; shift ;;
       --keep-open) keep_open=1; close_seat=0; shift ;;
       --no-close-seat) close_seat=0; shift ;;
       --force) force=1; shift ;;
@@ -1821,7 +1903,7 @@ work_finish() {
       *) [ -z "$id" ] || die "sobra argumento: $1"; id="$1"; shift ;;
     esac
   done
-  [ -n "$id" ] || die "uso: rig work finish <ticket-id> [--message M] [--no-verify] [--no-commit] [--keep-open] [--no-close-seat] [--force]"
+  [ -n "$id" ] || die "uso: rig work finish <ticket-id> [--message M] [--no-verify] [--no-commit] [--close-seat] [--keep-open] [--force]"
   valid_ticket_id "$id" || die "ticket id invalido: $id"
 
   store_lock
@@ -1829,6 +1911,9 @@ work_finish() {
   local key
   key=$(store_key "$id")
   [ -n "$key" ] || die "ticket no encontrado: $id"
+  if [ "$force" != "1" ] && ! seat_can_touch_ticket "$key"; then
+    die "politica sillas: $(events_actor) no cierra el ticket $key (ajeno); su silla o el usuario lo cierran"
+  fi
   local wt branch project title repo
   wt=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree // ""' "$TICKETS_FILE")
   branch=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.branch // ""' "$TICKETS_FILE")
@@ -1840,8 +1925,7 @@ work_finish() {
   git_root "$wt" >/dev/null || die "worktree no es repo git: $wt"
   [ -n "$repo" ] || repo=$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null | sed 's:/\.git$::')
 
-  exec 9>&- 2>/dev/null || true
-
+  store_unlock
   local vstatus="SKIP"
   if [ "$do_verify" = "1" ]; then
     local vbin=""
@@ -1890,7 +1974,6 @@ work_finish() {
   fi
 
   store_lock
-  store_lock
   local prev_commits commits evidence status d out
   prev_commits=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.commits // ""' "$TICKETS_FILE")
   commits="$prev_commits"
@@ -1938,6 +2021,7 @@ work_rm() {
   local key
   key=$(store_key "$id")
   [ -n "$key" ] || die "ticket no encontrado: $id"
+  seat_can_touch_ticket "$key" || die "politica sillas: $(events_actor) no elimina el worktree del ticket $key (ajeno)"
   local wt branch repo
   wt=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.worktree // ""' "$TICKETS_FILE")
   branch=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.branch // ""' "$TICKETS_FILE")
@@ -2251,9 +2335,12 @@ rig agents - estado de cada silla/agente en vivo (working|idle|blocked)
   rig agents [--watch] [--porcelain] [--interval SEG]
 
   Por cada silla (sesion tmux marcada @agent) muestra: silla, agente, estado
-  (working|idle|blocked), la fuente y el pane herdr. Fuente "plugin" = estado
+  (working|idle|blocked|dead), la fuente y el pane herdr. Fuente "plugin" = estado
   reportado por herdr (snapshot pane.agent_status); fuente "derive" = inferido del
   contenido del pane cuando el panel de agentes de herdr no trae datos (fallback).
+  Fuente "probe" y estado "dead" = la sesion existe pero el agente no corre (el
+  foreground es un shell: la silla murio o nunca arranco), asi el panel no queda
+  en working para siempre.
   --watch refresca cada --interval seg (default 2, no combina con --porcelain).
   --porcelain devuelve un JSON array de {seat,agent,state,source,pane,activity}.
 EOF
@@ -2277,13 +2364,18 @@ agents_render() {
     pid=$(tmux show-environment -t "$name" HERDR_PANE_ID 2>/dev/null | sed -n 's/^HERDR_PANE_ID=//p' | head -n1)
     state=''
     source=''
-    if [ -n "$pid" ]; then
-      state=$(printf '%s' "$statusmap" | jq -r --arg p "$pid" '.[$p] // empty' 2>/dev/null)
-      [ -n "$state" ] && source=plugin
-    fi
-    if [ -z "$state" ]; then
-      state=$(seat_activity_state "$name")
-      source=derive
+    if ! seat_agent_alive "$name"; then
+      state=dead
+      source=probe
+    else
+      if [ -n "$pid" ]; then
+        state=$(printf '%s' "$statusmap" | jq -r --arg p "$pid" '.[$p] // empty' 2>/dev/null)
+        [ -n "$state" ] && source=plugin
+      fi
+      if [ -z "$state" ]; then
+        state=$(seat_activity_state "$name")
+        source=derive
+      fi
     fi
     act=$(tmux display-message -p -t "$name" '#{session_activity}' 2>/dev/null || echo 0)
     row="${row}${name}${SEP}${agent:-opencode}${SEP}${state}${SEP}${source}${SEP}${pid}${SEP}${act}"$'\n'
@@ -2305,7 +2397,7 @@ agents_render() {
     local sc="$C_OFF"
     case "$state" in
       working) sc="$C_PROG" ;;
-      blocked) sc="$C_BLOCK" ;;
+      blocked|dead) sc="$C_BLOCK" ;;
     esac
     printf '  %-18s %-14s %s%-9s%s %-8s %s\n' "$(trunc "$seat" 18)" "$(trunc "$agent" 14)" "$sc" "$state" "$C_OFF" "$source" "${pane:--}"
   done
@@ -2415,6 +2507,112 @@ cmd_queue() {
   else
     queue_render
   fi
+}
+
+spaces_usage() {
+  cat >&2 <<'EOF'
+rig spaces - mapea el space herdr de cada ticket y reconcilia el cierre por el usuario
+
+  rig spaces [--porcelain]
+  rig spaces reconcile [--porcelain]
+  rig spaces --watch [--interval SEG]
+
+  Cada unidad de trabajo abre su propio space herdr y el ticket guarda su id
+  (campo space). El usuario cierra el space cuando da la cosa por resuelta: esa es
+  la senal de resolucion. 'reconcile' detecta los spaces que ya no existen y marca
+  su ticket done con evidencia "space cerrado por el usuario"; --watch lo mantiene
+  al dia. No cierra ni mata sillas: solo refleja la resolucion del usuario.
+EOF
+}
+
+spaces_rows() {
+  jq -r '.tickets[]|select((.space//"")!="")|[.id,(.num//0|tostring),(.space//""),(.space_label//""),(.status//""),(.worktree//"")]|join("\u001f")' "$TICKETS_FILE" 2>/dev/null
+}
+
+spaces_list() {
+  local porcelain="$1" rows open_ids count=0
+  open_ids='[]'
+  if herdr_ok; then
+    open_ids=$(herdr workspace list 2>/dev/null | jq -c '[.result.workspaces[].workspace_id]' 2>/dev/null || echo '[]')
+  fi
+  [ -n "$open_ids" ] || open_ids='[]'
+  rows=$(spaces_rows)
+  if [ "$porcelain" = "1" ]; then
+    printf '%s\n' "$rows" | jq -Rn --argjson open "$open_ids" '
+      [inputs | select(length>0) | split("\u001f") as $f
+        | ($f[2]) as $sp
+        | {id:$f[0], num:($f[1]|tonumber?), space:$sp, space_label:$f[3], status:$f[4], worktree:$f[5]}
+        | . + {live: ($open | index($sp) != null)}]' 2>/dev/null
+    return 0
+  fi
+  if [ -z "$rows" ]; then
+    info "sin spaces registrados en tickets"
+    return 0
+  fi
+  printf '%s%-9s %-4s %-12s %-6s %-11s %s%s\n' "$C_HEAD" "TICKET" "NUM" "SPACE" "LIVE" "ESTADO" "LABEL" "$C_OFF"
+  while IFS=$'\x1f' read -r tid tnum tsp tlabel tstat twt; do
+    [ -n "$tid" ] || continue
+    local live="no"
+    [ -n "$open_ids" ] && printf '%s' "$open_ids" | grep -qF "\"$tsp\"" && live="si"
+    printf '%-9s %-4s %-12s %-6s %-11s %s\n' "$(trunc "$tid" 9)" "#$tnum" "$(trunc "$tsp" 12)" "$live" "$tstat" "$(trunc "$tlabel" 30)"
+    count=$((count + 1))
+  done <<<"$rows"
+  info "$count space(s) mapeado(s)"
+}
+
+spaces_reconcile() {
+  local open_ids ids tid tsp out d nclosed=0
+  open_ids=$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[].workspace_id' 2>/dev/null)
+  ids=$(jq -r '.tickets[]|select((.space//"")!="" and .status=="in-progress")|[.id,(.space//"")]|join("\u001f")' "$TICKETS_FILE" 2>/dev/null)
+  [ -n "$ids" ] || { info "sin tickets in-progress con space registrado"; return 0; }
+  store_lock
+  store_ensure
+  while IFS=$'\x1f' read -r tid tsp; do
+    [ -n "$tid" ] || continue
+    [ -n "$tsp" ] || continue
+    printf '%s\n' "$open_ids" | grep -qxF "$tsp" && continue
+    d=$(now_date)
+    out=$(jq --arg id "$tid" --arg sp "$tsp" --arg e "space $tsp cerrado por el usuario (resolucion por cierre de espacio)" --arg d "$d" '
+      .tickets |= map(if .id==$id then . + {status:"done", evidence:$e, updated:$d} else . end)' "$TICKETS_FILE") \
+      && store_write <<<"$out"
+    event_emit ticket-done "ticket $tid -> done: space $tsp cerrado por el usuario" --ticket "$tid" \
+      --data "$(jq -nc --arg sp "$tsp" '{space:$sp,reason:"space-closed-by-user"}' 2>/dev/null)"
+    info "ticket $tid -> done (space $tsp cerrado por el usuario)"
+    nclosed=$((nclosed + 1))
+  done <<<"$ids"
+  [ "$nclosed" -gt 0 ] || info "sin spaces cerrados por reconciliar"
+}
+
+cmd_spaces() {
+  need_jq
+  local action=list porcelain=0 watch=0 interval=3
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      reconcile|sync) action=reconcile; shift ;;
+      --porcelain|-p) porcelain=1; shift ;;
+      --watch|-w) watch=1; shift ;;
+      --interval) [ $# -ge 2 ] || die "--interval requiere valor"; interval="$2"; shift 2 ;;
+      -h|--help|help) spaces_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) die "sobra argumento: $1" ;;
+    esac
+  done
+  if [ "$watch" = "1" ] && [ "$porcelain" = "1" ]; then die "--watch no soporta --porcelain"; fi
+  store_ensure
+  if [ "$action" = "reconcile" ] || [ "$watch" = "1" ]; then
+    herdr_ok || die "herdr no disponible para reconciliar spaces (RIG_HERDR=1)"
+  fi
+  if [ "$watch" = "1" ]; then
+    trap 'printf "%s\n" "$C_SHOW"; exit 0' INT TERM
+    printf '%s' "$C_HIDE"
+    while true; do
+      printf '\033[H\033[2J'
+      printf '%srig spaces%s  %s  (Ctrl-C para salir)\n' "$C_HEAD" "$C_OFF" "$(date '+%Y-%m-%d %H:%M:%S')"
+      spaces_reconcile
+      sleep "$interval"
+    done
+  fi
+  if [ "$action" = "reconcile" ]; then spaces_reconcile; else spaces_list "$porcelain"; fi
 }
 
 central_usage() {
@@ -2764,6 +2962,7 @@ selftest() {
   local s="$SELFTEST_SESSION" out tmp rc=0 i edir efile
   edir=$(mktemp -d)
   export RIG_EVENTS_FILE="$edir/events.jsonl"
+  export RIG_TICKETS_LOCK="${RIG_TICKETS_LOCK:-$edir/tickets.lock}"
   tmux kill-session -t "$s" 2>/dev/null || true
   if ! tmux new-session -d -s "$s"; then
     printf 'rig selftest FAIL: no pude crear la sesion de prueba\n' >&2
@@ -3182,6 +3381,7 @@ case "$cmd" in
   agents|a) cmd_agents "$@" ;;
   queue|q) cmd_queue "$@" ;;
   central|center|c) cmd_central "$@" ;;
+  spaces|space|sp) cmd_spaces "$@" ;;
   --selftest|selftest) selftest ;;
   ''|-h|--help|help) usage; [ -z "$cmd" ] && exit 1 || exit 0 ;;
   *) usage; exit 1 ;;

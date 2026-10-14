@@ -10,6 +10,8 @@ else SRC="$HOME/dotfiles/linux/bin/rig"; fi
 LINK="$HOME/.local/bin/rig"
 STORE="$HOME/.config/opencode/tickets.json"
 AREAS="hr hypr shell audio meta infra foldertinder"
+export RIG_TICKETS_LOCK="${RIG_TICKETS_LOCK:-$(mktemp "${TMPDIR:-/tmp}/rig-verify-lock.XXXXXX")}"
+export RIG_EVENTS_FILE="${RIG_EVENTS_FILE:-$(mktemp "${TMPDIR:-/tmp}/rig-verify-events.XXXXXX")}"
 
 rc=0
 ok() { printf 'OK\t%s\t%s\n' "$1" "$2"; }
@@ -714,4 +716,58 @@ else
   skip "tickets-idle" "tmux/jq no disponible"
 fi
 
+if out=$("$SRC" spaces --help 2>&1); then
+  if printf '%s' "$out" | grep -q 'space' && printf '%s' "$out" | grep -qi 'reconcile' && printf '%s' "$out" | grep -qi 'usuario'; then
+    ok "spaces-cli" "rig spaces documenta el mapeo ticket<->space y el cierre por el usuario"
+  else
+    fail "spaces-cli" "rig spaces --help no describe el mapeo/cierre por el usuario"
+  fi
+else
+  fail "spaces-cli" "rig spaces --help fallo"
+fi
+
+lifeok2=1
+grep -q 'seat_can_touch_ticket' "$SRC" || lifeok2=0
+grep -q 'seat_owns_ticket' "$SRC" || lifeok2=0
+grep -q 'store_unlock' "$SRC" || lifeok2=0
+grep -q 'close_seat=0' "$SRC" || lifeok2=0
+if [ "$lifeok2" = "1" ]; then
+  ok "no-close-policy" "rig no cierra sillas/tickets ajenos y deja la silla/space vivos por defecto"
+else
+  fail "no-close-policy" "rig sin guard de propiedad (seat_can_touch_ticket/seat_owns_ticket) o sin default no-close"
+fi
+
+stateok=1
+grep -q 'seat_agent_alive' "$SRC" || stateok=0
+grep -q 'dead' "$SRC" || stateok=0
+if "$SRC" agents --help 2>&1 | grep -q 'dead'; then :; else stateok=0; fi
+if [ "$stateok" = "1" ]; then
+  ok "state-fidelity" "rig agents detecta silla muerta/sin agente (estado dead) y no la deja en working"
+else
+  fail "state-fidelity" "rig agents no detecta silla muerta (seat_agent_alive/dead)"
+fi
+
+sptmp=$(mktemp -d)
+printf '{"version":1,"tickets":[{"id":"SPT","project":"meta","title":"titulo de prueba para el space","status":"in-progress","owner":"x","created":"2026-10-13","updated":"2026-10-13","evidence":"","num":900,"space":"ws_gone"}]}' >"$sptmp/tickets.json"
+mkdir -p "$sptmp/bin"
+cat >"$sptmp/bin/herdr" <<'FAKEH'
+#!/usr/bin/env bash
+if [ "$1 $2" = "workspace list" ]; then printf '{"result":{"workspaces":[]}}'; exit 0; fi
+exit 0
+FAKEH
+chmod +x "$sptmp/bin/herdr"
+if PATH="$sptmp/bin:$PATH" RIG_HERDR=1 RIG_TICKETS_FILE="$sptmp/tickets.json" RIG_TICKETS_LOCK="$sptmp/lock" \
+   RIG_EVENTS_FILE="$sptmp/events.jsonl" "$SRC" spaces reconcile >/dev/null 2>&1; then
+  st=$(jq -r '.tickets[0].status' "$sptmp/tickets.json" 2>/dev/null)
+  if [ "$st" = "done" ]; then
+    ok "space-done-on-close" "space cerrado por el usuario marca el ticket done"
+  else
+    fail "space-done-on-close" "reconcile no marco done el ticket (status=$st)"
+  fi
+else
+  fail "space-done-on-close" "rig spaces reconcile fallo con herdr simulado"
+fi
+rm -rf "$sptmp"
+
+rm -f "$RIG_TICKETS_LOCK" "$RIG_EVENTS_FILE"
 exit "$rc"
