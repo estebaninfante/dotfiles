@@ -1,18 +1,13 @@
 local variables = require("base.variables")
-local looknfeel = require("looknfeel")
 
 hl.window_rule({ match = { class = "swappy" }, no_anim = true })
 
-if looknfeel.blur_enabled then
-    hl.window_rule({ match = { class = ".*" }, opacity = "0.95 0.75" })
-    hl.window_rule({ match = { class = "kitty" }, opacity = "0.90" })
-    hl.window_rule({ match = { class = "herdr" }, opacity = "0.90" })
-    hl.window_rule({ match = { class = "brave-browser" }, opacity = "0.88 0.82" })
-else
-    hl.window_rule({ match = { class = ".*" }, opacity = "1.0 1.0" })
-end
+hl.window_rule({ match = { class = ".*" }, opacity = "1.0 1.0" })
+hl.window_rule({ match = { class = "kitty" }, opacity = "1.0 1.0" })
+hl.window_rule({ match = { class = "herdr" }, opacity = "1.0 1.0" })
+hl.window_rule({ match = { class = "brave-browser" }, opacity = "1.0 1.0" })
 hl.window_rule({ match = { float = true }, opacity = "1.0 1.0" })
-hl.window_rule({ match = { class = "discord", float = true }, opacity = "0.85 0.80" })
+hl.window_rule({ match = { class = "discord", float = true }, opacity = "1.0 1.0" })
 hl.window_rule({ match = { class = "^foldertinder$" }, workspace = "special:ft silent", no_initial_focus = 1, no_anim = true, border_size = 0, no_blur = 1, opacity = "1.0 1.0" })
 hl.window_rule({ match = { class = "com.stremio.Stremio" }, idle_inhibit = "always" })
 hl.window_rule({ match = { class = "leia" }, workspace = "10" })
