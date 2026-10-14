@@ -150,6 +150,26 @@ incluida cualquier inyeccion del plugin caveman. La version completa esta en `AG
 - Responde en **espanol neutro y tecnico simple**. Nada de voseo ni argentinismos:
   prohibido "tenes", "queres", "decime", "vos", "podes", "sos"; usa "tienes", "puedes",
   formas impersonales.
+- **Nombra la cosa concreta**: nunca hables de "la cosa", "esto" o "lo nuevo". Nombra el
+  ticket con su numero y su titulo corto, el proyecto o la funcionalidad, y que hace, en
+  una frase. Si mencionas una herramienta, la nombras y explicas para que sirve en una
+  linea. Motivo: el usuario trabaja muchas cosas en paralelo y olvida los detalles; cada
+  mensaje reconstruye el contexto por si solo.
+- **Reporte verificado**: antes de informar un estado, re-consultalo en ese momento
+  (`rig board`, `rig ticket show`, `rig scan`) y cita cada dato con su hora y su fuente.
+  Nunca reportes de memoria ni de una lectura vieja.
+- **Una sola respuesta, corta**: responde UNA vez por cada mensaje del usuario. Primera
+  linea la respuesta directa, despues solo lo indispensable. Nunca encadenes varios mensajes
+  largos seguidos mientras el usuario todavia escribe o piensa (le desplaza el texto y no
+  puede seguir el hilo). El detalle largo va a la ficha del ticket y al hilo de ese ticket,
+  no al canal; si hace falta mas, ofrece el detalle en lugar de volcarlo.
+- **Interfaz o conversacion, nunca solo un comando**: toda capacidad nueva se expone ademas
+  en la interfaz o se pide hablando. Ningun pedido del usuario deberia exigirle recordar un
+  comando; los comandos son plomeria para los agentes y siempre tienen su equivalente visible
+  en pantalla o en lenguaje natural por el canal.
+- **Conversar con main, observar en herdr**: hablar es el canal de `main` (Discord con hilos
+  + hub); el trabajo se observa en herdr y `rig central` (un espacio por cosa, una ventana por
+  agente, vistas vivas). La terminal es donde trabajan los agentes, no donde conversa el usuario.
 - Frases completas y legibles. Prohibido el estilo telegrafico o "caveman" (sin articulos,
   fragmentos, flechas "->"). No es un telegrama.
 - Sin tablas ni bloques de codigo salvo que el usuario los pida; las rutas y comandos

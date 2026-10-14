@@ -396,6 +396,98 @@ else
   skip "launch-failed-blocked" "tmux no disponible"
 fi
 
+ftmp=$(mktemp)
+printf '{"version":1,"tickets":[]}\n' >"$ftmp"
+RIG_TICKETS_FILE="$ftmp" RIG_METRICS=0 "$SRC" ticket add SHOWT --project demo --title "ticket de prueba para la ficha de visibilidad" --area meta >/dev/null 2>&1
+
+if out=$(RIG_TICKETS_FILE="$ftmp" RIG_METRICS=0 "$SRC" ticket show SHOWT 2>&1); then
+  if printf '%s' "$out" | grep -q 'Que se hizo'; then
+    ok "ticket-show-cli" "rig ticket show imprime la ficha"
+  else
+    fail "ticket-show-cli" "ficha sin seccion Que se hizo"
+  fi
+else
+  fail "ticket-show-cli" "rig ticket show fallo: $(printf '%s' "$out" | head -n1)"
+fi
+
+if out=$(RIG_TICKETS_FILE="$ftmp" RIG_METRICS=0 "$SRC" ticket show SHOWT --porcelain 2>&1) && printf '%s' "$out" | jq -e '.id=="SHOWT"' >/dev/null 2>&1; then
+  ok "ticket-show-porcelain" "JSON valido con el id del ticket"
+else
+  fail "ticket-show-porcelain" "salida no es JSON valido con .id"
+fi
+
+nowout=$(RIG_TICKETS_FILE="$ftmp" RIG_METRICS=0 "$SRC" ticket show SHOWT --no-metrics 2>&1 || true)
+if [[ "$nowout" == *"no modifico nada"* ]]; then
+  ok "ticket-show-noworktree" "sin worktree avisa que no modifico nada"
+else
+  fail "ticket-show-noworktree" "no avisa el estado sin worktree"
+fi
+
+if RIG_TICKETS_FILE="$ftmp" RIG_METRICS=0 "$SRC" board --detail >/dev/null 2>&1; then
+  ok "board-detail" "board --detail no falla"
+else
+  fail "board-detail" "board --detail fallo"
+fi
+
+rm -f "$ftmp"
+
+if grep -q 'ficha' "$SRC" && grep -q 'board --detail' "$SRC"; then
+  ok "central-ficha" "central incluye el pane ficha"
+else
+  fail "central-ficha" "la central no arma el pane ficha"
+fi
+
+if grep -q 'notify_state_change' "$SRC" && grep -q 'RIG_STATE_NOTIFY' "$SRC"; then
+  gtmp=$(mktemp -d)
+  nbin="$gtmp/notify-send"
+  printf '#!/bin/sh\necho "$*" >> %s\n' "$gtmp/log" >"$nbin"
+  chmod +x "$nbin"
+  stmp=$(mktemp)
+  printf '{"version":1,"tickets":[]}\n' >"$stmp"
+  RIG_TICKETS_FILE="$stmp" RIG_METRICS=0 "$SRC" ticket add NOT1 --project demo --title "ticket de prueba del aviso de estado" >/dev/null 2>&1
+  RIG_TICKETS_FILE="$stmp" RIG_METRICS=0 RIG_NOTIFY_BIN="$nbin" "$SRC" ticket set NOT1 --status "done" >/dev/null 2>&1
+  if [ -s "$gtmp/log" ]; then
+    ok "state-notify" "el cambio a done dispara el aviso de escritorio"
+  else
+    fail "state-notify" "no disparo el aviso al cerrar el ticket"
+  fi
+  rm -rf "$gtmp" "$stmp"
+else
+  fail "state-notify" "la fuente no define notify_state_change/RIG_STATE_NOTIFY"
+fi
+
+if command -v sqlite3 >/dev/null 2>&1; then
+  xtmp=$(mktemp -d)
+  xdb="$xtmp/opencode.db"
+  sqlite3 "$xdb" "CREATE TABLE session(id TEXT, title TEXT, directory TEXT, agent TEXT, model TEXT, cost REAL, tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER, time_created INTEGER, time_updated INTEGER);
+    CREATE TABLE message(id TEXT, session_id TEXT, data TEXT);
+    CREATE TABLE part(id TEXT, message_id TEXT, session_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT);
+    INSERT INTO session VALUES('ses_x','t','/tmp','build','m',0.1,100,20,5,0,0,1000,2000);
+    INSERT INTO message VALUES('msg_1','ses_x','{\"role\":\"user\"}');
+    INSERT INTO part VALUES('prt_1','msg_1','ses_x',1500,1500,'{\"type\":\"text\",\"text\":\"hola\"}');" >/dev/null 2>&1
+
+  if out=$(RIG_DB="$xdb" RIG_EXPORT_DIR="$xtmp/out" "$SRC" export ses_x 2>&1); then
+    rpath=$(head -n1 <<<"$out")
+    if [ -f "$rpath" ] && [ -s "$rpath" ]; then
+      ok "export-cli" "rig export escribe el archivo y devuelve la ruta"
+    else
+      fail "export-cli" "no devolvio una ruta valida: $out"
+    fi
+  else
+    fail "export-cli" "rig export fallo: $(head -n1 <<<"$out")"
+  fi
+
+  if out=$(RIG_DB="$xdb" RIG_EXPORT_DIR="$xtmp/out" "$SRC" export ses_x --format both --porcelain 2>&1) && jq -e '.kind=="session" and (.files|length>=1)' >/dev/null 2>&1 <<<"$out"; then
+    ok "export-porcelain" "rig export --porcelain devuelve JSON con los archivos"
+  else
+    fail "export-porcelain" "salida no es JSON valido con files"
+  fi
+  rm -rf "$xtmp"
+else
+  skip "export-cli" "sqlite3 no disponible"
+  skip "export-porcelain" "sqlite3 no disponible"
+fi
+
 atmp=$(mktemp)
 printf '{"version":1,"tickets":[]}\n' >"$atmp"
 if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-HR --project hypr-remote --title "ticket de prueba con area hr" --area hr >/dev/null 2>&1; then
