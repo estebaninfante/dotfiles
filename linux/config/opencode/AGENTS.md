@@ -1012,4 +1012,46 @@ Estado real de herdr (para no reportarlo mal):
 
 - Dueño: `supervisor`. Verificacion: dominio `agents`, check `observe-policy`.
 
+## Registro versionado de agentes (agents-registry)
+
+Todo agente, skill y plugin de esta maquina queda versionado y consultable desde cualquier
+agente. La herramienta es `agents-registry` (fuente `~/dotfiles/linux/bin/agents-registry`,
+symlink `~/.local/bin/agents-registry`; Node, **solo lectura**: nunca modifica agentes, skills
+ni plugins). Es un script propio, NO un subcomando de `rig` (rig tiene sus propios escritores).
+
+- **Catalogo**: `agents-registry build` escribe un JSON de esquema estable y aditivo
+  (`schema: 1`) con una entrada por agente, skill y plugin. Cada entrada lleva: `kind`,
+  `name`, `path`, `hash` (sha256 = la version), `version` (12 chars), `mtime`, `git`
+  (commit/fecha/autor/asunto del ultimo cambio), `mode`, `model` (`declared` + `effective`
+  leido de la DB), `description`, `triggers`, `skills_referenced`, `permission`, `tools`,
+  `harness` (integracion herdr), `verification` (dominio + estado), `tickets`
+  (`owner` + `worked`) y `usage` (tokens/costo/tiempo por sesion, solo agentes).
+- **Versionado estilo git**: cada build guarda una foto **append-only** en
+  `~/.local/state/rig/agents/snapshots/catalog-<ts>.json` (y el ultimo en
+  `~/.local/state/rig/agents/catalog.json`). Si el hash de un agente o skill cambia respecto
+  de la foto anterior, emite un evento `kind=agent-change` en el feed
+  (`~/.local/state/rig/events.jsonl`) con `from`, `to` y el motivo (asunto del commit). El
+  feed de la central muestra "el agente X subio de version" sin que nadie lo escriba a mano.
+- **Indice legible y versionado**: genera `docs/agents.md` en el repo de dotfiles (una linea
+  por agente con nombre, modelo, skills, version y fecha del ultimo cambio) mas el protocolo
+  de auto-mejora. Ese archivo **si se commitea**: el git de dotfiles guarda el historial de
+  los agentes.
+- **Comandos**: `agents-registry build` (construye el catalogo, guarda foto e indice),
+  `list` (agentes/skills/plugins con version y ultimo cambio), `show <nombre>` (detalle),
+  `history <nombre>` (versiones con su motivo: commits + eventos), `diff` (que cambio desde la
+  ultima foto). Salida estable para maquinas con `--json`/`--porcelain`; la salida humana dice
+  en castellano version, ultima modificacion y que cambio.
+- **Auto-mejora (protocolo)**: cualquier agente propone un cambio sobre un agente o una skill
+  mediante un ticket (`--area meta --owner supervisor`) que declara **motivo**, **evidencia**
+  (fallos/loops repetidos, consumo alto medido en `opencode.db`, un hueco de razonamiento visto
+  en una conversacion exportada, o un check de `verify` roto) y su **verificacion**. Al
+  integrarse, el registro guarda la version anterior y la nueva con la razon (commit + evento
+  `agent-change`). El catalogo es de **solo lectura para los agentes**: se regenera, no se
+  edita a mano.
+- **Cockpit**: `~/developing/agentes-platform` consume el catalogo (JSON estable) en vez de
+  re-descubrir agentes; ese repo no se edita desde aca.
+- Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run agents`
+  (checks `registry-tool`, `registry-catalog`, `registry-change`, `registry-doc`,
+  `registry-policy`) + `agents-registry --selftest` + `verify selftest`. Config nueva **no se
+  hot-reloadea**: reinicia opencode.
 
