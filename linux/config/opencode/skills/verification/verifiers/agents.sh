@@ -111,6 +111,15 @@ else
   fail "launch-policy" "falta la regla de lanzamiento inmediato (nada queda sin lanzar) en $policy_file"
 fi
 
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'ninguna silla se considera lanzada hasta que su encargo esta confirmado' "$policy_file" \
+   && grep -qF 'rig launch' "$policy_file" \
+   && grep -qF 'launch-failed' "$policy_file"; then
+  ok "launch-confirm-policy" "AGENTS.md exige confirmar la entrega del encargo (rig launch/--brief, launch-failed)"
+else
+  fail "launch-confirm-policy" "falta la regla de entrega confirmada (ninguna silla lanzada sin encargo confirmado) en $policy_file"
+fi
+
 tickets_file="${RIG_TICKETS_FILE:-$HOME/.config/opencode/tickets.json}"
 if [[ ! -f "$tickets_file" ]]; then
   skip "tickets-live" "sin $tickets_file"

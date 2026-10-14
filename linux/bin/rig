@@ -80,6 +80,9 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID]
                    [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--herdr-cwd DIR] [--attach] [--dry-run]
   rig send <silla> [--force] [--no-enter] <mensaje...>
+  rig launch <ticket-id> --cwd DIR --brief ARCHIVO [--project P --title T] [--area A]
+                   [--agent A] [--model M] [--ready-timeout SEG] [--launch-retries N] [--dry-run]
+                                     ticket + worktree + silla + encargo CONFIRMADO en una operacion
   rig read <silla> [--lines N]       capturar el output reciente
   rig whoami                         silla actual (dentro de tmux)
   rig herdr sync [--watch] [--interval S] [--quiet]
@@ -171,9 +174,14 @@ mark_seat() {
 }
 
 opencode_launcher() {
-  local bin=""
+  local bin="" d=""
+  if [ -n "${RIG_OPENCODE_BIN:-}" ] && [ -x "${RIG_OPENCODE_BIN}" ]; then printf '"%s"' "$RIG_OPENCODE_BIN"; return 0; fi
   if command -v mise >/dev/null 2>&1; then
     bin=$(mise which opencode 2>/dev/null | head -n1 || true)
+    if [ -z "$bin" ]; then
+      d=$(mise where opencode 2>/dev/null | head -n1 || true)
+      if [ -n "$d" ] && [ -x "$d/opencode" ]; then bin="$d/opencode"; fi
+    fi
   fi
   if [ -n "$bin" ] && [ -x "$bin" ]; then printf '"%s"' "$bin"; return 0; fi
   if command -v mise >/dev/null 2>&1; then printf 'mise x opencode -- opencode'; return 0; fi
@@ -560,10 +568,11 @@ cmd_seats() {
 }
 
 cmd_spawn() {
-  [ $# -ge 1 ] || die "uso: rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--attach] [--dry-run]"
+  [ $# -ge 1 ] || die "uso: rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID] [--brief ARCHIVO] [--ready-timeout SEG] [--launch-retries N] [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--attach] [--dry-run]"
   local name="$1"; shift
   local agent="" cwd="$PWD" custom="" prompt="" model="$SEAT_MODEL" attach=0 dry_run=0 ticket=""
   local herdr_flag="auto" mirror_flag="1" herdr_cwd="" focus_flag="${RIG_FOCUS:-1}"
+  local brief="" ready_timeout="" launch_retries=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --agent) [ $# -ge 2 ] || die "--agent requiere valor"; agent="$2"; shift 2 ;;
@@ -572,6 +581,9 @@ cmd_spawn() {
       --prompt) [ $# -ge 2 ] || die "--prompt requiere valor"; prompt="$2"; shift 2 ;;
       --model) [ $# -ge 2 ] || die "--model requiere valor"; model="$2"; shift 2 ;;
       --ticket) [ $# -ge 2 ] || die "--ticket requiere valor"; ticket="$2"; shift 2 ;;
+      --brief) [ $# -ge 2 ] || die "--brief requiere valor"; brief="$2"; shift 2 ;;
+      --ready-timeout) [ $# -ge 2 ] || die "--ready-timeout requiere valor"; ready_timeout="$2"; shift 2 ;;
+      --launch-retries) [ $# -ge 2 ] || die "--launch-retries requiere valor"; launch_retries="$2"; shift 2 ;;
       --herdr-cwd) [ $# -ge 2 ] || die "--herdr-cwd requiere valor"; herdr_cwd="$2"; shift 2 ;;
       --herdr) herdr_flag=1; shift ;;
       --no-herdr) herdr_flag=0; shift ;;
@@ -597,7 +609,9 @@ cmd_spawn() {
   need_tmux
   if session_exists "$name"; then
     info "ya existe la silla: $name"
-    return 0
+    if [ -z "$brief" ]; then return 0; fi
+    launch_deliver "$name" "$brief" "$ticket" "$cwd" "${ready_timeout:-}" "${launch_retries:-}"
+    return $?
   fi
   [ -n "$herdr_cwd" ] || herdr_cwd="$cwd"
   local ws="" tid="" pid="" ex_tid="" space_key="" space_lbl="" win_label=""
@@ -613,6 +627,7 @@ cmd_spawn() {
   fi
   tmux new-session -d -s "$name" -c "$cwd" "${env_args[@]}" || die "no se pudo crear la sesion $name"
   mark_seat "$name" "$cmd" "$cwd" "$(date +%s)"
+  if [ -n "$ticket" ]; then tmux set-option -t "$name" @agent_ticket "$ticket" 2>/dev/null || true; fi
   tmux set-option -t "$name" set-titles-string "$name" 2>/dev/null || true
   tmux send-keys -t "$name" -l -- "$cmd"
   tmux send-keys -t "$name" Enter
@@ -627,6 +642,10 @@ cmd_spawn() {
   if mirror_enabled; then mirror_add "$name"; fi
   event_emit spawn "silla $name creada en $cwd (agente ${agent:-spin-default})" --seat "$name" --ticket "$ticket" \
     --data "$(jq -nc --arg a "$agent" --arg m "$model" --arg c "$cwd" --arg ws "$ws" '{agent:$a,model:$m,cwd:$c,workspace:$ws}' 2>/dev/null)"
+  if [ -n "$brief" ]; then
+    launch_deliver "$name" "$brief" "$ticket" "$cwd" "${ready_timeout:-}" "${launch_retries:-}"
+    return $?
+  fi
   if [ "$attach" = "1" ]; then
     if [ -n "${TMUX:-}" ]; then tmux switch-client -t "$name"; else tmux attach -t "$name"; fi
   fi
@@ -678,6 +697,109 @@ cmd_send() {
   info "enviado a $seat"
 }
 
+seat_ready() {
+  local seat="$1" pat="${RIG_LAUNCH_READY_MATCH:-ctrl\\+p commands}"
+  tmux capture-pane -p -J -t "$seat" -S -80 2>/dev/null | grep -qE "$pat"
+}
+
+launch_wait_ready() {
+  local seat="$1" timeout="${2:-90}" waited=0
+  while [ "$waited" -lt "$timeout" ]; do
+    if seat_ready "$seat"; then return 0; fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+
+launch_db_ok() { command -v sqlite3 >/dev/null 2>&1 && [ -f "$DB_PATH" ]; }
+
+launch_tokens_for_dir() {
+  launch_db_ok || { printf '0'; return 0; }
+  local d
+  d=$(printf '%s' "$1" | sed "s/'/''/g")
+  sqlite3 -readonly "$DB_PATH" \
+    "SELECT COALESCE(SUM(tokens_input+tokens_output+tokens_reasoning),0) FROM session WHERE directory='$d'" \
+    2>/dev/null || printf '0'
+}
+
+launch_needle() {
+  printf '%s' "$1" | tr '\n' ' ' | tr -cs 'A-Za-z0-9' ' ' | sed 's/^ *//' | cut -c1-40 | tr -d ' '
+}
+
+launch_paste() {
+  local seat="$1" brief="$2"
+  tmux set-buffer -b rig_launch -- "$brief"
+  tmux paste-buffer -b rig_launch -t "$seat" -p
+  sleep 0.15
+  tmux send-keys -t "$seat" Enter
+}
+
+launch_confirm() {
+  local seat="$1" dir="$2" needle="$3" base="$4" wait_s="${5:-20}"
+  local deadline txt tok
+  deadline=$(( $(date +%s) + wait_s ))
+  while :; do
+    tok=$(launch_tokens_for_dir "$dir")
+    if [ "${tok:-0}" -gt "${base:-0}" ] 2>/dev/null; then printf 'consumo' >&2; return 0; fi
+    if [ -n "$needle" ]; then
+      txt=$(tmux capture-pane -p -J -t "$seat" -S -200 2>/dev/null | tr -d ' \t')
+      if [ -n "$txt" ] && printf '%s' "$txt" | grep -qF "$needle"; then printf 'panel' >&2; return 0; fi
+    fi
+    [ "$(date +%s)" -lt "$deadline" ] || break
+    sleep 1
+  done
+  return 1
+}
+
+launch_fail() {
+  local seat="$1" ticket="$2" dir="$3" reason="$4"
+  event_emit launch-failed "encargo NO entregado a $seat: $reason" --seat "$seat" --ticket "$ticket" \
+    --data "$(jq -nc --arg r "$reason" --arg d "$dir" --arg s "$seat" '{reason:$r,dir:$d,seat:$s}' 2>/dev/null)"
+  if [ -n "$ticket" ]; then
+    local key
+    key=$(store_key "$ticket")
+    if [ -n "$key" ]; then
+      ticket_set "$key" --status blocked --evidence "encargo no entregado: $reason" >/dev/null 2>&1 || true
+    fi
+  fi
+  info "rig: entrega FALLIDA a $seat -> $reason (ticket ${ticket:-n/a} blocked)"
+  return 1
+}
+
+launch_deliver() {
+  local seat="$1" brief_file="$2" ticket="$3" dir="$4"
+  local timeout="${5:-${RIG_LAUNCH_READY_TIMEOUT:-90}}"
+  local retries="${6:-${RIG_LAUNCH_RETRIES:-3}}"
+  local confirm_wait="${RIG_LAUNCH_CONFIRM_WAIT:-20}"
+  [ -f "$brief_file" ] || { launch_fail "$seat" "$ticket" "$dir" "brief no existe: $brief_file"; return 1; }
+  local brief
+  brief=$(cat "$brief_file" 2>/dev/null)
+  [ -n "$brief" ] || { launch_fail "$seat" "$ticket" "$dir" "brief vacio: $brief_file"; return 1; }
+  local needle base
+  needle=$(launch_needle "$brief")
+  base=$(launch_tokens_for_dir "$dir")
+  if ! launch_wait_ready "$seat" "$timeout"; then
+    launch_fail "$seat" "$ticket" "$dir" "la interfaz no quedo lista en ${timeout}s"
+    return 1
+  fi
+  local attempt=1
+  while :; do
+    launch_paste "$seat" "$brief"
+    if launch_confirm "$seat" "$dir" "$needle" "$base" "$confirm_wait"; then
+      event_emit launch-ok "encargo entregado a $seat (intento $attempt)" --seat "$seat" --ticket "$ticket" \
+        --data "$(jq -nc --arg s "$seat" --arg d "$dir" --argjson n "$attempt" '{seat:$s,dir:$d,attempt:$n}' 2>/dev/null)"
+      info "encargo entregado a $seat (intento $attempt)"
+      return 0
+    fi
+    [ "$attempt" -ge "$retries" ] && break
+    attempt=$((attempt + 1))
+    launch_wait_ready "$seat" "$timeout" || true
+  done
+  launch_fail "$seat" "$ticket" "$dir" "no confirme la entrega tras $retries intentos (panel sin el encargo y consumo cero)"
+  return 1
+}
+
 cmd_read() {
   need_tmux
   local seat="" lines=80
@@ -708,6 +830,102 @@ cmd_whoami() {
   else
     info "session $name (no es silla rig)"
   fi
+}
+
+launch_usage() {
+  cat >&2 <<'EOF'
+rig launch - lanza trabajo en UNA operacion determinista (ticket + silla + encargo confirmado)
+
+  rig launch <ticket-id> --cwd DIR --brief ARCHIVO [--project P --title T] [--area A]
+             [--owner O] [--agent A] [--base REF] [--model M] [--cmd CMD]
+             [--ready-timeout SEG] [--launch-retries N]
+             [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--attach]
+             [--dry-run]
+
+  Crea el ticket si no existe (requiere --project y --title), crea su worktree + branch
+  (ticket/<id>) y su silla, y entrega el encargo leido de --brief. La entrega es
+  determinista: espera a que la interfaz este lista (default 90s), pega el encargo y
+  confirma que llego (el texto en el panel o consumo de contexto > 0). Si no confirma
+  tras --launch-retries intentos (default 3), deja el ticket en blocked, emite el evento
+  'launch-failed' y sale con codigo distinto de cero. Sin confirmacion NO hay exito.
+  Env: RIG_LAUNCH_READY_TIMEOUT, RIG_LAUNCH_RETRIES, RIG_LAUNCH_CONFIRM_WAIT,
+       RIG_LAUNCH_READY_MATCH.
+EOF
+}
+
+cmd_launch() {
+  need_jq
+  local id="" cwd="$PWD" agent="" brief="" project="" title="" area="" owner="" base="HEAD"
+  local model="$SEAT_MODEL" custom="" ready_timeout="" launch_retries=""
+  local no_herdr=0 herdr=0 no_focus=0 no_mirror=0 attach=0 dry_run=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --cwd) [ $# -ge 2 ] || die "--cwd requiere valor"; cwd="$2"; shift 2 ;;
+      --agent) [ $# -ge 2 ] || die "--agent requiere valor"; agent="$2"; shift 2 ;;
+      --brief) [ $# -ge 2 ] || die "--brief requiere valor"; brief="$2"; shift 2 ;;
+      --project) [ $# -ge 2 ] || die "--project requiere valor"; project="$2"; shift 2 ;;
+      --title) [ $# -ge 2 ] || die "--title requiere valor"; title="$2"; shift 2 ;;
+      --area) [ $# -ge 2 ] || die "--area requiere valor"; area="$2"; shift 2 ;;
+      --owner) [ $# -ge 2 ] || die "--owner requiere valor"; owner="$2"; shift 2 ;;
+      --base) [ $# -ge 2 ] || die "--base requiere valor"; base="$2"; shift 2 ;;
+      --model) [ $# -ge 2 ] || die "--model requiere valor"; model="$2"; shift 2 ;;
+      --cmd) [ $# -ge 2 ] || die "--cmd requiere valor"; custom="$2"; shift 2 ;;
+      --ready-timeout) [ $# -ge 2 ] || die "--ready-timeout requiere valor"; ready_timeout="$2"; shift 2 ;;
+      --launch-retries) [ $# -ge 2 ] || die "--launch-retries requiere valor"; launch_retries="$2"; shift 2 ;;
+      --herdr) herdr=1; shift ;;
+      --no-herdr) no_herdr=1; shift ;;
+      --focus) no_focus=0; shift ;;
+      --no-focus) no_focus=1; shift ;;
+      --no-mirror) no_mirror=1; shift ;;
+      --attach) attach=1; shift ;;
+      --dry-run|--print-cmd) dry_run=1; shift ;;
+      -h|--help|help) launch_usage; return 0 ;;
+      -*) die "opcion desconocida: $1" ;;
+      *) [ -z "$id" ] || die "sobra argumento: $1"; id="$1"; shift ;;
+    esac
+  done
+  [ -n "$id" ] || die "uso: rig launch <ticket-id> --cwd DIR --brief ARCHIVO [--project P --title T] [--area A]"
+  valid_ticket_id "$id" || die "ticket id invalido: $id"
+  [ -n "$brief" ] || die "falta --brief ARCHIVO"
+  [ -f "$brief" ] || die "brief no existe: $brief"
+  [ -d "$cwd" ] || die "cwd no existe: $cwd"
+  cwd=$(cd "$cwd" && pwd)
+  if [ -n "$area" ]; then valid_area "$area" || die "area invalida: $area"; fi
+
+  store_ensure
+  local key
+  key=$(store_key "$id")
+  if [ -z "$key" ]; then
+    [ -n "$project" ] || die "ticket $id no existe: pasa --project y --title para crearlo"
+    [ -n "$title" ] || die "ticket $id no existe: pasa --title para crearlo"
+    local -a targs=("$id" --project "$project" --title "$title")
+    [ -n "$area" ] && targs+=(--area "$area")
+    [ -n "$owner" ] && targs+=(--owner "$owner")
+    ticket_add "${targs[@]}"
+    key=$(store_key "$id")
+    [ -n "$key" ] || die "no se pudo crear el ticket $id"
+  fi
+
+  local -a wargs=("$key" --cwd "$cwd" --base "$base" --model "$model" --brief "$brief" --spawn)
+  [ -n "$agent" ] && wargs+=(--agent "$agent")
+  [ -n "$custom" ] && wargs+=(--cmd "$custom")
+  [ -n "$ready_timeout" ] && wargs+=(--ready-timeout "$ready_timeout")
+  [ -n "$launch_retries" ] && wargs+=(--launch-retries "$launch_retries")
+  [ "$herdr" = "1" ] && wargs+=(--herdr)
+  [ "$no_herdr" = "1" ] && wargs+=(--no-herdr)
+  [ "$no_focus" = "1" ] && wargs+=(--no-focus)
+  [ "$no_mirror" = "1" ] && wargs+=(--no-mirror)
+  [ "$attach" = "1" ] && wargs+=(--attach)
+  if [ "$dry_run" = "1" ]; then
+    info "launch: ticket $key -> worktree + silla en $cwd, brief $brief"
+    return 0
+  fi
+  work_new "${wargs[@]}"
+  local rc=$?
+  if [ "$rc" != "0" ]; then
+    info "rig launch FALLO: el encargo de $key no se confirmo (ticket blocked)"
+  fi
+  return "$rc"
 }
 
 valid_status() {
@@ -1360,7 +1578,8 @@ cmd_board() {
             | {sessions:.n,
                tokens:{input:.tin,output:.tout,reasoning:.trea,cache_read:.tcr,cache_write:.tcw,total:(.tin+.tout+.trea)},
                cost:.cost,
-               time:{created:.created,updated:.updated,duration_ms:(.updated-.created)}})}) | with_area))'
+               time:{created:.created,updated:.updated,duration_ms:(.updated-.created)}}),
+             delivery:{state:(if (.status == "in-progress") then "in-progress" else "ok" end)}}) | with_area))'
     local brc=$?
     rm -f "$sf"
     return "$brc"
@@ -1437,6 +1656,7 @@ work_new() {
   need_jq; need_git
   local id="" cwd="$PWD" agent="" base="HEAD" spawn=0 attach=0 porcelain=0 ses="" prompt=""
   local model="$SEAT_MODEL" herdr_flag="auto" mirror_flag="1" focus_flag=""
+  local brief="" ready_timeout="" launch_retries="" custom=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --cwd) [ $# -ge 2 ] || die "--cwd requiere valor"; cwd="$2"; shift 2 ;;
@@ -1444,6 +1664,10 @@ work_new() {
       --base) [ $# -ge 2 ] || die "--base requiere valor"; base="$2"; shift 2 ;;
       --session) [ $# -ge 2 ] || die "--session requiere valor"; ses="$2"; shift 2 ;;
       --prompt) [ $# -ge 2 ] || die "--prompt requiere valor"; prompt="$2"; shift 2 ;;
+      --brief) [ $# -ge 2 ] || die "--brief requiere valor"; brief="$2"; shift 2 ;;
+      --ready-timeout) [ $# -ge 2 ] || die "--ready-timeout requiere valor"; ready_timeout="$2"; shift 2 ;;
+      --launch-retries) [ $# -ge 2 ] || die "--launch-retries requiere valor"; launch_retries="$2"; shift 2 ;;
+      --cmd) [ $# -ge 2 ] || die "--cmd requiere valor"; custom="$2"; shift 2 ;;
       --model) [ $# -ge 2 ] || die "--model requiere valor"; model="$2"; shift 2 ;;
       --herdr) herdr_flag=1; shift ;;
       --no-herdr) herdr_flag=0; shift ;;
@@ -1520,6 +1744,10 @@ work_new() {
     if [ "$focus_flag" = "0" ]; then sargs+=(--no-focus); elif [ "$focus_flag" = "1" ]; then sargs+=(--focus); fi
     [ "$mirror_flag" = "0" ] && sargs+=(--no-mirror)
     [ "$attach" = "1" ] && sargs+=(--attach)
+    [ -n "$brief" ] && sargs+=(--brief "$brief")
+    [ -n "$ready_timeout" ] && sargs+=(--ready-timeout "$ready_timeout")
+    [ -n "$launch_retries" ] && sargs+=(--launch-retries "$launch_retries")
+    [ -n "$custom" ] && sargs+=(--cmd "$custom")
     cmd_spawn "$seat" "${sargs[@]}"
   fi
 }
@@ -1612,6 +1840,8 @@ work_finish() {
   git_root "$wt" >/dev/null || die "worktree no es repo git: $wt"
   [ -n "$repo" ] || repo=$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null | sed 's:/\.git$::')
 
+  exec 9>&- 2>/dev/null || true
+
   local vstatus="SKIP"
   if [ "$do_verify" = "1" ]; then
     local vbin=""
@@ -1659,6 +1889,8 @@ work_finish() {
     fi
   fi
 
+  store_lock
+  store_lock
   local prev_commits commits evidence status d out
   prev_commits=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.commits // ""' "$TICKETS_FILE")
   commits="$prev_commits"
@@ -1859,6 +2091,7 @@ cmd_scan() {
   need_jq
   local porcelain=0 lines=40 project="" status="" no_metrics=0 no_seats=0 interval=2
   local idle_max="${RIG_IDLE_MAX_MIN:-60}"
+  local undeliv_max="${RIG_UNDELIVERED_MIN:-5}"
   watch=0
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1877,6 +2110,7 @@ cmd_scan() {
   done
   [[ "$lines" =~ ^[0-9]+$ ]] || die "lines invalido: $lines"
   [[ "$idle_max" =~ ^[0-9]+$ ]] || die "RIG_IDLE_MAX_MIN invalido: $idle_max"
+  [[ "$undeliv_max" =~ ^[0-9]+$ ]] || die "RIG_UNDELIVERED_MIN invalido: $undeliv_max"
   if [ -n "$status" ]; then valid_status "$status" || die "status invalido: $status"; fi
   if [ "$watch" = "1" ] && [ "$porcelain" = "1" ]; then die "--watch no soporta --porcelain"; fi
   store_ensure
@@ -1922,7 +2156,7 @@ scan_report() {
   tw=$(jv_file "$wts")
   sf=$(jv_file "$sessions")
   full=$(jq -cn --rawfile tickets "$tf" --rawfile seats "$ts" \
-    --rawfile wts "$tw" --rawfile sj "$sf" --argjson idle_max "$idle_max" \
+    --rawfile wts "$tw" --rawfile sj "$sf" --argjson idle_max "$idle_max" --argjson undeliv_max "$undeliv_max" \
     "$METRICS_DEFS"'
     ($tickets | fromjson) as $tickets
     | ($seats | fromjson) as $seats
@@ -1947,6 +2181,7 @@ scan_report() {
              activity:$act,
              idle_min:(if $act > 0 then ((now - $act) / 60 | floor) else null end),
              stale:( ($t.status == "in-progress") and ($s != null) and (($w.live // false) == true) and ($act > 0) and (((now - $act) / 60) > $idle_max) ),
+             delivery:{state:(if ($t.status == "in-progress") and ($s != null) and (($m.tin+$m.tout+$m.trea) == 0) and ($act > 0) and (((now - $act) / 60) > $undeliv_max) then "undelivered" else "ok" end), tokens_total:($m.tin+$m.tout+$m.trea), seat:(if $s then $s.name else "" end), dir:$wp},
              metrics:{sessions:$m.n,
                tokens:{input:$m.tin,output:$m.tout,reasoning:$m.trea,cache_read:$m.tcr,cache_write:$m.tcw,total:($m.tin+$m.tout+$m.trea)},
                cost:$m.cost, time:{created:$m.created,updated:$m.updated,duration_ms:($m.updated-$m.created)}} }
@@ -1979,7 +2214,7 @@ scan_report() {
     .[] as $e
     | ("E\u001f" + (if ($e.stale // false) then "!" else "" end) + $e.id + "\u001f" + ($e.project // "") + "\u001f" + ($e.owner // "")
        + "\u001f" + ($e.seat // "")
-       + "\u001f" + (if ($e.stale // false) then "stale" elif ($e.live and ($e.seat // "")!="") then "live" elif $e.live then "idle" else "missing" end)
+       + "\u001f" + (if ($e.stale // false) then "stale" elif ($e.live and ($e.seat // "")!="" and (($e.delivery.state // "")=="undelivered")) then "undelivered" elif ($e.live and ($e.seat // "")!="") then "live" elif $e.live then "idle" else "missing" end)
        + "\u001f" + (($e.activity // 0)|tostring)
        + "\u001f" + (($e.files|length)|tostring)
        + "\u001f" + ((($e.metrics.sessions) // 0)|tostring)
@@ -2851,6 +3086,40 @@ FAKE
     rm -rf "$wtmp"
   fi
 
+  local ltmp ltstore levents lbrief
+  ltmp=$(mktemp -d)
+  ltstore="$ltmp/tickets.json"
+  levents="$ltmp/events.jsonl"
+  lbrief="$ltmp/brief.txt"
+  printf '{"version":1,"tickets":[]}\n' >"$ltstore"
+  printf 'Prueba de entrega: responde solo LISTO y termina.\n' >"$lbrief"
+  if ! RIG_TICKETS_FILE="$ltstore" "$SELF" ticket add L1 --project meta --title "ticket de prueba para la entrega confirmada" >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: launch setup ticket add fallo\n' >&2
+    rc=1
+  fi
+  if RIG_TICKETS_FILE="$ltstore" RIG_EVENTS_FILE="$levents" RIG_METRICS=0 \
+     "$SELF" spawn zz-selftest-launch --cwd /tmp --cmd 'sleep 600' --ticket L1 \
+     --brief "$lbrief" --ready-timeout 1 --launch-retries 1 --no-herdr --no-mirror >/dev/null 2>&1; then
+    printf 'rig selftest FAIL: spawn --brief con panel no-listo reporto exito\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$ltstore" "$SELF" ticket list --porcelain 2>/dev/null)
+  if [[ "$out" != *'"status": "blocked"'* ]]; then
+    printf 'rig selftest FAIL: entrega fallida no dejo el ticket blocked\n' >&2
+    rc=1
+  fi
+  if ! grep -q 'launch-failed' "$levents" 2>/dev/null; then
+    printf 'rig selftest FAIL: entrega fallida no emitio el evento launch-failed\n' >&2
+    rc=1
+  fi
+  out=$(RIG_TICKETS_FILE="$ltstore" "$SELF" launch --help 2>&1)
+  if [[ "$out" != *'rig launch'* ]] || [[ "$out" != *'--brief'* ]]; then
+    printf 'rig selftest FAIL: launch --help no documenta el comando\n' >&2
+    rc=1
+  fi
+  tmux kill-session -t zz-selftest-launch 2>/dev/null || true
+  rm -rf "$ltmp"
+
   if command -v sqlite3 >/dev/null 2>&1; then
     local mtmp mdb mtstore
     mtmp=$(mktemp -d)
@@ -2909,6 +3178,7 @@ case "$cmd" in
   log|note) cmd_log "$@" ;;
   say|reply) cmd_say "$@" ;;
   ask) cmd_ask "$@" ;;
+  launch|lg) cmd_launch "$@" ;;
   agents|a) cmd_agents "$@" ;;
   queue|q) cmd_queue "$@" ;;
   central|center|c) cmd_central "$@" ;;

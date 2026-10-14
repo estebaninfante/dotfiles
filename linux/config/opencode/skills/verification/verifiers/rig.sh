@@ -332,6 +332,68 @@ else
   fail "board-render" "rig board fallo: $(printf '%s' "$out" | head -n1)"
 fi
 
+if out=$("$SRC" launch --help 2>&1); then
+  if printf '%s' "$out" | grep -q 'rig launch' && printf '%s' "$out" | grep -q -- '--brief'; then
+    ok "launch-help" "help de rig launch con --brief"
+  else
+    fail "launch-help" "help de launch sin --brief"
+  fi
+else
+  fail "launch-help" "rig launch --help fallo"
+fi
+
+launchmiss=0
+for fn in launch_deliver seat_ready launch_tokens_for_dir launch-failed; do
+  grep -q "$fn" "$SRC" || launchmiss=1
+done
+if [ "$launchmiss" = "0" ]; then
+  ok "launch-hooks" "entrega determinista presente (launch_deliver/seat_ready/launch-failed)"
+else
+  fail "launch-hooks" "faltan helpers de entrega en rig"
+fi
+
+if out=$("$SRC" scan --porcelain 2>&1); then
+  if printf '%s' "$out" | jq -e '[.[]|select(.kind=="ticket")]|all(has("delivery"))' >/dev/null 2>&1; then
+    ok "scan-delivery" "scan porcelain con campo delivery"
+  else
+    fail "scan-delivery" "scan porcelain sin campo delivery"
+  fi
+else
+  fail "scan-delivery" "rig scan --porcelain fallo: $(printf '%s' "$out" | head -n1)"
+fi
+
+if out=$("$SRC" board --porcelain 2>&1); then
+  if printf '%s' "$out" | jq -e 'all(has("delivery"))' >/dev/null 2>&1; then
+    ok "board-delivery" "board porcelain con campo delivery"
+  else
+    fail "board-delivery" "board porcelain sin campo delivery"
+  fi
+else
+  fail "board-delivery" "rig board --porcelain fallo: $(printf '%s' "$out" | head -n1)"
+fi
+
+if command -v tmux >/dev/null 2>&1; then
+  lbtmp=$(mktemp); lbf=$(mktemp); lbev=$(mktemp)
+  printf '{"version":1,"tickets":[]}\n' >"$lbtmp"
+  printf 'encargo de prueba que no debe llegar nunca\n' >"$lbf"
+  tmux kill-session -t zz-launch 2>/dev/null || true
+  RIG_TICKETS_FILE="$lbtmp" RIG_METRICS=0 "$SRC" ticket add L1 --project meta --title "ticket de prueba de entrega fallida" --area meta >/dev/null 2>&1
+  if RIG_TICKETS_FILE="$lbtmp" RIG_EVENTS_FILE="$lbev" RIG_METRICS=0 "$SRC" spawn zz-launch --cwd /tmp --cmd "sleep 600" --ticket L1 --brief "$lbf" --ready-timeout 2 --launch-retries 1 --no-herdr --no-mirror >/dev/null 2>&1; then
+    fail "launch-failed-blocked" "spawn --brief con panel no listo debio fallar"
+  else
+    lbst=$(RIG_TICKETS_FILE="$lbtmp" "$SRC" ticket list --porcelain 2>/dev/null | jq -r '.[0].status' 2>/dev/null)
+    if [ "$lbst" = "blocked" ] && grep -q 'launch-failed' "$lbev" 2>/dev/null; then
+      ok "launch-failed-blocked" "entrega no confirmada -> blocked + evento launch-failed"
+    else
+      fail "launch-failed-blocked" "no dejo blocked/evento (status=${lbst:-?})"
+    fi
+  fi
+  tmux kill-session -t zz-launch 2>/dev/null || true
+  rm -f "$lbtmp" "$lbf" "$lbev"
+else
+  skip "launch-failed-blocked" "tmux no disponible"
+fi
+
 atmp=$(mktemp)
 printf '{"version":1,"tickets":[]}\n' >"$atmp"
 if RIG_TICKETS_FILE="$atmp" RIG_METRICS=0 "$SRC" ticket add A-HR --project hypr-remote --title "ticket de prueba con area hr" --area hr >/dev/null 2>&1; then
