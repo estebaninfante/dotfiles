@@ -1,0 +1,1206 @@
+#!/usr/bin/env python3
+import base64
+import datetime
+import fcntl
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import ssl
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from typing import Any, Optional
+
+STATE_HOME = Path(os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local" / "state"))
+RIG_STATE = STATE_HOME / "rig"
+DEFAULT_EVENTS = RIG_STATE / "events.jsonl"
+DEFAULT_STATE_DIR = RIG_STATE / "discord"
+DISCORD_MAX_CHARS = 1900
+FORWARD_INTERVAL = 1.0
+IDLE_POLL = 1.0
+FRAME_TIMEOUT = 30.0
+DEFAULT_ESCALATE_MIN = 10.0
+THREAD_NAME_MAX = 90
+CHANNEL_LINE_MAX = 240
+ARCHIVE_MINUTES = 1440
+AREA_EMOJI = {
+    "hr": "\U0001F4E1",
+    "hypr": "\U0001F5A5",
+    "shell": "\U0001F5C2",
+    "audio": "\U0001F50A",
+    "meta": "\U0001F9E0",
+    "infra": "\U0001F527",
+    "foldertinder": "\U0001F4C1",
+}
+INTENTS = (1 << 0) | (1 << 9) | (1 << 15)
+OP_DISPATCH = 0
+OP_HEARTBEAT = 1
+OP_IDENTIFY = 2
+OP_RESUME = 6
+OP_RECONNECT = 7
+OP_INVALID_SESSION = 9
+OP_HELLO = 10
+OP_HEARTBEAT_ACK = 11
+WS_CONT = 0x0
+WS_TEXT = 0x1
+WS_BINARY = 0x2
+WS_CLOSE = 0x8
+WS_PING = 0x9
+WS_PONG = 0xA
+
+
+def log(message: str) -> None:
+    print("[rig-discord-bot] " + message, file=sys.stderr, flush=True)
+
+
+class Config:
+    def __init__(self) -> None:
+        self.token: str = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+        self.api: str = os.environ.get("RIG_DISCORD_API", "https://discord.com/api/v10").rstrip("/")
+        self.gateway: str = os.environ.get(
+            "RIG_DISCORD_GATEWAY", "wss://gateway.discord.gg/?v=10&encoding=json"
+        )
+        raw_users = os.environ.get("DISCORD_ALLOWED_USER_IDS", "")
+        self.allowed: tuple[str, ...] = tuple(x.strip() for x in raw_users.split(",") if x.strip())
+        self.channel_id: str = os.environ.get("DISCORD_CHANNEL_ID", "").strip()
+        self.seat: str = os.environ.get("RIG_SEAT", "main-seat")
+        self.rig: str = os.environ.get("RIG_BIN") or shutil.which("rig") or str(Path.home() / ".local" / "bin" / "rig")
+        self.prefix: str = os.environ.get("RIG_DISCORD_PREFIX", "[dc]")
+        self.state_dir: Path = Path(os.environ.get("RIG_DISCORD_STATE_DIR") or DEFAULT_STATE_DIR)
+        self.events_file: Path = Path(os.environ.get("RIG_EVENTS_FILE") or DEFAULT_EVENTS)
+        self.stt_cmd: str = os.environ.get("RIG_STT_CMD", "").strip()
+        minutes = os.environ.get("RIG_DISCORD_ESCALATE_MIN", "").strip()
+        try:
+            self.escalate_secs: float = float(minutes) * 60.0 if minutes else DEFAULT_ESCALATE_MIN * 60.0
+        except ValueError:
+            self.escalate_secs = DEFAULT_ESCALATE_MIN * 60.0
+        self.escalate_cmd: str = os.environ.get("RIG_ESCALATE_BIN") or shutil.which("rig-escalate") or str(Path.home() / ".local" / "bin" / "rig-escalate")
+        self.threads: bool = os.environ.get("RIG_DISCORD_THREADS", "1") != "0"
+        self.archive_minutes: int = ARCHIVE_MINUTES
+        self.projects_dir: Path = Path(
+            os.environ.get("RIG_DISCORD_PROJECTS") or (self.state_dir / "projects.json")
+        )
+        self.extract_cmd: list[str] = (
+            os.environ.get("RIG_EXTRACT_CMD") or "rig export").split()
+
+    def ready(self) -> Optional[str]:
+        if not self.token:
+            return "falta DISCORD_BOT_TOKEN (EnvironmentFile ~/.config/rig/discord.env)"
+        if not self.allowed:
+            return "falta DISCORD_ALLOWED_USER_IDS (allowlist de tu user id)"
+        if not self.channel_id:
+            return "falta DISCORD_CHANNEL_ID (canal dedicado del agente)"
+        return None
+
+
+def rest_request(cfg: Config, method: str, path: str, payload: Optional[dict[str, Any]] = None,
+                 timeout: float = 30.0) -> dict[str, Any]:
+    url = cfg.api + path
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Authorization": f"Bot {cfg.token}", "Content-Type": "application/json",
+               "User-Agent": "rig-discord-bot (https://localhost, 1.0)"}
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = resp.read().decode("utf-8")
+    if not body:
+        return {}
+    parsed = json.loads(body)
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"{method} {path}: respuesta no-objeto")
+    return parsed
+
+
+def send_message(cfg: Config, channel_id: str, text: str) -> None:
+    for chunk in split_chunks(text):
+        rest_request(cfg, "POST", f"/channels/{channel_id}/messages", {"content": chunk})
+
+
+def split_chunks(text: str) -> list[str]:
+    if len(text) <= DISCORD_MAX_CHARS:
+        return [text]
+    out: list[str] = []
+    rest = text
+    while len(rest) > DISCORD_MAX_CHARS:
+        cut = rest.rfind("\n", 0, DISCORD_MAX_CHARS)
+        if cut <= 0:
+            cut = DISCORD_MAX_CHARS
+        out.append(rest[:cut])
+        rest = rest[cut:].lstrip("\n")
+    if rest:
+        out.append(rest)
+    return out
+
+
+def emit(cfg: Config, kind: str, message: str, ticket: str = "", seat: str = "") -> None:
+    env = dict(os.environ)
+    env["RIG_ACTOR"] = "discord-bridge"
+    args = [cfg.rig, "log", message, "--kind", kind]
+    if ticket:
+        args += ["--ticket", ticket]
+    if seat:
+        args += ["--seat", seat]
+    try:
+        subprocess.run(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    except Exception as exc:
+        log(f"emit {kind} fallo: {exc}")
+
+
+def inject_to(cfg: Config, seat: str, text: str) -> tuple[bool, str]:
+    try:
+        proc = subprocess.run([cfg.rig, "send", seat, text], capture_output=True, text=True, timeout=20)
+    except Exception as exc:
+        return False, str(exc)
+    if proc.returncode != 0:
+        return False, (proc.stderr or proc.stdout or "rig send fallo").strip()
+    return True, ""
+
+
+def tagged(cfg: Config, text: str, thread: str = "") -> str:
+    if thread:
+        return f"{cfg.prefix} t={thread} {text}"
+    return f"{cfg.prefix} {text}"
+
+
+def inject(cfg: Config, text: str, thread: str = "") -> tuple[bool, str]:
+    return inject_to(cfg, cfg.seat, tagged(cfg, text, thread))
+
+
+def mention(cfg: Config) -> str:
+    return " ".join(f"<@{u}>" for u in cfg.allowed)
+
+
+AREA_PREFIX = {
+    "HR": "hr",
+    "HYPR": "hypr",
+    "SHELL": "shell",
+    "AUDIO": "audio",
+    "META": "meta",
+    "M": "meta",
+    "MAIN": "meta",
+    "INFRA": "infra",
+    "FT": "foldertinder",
+}
+
+
+def area_of(ticket: str) -> str:
+    if not ticket:
+        return ""
+    return AREA_PREFIX.get(ticket.split("-")[0].upper(), "")
+
+
+def load_projects(cfg: Config) -> dict[str, dict[str, Any]]:
+    try:
+        data = json.loads(cfg.projects_dir.read_text())
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_projects(cfg: Config, projects: dict[str, dict[str, Any]]) -> None:
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+    tmp = cfg.projects_dir.with_suffix(".tmp")
+    tmp.write_text(json.dumps(projects))
+    tmp.replace(cfg.projects_dir)
+
+
+def remember_project(cfg: Config, keys: list[str], project: dict[str, Any]) -> None:
+    projects = load_projects(cfg)
+    for key in keys:
+        if key:
+            projects[str(key)] = project
+    save_projects(cfg, projects)
+
+
+def thread_for(cfg: Config, key: str) -> str:
+    proj = load_projects(cfg).get(str(key))
+    if isinstance(proj, dict):
+        return str(proj.get("thread") or "")
+    return ""
+
+
+def latest_project(cfg: Config) -> dict[str, Any]:
+    best: dict[str, Any] = {}
+    best_ts = -1.0
+    for proj in load_projects(cfg).values():
+        if not isinstance(proj, dict):
+            continue
+        ts = float(proj.get("ts") or 0)
+        if ts >= best_ts:
+            best, best_ts = proj, ts
+    return best
+
+
+def route_target(cfg: Config, thread: str) -> tuple[str, str]:
+    if thread:
+        proj = load_projects(cfg).get(thread)
+        if isinstance(proj, dict):
+            return thread, str(proj.get("last_user") or "")
+        return thread, ""
+    proj = latest_project(cfg)
+    return str(proj.get("thread") or "") or cfg.channel_id, str(proj.get("last_user") or "")
+
+
+def thread_name(cfg: Config, ticket: str, text: str) -> str:
+    words = " ".join((text or "").split())
+    label = (ticket + " " + words).strip()
+    return (label or "pedido")[:THREAD_NAME_MAX]
+
+
+def create_thread(cfg: Config, message_id: str, name: str) -> Optional[str]:
+    payload = {"name": name, "auto_archive_duration": cfg.archive_minutes, "type": 11}
+    try:
+        res = rest_request(
+            cfg, "POST",
+            f"/channels/{cfg.channel_id}/messages/{message_id}/threads", payload)
+    except Exception as exc:
+        log(f"crear hilo fallo: {exc}")
+        return None
+    return str(res.get("id") or "") or None
+
+
+def post_message(cfg: Config, channel_id: str, text: str, reference: str = "") -> list[str]:
+    ids: list[str] = []
+    for chunk in split_chunks(text):
+        payload: dict[str, Any] = {"content": chunk}
+        had_ref = bool(reference) and not ids
+        if had_ref:
+            payload["message_reference"] = {
+                "message_id": reference, "channel_id": channel_id, "fail_if_not_exists": False}
+        try:
+            res = rest_request(cfg, "POST", f"/channels/{channel_id}/messages", payload)
+        except Exception as exc:
+            if had_ref:
+                log(f"post con cita en {channel_id} fallo ({exc}); reintento sin cita")
+                payload.pop("message_reference", None)
+                try:
+                    res = rest_request(cfg, "POST", f"/channels/{channel_id}/messages", payload)
+                except Exception as exc2:
+                    log(f"post en {channel_id} fallo: {exc2}")
+                    break
+            else:
+                log(f"post en {channel_id} fallo: {exc}")
+                break
+        mid = str(res.get("id") or "")
+        if mid:
+            ids.append(mid)
+    return ids
+
+
+def record(cfg: Config, kind: str, summary: str, data: dict[str, Any],
+           ticket: str = "", seat: str = "") -> None:
+    event = {
+        "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "kind": kind,
+        "actor": "discord-bridge",
+        "ticket": ticket,
+        "seat": seat,
+        "area": area_of(ticket),
+        "summary": summary,
+        "data": data,
+    }
+    try:
+        cfg.events_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(cfg.events_file, "a", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            handle.write(json.dumps(event) + "\n")
+            fcntl.flock(handle, fcntl.LOCK_UN)
+    except Exception as exc:
+        log(f"record fallo: {exc}")
+
+
+EXTRACT_VERBS = ("bajame", "bájame", "mandame", "mándame", "pasame", "pásame",
+                 "descargame", "descárgame", "enviame", "envíame", "dame", "exportame")
+EXTRACT_NOUNS = ("conversacion", "conversación", "extraccion", "extracción",
+                 "transcripcion", "transcripción", "pensamiento", "penso", "pensó",
+                 "sesion", "sesión", "charla")
+
+
+def wants_extract(text: str) -> bool:
+    low = (text or "").lower()
+    return any(v in low for v in EXTRACT_VERBS) and any(n in low for n in EXTRACT_NOUNS)
+
+
+def extract_ticket(text: str) -> str:
+    match = re.search(r"#?(\d{1,6})\b", text or "")
+    if match:
+        return match.group(1)
+    match = re.search(r"\b([A-Za-z]{2,}-\d+)\b", text or "")
+    return match.group(1) if match else ""
+
+
+def upload_attachment(cfg: Config, channel_id: str, path: Path, content: str,
+                      reference: str = "") -> str:
+    boundary = "----rigbridge" + os.urandom(12).hex()
+    payload: dict[str, Any] = {"content": content}
+    if reference:
+        payload["message_reference"] = {
+            "message_id": reference, "channel_id": channel_id, "fail_if_not_exists": False}
+    head = (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n\r\n"
+        f"{json.dumps(payload)}\r\n"
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[0]\"; "
+        f"filename=\"{path.name}\"\r\nContent-Type: text/markdown\r\n\r\n").encode()
+    body = head + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+    request = urllib.request.Request(
+        f"{cfg.api}/channels/{channel_id}/messages", data=body, method="POST",
+        headers={
+            "Authorization": f"Bot {cfg.token}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "User-Agent": "rig-discord-bot (https://localhost, 1.0)",
+        })
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        log(f"subir adjunto fallo: {exc}")
+        send_message(cfg, channel_id, content + f"\n(no pude subir el adjunto: {exc})")
+        return ""
+    return str(result.get("id") or "")
+
+
+def handle_extract(cfg: Config, channel_id: str, text: str, message_id: str,
+                   in_thread: bool) -> None:
+    ticket = extract_ticket(text)
+    stamp = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    args = list(cfg.extract_cmd) + ([ticket] if ticket else [text])
+    try:
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=180)
+    except Exception as exc:
+        emit(cfg, "extract-error", f"extraccion fallo: {exc}")
+        send_message(cfg, channel_id, f"No pude extraer la conversacion ({exc}).")
+        return
+    raw = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not raw:
+        emit(cfg, "extract-empty", (proc.stderr or "").strip()[:200])
+        send_message(cfg, channel_id,
+                     "La extraccion no devolvio contenido. Comando: "
+                     f"{' '.join(cfg.extract_cmd)} (override RIG_EXTRACT_CMD).")
+        return
+    out_dir = cfg.state_dir / "exports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    single = raw.splitlines()[0]
+    if len(raw.splitlines()) == 1 and Path(single).is_file():
+        path = Path(single)
+    else:
+        path = out_dir / f"extraccion-{ticket or 'pedido'}-{stamp.replace(':', '')}.md"
+        path.write_text(raw)
+    header = f"Sesion: {ticket or '-'} · generado: {stamp}"
+    reference = message_id if in_thread else ""
+    upload_attachment(cfg, channel_id, path, header, reference)
+    emit(cfg, "extract", f"{path.name} ({ticket or text[:40]})")
+
+
+def pending_path(cfg: Config) -> Path:
+    return cfg.state_dir / "pending-asks.json"
+
+
+def load_pending(cfg: Config) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(pending_path(cfg).read_text())
+        return [x for x in data if isinstance(x, dict)]
+    except Exception:
+        return []
+
+
+def save_pending(cfg: Config, pending: list[dict[str, Any]]) -> None:
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+    path = pending_path(cfg)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(pending))
+    tmp.replace(path)
+
+
+def ask_events(event: dict[str, Any]) -> bool:
+    return event.get("kind") == "ask" and event.get("actor") != "discord-bridge"
+
+
+def unblock_ticket(cfg: Config, ticket: str, text: str) -> None:
+    evidence = "answer(discord): " + text[:160]
+    try:
+        subprocess.run([cfg.rig, "ticket", "set", ticket, "--status", "in-progress",
+                        "--evidence", evidence], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=15)
+    except Exception as exc:
+        log(f"unblock ticket {ticket} fallo: {exc}")
+
+
+def post_ask(cfg: Config, event: dict[str, Any]) -> None:
+    data = event.get("data") or {}
+    question = data.get("message") or event.get("summary") or ""
+    if not question:
+        return
+    seat = str(event.get("seat") or "")
+    ticket = str(event.get("ticket") or data.get("ticket") or "")
+    priority = str(data.get("priority") or "normal")
+    head = "PREGUNTA URGENTE" if priority == "alta" else "Pregunta"
+    lines = [f"{mention(cfg)} {head} de la silla {seat}".rstrip()]
+    if ticket:
+        lines.append(f"Ticket: {ticket}")
+    lines += ["", question, "", "Responde en este canal y te la hago llegar."]
+    stamp = str(event.get("ts") or "")
+    if stamp:
+        lines.append(f"-# {stamp} · fuente {event.get('actor') or seat or '?'}")
+    thread = str(data.get("thread") or "")
+    target, reference = route_target(cfg, thread)
+    ids = post_message(cfg, target, "\n".join(lines), reference)
+    emit(cfg, "discord-ask", question, ticket=ticket, seat=seat)
+    record(cfg, "ask", question,
+           {"channel_id": target, "thread_id": target if target != cfg.channel_id else "",
+            "message_id": ids[0] if ids else "", "parent_id": reference,
+            "child_id": ids[0] if ids else "", "to": "discord"},
+           ticket=ticket, seat=seat)
+    pending = load_pending(cfg)
+    pending.append({"ts": time.time(), "seat": seat, "ticket": ticket,
+                    "question": question, "priority": priority, "reminded": False,
+                    "thread": target if target != cfg.channel_id else "",
+                    "message_id": ids[0] if ids else ""})
+    save_pending(cfg, pending)
+
+
+def deliver_answer(cfg: Config, text: str, pending: list[dict[str, Any]],
+                   channel_id: str = "", parent_id: str = "", thread: str = "") -> None:
+    ask = pending[-1]
+    seat = str(ask.get("seat") or cfg.seat)
+    ticket = str(ask.get("ticket") or "")
+    target = channel_id or str(ask.get("thread") or "") or cfg.channel_id
+    thread_id = str(ask.get("thread") or "") or thread
+    ask_id = str(ask.get("message_id") or "")
+    ok, err = inject_to(cfg, seat, tagged(cfg, f"[respuesta] {text}", thread_id))
+    if not ok and seat != cfg.seat:
+        emit(cfg, "discord-error",
+             f"respuesta a {seat} fallo ({err}); reintento en {cfg.seat}")
+        ok2, err2 = inject_to(cfg, cfg.seat, tagged(cfg, f"[respuesta] {text}", thread_id))
+        if ok2:
+            seat, ok, err = cfg.seat, ok2, err2
+        else:
+            err = err2
+    if not ok:
+        emit(cfg, "discord-error", f"respuesta fallo: {err}")
+        post_message(cfg, target, f"No pude entregar tu respuesta a {seat}: {err}", ask_id)
+        return
+    emit(cfg, "answer", text, ticket=ticket, seat=seat)
+    if ticket:
+        unblock_ticket(cfg, ticket, text)
+    reply_id = parent_id or ask_id
+    ids = post_message(cfg, target, f"Respuesta entregada a {seat}.", reply_id)
+    record(cfg, "answer", text,
+           {"channel_id": target, "thread_id": target if target != cfg.channel_id else "",
+            "message_id": reply_id, "parent_id": reply_id,
+            "child_id": ids[0] if ids else "", "to": "discord"},
+           ticket=ticket, seat=seat)
+    pending.pop()
+    save_pending(cfg, pending)
+
+
+def route_text(cfg: Config, channel_id: str, text: str, thread: str = "") -> None:
+    pending = load_pending(cfg)
+    if pending:
+        deliver_answer(cfg, text, pending, thread=thread)
+        return
+    ok, err = inject(cfg, text, thread)
+    if not ok:
+        emit(cfg, "discord-error", f"inject fallo: {err}")
+        send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
+
+
+def transcribe(cfg: Config, url: str, suffix: str) -> Optional[str]:
+    if not cfg.stt_cmd:
+        return None
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "rig-discord-bot"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = resp.read()
+        with tempfile.NamedTemporaryFile(suffix=suffix or ".ogg", delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        parts = cfg.stt_cmd.split() + [tmp_path]
+        proc = subprocess.run(parts, capture_output=True, text=True, timeout=300)
+        os.unlink(tmp_path)
+        return (proc.stdout or "").strip() or None
+    except Exception as exc:
+        log(f"transcribe fallo: {exc}")
+        return None
+
+
+def handle_voice(cfg: Config, channel_id: str, attachment: dict[str, Any],
+                 thread: str = "") -> None:
+    emit(cfg, "discord-voice", f"{channel_id}: audio {attachment.get('filename', '')}")
+    if not cfg.stt_cmd:
+        send_message(cfg, channel_id, "Voz aun no soportada (falta STT local en RIG_STT_CMD). Escribi texto.")
+        return
+    ct = str(attachment.get("content_type") or "")
+    suffix = "." + ct.split("/")[-1].split(";")[0] if ct else ".ogg"
+    text = transcribe(cfg, attachment.get("url", ""), suffix)
+    if not text:
+        send_message(cfg, channel_id, "No pude transcribir el audio.")
+        return
+    send_message(cfg, channel_id, f"Transcrito: {text}")
+    emit(cfg, "discord-in", f"voz: {text}")
+    route_text(cfg, channel_id, text, thread)
+
+
+def handle_message(cfg: Config, d: dict[str, Any]) -> None:
+    author = d.get("author") or {}
+    if author.get("bot"):
+        return
+    channel_id = str(d.get("channel_id", ""))
+    projects = load_projects(cfg)
+    in_thread = channel_id != cfg.channel_id and channel_id in projects
+    if channel_id != cfg.channel_id and not in_thread:
+        return
+    user_id = str(author.get("id", ""))
+    if user_id not in cfg.allowed:
+        emit(cfg, "discord-reject", f"user no autorizado: {user_id}")
+        return
+    content = d.get("content") or ""
+    message_id = str(d.get("id", ""))
+    ref = d.get("message_reference") or {}
+    parent_id = str(ref.get("message_id") or "")
+    origin_thread = channel_id if in_thread else ""
+    if not content.strip():
+        for attachment in d.get("attachments") or []:
+            if str(attachment.get("content_type") or "").startswith("audio"):
+                handle_voice(cfg, channel_id, attachment, origin_thread)
+        return
+    if cfg.threads and not in_thread and message_id:
+        name = thread_name(cfg, "", content)
+        thread_id = create_thread(cfg, message_id, name) or ""
+        if thread_id:
+            origin_thread = thread_id
+            remember_project(cfg, [message_id, thread_id],
+                             {"root": message_id, "thread": thread_id,
+                              "ts": time.time(), "ticket": "", "name": name})
+            send_message(cfg, cfg.channel_id, f"Abri un hilo para este pedido: {name}")
+    if in_thread and message_id:
+        project = projects.get(channel_id)
+        if isinstance(project, dict):
+            project["last_user"] = message_id
+            remember_project(cfg, [channel_id], project)
+    record(cfg, "conv-in", f"{user_id}: {content}",
+           {"channel_id": channel_id,
+            "thread_id": channel_id if in_thread else "",
+            "message_id": message_id, "parent_id": parent_id,
+            "child_id": "", "to": "discord"})
+    emit(cfg, "discord-in", f"{user_id}: {content}")
+    if content.startswith("!"):
+        ok, err = inject(cfg, content[1:].lstrip(), origin_thread)
+        if not ok:
+            emit(cfg, "discord-error", f"inject fallo: {err}")
+            send_message(cfg, channel_id, f"No pude hablar con main ({cfg.seat}): {err}")
+        return
+    if wants_extract(content):
+        handle_extract(cfg, channel_id, content, message_id, in_thread)
+        return
+    route_text(cfg, channel_id, content, origin_thread)
+
+
+def load_cursor(cfg: Config) -> dict[str, int]:
+    path = cfg.state_dir / "events.cursor.json"
+    try:
+        data = json.loads(path.read_text())
+        return {"inode": int(data.get("inode", -1)), "offset": int(data.get("offset", 0))}
+    except Exception:
+        return {"inode": -1, "offset": 0}
+
+
+def save_cursor(cfg: Config, inode: int, offset: int) -> None:
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+    path = cfg.state_dir / "events.cursor.json"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"inode": inode, "offset": offset}))
+    tmp.replace(path)
+
+
+def reply_targets(event: dict[str, Any]) -> bool:
+    if event.get("kind") != "reply" or event.get("actor") != "main":
+        return False
+    to = str((event.get("data") or {}).get("to") or "")
+    return to in ("", "discord", "telegram", "hub", "all")
+
+
+def forward_replies(cfg: Config) -> int:
+    path = cfg.events_file
+    if not path.exists():
+        return 0
+    st = path.stat()
+    cur = load_cursor(cfg)
+    offset = cur["offset"] if cur["inode"] == st.st_ino and st.st_size >= cur["offset"] else 0
+    with path.open("rb") as fh:
+        fh.seek(offset)
+        data = fh.read()
+    if not data:
+        save_cursor(cfg, st.st_ino, offset)
+        return 0
+    if data.endswith(b"\n"):
+        complete = data
+        consumed = len(data)
+    else:
+        idx = data.rfind(b"\n")
+        if idx == -1:
+            save_cursor(cfg, st.st_ino, offset)
+            return 0
+        complete = data[: idx + 1]
+        consumed = idx + 1
+    count = 0
+    for line in complete.decode("utf-8", "replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except Exception:
+            continue
+        if reply_targets(event):
+            text = (event.get("data") or {}).get("message") or event.get("summary") or ""
+            if text:
+                stamp = str(event.get("ts") or "")
+                body = text + (f"\n-# {stamp} · {event.get('actor') or 'main'}" if stamp else "")
+                thread = str((event.get("data") or {}).get("thread") or "")
+                target, reference = route_target(cfg, thread)
+                ids = post_message(cfg, target, body, reference)
+                record(cfg, "conv-out", body,
+                       {"channel_id": target,
+                        "thread_id": target if target != cfg.channel_id else "",
+                        "message_id": ids[0] if ids else "",
+                        "parent_id": reference,
+                        "child_id": ids[0] if ids else "",
+                        "to": "discord"})
+                emit(cfg, "discord-out", text)
+                count += 1
+            continue
+        if ask_events(event):
+            try:
+                post_ask(cfg, event)
+                count += 1
+            except Exception as exc:
+                log(f"post_ask fallo: {exc}")
+            continue
+    save_cursor(cfg, st.st_ino, offset + consumed)
+    return count
+
+
+def escalate_pending(cfg: Config) -> int:
+    pending = load_pending(cfg)
+    if not pending:
+        return 0
+    now = time.time()
+    changed = False
+    for ask in pending:
+        try:
+            age = now - float(ask.get("ts", now))
+        except (TypeError, ValueError):
+            age = cfg.escalate_secs
+        if age < cfg.escalate_secs:
+            continue
+        ask["ts"] = now
+        ask["reminded"] = True
+        changed = True
+        question = str(ask.get("question") or "")
+        seat = str(ask.get("seat") or "")
+        ticket = str(ask.get("ticket") or "")
+        try:
+            target = str(ask.get("thread") or "") or cfg.channel_id
+            reference = str(ask.get("message_id") or "")
+            post_message(cfg, target, f"{mention(cfg)} Sigue sin respuesta: {question}", reference)
+        except Exception as exc:
+            log(f"escalate send fallo: {exc}")
+        emit(cfg, "ask-reminder", question, ticket=ticket, seat=seat)
+        try:
+            subprocess.run([cfg.escalate_cmd, "--remind", question, "--seat", seat,
+                            "--ticket", ticket, "--priority", "alta"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        except Exception as exc:
+            log(f"escalate remind fallo: {exc}")
+    if changed:
+        save_pending(cfg, pending)
+    return len(pending)
+
+
+def forward_loop(cfg: Config, stop: threading.Event) -> None:
+    while not stop.is_set():
+        try:
+            forward_replies(cfg)
+        except Exception as exc:
+            log(f"forward fallo: {exc}")
+        try:
+            escalate_pending(cfg)
+        except Exception as exc:
+            log(f"escalate fallo: {exc}")
+        stop.wait(FORWARD_INTERVAL)
+
+
+def ws_encode(payload: bytes, opcode: int, mask: bool = True) -> bytes:
+    header = bytearray([0x80 | opcode])
+    n = len(payload)
+    flag = 0x80 if mask else 0x00
+    if n < 126:
+        header.append(flag | n)
+    elif n < 65536:
+        header.append(flag | 126)
+        header += n.to_bytes(2, "big")
+    else:
+        header.append(flag | 127)
+        header += n.to_bytes(8, "big")
+    if mask:
+        key = os.urandom(4)
+        header += key
+        payload = bytes(b ^ key[i % 4] for i, b in enumerate(payload))
+    return bytes(header) + payload
+
+
+class WSReader:
+    def __init__(self, sock: socket.socket, leftover: bytes = b"") -> None:
+        self.sock = sock
+        self.buf = bytearray(leftover)
+
+    def read_exact(self, n: int, timeout: float) -> bytes:
+        while len(self.buf) < n:
+            self.sock.settimeout(timeout)
+            try:
+                chunk = self.sock.recv(65536)
+            except (socket.timeout, ssl.SSLWantReadError):
+                raise socket.timeout("idle")
+            if not chunk:
+                raise ConnectionError("socket cerrado")
+            self.buf += chunk
+        out = bytes(self.buf[:n])
+        del self.buf[:n]
+        return out
+
+    def read_frame(self, idle_timeout: float = IDLE_POLL) -> tuple[bool, int, bytes]:
+        head = self.read_exact(2, idle_timeout)
+        fin = bool(head[0] & 0x80)
+        opcode = head[0] & 0x0F
+        masked = bool(head[1] & 0x80)
+        length = head[1] & 0x7F
+        if length == 126:
+            length = int.from_bytes(self.read_exact(2, FRAME_TIMEOUT), "big")
+        elif length == 127:
+            length = int.from_bytes(self.read_exact(8, FRAME_TIMEOUT), "big")
+        key = self.read_exact(4, FRAME_TIMEOUT) if masked else None
+        payload = self.read_exact(length, FRAME_TIMEOUT) if length else b""
+        if key:
+            payload = bytes(b ^ key[i % 4] for i, b in enumerate(payload))
+        return fin, opcode, payload
+
+
+def ws_connect(cfg: Config, timeout: float = 30.0) -> tuple[socket.socket, WSReader]:
+    parsed = urllib.parse.urlparse(cfg.gateway)
+    host = parsed.hostname or "gateway.discord.gg"
+    port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path += "?" + parsed.query
+    raw = socket.create_connection((host, port), timeout=timeout)
+    if parsed.scheme == "wss":
+        ctx = ssl.create_default_context()
+        sock = ctx.wrap_socket(raw, server_hostname=host)
+    else:
+        sock = raw
+    key = base64.b64encode(os.urandom(16)).decode()
+    request = (
+        f"GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    )
+    sock.sendall(request.encode())
+    buf = b""
+    while b"\r\n\r\n" not in buf:
+        chunk = sock.recv(4096)
+        if not chunk:
+            raise ConnectionError("handshake sin respuesta")
+        buf += chunk
+    head, _, leftover = buf.partition(b"\r\n\r\n")
+    status = head.split(b"\r\n", 1)[0]
+    if b" 101" not in status:
+        raise RuntimeError(f"handshake rechazado: {status.decode('latin-1')}")
+    return sock, WSReader(sock, leftover)
+
+
+def load_session(cfg: Config) -> dict[str, Any]:
+    try:
+        return json.loads((cfg.state_dir / "session.json").read_text())
+    except Exception:
+        return {"session_id": "", "seq": None}
+
+
+def save_session(cfg: Config, session_id: str, seq: Optional[int]) -> None:
+    cfg.state_dir.mkdir(parents=True, exist_ok=True)
+    path = cfg.state_dir / "session.json"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"session_id": session_id, "seq": seq}))
+    tmp.replace(path)
+
+
+def gateway_once(cfg: Config, stop: threading.Event) -> None:
+    sock, reader = ws_connect(cfg)
+    session = load_session(cfg)
+    seq: Optional[int] = session.get("seq")
+    session_id: str = session.get("session_id") or ""
+    heartbeat = 45.0
+    last_hb = time.monotonic()
+    identified = False
+    try:
+        while not stop.is_set():
+            try:
+                fin, opcode, payload = reader.read_frame(IDLE_POLL)
+            except socket.timeout:
+                if identified and time.monotonic() - last_hb >= heartbeat:
+                    sock.sendall(ws_encode(json.dumps({"op": OP_HEARTBEAT, "d": seq}).encode(), WS_TEXT))
+                    last_hb = time.monotonic()
+                continue
+            if opcode == WS_CLOSE:
+                log("gateway cerro; reconecto")
+                return
+            if opcode == WS_PING:
+                sock.sendall(ws_encode(payload, WS_PONG))
+                continue
+            if opcode == WS_PONG:
+                continue
+            if opcode != WS_TEXT:
+                continue
+            msg = json.loads(payload.decode("utf-8"))
+            op = msg.get("op")
+            d = msg.get("d")
+            if op == OP_HELLO:
+                heartbeat = float((d or {}).get("heartbeat_interval", 45000)) / 1000.0
+                if session_id and seq is not None:
+                    sock.sendall(ws_encode(json.dumps(
+                        {"op": OP_RESUME, "d": {"token": cfg.token, "session_id": session_id, "seq": seq}}
+                    ).encode(), WS_TEXT))
+                else:
+                    sock.sendall(ws_encode(json.dumps(
+                        {"op": OP_IDENTIFY, "d": {"token": cfg.token, "intents": INTENTS,
+                                                  "properties": {"os": "linux", "browser": "rig",
+                                                                 "device": "rig-discord-bot"}}}
+                    ).encode(), WS_TEXT))
+                identified = True
+                last_hb = time.monotonic()
+            elif op == OP_HEARTBEAT:
+                sock.sendall(ws_encode(json.dumps({"op": OP_HEARTBEAT, "d": seq}).encode(), WS_TEXT))
+                last_hb = time.monotonic()
+            elif op == OP_RECONNECT:
+                log("gateway pidio reconectar")
+                return
+            elif op == OP_INVALID_SESSION:
+                log("sesion invalida; reidentifico")
+                session_id, seq = "", None
+                save_session(cfg, "", None)
+                return
+            elif op == OP_DISPATCH:
+                seq = msg.get("s", seq)
+                event_type = msg.get("t")
+                if event_type == "READY":
+                    session_id = str((d or {}).get("session_id", ""))
+                elif event_type == "RESUMED":
+                    log("sesion resumida")
+                save_session(cfg, session_id, seq)
+                if event_type == "MESSAGE_CREATE":
+                    try:
+                        handle_message(cfg, d or {})
+                    except Exception as exc:
+                        log(f"message fallo: {exc}")
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+
+def gateway_loop(cfg: Config, stop: threading.Event) -> None:
+    while not stop.is_set():
+        try:
+            gateway_once(cfg, stop)
+        except Exception as exc:
+            log(f"gateway fallo: {exc}")
+        if stop.is_set():
+            break
+        stop.wait(5)
+
+
+def run(cfg: Config) -> int:
+    problem = cfg.ready()
+    if problem:
+        log("no arranco: " + problem)
+        return 1
+    log(f"escuchando; silla={cfg.seat} canal={cfg.channel_id} allowlist={cfg.allowed}")
+    stop = threading.Event()
+
+    def shutdown(signum: int, frame: Any) -> None:
+        log(f"senal {signum}; saliendo")
+        stop.set()
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+    worker = threading.Thread(target=forward_loop, args=(cfg, stop), daemon=True)
+    worker.start()
+    try:
+        gateway_loop(cfg, stop)
+    finally:
+        stop.set()
+        worker.join(timeout=3)
+    return 0
+
+
+def selftest() -> int:
+    import http.server
+
+    tmp = Path(tempfile.mkdtemp(prefix="rig-dc-selftest."))
+    events = tmp / "events.jsonl"
+    events.write_text("")
+    send_log = tmp / "sends.jsonl"
+    send_log.write_text("")
+    rig = tmp / "rig"
+    rig.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "args = sys.argv[1:]\n"
+        "open(os.environ['FAKE_SEND_LOG'], 'a').write(json.dumps(args) + '\\n')\n"
+        "if args[:1] == ['send']:\n"
+        "    ev = os.environ['RIG_EVENTS_FILE']\n"
+        "    line = {'ts': '2026-01-01T00:00:00-05:00', 'kind': 'reply', 'actor': 'main',\n"
+        "            'ticket': '', 'seat': 'main-seat', 'area': '', 'summary': 'respuesta de prueba',\n"
+        "            'data': {'message': 'respuesta dc', 'to': 'discord', 'len': 11}}\n"
+        "    open(ev, 'a').write(json.dumps(line) + '\\n')\n"
+        "sys.exit(0)\n"
+    )
+    rig.chmod(0o755)
+
+    state: dict[str, Any] = {"sends": [], "paths": [], "calls": []}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args: Any) -> None:
+            return
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            state["paths"].append(self.path)
+            state["sends"].append(payload.get("content", ""))
+            ref = payload.get("message_reference") or {}
+            state["calls"].append({"path": self.path, "content": payload.get("content", ""),
+                                   "reference": str(ref.get("message_id") or "")})
+            body = json.dumps({"id": "1", "content": payload.get("content", "")}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    os.environ.update({
+        "DISCORD_BOT_TOKEN": "selftest",
+        "RIG_DISCORD_API": f"http://127.0.0.1:{port}",
+        "DISCORD_ALLOWED_USER_IDS": "555",
+        "DISCORD_CHANNEL_ID": "999",
+        "RIG_SEAT": "main-seat",
+        "RIG_BIN": str(rig),
+        "RIG_EVENTS_FILE": str(events),
+        "RIG_DISCORD_STATE_DIR": str(tmp / "state"),
+        "FAKE_SEND_LOG": str(send_log),
+    })
+
+    failures: list[str] = []
+    try:
+        small = ws_encode(b"hola", WS_TEXT, mask=True)
+        fin, op, body = decode_frame_bytes(small)
+        if not (fin and op == WS_TEXT and body == b"hola"):
+            failures.append("ws_encode/decode corto fallo")
+        mid = ws_encode(b"x" * 300, WS_TEXT, mask=False)
+        fin, op, body = decode_frame_bytes(mid)
+        if not (fin and body == b"x" * 300):
+            failures.append("ws_encode/decode 126 fallo")
+        big = ws_encode(os.urandom(70000), WS_BINARY, mask=True)
+        fin, op, body = decode_frame_bytes(big)
+        if not (fin and op == WS_BINARY and len(body) == 70000):
+            failures.append("ws_encode/decode 127 fallo")
+
+        cfg = Config()
+        problem = cfg.ready()
+        if problem:
+            failures.append(f"config no lista: {problem}")
+
+        handle_message(cfg, {"channel_id": "999", "content": "hola main",
+                             "author": {"id": "555", "bot": False}})
+        sent = [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]
+        if not any(a[:3] == ["send", "main-seat", "[dc] hola main"] for a in sent):
+            failures.append(f"no inyecto en la silla: {sent}")
+
+        handle_message(cfg, {"channel_id": "999", "content": "intruso",
+                             "author": {"id": "666", "bot": False}})
+        sent = [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]
+        if any(a[:2] == ["send", "main-seat"] and a[2:] == ["[dc] intruso"] for a in sent):
+            failures.append("inyecto un user no autorizado")
+
+        handle_message(cfg, {"channel_id": "888", "content": "otro canal",
+                             "author": {"id": "555", "bot": False}})
+        sent = [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]
+        if any(a[:2] == ["send", "main-seat"] and a[2:] == ["[dc] otro canal"] for a in sent):
+            failures.append("inyecto desde un canal no dedicado")
+
+        forwarded = forward_replies(cfg)
+        if forwarded != 1:
+            failures.append(f"forward conto {forwarded}, esperaba 1")
+        if not any(s.startswith("respuesta dc") for s in state["sends"]):
+            failures.append(f"respuesta no llego al canal: {state['sends']}")
+        if not any(p.endswith("/channels/999/messages") for p in state["paths"]):
+            failures.append(f"ruta REST inesperada: {state['paths']}")
+        again = forward_replies(cfg)
+        if again != 0:
+            failures.append(f"reenvio duplicado: {again}")
+
+        ask = {"ts": "2026-01-01T00:00:01-05:00", "kind": "ask", "actor": "work-x",
+               "ticket": "T-1", "seat": "work-x", "area": "meta",
+               "summary": "necesito el dato",
+               "data": {"message": "necesito el dato", "priority": "normal", "awaiting": True}}
+        with events.open("a") as fh:
+            fh.write(json.dumps(ask) + "\n")
+        posted = forward_replies(cfg)
+        if posted != 1:
+            failures.append(f"ask no posteado: {posted}")
+        if not any("necesito el dato" in s for s in state["sends"]):
+            failures.append("la pregunta no llego al canal")
+        if not any("<@555>" in s for s in state["sends"]):
+            failures.append("la pregunta no menciona al usuario")
+        if not load_pending(cfg):
+            failures.append("no registro la pregunta pendiente")
+
+        handle_message(cfg, {"channel_id": "999", "content": "aqui va la respuesta",
+                             "author": {"id": "555", "bot": False}})
+        sent = [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]
+        if not any(a[:3] == ["send", "work-x", "[dc] [respuesta] aqui va la respuesta"] for a in sent):
+            failures.append(f"la respuesta no fue a la silla que pregunto: {sent}")
+        if load_pending(cfg):
+            failures.append("no limpio la pregunta pendiente tras responder")
+        if not any(a[:3] == ["ticket", "set", "T-1"] for a in sent):
+            failures.append("no desbloqueo el ticket T-1")
+        state["paths"].clear()
+        state["sends"].clear()
+        handle_message(cfg, {"id": "7001", "channel_id": "999", "content": "una idea nueva",
+                             "author": {"id": "555", "bot": False}})
+        if not any(p.endswith("/threads") for p in state["paths"]):
+            failures.append("no creo hilo para el pedido nuevo")
+        sent = [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]
+        if not any(a[:3] == ["send", "main-seat", "[dc] t=1 una idea nueva"] for a in sent):
+            failures.append(f"el pedido nuevo no inyecto con su hilo: {sent}")
+        projects = load_projects(cfg)
+        if not projects:
+            failures.append("el pedido no quedo registrado como proyecto")
+        elif not any(str(p.get("thread") or "") for p in projects.values()):
+            failures.append("el proyecto del pedido no tiene hilo")
+        handle_message(cfg, {"id": "7002", "channel_id": "1", "content": "comento en el hilo",
+                             "author": {"id": "555", "bot": False}})
+        if not any(a[:3] == ["send", "main-seat", "[dc] t=1 comento en el hilo"] for a in
+                   [json.loads(x) for x in send_log.read_text().splitlines() if x.strip()]):
+            failures.append("no ruteo el mensaje del hilo a main")
+
+        forward_replies(cfg)
+        state["calls"].clear()
+        state["sends"].clear()
+        state["paths"].clear()
+        remember_project(cfg, ["11"], {"root": "11", "thread": "11", "ts": 1.0,
+                                       "ticket": "", "name": "hilo A", "last_user": "9001"})
+        remember_project(cfg, ["22"], {"root": "22", "thread": "22", "ts": 2.0,
+                                       "ticket": "", "name": "hilo B", "last_user": "9002"})
+        with events.open("a") as fh:
+            for th, txt in (("11", "respuesta hilo A"), ("22", "respuesta hilo B")):
+                fh.write(json.dumps({"ts": "2026-01-01T00:00:02-05:00", "kind": "reply",
+                                     "actor": "main", "ticket": "", "seat": "main-seat",
+                                     "area": "", "summary": txt,
+                                     "data": {"message": txt, "to": "discord", "thread": th}}) + "\n")
+        routed = forward_replies(cfg)
+        if routed != 2:
+            failures.append(f"ruteo por hilo conto {routed}, esperaba 2")
+        calls = state["calls"]
+        in_a = [c for c in calls if c["path"].endswith("/channels/11/messages")]
+        in_b = [c for c in calls if c["path"].endswith("/channels/22/messages")]
+        if not any("respuesta hilo A" in c["content"] for c in in_a):
+            failures.append(f"la respuesta del hilo A no cayo en su hilo: {calls}")
+        if not any("respuesta hilo B" in c["content"] for c in in_b):
+            failures.append(f"la respuesta del hilo B no cayo en su hilo: {calls}")
+        if any("respuesta hilo B" in c["content"] for c in in_a):
+            failures.append("la respuesta del hilo B se mezclo en el hilo A")
+        if any("respuesta hilo A" in c["content"] for c in in_b):
+            failures.append("la respuesta del hilo A se mezclo en el hilo B")
+        if not any(c["reference"] == "9001" for c in in_a):
+            failures.append("la respuesta del hilo A no cito al ultimo mensaje del hilo")
+    except Exception as exc:
+        failures.append(f"excepcion: {exc}")
+    finally:
+        server.shutdown()
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    if failures:
+        for item in failures:
+            print("rig-discord-bot selftest FAIL: " + item, file=sys.stderr)
+        return 1
+    print("rig-discord-bot selftest OK")
+    return 0
+
+
+def decode_frame_bytes(raw: bytes) -> tuple[bool, int, bytes]:
+    head = raw[:2]
+    fin = bool(head[0] & 0x80)
+    opcode = head[0] & 0x0F
+    masked = bool(head[1] & 0x80)
+    length = head[1] & 0x7F
+    pos = 2
+    if length == 126:
+        length = int.from_bytes(raw[pos:pos + 2], "big")
+        pos += 2
+    elif length == 127:
+        length = int.from_bytes(raw[pos:pos + 8], "big")
+        pos += 8
+    key = None
+    if masked:
+        key = raw[pos:pos + 4]
+        pos += 4
+    payload = raw[pos:pos + length]
+    if key:
+        payload = bytes(b ^ key[i % 4] for i, b in enumerate(payload))
+    return fin, opcode, payload
+
+
+def main(argv: list[str]) -> int:
+    if "--selftest" in argv:
+        return selftest()
+    if "--help" in argv or "-h" in argv:
+        print("rig-discord-bot [--selftest] [--once]\n"
+              "  puente Discord <-> main: mensajes del canal entran a la silla (rig send),\n"
+              "  las respuestas (rig say, kind=reply) vuelven al canal.\n"
+              "  hilos: cada pedido nuevo abre un hilo de Discord (RIG_DISCORD_THREADS=1);\n"
+              "  el canal queda limpio y el detalle vive en el hilo del pedido.\n"
+              "  cada mensaje viaja a la silla con su hilo ('[dc] t=<thread> ...') y las\n"
+              "  respuestas (rig say --thread) vuelven al mismo hilo, sin mezclar temas.\n"
+              "  escalado: un evento kind=ask se publica mencionando al usuario;\n"
+              "  al responder, la respuesta viaja a la silla que pregunto (inject del seat),\n"
+              "  emite kind=answer, desbloquea el ticket y limpia la pregunta pendiente.\n"
+              "  sin respuesta en RIG_DISCORD_ESCALATE_MIN (default 10) min, repite y sube.\n"
+              "  Config por EnvironmentFile: DISCORD_BOT_TOKEN, DISCORD_ALLOWED_USER_IDS,\n"
+              "  DISCORD_CHANNEL_ID, RIG_SEAT, RIG_EVENTS_FILE, RIG_BIN, RIG_STT_CMD,\n"
+              "  RIG_DISCORD_ESCALATE_MIN, RIG_ESCALATE_BIN, RIG_DISCORD_THREADS (opcionales).")
+        return 0
+    cfg = Config()
+    if "--once" in argv:
+        problem = cfg.ready()
+        if problem:
+            log("no arranco: " + problem)
+            return 1
+        forward_replies(cfg)
+        return 0
+    return run(cfg)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

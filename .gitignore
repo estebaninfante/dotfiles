@@ -38,6 +38,6 @@ linux/config/opencode/tickets.json
 # caveman: flag de sesion, se genera en runtime (caveman apagado por defecto)
 linux/config/opencode/.caveman-active
 
-# secrets locales (tokens): nunca versionar
+# secrets locales (tokens de bots, claves): nunca versionar
 linux/config/opencode/secrets/
 linux/config/opencode/service.json

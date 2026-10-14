@@ -210,6 +210,22 @@
         "~/.config/opencode/tickets.json",
         "~/dotfiles/linux/config/opencode/skills/verification/verifiers/rig.sh"
       ]
+    },
+    "bridge": {
+      "script": "bridge.sh",
+      "desc": "puente Discord/Telegram<->main (bots, units systemd, docs)",
+      "priority": 16,
+      "globs": [
+        "~/dotfiles/linux/bin/rig-discord-bot",
+        "~/dotfiles/linux/system/systemd-user/rig-discord-bot.service",
+        "~/.local/bin/rig-discord-bot",
+        "~/dotfiles/linux/bin/rig-telegram-bot",
+        "~/dotfiles/linux/system/systemd-user/rig-telegram-bot.service",
+        "~/dotfiles/linux/bin/rig-escalate",
+        "~/.local/bin/rig-escalate",
+        "~/dotfiles/docs/main-bridge.md",
+        "~/.local/bin/rig-telegram-bot"
+      ]
     }
   }
 }

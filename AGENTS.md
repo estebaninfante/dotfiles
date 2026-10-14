@@ -343,3 +343,84 @@ Solo solicita confirmacion para operaciones potencialmente destructivas:
 - Reiniciar o apagar el sistema.
 
 Los reinicios de aplicaciones, recargas de servicios, validaciones de configuracion y operaciones rutinarias **no requieren confirmacion**.
+
+## Puente Discord <-> `main` (hablarle desde el celular)
+
+El dueno habla con su agente primario `main` desde un **canal dedicado de Discord**: ahi vive el
+agente, ahi le escribe. Transporte elegido por el usuario (Telegram queda como alternativa
+documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
+
+- **Entrada**: `rig-discord-bot` recibe el mensaje del canal por el Gateway de Discord, valida
+  que el autor este en la allowlist de **user ids** y lo inyecta en la silla con
+  `rig send main-seat "[dc] <texto>"`.
+- **Salida**: `main` responde con `rig say "<respuesta>"` (evento `kind=reply`, `actor=main`);
+  el bot sigue `~/.local/state/rig/events.jsonl` y reenvia los replies al canal dedicado.
+- **Hilos por pedido (conversacion matricial)**: cada pedido nuevo del usuario abre un **hilo
+  nativo de Discord** (nombre = numero/titulo del ticket o las primeras palabras de la idea);
+  el canal general queda limpio y el detalle vive en el hilo. `main` responde **una vez** por
+  mensaje del usuario, corto; prohibido encadenar varios mensajes largos en el canal (el reporte
+  largo se parte **dentro** del hilo, tope 2000 chars por mensaje). Se usa la **respuesta nativa**
+  de Discord (`message_reference`) para saber a que mensaje contesta el usuario. **Limite
+  honesto**: Discord da un solo nivel de hilo (no hay arbol infinito tipo Reddit): hilo por
+  pedido + respuestas con cita al padre; un arbol profundo lo dibuja la interfaz del hub, no
+  Discord. Toggle `RIG_DISCORD_THREADS` (default 1).
+- **Registro padre/hijo (para el hub)**: cada mensaje emitido deja un evento con el id propio y
+  el del padre. Forma canonica (acordada con `work-hub-conversacion`): `kind` en `{conv-in,
+  conv-out, ask, answer}`, `data={channel_id, thread_id, message_id, parent_id, child_id, to}`;
+  el hub enlaza por `parent_id` y el rol sale de `actor` (usuario -> user, main/bot -> assistant).
+- **Extraccion conversacional (adjuntos)**: se pide conversando ("bajame la conversacion y el
+  pensamiento del ticket 93"); el bot detecta verbo de entrega + sustantivo de contenido, saca el
+  ticket (`#93` o `FOO-3`) y sube el archivo (`extraccion-<ticket>.md`) como adjunto dentro del
+  hilo con `Sesion: <ticket> · generado: <hora ISO>`. El bot invoca la extraccion (env
+  `RIG_EXTRACT_CMD`, default `rig export`) con la *cosa* (ticket/silla/sesion) y sube el archivo
+  que `rig export` imprime en stdout (owner `work-visibilidad-y-cierre`; tambien `rig ticket
+  show <id>`); **no** lee la base de opencode por su cuenta.
+- **`main` en silla**: `main` corre como silla tmux (`rig spawn main-seat --agent main`) para
+  ser direccionable; el pane de herdr le hace attach para seguir viendolo en el escritorio.
+- **Sin puertos**: el bot abre conexion **saliente** al Gateway (`wss://gateway.discord.gg`);
+  nada escucha en la LAN/internet. Bot Python3 stdlib (WebSocket propio), sin `discord.js`.
+- **Seguridad**: allowlist estricta de **user id**; token, allowlist y `channel_id` en
+  `~/.config/rig/discord.env` (chmod 600, FUERA del repo); se ignora todo mensaje de bots u
+  otros canales; cada mensaje queda como evento (`discord-in/out/voice/error/reject`).
+- **Alta del bot**: el usuario debe crear/reusar la app en el portal de Discord, activar
+  **MESSAGE CONTENT INTENT**, regenerar el token e invitar el bot con permisos `76800` (View
+  Channel + Send Messages + Read Message History); luego pega el token/user id/channel id en
+  `~/.config/rig/discord.env`. Paso a paso en `docs/main-bridge.md`.
+- **Regla para `main`**: un mensaje que empieza con `[dc]` se responde al usuario con
+  `rig say "<respuesta>"`.
+- **Escalado al humano (bidireccional)**: el canal tambien sirve para que **cualquier flujo que
+  se trabe llame al usuario**. La silla pregunta con
+  `rig-escalate "<pregunta>" --ticket X --seat S --priority alta|normal` (o `rig ask`, subcomando
+  que integra `work-rig-reconcile` como wrapper delgado del script; este ticket NO edita `rig`).
+  El script: (1) emite `kind=ask` (`data.awaiting`) en el registro; (2) marca el ticket `blocked`
+  con motivo; (3) avisa por escritorio (`notify-send`) y por voz (TTS `voice`); (4) el bot de
+  Discord publica la pregunta con **mencion** `<@user_id>` (dispara push del telefono). El retorno
+  es el punto clave: la respuesta del usuario (texto o nota de voz) viaja de vuelta a la silla
+  que pregunto (`rig send <seat> "[dc] [respuesta] ..."`), la **desbloquea** (`rig ticket set
+  --status in-progress`) y queda como evento `kind=answer`; la cola vive en
+  `pending-asks.json` (LIFO). Con una pregunta pendiente, el texto del canal se trata como
+  respuesta (prefijo `!` para hablarle a `main` igual).
+- **Urgencia/reintento**: si un `ask` sigue sin respuesta mas de `RIG_DISCORD_ESCALATE_MIN`
+  minutos (default 10), el bot republica con mencion + re-dispara escritorio/voz
+  (`rig-escalate --remind`) y emite `kind=ask-reminder`.
+- **Marca de tiempo y fuente (regla)**: todo mensaje que el puente publica en el canal expone su
+  hora y su origen. El ask cierra con `-# <hora ISO> · fuente <actor|seat>`; las respuestas de
+  `main` salen con `-# <hora ISO> · main`. Las horas son las del evento (`ts`). El reporte del
+  punto de entrada se reconstruye en el momento citando hora y fuente, sin mirar el reloj a ojo.
+- **Aviso al telefono (opciones, documentadas)**: la mencíon/DM de Discord disparan el push de su
+  app; el `ntfy` local ya existe. Una **llamada telefonica real** requiere proveedor externo
+  (Twilio/Vonage) con costo por minuto y numero; un bot de Discord **no** puede iniciar llamada
+  de voz ni timbre. Sin implementar telefonia (ver `docs/main-bridge.md`, tabla de costos/fases).
+- **Unit**: `linux/system/systemd-user/rig-discord-bot.service` (`Restart=always`,
+  `EnvironmentFile`, `ConditionPathExists=%h/.config/rig/discord.env`; sin token queda
+  `condition failed`, no arranca).
+- **Voz**: nota de voz de Discord (attachment `audio/*`) -> STT local (aun no instalado) ->
+  texto; respuesta en audio via `voice` (chatterbox). Llamada telefonica real (SIP) NO viable
+  sin proveedor externo; canales de voz nativos de Discord fuera de alcance. WhatsApp: solo
+  documentado (Cloud API oficial vs no-oficial con riesgo de bloqueo del numero).
+- **Un solo transporte**: NO correr el bot de Telegram y el de Discord a la vez (ambos reenvian
+  los mismos `kind=reply`).
+- Dueño: `supervisor` (doctrina/canal) + `dotfiles` (script y unit).
+  Verificacion: `verify run bridge` (py_compile + selftest + token-leak + unit + symlink, para
+  discord y telegram) y `verify run rig`. Config nueva -> reinicia opencode no aplica, pero la
+  silla `main-seat` se levanta con `rig spawn`.
