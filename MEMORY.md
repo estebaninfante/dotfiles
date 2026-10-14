@@ -8,6 +8,8 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - **WebSocket server en gesturecontrol**: LandmarkServer corre en thread separado con asyncio loop propio. `publish()` usa `run_coroutine_threadsafe()` para enviar desde el thread principal.
 - **opencode en Omarchy = binario OFICIAL V2 (unico dueno)**: hoy corre OpenCode 2 en `~/.opencode/bin/opencode` (v2.0.28, instalado con `https://opencode.ai/v2/install`; metodo versionado en `linux/bin/opencode-install`). NO se instala por mise: el backend aqua da 404 en las releases 2.0.x (la 2.0 no se publica como GitHub releases de `anomalyco/opencode`). El lanzador `linux/bin/opencode` hace `exec "$HOME/.opencode/bin/opencode" "$@"`. Nada de pacman `opencode-bin` ni npm global `opencode-ai`. El binario V1 (aqua `1.19.0` en `~/.local/share/mise/installs/opencode/1.19.0/opencode`) se conserva SOLO como rollback y como binario de las sillas V1 mientras rig se adapta.
 - **V2 trae servidor de fondo**: `opencode service` (start/restart/status/stop) mantiene un servicio caliente (p.ej. http://127.0.0.1:49374) y la TUI se conecta a el -> el arranque percibido baja de ~3.9s (V1, cold start por TUI) a ~0.1-0.5s (`opencode session list`). El archivo de servicio es `~/.local/state/opencode/service.json` (contiene un password: NO versionar).
+- **Next.js 16: un solo `next dev` por arbol**: el segundo `next dev` en el mismo directorio falla con `Another next dev server is already running` (deja log/PID en `.next/dev/`). En cambio `next dev` (que escribe en `.next/dev/`) y `next build`/`next start` (en `.next/BUILD_ID`) CONVIVEN en el mismo arbol. Por eso agentes-platform main se sirve con build+`next start` (convive con el `next dev` del usuario en :3020) y el worktree `developing` (dedicado) con `next dev`.
+- **pnpm 12 `ERR_PNPM_IGNORED_BUILDS`**: `strictDepBuilds` (default true) falla si hay build scripts sin revisar. En 12.4.2 solo `strictDepBuilds: false` en `pnpm-workspace.yaml` lo baja a warning; NO funcionan `--config.strictDepBuilds=false`, `--config.strict-dep-builds=false`, `.npmrc` (kebab o camel) ni `npm_config_*`. `allowBuilds` con valores string placeholder ("set this to true or false") NO aprueba nada. El install IGUAL enlaza `node_modules` antes de abortar, asi que el error deja las deps usables.
 
 ## Errores comunes y soluciones
 
@@ -23,6 +25,7 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - **V2 no acepta `opencode --agent X --model Y`**: esos flags solo existen en `opencode run` (top-level solo hay `--prompt`, `--standalone`, `--server`, `--auto`, `-c/--continue`, `-s/--session`). Por eso `rig spawn` (que lanza `opencode --agent ... --model ...`) falla con `cli process failed cause=ShowHelp` (ticket #98 RIG-LAUNCH-FIABLE).
 - **`/tmp` es tmpfs chico (~1.5G libres)**: para instalaciones/descargas grandes usar `TMPDIR=/var/tmp`.
 - **Leer archivos bajo `~/.config/opencode/` con la tool `read` re-inyecta TODO el AGENTS.md (~60 KB)**: usar `bash cat` para inspeccionarlos.
+- **`ERR_PNPM_IGNORED_BUILDS` al instalar agentes-platform (`@google/genai`, `protobufjs`)**: ver patron de pnpm 12. Un install que escupe ese error deja `node_modules` poblado (el linking corre antes del check); el wrapper lo tolera comprobando que `node_modules` existe.
 
 ## Configuraciones frecuentes
 
@@ -31,6 +34,7 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - `~/.local/share/gesturecontrol/gestureControl.py` — engine parcheado (cv2.waitKey fix)
 - **Bedtime timer**: desktop se apaga a las 21:00 (hora Colombia). `bedtime-skip.sh` crea flag `/run/bedtime-skip` para cancelar una noche.
 - **opencode (V2)**: binario `~/.opencode/bin/opencode` (v2.0.28, instalador oficial); lanzador `~/.local/bin/opencode` (→ `linux/bin/opencode`); metodo de instalacion `~/.local/bin/opencode-install` (→ `linux/bin/opencode-install`); config `~/.config/opencode/` (→ `linux/config/opencode/`: `opencode.json`, `cli.json` del cliente TUI, `plugins/` con los 5 ports V2, `plugins-disabled/` con los no portados: btw, caveman, herdr-agent-state, herdr-pane-state, notify-sound, voice, arize-tracing); servidor de fondo con `opencode service`. `rtk` v1.0.0 en `~/.local/bin/rtk`; el plugin `plugins/rtk.js` reescribe comandos bash via `rtk rewrite` cuando `rtk` esta en PATH.
+- **agentes-platform (dos enlaces tailnet)**: units `agentes-platform-main.service` (`https://laptopmarchy.tail77dc99.ts.net:10000/` → `127.0.0.1:3031`, build+`next start` sobre `~/developing/agentes-platform`) y `agentes-platform-developing.service` (`:10001/` → `127.0.0.1:3040`, `next dev` sobre el worktree persistente `~/developing/.rig-worktrees/agentes-platform/developing`); wrapper `linux/bin/agentes-platform-serve <main|developing>`; `developing/.env.local` se enlaza a `main/.env.local`. Puertos 38000/47000 reservados (preview). Units en `linux/system/systemd-user/`, instaladas por setup-omarchy.
 
 ## Skills creadas
 
@@ -41,6 +45,13 @@ _(Agente: listar skills creadas por auto-mejora)_
 _(agregar aqui pendientes activos)_
 
 ## Historial de sesiones (últimas 5)
+
+### Sesión 2026-10-14: Ticket PLATAFORMA-DOS-ENLACES — dos enlaces tailnet de agentes-platform
+- **Pedido**: dos enlaces para ver en vivo lo que hacen los agentes: agentes-platform en su version **main** y en su version **developing**. Hoy el 10000 -> 3031 estaba caido (3031 no corria).
+- **Entregado**: units --user `agentes-platform-main.service` (`:10000/` -> `127.0.0.1:3031`, build de produccion + `next start`, rebuild automatico si el build queda obsoleto) y `agentes-platform-developing.service` (`:10001/` -> `127.0.0.1:3040`, `next dev` sobre el worktree persistente `~/developing/.rig-worktrees/agentes-platform/developing`); wrapper `linux/bin/agentes-platform-serve <main|developing>`; enlaces `tailscale serve` solo-tailnet. El worktree developing no tenia `node_modules` (se instalo) ni `.env.local` (el wrapper lo enlaza a `main/.env.local`).
+- **Hallazgos**: Next 16 admite **un solo `next dev` por arbol** (el segundo falla) -> main va con `next start` (convive con el dev del usuario en :3020); el symlink de `node_modules` entre arboles NO sirve (Turbopack rechaza symlinks fuera del root, "Symlink ... points out of the filesystem root"); pnpm 12 exige `strictDepBuilds: false` en `pnpm-workspace.yaml` para `ERR_PNPM_IGNORED_BUILDS` (los `--config.*`, `.npmrc` y env no funcionan en 12.4.2).
+- **Verificacion**: units enabled+active, `curl 127.0.0.1:3031/` = 200 y `127.0.0.1:3040/` = 200, `curl https://laptopmarchy.tail77dc99.ts.net:10000/` = 200 y `:10001/` = 200; `verify auto linux/system/systemd-user/agentes-platform-*.service` (systemd) PASS.
+- **Nota**: commit en el arbol vivo `~/dotfiles` (rama main, commit `1ee41a2`), NO en el worktree del ticket: la infra debe quedar viva ya y los symlinks de `~/.local/bin` apuntan al arbol vivo.
 
 ### Sesión 2026-10-13: Ticket OPENCODE-V2 — migración a OpenCode 2.0.28 + port de plugins
 - **Pedido del usuario (literal)**: "Migremos a la 2.0 igual, si necesito algún plugin, tú mismo lo haces. Hagamos la migración, y soluciona, que todavía se demora bastante en entrar a opencode, por lo que veo." y luego "Dale" (autorizando portar los 5 plugins de control).
@@ -76,14 +87,5 @@ _(agregar aqui pendientes activos)_
 - **Nota**: nautilus 50.3.1, glycin-loaders = thumbnailers sandbox en bwrap. Fuga conocida del estilo. Recurrencia → desactivar thumbnails o actualizar paquete.
 - **Diagnostic**: no confiar en "exit 0" de launchers D-Bus; verificar ventana con `hyprctl clients -j`.
 
-### Sesión 2026-09-25: Terminar migración desktop → laptop (fresh install)
-- **hyprexpo**: upstream borró el pin `e95ef2e` (historial reescrito, 404 en GitHub) y `master` cambió a layout `src/`. Rebaseado a `5891014c` = pin oficial de `hyprpm.toml` para Hyprland 0.56.2. Parche regenerado (mismos 16 archivos), verificado en sesión anidada (grilla 3D OK en PNG). Hunk de live-refresh descartado (esa función upstream no existe en el nuevo pin; expo = snapshots + damage, como stock). `.so` instalado en `/var/cache/hyprpm/eztvn/hyprexpo/` vía pkexec; aplica al próximo login. PIN actualizado en `hyprexpo-rebuild.sh`, `hyprexpo-verify-3d.sh` y SKILL.md. Nota en `hyprexpo-changes.md`.
-- **Lección (skill hyprland-plugin-safety)**: ante pin muerto, leer `commit_pins` del `hyprpm.toml` upstream para la versión de Hyprland en ejecución, NO usar `HEAD`.
-- **setup-secrets.sh**: peer se elegía por `hostname` (laptopmarchy → peer erróneo "laptop"). Ahora usa `~/.config/machine-type` con fallback a hostname.
-- **Paquetes**: tailscale + syncthing NO estaban en setup-omarchy (FASE 9 los esperaba). Instalados vía pacman+pkexec, servicios habilitados (`tailscaled` activo; `syncthing@eztvn` habilitado, arranque manual descartado por usuario). Agregados a EXTRA_PKGS del setup para futuros installs.
-- **SSH**: key `ed25519` creada en laptop (`eztvn@laptopmarchy`). Falta: autorizarla en desktop + `tailscale up --authkey` + `gh auth login` + copiar secrets/sunshine-pass (desktop offline durante la sesión).
-- **`reverse_rows`**: `hyprland.lua` lo seteaba pero la clave no existía en ningún parche (venía de árbol sucio del desktop). Implementado en el fork (flag en computeTileLayout/tileIndexAtPoint, default 0), test headless 9/9, parche v2 (18 archivos). `.so` con reverse compilado en `~/.cache/hyprexpo-src/` — falta `sudo install` (polkit bloqueado con pantalla lockeada) + relogin.
-- **Ojo**: `pkill -f <patrón>` se suicida si el patrón aparece en tu propio comando. Matar nested solo por PID. Los `make test` del plugin tienen 4 FAILs preexistentes de selección (no-layout) en este pin.
-
 ---
-_Ultima actualización: 2026-10-13 (ticket OPENCODE-V2: OpenCode 2.0.28 binario oficial + servidor de fondo + 5 plugins portados a la API V2)_
+_Ultima actualización: 2026-10-14 (ticket PLATAFORMA-DOS-ENLACES: dos enlaces tailnet de agentes-platform, main 10000->3031 y developing 10001->3040)_
