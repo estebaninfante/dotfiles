@@ -230,6 +230,30 @@ else
   fail "app-dev-owner" "app-dev falta o no cumple (owner implementacion + modelo gratis + frontera + Triggers + fila en AGENTS.md)"
 fi
 
+fallback_cfg="${MODEL_FALLBACK_JSON:-$HOME/.config/opencode/model-fallback.json}"
+fallback_reason=""
+if [[ ! -f "$fallback_cfg" ]]; then
+  fallback_reason="falta la cadena de fallback: $fallback_cfg"
+elif ! node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const chain = (c.agents && c.agents["*"] && c.agents["*"].fallbackModels) || [];
+const free = chain.some((m) => /^opencode\//.test(m));
+const go = chain.some((m) => /^opencode-go\//.test(m));
+process.exit(free && go ? 0 : 1);
+' "$fallback_cfg" 2>/dev/null; then
+  fallback_reason="la cadena $fallback_cfg no tiene a la vez un modelo opencode/ y uno opencode-go/ en agents[*] (o es JSON invalido)"
+elif ! grep -qF 'Fallback de modelos gratis -> opencode-go' "$policy_file" \
+   || ! grep -qF 'workhorse' "$policy_file" \
+   || ! grep -qF 'departamento de tokens' "$policy_file"; then
+  fallback_reason="falta la seccion de fallback/tiers/departamento de tokens en $policy_file"
+fi
+if [[ -z "$fallback_reason" ]]; then
+  ok "fallback-policy" "cadena zen->opencode-go presente y valida + seccion de tiers y departamento en AGENTS.md"
+else
+  fail "fallback-policy" "$fallback_reason"
+fi
+
 models_list=""
 if command -v opencode >/dev/null 2>&1; then
   models_list="$(opencode models 2>/dev/null | awk '{print $1}')"

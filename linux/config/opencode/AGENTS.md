@@ -190,6 +190,45 @@ inexistente es un defecto: el agente no corre o cae a un provider sin auth.
   models`) y `app-dev-owner` (`app-dev` existe, es el owner de implementacion, con modelo
   gratuito y frontera con `app-architect`).
 
+## Fallback de modelos gratis -> opencode-go (cadena, tiers y departamento de tokens)
+
+El plugin `@smart-coders-hq/opencode-model-fallback` corre en cada sesion y mueve el prompt al
+siguiente modelo **sano** de la cadena cuando el activo da `rate_limit`, `quota_exceeded`, `5xx`,
+`timeout` u `overloaded`. La cadena vive en `~/.config/opencode/model-fallback.json` (fuente
+versionada: `linux/config/opencode/model-fallback.json`): `agents["*"].fallbackModels` es el
+default y `agents.<nombre>` lo pisa por agente. Sin ese archivo el plugin queda con cadena vacia
+(emite `fallback.no-chain` en `~/.local/share/opencode/logs/model-fallback.log`) y **no hay pase
+zen -> opencode-go**.
+
+- **Cadena actual**: `*` = `opencode/mimo-v2.6-flash-free` -> `opencode/cat-jam-free` ->
+  `opencode-go/deepseek-v4.1-flash` -> `opencode-go/deepseek-v4-flash` (usar los gratis esta
+  bien; al agotarse los de Zen cae a la key `opencode-go`). Los agentes de la fase de PENSAR
+  (`app-architect`, `omarchy-shell`, `hyprland`) tienen su propia cadena que **no baja a gratis**:
+  `opencode-go/deepseek-v4.1-flash` -> `opencode-go/deepseek-v4-flash`.
+- **Tiers operativos (workhorse vs frontera)**: *workhorse* = los modelos de trabajo
+  (`opencode/mimo-v2.6-flash-free`, `opencode/cat-jam-free`, `opencode-go/deepseek-v4.1-flash`,
+  `opencode-go/deepseek-v4-flash`); *frontera* = `opencode-go/deepseek-v4-pro` (solo pensar).
+  Todo modelo de la cadena debe existir en `opencode models`.
+- **Quien decide y con que senal**: el **plugin** decide el fallback de forma automatica por
+  **salud** (rate-limit/cuota/5xx/timeout/overload) sin pedir permiso. El **escalado de nivel**
+  lo decide la **silla** por senal (2 fallos de la misma tarea, ERROR del verificador, o tarea
+  que toca foco/input/shell/QML/migraciones) y lo deja con `rig log --ticket <id>`. El default de
+  sillas es gratis/flash, **nunca pro** (ver la politica de modelos).
+- **Departamento de tokens (PENDIENTE, diseno)**: se propone **extender `supervisor`** (no crear
+  un agente nuevo que sume presupuesto de descripciones) con un rol de custodia del gasto que:
+  (1) lee el costo real por sesion/agente (`opencode.db` via `rig ticket metrics`), (2) mantiene
+  esta cadena y los tiers alineados con `opencode models`, y (3) propone degradaciones/upgrades
+  por evidencia, no por confianza. Si el volumen lo justifica, se crea entonces el agente
+  `token-steward` (area `meta`, owner `supervisor`) con motivo + evidencia + verificacion. El
+  catalogo de modelos workhorse/frontera lo aporta #127 MODEL-AWARENESS: coordinarlo, no
+  duplicarlo. Toda creacion de agente pide reiniciar opencode.
+- **Contrato de verificacion**: `verify run agents` (check `fallback-policy`: existe
+  `model-fallback.json` valido con al menos un modelo `opencode/` y uno `opencode-go/` en `*`, y
+  esta seccion presente en AGENTS.md). Editar la cadena o los agentes **no se hot-reloadea**:
+  reinicia opencode para que aplique.
+- Dueño: `supervisor` (doctrina) + `dotfiles` (config versionada). Config nueva -> reinicia
+  opencode.
+
 ## Invariante: unidades chicas + steering (`main` no bloquea al usuario)
 
 El usuario solo habla con `main`. En el TUI de opencode el **steering ya es nativo**: un
