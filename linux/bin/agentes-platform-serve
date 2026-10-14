@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="${HOME}/.local/share/mise/shims:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+
+main_tree="${HOME}/developing/agentes-platform"
+dev_tree="${HOME}/developing/.rig-worktrees/agentes-platform/developing"
+
+target="${1:-}"
+
+case "$target" in
+    main)
+        tree="$main_tree"
+        port="${AGENTES_PLATFORM_MAIN_PORT:-3031}"
+        mode="start"
+        ;;
+    developing)
+        tree="$dev_tree"
+        port="${AGENTES_PLATFORM_DEVELOPING_PORT:-3040}"
+        mode="dev"
+        ;;
+    *)
+        echo "uso: agentes-platform-serve <main|developing>" >&2
+        exit 2
+        ;;
+esac
+
+if [ ! -d "$tree" ]; then
+    echo "agentes-platform-serve: no existe el arbol $tree" >&2
+    exit 3
+fi
+
+cd "$tree"
+
+if [ "$mode" = "dev" ] && [ ! -e .env.local ] && [ -e "$main_tree/.env.local" ]; then
+    ln -sfn "$main_tree/.env.local" .env.local
+fi
+
+if [ ! -d node_modules ]; then
+    echo "agentes-platform-serve: instalando dependencias en $tree" >&2
+    pnpm install --frozen-lockfile || true
+    if [ ! -d node_modules ]; then
+        echo "agentes-platform-serve: no se pudieron instalar las dependencias" >&2
+        exit 4
+    fi
+fi
+
+if [ "$mode" = "dev" ]; then
+    exec pnpm exec next dev -p "$port" -H 127.0.0.1
+fi
+
+needs_build=0
+if [ ! -f .next/BUILD_ID ]; then
+    needs_build=1
+elif [ -n "$(find app components lib hooks connector public types next.config.ts package.json postcss.config.mjs -newer .next/BUILD_ID -print -quit 2>/dev/null)" ]; then
+    needs_build=1
+fi
+
+if [ "$needs_build" = "1" ]; then
+    echo "agentes-platform-serve: construyendo $tree" >&2
+    pnpm build
+fi
+
+exec pnpm exec next start -p "$port" -H 127.0.0.1

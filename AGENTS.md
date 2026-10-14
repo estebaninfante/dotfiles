@@ -321,6 +321,40 @@ al usuario remoto por **Tailscale** (tailnet-only). Nada de `0.0.0.0` en apps si
   debe fallar (000) y `curl -k https://laptopmarchy.tail77dc99.ts.net/` = 200; `verify auto
   <unit>` (dominio systemd). La unit es machine-local (systemd/user), no vive en este repo.
 
+## agentes-platform: dos enlaces tailnet (main y developing)
+
+La app **agentes-platform** (`~/developing/agentes-platform`, Next.js + pnpm) se sirve en la
+maquina con **dos enlaces tailnet estables**, uno por rama, para ver en vivo lo que hacen los
+agentes en cada version:
+
+- **main**: `https://laptopmarchy.tail77dc99.ts.net:10000/` -> `127.0.0.1:3031`.
+- **developing**: `https://laptopmarchy.tail77dc99.ts.net:10001/` -> `127.0.0.1:3040`.
+
+Ambos solo-tailnet (`tailscale serve`), loopback `127.0.0.1` en la maquina (nada de `0.0.0.0`).
+
+- **Units** (`linux/system/systemd-user/`, instaladas por `setup-omarchy.sh`):
+  `agentes-platform-main.service` y `agentes-platform-developing.service`, `Restart=always`,
+  `StartLimitBurst=20`. Dueñas del ciclo de vida: no lanzar `next` a mano para estos puertos.
+- **Wrapper**: `linux/bin/agentes-platform-serve <main|developing>` (symlink en `~/.local/bin/`).
+  `main` construye si el build esta obsoleto (`find ... -newer .next/BUILD_ID`) y corre
+  `next start`; `developing` corre `next dev` sobre el worktree persistente
+  `~/developing/.rig-worktrees/agentes-platform/developing` (siempre refleja el codigo actual).
+- **Los dos modos difieren a proposito**: Next 16 admite **un solo `next dev` por arbol** (el
+  segundo falla con "Another next dev server is already running"). El usuario tiene su dev en
+  `:3020` sobre el arbol main, asi que main se sirve con **build de produccion + `next start`**
+  (convive con el dev, que vive en `.next/dev/`). El worktree `developing` es dedicado -> ahi si
+  `next dev`. `next.config.ts` ya declara `allowedDevOrigins` con el host tailnet.
+- **`.env.local`**: el wrapper enlaza `developing/.env.local` -> `main/.env.local` si falta (el
+  archivo es gitignored y no viaja con el worktree).
+- **Puertos reservados**: NO reusar `38000` (`PREVIEW-SEGURO`) ni `47000`; los enlaces de
+  agentes-platform son `10000 -> 3031` y `10001 -> 3040`. Un puerto nuevo = un enlace nuevo.
+- **Verificacion**: `systemctl --user is-enabled agentes-platform-main.service
+  agentes-platform-developing.service` = enabled; `is-active` = active;
+  `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3031/` = 200 y
+  `http://127.0.0.1:3040/` = 200; `curl ... https://laptopmarchy.tail77dc99.ts.net:10000/` = 200
+  y `:10001/` = 200; `ss -ltn | grep -E '3031|3040'` = `127.0.0.1`. `verify auto
+  linux/system/systemd-user/agentes-platform-*.service` (dominio systemd).
+
 ## Lo que NO se gestiona
 
 Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario, ni ejecutables instalados por gestores de paquetes.

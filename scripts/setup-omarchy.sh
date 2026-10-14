@@ -477,6 +477,16 @@ else
     warn "Falta $DOTFILES_SYSTEM/systemd-user/ai-chats-sync.service/.timer/.path"
 fi
 
+if [[ -f "$DOTFILES_SYSTEM/systemd-user/agentes-platform-main.service" ]] && [[ -f "$DOTFILES_SYSTEM/systemd-user/agentes-platform-developing.service" ]]; then
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/agentes-platform-main.service" "$SYSTEMD_DIR/agentes-platform-main.service"
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/agentes-platform-developing.service" "$SYSTEMD_DIR/agentes-platform-developing.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now agentes-platform-main.service agentes-platform-developing.service 2>/dev/null || true
+    ok "agentes-platform (user) habilitado (main 10000->3031, developing 10001->3040)"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd-user/agentes-platform-*.service"
+fi
+
 # Sudoers: permite al panel de bateria (eztvn.power) reiniciar el guard al
 # cambiar de perfil sin pedir password.
 if [[ -f "$DOTFILES_SYSTEM/sudoers.d/power-guard" ]]; then

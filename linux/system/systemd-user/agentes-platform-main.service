@@ -1,0 +1,17 @@
+[Unit]
+Description=agentes-platform (rama main) servida en 127.0.0.1:3031
+Documentation=https://github.com/eztvn/dotfiles
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/agentes-platform-serve main
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=300
+StartLimitBurst=20
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target
