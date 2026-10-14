@@ -4,7 +4,7 @@ set -uo pipefail
 SELF="$(readlink -f "$0")"
 SELFTEST_SESSION=_rig_selftest
 SHELLS_COMMANDS="bash zsh fish sh dash ksh"
-SEAT_MODEL="${RIG_SEAT_MODEL:-opencode-go/deepseek-v4.1-flash}"
+SEAT_MODEL="${RIG_SEAT_MODEL:-opencode/mimo-v2.6-flash-free}"
 TICKETS_FILE="${RIG_TICKETS_FILE:-$HOME/.config/opencode/tickets.json}"
 TICKETS_LOCK="${RIG_TICKETS_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/rig-tickets.lock}"
 TICKET_STATUSES="pending in-progress blocked done"
@@ -139,7 +139,8 @@ num: cada ticket tiene un numero secuencial (#N, por orden de creacion) que se m
   (#12 o 12). El titulo debe ser descriptivo en espanol (>=6 palabras), no un slug.
 worktree: cada ticket corre en su propio arbol git (branch ticket/<id>) -> cambios
 paralelos sin carrera; merge a la base es explicito. Override de ubicacion: RIG_WORKTREE_DIR.
-modelo: toda silla arranca con --model explicito (default opencode-go/deepseek-v4.1-flash).
+modelo: toda silla arranca con --model explicito (default opencode/mimo-v2.6-flash-free, el
+  nivel barato de la politica de modelos). Subir a normal/fuerte es explicito por senal.
   Override: RIG_SEAT_MODEL.
 herdr (ESPACIO POR COSA NUEVA): cada unidad de trabajo nueva abre su PROPIO space (workspace)
   herdr, nombrado por esa cosa: "#<num> <titulo>" para un ticket, o el nombre de la silla para
@@ -1412,7 +1413,7 @@ rig work - cambios paralelos y trazables: un git worktree + branch por ticket
       (con --prompt <texto> arranca el agente con ese primer mensaje).
       --session <ses_id> asocia una sesion de opencode (para metricas por ticket).
       --model M fija el modelo de la silla (default $RIG_SEAT_MODEL o
-      opencode-go/deepseek-v4.1-flash). --herdr abre un SPACE herdr propio para
+      opencode/mimo-v2.6-flash-free). --herdr abre un SPACE herdr propio para
       esta cosa (label '#num titulo' o el id), y cada agente es una ventana del
       space; un 2do agente de la misma cosa suma su ventana. --mirror abre la
       ventana espejo en tmux.

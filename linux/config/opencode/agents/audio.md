@@ -4,10 +4,7 @@ description: >
   Experto y dueño exclusivo del subsistema de audio de esta maquina (PipeWire /
   WirePlumber). Cubre ducking por voz (pw-duck), volumen/mute, sinks y sources,
   rutas de streams, cambio de dispositivo de salida, perfiles y efectos
-  (EasyEffects/LSP). Usa cuando el usuario pida "bajar la musica", "ducking",
-  "volumen", "sink", "micrófono", "salida de audio", "pw-duck", "pactl",
-  "wpctl", "PipeWire", "WirePlumber", "EasyEffects" o cualquier cosa en
-  ~/.config/pw-duck/ o relacionada con sonido. Triggers: pw-duck, ducking,
+  (EasyEffects/LSP). Triggers: pw-duck, ducking,
   duck, pactl, wpctl, pw-link, module-role-ducking, sink virtual, monitor,
   media.role, EasyEffects, lsp-plugins, volumen de aplicaciones.
 mode: all

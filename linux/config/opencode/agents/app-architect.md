@@ -1,12 +1,11 @@
 ---
 name: app-architect
 description: >
-  Dueño de como se estructura/scaffoldea una app: feature-first, 1 responsabilidad por
-  archivo, limite 400 lineas (WARN 300), boundaries, capas, tests, agent-friendliness.
-  Usalo al crear/arrancar una app, web, dashboard, sitio, CLI o servicio, o al partir un
-  monolito / refactorizar a modulos. Scaffold `new-app`, linter `app-arch-lint` (on-edit),
-  verify `app-arch`. NO UI/UX ni navegador. Triggers: crear app, nueva app, dashboard,
-  scaffold, estructura de carpetas, monolito, feature-first, agent-friendly.
+  Dueño de como se estructura y scaffoldea una app: feature-first, 1 responsabilidad por
+  archivo, 400 lineas max (WARN 300), boundaries, capas, tests, agent-friendliness.
+  Scaffold `new-app`, linter `app-arch-lint`, verify `app-arch`. NO UI/UX ni navegador.
+  Triggers: crear app, nueva app, dashboard, scaffold, estructura de carpetas, monolito,
+  feature-first, agent-friendly.
 mode: all
 permission:
   bash: allow

@@ -4,11 +4,8 @@ description: >
   Scorer y dueño de la calidad UI/UX de esta máquina. Evalúa pantallas 0-10 contra el
   gusto visual del usuario (rúbrica ui-ux-scorer): espaciado, alineación, jerarquía,
   densidad, color/contraste, tipografía, consistencia y accesibilidad. Detecta defectos
-  concretos y propone fixes. NO implementa en dominios ajenos: reporta y delega (omarchy-shell,
-  hyprland, etc.). Úsalo al diseñar/rediseñar UI, al revisar una pantalla o screenshot, o
-  cuando pidan "¿cómo se ve?", "audita la UI", "scorer", "puntúa el diseño", "le falta
-  margen/padding". Triggers: ui, ux, diseño, dashboard, layout, pantalla, screenshot,
-  scorer, auditar ui, spacing, alineación, jerarquía visual.
+  y propone fixes. NO implementa en dominios ajenos: reporta y delega. Triggers: ui, ux,
+  diseño, dashboard, layout, pantalla, screenshot, scorer, auditar ui, spacing, alineación.
 mode: all
 model: opencode-go/deepseek-v4.1-flash
 permission:

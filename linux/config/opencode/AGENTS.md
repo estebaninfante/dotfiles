@@ -108,9 +108,55 @@ friccion (leer, clasificar, coordinar, tablero); `build` queda deshabilitado.
 | Computer use | `computer-use` | automatizacion de GUI/escritorio |
 | UI/UX (evaluacion visual) | `ui-ux` | puntuar/diagnosticar cualquier UI o screenshot contra el gusto visual del usuario (skill `ui-ux-scorer`); NO implementa, reporta y delega al owner del dominio |
 | Arquitectura/scaffolding de apps | `app-architect` | estructura feature-first, tamanos de archivo, boundaries, capas, tests, agent-friendliness; scaffold `new-app`, linter `app-arch-lint`, verify `app-arch`. NO UI/UX (`ui-ux`) ni navegador (`browser-pilot`) |
+| Implementacion de features (apps) | `app-dev` | escribir el codigo de una spec ya decidida, repetir patrones existentes, tests, conectar una feature a su api/model; respeta <= 400 lineas/archivo, tipos en boundaries, linter + typecheck. Corre en modelo GRATUITO. NO decide arquitectura/estructura/scaffolding (eso es `app-architect`), ni UI/UX (`ui-ux`) ni navegador (`browser-pilot`) |
 
 Si un pedido toca un dominio **sin owner**, eso es un hueco: crea el owner antes de tocar
 nada (ver regla meta).
+
+### Frontera `app-architect` vs `app-dev` (apps del usuario)
+
+Decidir **como** se organiza una app (feature-first, boundaries, capas, scaffolding, partir un
+monolito, `AGENTS.md` del proyecto) es de `app-architect`. **Implementar** la feature ya
+especificada dentro de esa estructura (codigo, tests, conectar `ui -> model -> api`) es de
+`app-dev`. Un ticket de implementacion no se lanza con `app-architect`: se lanza con `app-dev`,
+que arranca en el modelo gratuito (ver la politica de modelos).
+
+## Politica de modelos por tipo de trabajo (3 niveles)
+
+Toda tarea corre en el nivel **mas barato** que la cubra y escala **UN** nivel solo por **senal**
+(nunca por confianza, que es sobre-optimista). El nivel vive en el campo `model` del agente
+(para subagentes in-process) y en el `--model` de la silla (que lo pisa; por eso el default de
+`rig spawn`/`rig work new` es el nivel barato).
+
+| Nivel | Modelo | Cuando | Quien |
+|-------|--------|--------|-------|
+| **barato (gratuito)** | `opencode/mimo-v2.6-flash-free` (alterno `opencode/cat-jam-free`) | implementacion mecanica: escribir el codigo de una spec decidida, repetir patrones, escribir tests, conectar una feature | `app-dev`, tickets de implementacion |
+| **normal (flash)** | `opencode-go/deepseek-v4.1-flash` | trabajo normal: analisis, coordinacion, editar config, verificar, delegar, research | `supervisor`, `main`, `dotfiles`, `researcher`, `browser-*` |
+| **fuerte** | `opencode-go/deepseek-v4-pro` | arquitectura, diagnostico dificil, y **todo** lo que toque foco, input, shell/QML o migraciones | `app-architect`, `omarchy-shell`, `hyprland`; escalado |
+
+- **Default de sillas = barato**: `SEAT_MODEL` en `rig` nace en el modelo gratuito; subir a
+  `normal` o `fuerte` es explicito con `--model` / `RIG_SEAT_MODEL`. No se cambia a mano el
+  modelo de una silla ya trabajando.
+- **Escalado por senal (REGLA DURA)**: una silla sube de nivel **solo** si (a) falla **dos
+  veces** la misma tarea, (b) el verificador da **ERROR**, o (c) la tarea toca **foco, input,
+  shell/QML o migraciones**. La decision y el motivo quedan como **evidencia** en el ticket
+  (`rig log --ticket <id> "escalo modelo <nivel>: <motivo>"`).
+- **No bajar en caliente**: la silla vuelve al nivel barato para el **siguiente** pedido, no a
+  mitad de una tarea.
+- **Free de verdad**: el provider `opencode` (Zen) sirve los `*-free` sin auth; la unica key
+  local es `opencode-go`. Un `model:` que no exista en `opencode models` deja el agente roto
+  (caso real: `opencode/mimo-v2.5-free` no existe -> `cavecrew-investigator` fallaba).
+
+## Invariante: agentes con modelo valido
+
+Todo `model:` declarado en `~/.config/opencode/agents/*.md` debe existir en `opencode models`
+(o ser un nivel documentado arriba). Un alias sin proveedor (p.ej. `haiku`) o un `*-free`
+inexistente es un defecto: el agente no corre o cae a un provider sin auth.
+
+- Dueño: `supervisor`. Verificacion: dominio `agents`, checks `model-policy` (la politica de 3
+  niveles esta en este archivo), `model-valid` (todo `model:` de agente existe en `opencode
+  models`) y `app-dev-owner` (`app-dev` existe, es el owner de implementacion, con modelo
+  gratuito y frontera con `app-architect`).
 
 ## Invariante: unidades chicas + steering (`main` no bloquea al usuario)
 
@@ -242,8 +288,9 @@ eso el trabajo **no** corre in-process en `main`, y **esta prohibido delegar con
   en `~/.config/herdr/config.toml` + `herdr config check` + `herdr server reload-config`.
   Actualizar a 0.9.x solo con confirmacion del usuario (hay sillas adjuntas).
 - **Modelo explicito siempre**: toda silla arranca con `--model` (default
-  `opencode-go/deepseek-v4.1-flash`, override `RIG_SEAT_MODEL`) para no heredar el ultimo modelo y
-  caer en un provider sin auth.
+  `opencode/mimo-v2.6-flash-free`, el nivel barato de la politica de modelos; override
+  `RIG_SEAT_MODEL`) para no heredar el ultimo modelo y caer en un provider sin auth. Subir a
+  `normal`/`fuerte` es explicito por senal (ver la politica de modelos).
 - **Ciclo de vida**: al cerrar el ticket (`rig work finish` / `rig ticket done`) se libera la RAM:
   se matan **TODAS las sillas de su space** (todos sus panes/agentes) y se cierra **el space** (solo
   si el space es de ese ticket: su label matchea el id/num de la cosa), mas sus ventanas espejo
