@@ -38,7 +38,21 @@ if [ ! -d node_modules ]; then
     fi
 fi
 
-# Binding por defecto (0.0.0.0). Next 16 falla su proxy interno si se fuerza
-# -H 127.0.0.1 (intenta 'localhost' por IPv6 y no está bindeado). tailscale
-# serve llega igual por 127.0.0.1.
-exec pnpm exec next dev -p "$port"
+# Se sirve un BUILD de la rama activa (no `next dev`): Clerk no carga su UI
+# fuera de `localhost` en modo dev (su handshake de desarrollo falla y el modal
+# de login queda en blanco). En modo producción funciona en cualquier host.
+# Rebuild automático si falta o si hay fuentes más nuevas que el build.
+needs_build=0
+if [ ! -f .next/BUILD_ID ]; then
+    needs_build=1
+elif [ -n "$(find app components lib modules hooks i18n messages proxy.ts next.config.mjs package.json \
+    -newer .next/BUILD_ID -print -quit 2>/dev/null)" ]; then
+    needs_build=1
+fi
+
+if [ "$needs_build" = "1" ]; then
+    echo "zentro-serve: construyendo $tree" >&2
+    pnpm build
+fi
+
+exec pnpm exec next start -p "$port"
