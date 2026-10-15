@@ -113,6 +113,10 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig spaces [--porcelain] | rig spaces reconcile | rig spaces --watch [--interval SEG]
                                      mapea ticket<->space herdr y marca done el ticket cuyo
                                      space el usuario cerro (senal de resolucion)
+  rig panorama [--watch] [--interval SEG]
+                                     TODO lo que corre: todas las sesiones tmux (marcadas o
+                                     no), agentes/procesos de IA, huerfanos, congelados y
+                                     zombies, y modelos cargados en GPU. --watch refresca.
 
   rig events [--watch] [--ticket X] [--seat S] [--kind K] [--since 30m] [--limit N] [--porcelain]
                                      feed append-only de lo que hacen main y las sillas
@@ -3777,6 +3781,116 @@ FAKE
   return "$rc"
 }
 
+pnr_fmt() {
+  local s=${1:-0}
+  if [ "$s" -ge 86400 ]; then printf '%dd%dh' $((s/86400)) $((s%86400/3600))
+  elif [ "$s" -ge 3600 ]; then printf '%dh%dm' $((s/3600)) $((s%3600/60))
+  elif [ "$s" -ge 60 ]; then printf '%dm' $((s/60))
+  else printf '%ds' "$s"; fi
+}
+
+# imprime: pid<TAB>ppid<TAB>state<TAB>uptime_s<TAB>cputime_s<TAB>rss_kb<TAB>cmdline
+pnr_scan() {
+  local HZ UP MYUID d pid stat comm rest uid state ppid ut st sta et cpu rss cmd
+  HZ=$(getconf CLK_TCK 2>/dev/null || echo 100)
+  UP=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
+  MYUID=$(id -u)
+  for d in /proc/[0-9]*; do
+    pid=${d#/proc/}; [ -r "$d/stat" ] || continue
+    stat=$(<"$d/stat") 2>/dev/null || continue
+    comm=${stat#*(}; comm=${comm%%)*}
+    rest=${stat##*) }
+    read -ra f <<<"$rest"
+    uid=$(awk '/^Uid:/{print $2}' "$d/status" 2>/dev/null)
+    [ "$uid" = "$MYUID" ] || continue
+    state=${f[0]:-?}; ppid=${f[1]:-0}; ut=${f[11]:-0}; st=${f[12]:-0}; sta=${f[19]:-0}
+    et=$(( UP - sta/HZ )); [ "$et" -lt 0 ] && et=0
+    cpu=$(( (ut+st)/HZ ))
+    rss=$(awk '/^VmRSS:/{print $2}' "$d/status" 2>/dev/null)
+    cmd=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null | tr '\n\t' '  '); cmd=${cmd% }
+    [ -z "$cmd" ] && cmd="[$comm]"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$pid" "$ppid" "$state" "$et" "$cpu" "${rss:-0}" "$cmd"
+  done
+}
+
+pnr_render() {
+  printf '%sPANORAMA%s - todo lo que corre        %s\n' "$C_HEAD" "$C_OFF" "$(date '+%H:%M:%S')"
+
+  printf '\n%sSESIONES TMUX%s\n' "$C_HEAD" "$C_OFF"
+  if command -v tmux >/dev/null 2>&1 && tmux ls >/dev/null 2>&1; then
+    local sess name agent fg c free=0
+    while IFS= read -r sess; do
+      [ -z "$sess" ] && continue
+      name=${sess%%:*}
+      agent=$(tmux show-options -t "$name" -v @agent 2>/dev/null || true)
+      fg=$(tmux display-message -p -t "$name" '#{pane_current_command}' 2>/dev/null || true)
+      if [ "$agent" = "1" ]; then
+        c=$(tmux show-options -t "$name" -v @agent_cmd 2>/dev/null)
+        printf '  %s*%s %-20s %s\n' "$C_DONE" "$C_OFF" "$name" "${c:0:76}"
+      else
+        free=$((free+1))
+        printf '  %so%s %-20s %s\n' "$C_PROG" "$C_OFF" "$name" "[sin marcar] corre: $fg"
+      fi
+    done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+    printf '  %s-> %d sin marcar (no son sillas de rig)%s\n' "$C_PEND" "$free" "$C_OFF"
+  else
+    printf '  (tmux no disponible)\n'
+  fi
+
+  printf '\n%sAGENTES / PROCESOS DE IA%s\n' "$C_HEAD" "$C_OFF"
+  printf '  %-9s %-3s %-8s %-8s %-6s %s\n' PID ST UPTIME CPUTIME RSS COMANDO
+  pnr_scan | awk -F'\t' '$7 ~ /(pi\/pi|opencode|omnivoz|bin\/lab|kokoro|whisper|pi_shim|voice\/)/ && $7 !~ /quickshell/ && $7 !~ /^awk/' \
+    | sort -t$'\t' -k4 -nr | while IFS=$'\t' read -r pid ppid state et cpu rss cmd; do
+      printf '  %-9s %-3s %-8s %-8s %-6s %s\n' "$pid" "$state" "$(pnr_fmt "$et")" "$(pnr_fmt "$cpu")" "$((rss/1024))M" "${cmd:0:88}"
+    done
+
+  printf '\n%sEN SEGUNDO PLANO / COLGADOS%s  (huerfanos, congelados, zombies)\n' "$C_HEAD" "$C_OFF"
+  pnr_scan | awk -F'\t' '($2==1 || $3=="T" || $3=="Z") && $7 !~ /^awk/ && $7 !~ /systemd --user|syncthing serve|libinput-gestures|^\[waitpid\]/' \
+    | sort -t$'\t' -k4 -nr | while IFS=$'\t' read -r pid ppid state et cpu rss cmd; do
+      local tag=""
+      [ "$ppid" = "1" ] && tag="huerfano"
+      [ "$state" = "T" ] && tag="${tag:+, }congelado (SIGSTOP)"
+      [ "$state" = "Z" ] && tag="${tag:+, }zombie"
+      printf '  %-9s %-3s %-8s %-8s %s  %s[%s]%s\n' "$pid" "$state" "$(pnr_fmt "$et")" "$(pnr_fmt "$cpu")" "${cmd:0:76}" "$C_BLOCK" "$tag" "$C_OFF"
+    done
+
+  printf '\n%sMODELOS CARGADOS%s\n' "$C_HEAD" "$C_OFF"
+  if command -v ollama >/dev/null 2>&1; then
+    local om; om=$(ollama ps 2>/dev/null | tail -n +2)
+    if [ -n "$om" ]; then printf '  %s\n' "$om"; else printf '  (ninguno en ollama)\n'; fi
+  fi
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    local g
+    g=$(nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader 2>/dev/null)
+    [ -n "$g" ] && printf '%s\n' "$g" | sed 's/^/  GPU: /'
+  fi
+}
+
+cmd_panorama() {
+  local watch=0 interval=3
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --watch|-w) watch=1 ;;
+      --interval) shift; interval="${1:-3}" ;;
+      -h|--help) info "rig panorama [--watch] [--interval SEG]"; return 0 ;;
+      *) die "rig panorama: opcion desconocida: $1" ;;
+    esac
+    shift
+  done
+  case "$interval" in ''|*[!0-9]*) interval=3 ;; esac
+  if [ "$watch" = "1" ]; then
+    trap 'printf "%s" "$C_SHOW"; exit 0' INT TERM
+    printf '%s' "$C_HIDE"
+    while :; do
+      printf '\033[H\033[2J'
+      pnr_render
+      sleep "$interval"
+    done
+  else
+    pnr_render
+  fi
+}
+
 cmd="${1:-}"
 [ $# -gt 0 ] && shift
 case "$cmd" in
@@ -3800,6 +3914,7 @@ case "$cmd" in
   queue|q) cmd_queue "$@" ;;
   central|center|c) cmd_central "$@" ;;
   spaces|space|sp) cmd_spaces "$@" ;;
+  panorama|pano|p) cmd_panorama "$@" ;;
   --selftest|selftest) selftest ;;
   ''|-h|--help|help) usage; [ -z "$cmd" ] && exit 1 || exit 0 ;;
   *) usage; exit 1 ;;
