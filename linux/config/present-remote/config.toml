@@ -26,9 +26,10 @@ cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactiv
 
 # Botón "extra" (el del cuadrito / pantalla negra).
 [buttons.f14]
-tap    = "@voice"                          # 1 toque -> toggle de Omar (prende/apaga)
-double = "handy --toggle-post-process"     # 2 toques -> Handy (dictado)
-# hold sin definir -> mantener no hace nada
+tap    = "@voice"                          # 1 toque -> toggle de Omar
+double = "handy --toggle-post-process"      # 2 toques -> Handy (dictado)
+triple = "omarchy-menu toggle"             # 3 toques -> launcher
+hold   = "wtype -M logo -k y -m logo"      # mantener  -> Súper+Y
 
 # Flecha izquierda (diapositiva anterior).
 [buttons.f15]
@@ -38,7 +39,9 @@ tap = "@arrow prev"
 [buttons.f16]
 tap = "@arrow next"
 
-# Cuarto boton: el que manda Enter. Por defecto reenvia Enter (enviar mensaje);
-# cambialo por lo que quieras.
+# Cuarto boton: el que manda Enter nativo. Mismo esquema de gestos.
 [buttons.f17]
-tap = "@enter"
+tap    = "@voice"
+double = "handy --toggle-post-process"
+triple = "omarchy-menu toggle"
+hold   = "wtype -M logo -k y -m logo"
