@@ -67,6 +67,9 @@
           "id": "omarchy.audio"
         },
         {
+          "id": "eztvn.pi-tts"
+        },
+        {
           "id": "eztvn.power"
         }
       ]
