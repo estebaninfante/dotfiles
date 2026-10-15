@@ -118,6 +118,17 @@ gana sobre `shell.json` si existe; hoy no se usa (layout unico).
 | user-dirs.dirs | `~/.config/user-dirs.dirs` |
 | user-dirs.locale | `~/.config/user-dirs.locale` |
 
+### Pi agent (`linux/pi/agent/` — symlink por archivo)
+
+Solo se versionan extensiones propias de Pi (la voz). El resto de `~/.pi/agent/`
+(sesiones, auth, skills de terceros) no se toca.
+
+| Archivo | Ruta destino |
+|---------|-------------|
+| extensions/tts-summary.ts | `~/.pi/agent/extensions/tts-summary.ts` |
+
+Cambios en una extension se aplican con `/reload` (o reiniciando Pi).
+
 ### Home (`linux/home/`)
 
 | Archivo | Ruta destino |

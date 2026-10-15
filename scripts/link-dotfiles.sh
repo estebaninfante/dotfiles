@@ -158,6 +158,19 @@ else
     warn "no existe $ICONS_SRC"
 fi
 
+header "Pi extensions (~/.pi/agent/extensions)"
+PI_EXT_SRC="${REPO}/linux/pi/agent/extensions"
+PI_EXT_DST="${HOME}/.pi/agent/extensions"
+if [ -d "$PI_EXT_SRC" ]; then
+    mkdir -p "$PI_EXT_DST"
+    for f in "$PI_EXT_SRC"/*; do
+        [ -e "$f" ] || continue
+        link_path "$f" "${PI_EXT_DST}/$(basename "$f")" true
+    done
+else
+    warn "no existe $PI_EXT_SRC"
+fi
+
 header "Copias (no symlink)"
 for name in "${COPY_DIRS[@]}"; do
     src="${CONFIG_SRC}/${name}"

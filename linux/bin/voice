@@ -21,6 +21,10 @@
 #   voice benchmark                      benchmark TTS (kokoro/piper/espeak × es/en)
 #   voice stop                           vaciar cola TTS + cortar playback
 #   voice daemon start|stop|restart      control del servicio systemd user
+#   voice volume [0.0-1.0|NN%]           ver/cambiar volumen relativo de la voz TTS
+#   voice history [--json] [N]           historial de la voz (mas reciente primero)
+#   voice history play <N>               reproducir la entrada N del historial
+#   voice play <archivo.wav>             reproducir un WAV del historial
 #
 # Arquitectura de capas:
 #   TTS  → linux/voice/daemon.py (cola, router kokoro/piper/espeak por-idioma)
@@ -36,6 +40,8 @@ REPO="${VOICE_REPO:-$HOME/dotfiles}"
 VOICE_DIR="$REPO/linux/voice"
 CONFIG_DIR="$HOME/.config/voice"
 CACHE_DIR="${VOICE_CACHE_DIR:-$HOME/.cache/voice}"
+HISTORY_DIR="${VOICE_HISTORY_DIR:-$HOME/.local/share/voice/tts}"
+HISTORY_RECORDINGS="$HISTORY_DIR/recordings"
 STATE_FILE="$HOME/.local/state/voice/state.json"
 FIFO="$CACHE_DIR/tts.fifo"
 PID_FILE="$CACHE_DIR/daemon.pid"
@@ -94,13 +100,28 @@ try:
     st = json.load(open(os.path.expanduser("~/.local/state/voice/state.json")))
 except Exception:
     st = {}
+def emit(v):
+    if v is True: print("true")
+    elif v is False: print("false")
+    else: print(v)
 if sec in st and key in st[sec]:
-    print(st[sec][key])
+    emit(st[sec][key])
 elif sec in cfg and key in cfg[sec]:
-    print(cfg[sec][key])
+    emit(cfg[sec][key])
 else:
     print("")
 PYEOF
+}
+
+# Volumen relativo del TTS (0.0-1.0) sobre el volumen general de salida.
+# No es un volumen independiente: se multiplica por el general.
+tts_volume() {
+  local raw; raw=$(config_val tts volume); raw=${raw:-1.0}
+  if [[ "$raw" == *% ]]; then
+    awk "BEGIN{printf \"%.3f\", ${raw%\%}/100}"
+  else
+    awk "BEGIN{printf \"%.3f\", $raw}"
+  fi
 }
 
 # ── comandos ────────────────────────────────────────────────────────────
@@ -140,7 +161,7 @@ __speak_direct() {
     local kokoro=voice-kokoro
     if command -v "$kokoro" >/dev/null 2>&1; then
       command -v "$kokoro" | xargs -I{} {} -t "$text" -l "$lang" -v "$voice" -o /tmp/voice-kokoro-direct.wav >/dev/null 2>&1 \
-        && pw-play /tmp/voice-kokoro-direct.wav >/dev/null 2>&1
+        && pw-play --volume="$(tts_volume)" /tmp/voice-kokoro-direct.wav >/dev/null 2>&1
       return $?
     fi
     engine=piper
@@ -167,7 +188,7 @@ speak_core_piper() { # speak_core_piper <voz> <texto> — sin flock, sin daemon
   json="${model}.json"
   rate=$(jq -r '.audio.sample_rate // 22050' "$json" 2>/dev/null || echo 22050)
   piper --model "$model" --output-raw 2>/dev/null <<<"$*" |
-    pw-play --raw --format=s16 --rate "$rate" --channels=1 - >/dev/null 2>&1
+    pw-play --volume="$(tts_volume)" --raw --format=s16 --rate "$rate" --channels=1 - >/dev/null 2>&1
 }
 
 listen() {
@@ -292,7 +313,7 @@ PYEOF
   fi
 }
 
-usage() { sed -n '2,21p' "$0"; }
+usage() { sed -n '2,27p' "$0"; }
 
 send_agent() {  # send_agent --agent <nombre> --text "texto"
   local agent="" text=""
@@ -385,6 +406,50 @@ PYEOF
   mode)
     if [ "$#" -ge 2 ]; then get_set tts mode "$2"; echo "modo: $2 (summary|full)"
     else echo "modo: $(config_val tts mode)"; fi
+    ;;
+  volume)
+    # Volumen relativo del TTS sobre el general: 0.0-1.0 o NN%.
+    if [ "$#" -ge 2 ]; then
+      v="$2"
+      if [[ "$v" != *% ]] && awk "BEGIN{exit !($v>1)}"; then v="${v}%"; fi
+      get_set tts volume "$v"
+      echo "volumen TTS: $v (relativo al general)"
+    else
+      echo "volumen TTS: $(config_val tts volume)"
+    fi
+    ;;
+  history)
+    # Historial de la voz: `history [--json] [N]`, `history play <N>`, `history clear`.
+    shift
+    case "${1:-}" in
+      play)
+        n="${2:-1}"
+        wav=$("$PY" "$VOICE_DIR/engine.py" history-wav "$n" 2>/dev/null) || {
+          echo "voice: no existe la entrada $n del historial" >&2; exit 1; }
+        pw-play --volume="$(tts_volume)" "$wav" >/dev/null 2>&1 &
+        echo "voice: reproduciendo entrada $n"
+        ;;
+      clear)
+        [ -d "$HISTORY_RECORDINGS" ] && \
+          find "$HISTORY_RECORDINGS" -maxdepth 1 -name 'tts-*.wav' -delete 2>/dev/null
+        mkdir -p "$HISTORY_DIR"; : > "$HISTORY_DIR/history.jsonl"
+        echo "voice: historial vaciado"
+        ;;
+      *) "$PY" "$VOICE_DIR/engine.py" history "$@" ;;
+    esac
+    ;;
+  play)
+    # Reproduce un WAV del historial (no cualquier archivo).
+    [ "$#" -ge 2 ] || { echo "uso: voice play <archivo.wav>" >&2; exit 2; }
+    _dir="$(readlink -f "$HISTORY_RECORDINGS" 2>/dev/null || echo "$HISTORY_RECORDINGS")"
+    _want="$(readlink -f "$2" 2>/dev/null || echo "$2")"
+    case "$_want" in
+      "$_dir"/*) ;;
+      *) echo "voice: solo reproduzco audios del historial ($_dir)" >&2; exit 2 ;;
+    esac
+    [ -f "$_want" ] || { echo "voice: no existe $_want" >&2; exit 1; }
+    pw-play --volume="$(tts_volume)" "$_want" >/dev/null 2>&1 &
+    echo "voice: reproduciendo $(basename "$_want")"
     ;;
   engine)
     if [ "$#" -ge 3 ]; then

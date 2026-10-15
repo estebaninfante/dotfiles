@@ -86,6 +86,28 @@ aplicaciones que solo hacen `voice speak`.
 - Config (committed, symlink a `~/.config/voice/config.toml`): defaults.
 - Estado runtime (`~/.local/state/voice/state.json`): sobreescrituras locales
   por máquina (fuera del repo). `voice set stt accelerator gpu` escribe aquí.
+- Historial de la voz (`~/.local/share/voice/tts/`): WAVs + `history.jsonl`
+  de lo que dijo el agente (ver más abajo).
+
+## Historial de la voz
+
+Cada frase que reproduce el daemon se guarda en `~/.local/share/voice/tts/`:
+`recordings/tts-*.wav` y una línea JSON por frase en `history.jsonl` (fecha,
+texto, motor y voz). Se conservan las **últimas 200**; al superarlas se borran
+las más viejas junto con sus WAV. `VOICE_HISTORY_MAX` cambia el tope y
+`VOICE_HISTORY_DIR` la ruta.
+
+El widget de barra `eztvn.pi-tts` lista el historial y reproduce cualquier
+entrada con un clic; el volumen relativo de la voz se ajusta ahí mismo o con
+`voice volume`.
+
+```bash
+voice history                # últimas frases (más reciente primero)
+voice history --json 200     # para consumir desde el widget
+voice history play 1         # reproduce la entrada 1 (la última)
+voice play ~/.local/share/voice/tts/recordings/tts-*.wav
+voice history clear          # vacía índice y WAVs
+```
 
 ## Servicio systemd (usuario)
 
@@ -119,6 +141,10 @@ voice transcribe <wav>       STT a un archivo
 voice benchmark [eng] [lang] benchmark TTS (kokoro/piper/espeak)
 voice daemon start|stop|restart|status
 voice tts on|off             activa/desactiva salida hablada
+voice volume [0.0-1.0|NN%]   volumen relativo de la voz sobre el general
+voice history [--json] [N]   últimas frases (más reciente primero)
+voice history play <N>       reproduce la entrada N del historial
+voice play <wav>             reproduce un WAV del historial
 ```
 
 ## Hotkey

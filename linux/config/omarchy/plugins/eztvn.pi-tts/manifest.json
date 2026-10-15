@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.pi-tts",
+  "name": "Pi TTS",
+  "version": "1.1.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Voz TTS del sistema (voice): activa/desactiva los anuncios hablados de los agentes, ajusta su volumen relativo y repasa el historial de lo que dijeron",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Voz (TTS)",
+    "description": "Activa o desactiva la voz TTS del sistema, ajusta su volumen y repasa el historial de frases",
+    "category": "Assistant",
+    "aliases": ["pi", "tts", "voz", "resumen", "speak"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalMs": 2000
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalMs",
+        "type": "integer",
+        "label": "Refresh interval (ms)",
+        "description": "Cada cuanto se relee el estado del interruptor.",
+        "min": 500,
+        "max": 10000,
+        "step": 500,
+        "defaultValue": 2000
+      }
+    ]
+  },
+  "homepage": "https://github.com/CHANGE-ME/tts-summary",
+  "repository": "https://github.com/CHANGE-ME/tts-summary"
+}

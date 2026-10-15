@@ -35,8 +35,10 @@ from engine import (
     CACHE_DIR,
     find_piper_model,
     load_config,
+    record_history,
     save_state,
     tts_command,
+    tts_volume,
 )
 
 FIFO = os.environ.get("VOICE_TTS_FIFO", os.path.join(CACHE_DIR, "tts.fifo"))
@@ -256,9 +258,11 @@ def synth_and_play(req: dict) -> bool:
     # Cadena de motores a probar en orden. engine puede estar explícito en req.
     chain = [engine] + [s for s in ("piper", "espeak") if s != engine]
     ok = False
+    played_engine = ""
     for eng in chain:
         ok = _synth(eng, voice, lang, text, wav) and _play(wav)
         if ok:
+            played_engine = eng
             break
         log(f"fallback: {eng} -> siguiente motor de la cadena")
         if os.path.exists(wav):
@@ -267,6 +271,12 @@ def synth_and_play(req: dict) -> bool:
             except OSError:
                 pass
 
+    if ok:
+        # El WAV pasa al historial (se mueve): queda disponible para repasarlo
+        # desde el widget de la barra. No se borra si falla la anotacion.
+        record_history(wav, text, played_engine, voice, lang)
+    # Si record_history lo movio, esto ya no encuentra nada; si fallo la
+    # sintesis, limpia el temporal.
     try:
         if os.path.exists(wav):
             os.remove(wav)
@@ -451,7 +461,14 @@ def _run(argv: list[str], text: str | None) -> bool:
 def _play(wav: str) -> bool:
     if not os.path.isfile(wav):
         return False
-    argv = ["pw-play", wav]
+    # El volumen es un factor relativo sobre el volumen general de salida
+    # (pw-play lo aplica sobre el sink): no es un volumen independiente, asi
+    # que bajar el general tambien baja la voz.
+    try:
+        vol = tts_volume()
+    except Exception:
+        vol = 1.0
+    argv = ["pw-play", f"--volume={vol:.3f}", wav]
     try:
         r = subprocess.run(argv, capture_output=True, timeout=900)
         if r.returncode != 0:

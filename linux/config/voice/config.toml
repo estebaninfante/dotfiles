@@ -5,9 +5,13 @@
 # state.json pisa sobre estas claves.
 
 [tts]
-enabled = true            # false = opencode/daemon no anuncian nada por voz
+enabled = true            # false = opencode/daemon/agentes no anuncian nada por voz
 lang = "es"               # idioma de la voz principal: es | en
 mode = "summary"          # summary = resumen de la respuesta; full = texto completo
+# Volumen relativo del TTS (0.0-1.0 o NN%). Multiplica el volumen general de
+# salida: 1.0 = igual que el general; menos = mas bajo en proporcion. NO es un
+# volumen independiente (si bajas el general, baja tambien). Config: `voice volume`.
+volume = 1.0
 
 # Router por-idioma: cada idioma tiene su motor + voz.
 # es → piper (es_MX-claude-high suena mejor que el es de kokoro, que es thin)
