@@ -5,6 +5,9 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
+# Baja el boost de hardware del micrófono interno (evita saturación); se
+# ignora si la tarjeta no está presente todavía.
+ExecStartPre=-%h/.local/bin/mic-gain hw
 ExecStart=%h/.local/bin/mic-gain watch
 Restart=on-failure
 RestartSec=3

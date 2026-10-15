@@ -50,7 +50,7 @@ USB2.0 Device             = 0.80
 # Se resuelve por nombre de tarjeta, no por índice, para que no baile.
 HW_CARD_MATCH = "HD-Audio Generic"
 HW_CONTROLS = {
-    "Internal Mic Boost": "1",   # +10 dB en vez del máximo (+30 dB)
+    "Internal Mic Boost": "0",   # 0 dB (antes estaba al máximo, +30 dB)
     "Capture": "100%",
 }
 

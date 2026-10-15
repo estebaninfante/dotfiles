@@ -11,6 +11,7 @@ Sigue los cambios de dispositivo: si cambia la fuente default, reconecta.
 No escribe archivos temporales ni necesita daemon aparte.
 """
 import json
+import math
 import os
 import select
 import struct
@@ -58,6 +59,11 @@ def source_info(name):
     return {}
 
 
+def dbfs_to_pct(db):
+    """Mapea dBFS (-60..0) a 0..100 para la escalera de LEDs."""
+    return int(max(0.0, min(100.0, (db + 60.0) / 60.0 * 100.0)))
+
+
 def open_parec(name):
     return subprocess.Popen(
         [
@@ -97,8 +103,10 @@ def main():
         buf = buf[FRAME * 4:]
         peak = max((abs(x) for x in samples), default=0.0)
         rms = (sum(x * x for x in samples) / FRAME) ** 0.5
-        level = int(min(100.0, rms * 350.0))
-        peak_pct = int(min(100.0, peak * 180.0))
+        rms_db = 20.0 * math.log10(max(rms, 1e-6))
+        peak_db = 20.0 * math.log10(max(peak, 1e-6))
+        level = dbfs_to_pct(rms_db)
+        peak_pct = dbfs_to_pct(peak_db)
 
         frames += 1
         now = time.monotonic()
@@ -121,6 +129,8 @@ def main():
             print(json.dumps({
                 "level": level,
                 "peak": peak_pct,
+                "db": round(rms_db, 1),
+                "peak_db": round(peak_db, 1),
                 "gain": info.get("gain", 0),
                 "mute": info.get("mute", False),
                 "device": info.get("desc", ""),

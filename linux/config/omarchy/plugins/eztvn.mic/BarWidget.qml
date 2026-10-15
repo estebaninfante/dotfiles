@@ -15,6 +15,9 @@ BarWidget {
 
   property real level: 0
   property real peak: 0
+  property real peakHold: 0
+  property real db: -60
+  property real peakDb: -60
   property real gain: 0
   property bool muted: false
   property string device: ""
@@ -30,14 +33,19 @@ BarWidget {
   readonly property string tooltip:
     "Micrófono: " + (root.device || "—") + "\n" +
     "Ganancia: " + Math.round(root.gain) + "%" + (root.muted ? " (silenciado)" : "") + "\n" +
-    "Nivel: " + Math.round(root.level) + "%"
+    "Nivel: " + Math.round(root.db) + " dB  ·  pico " + Math.round(root.peakDb) + " dB"
 
   function apply(line) {
     let d
     try { d = JSON.parse(String(line).trim()) } catch (e) { return }
     if (!d) return
     root.level = Number(d.level) || 0
-    root.peak = Number(d.peak) || 0
+    var p = Number(d.peak) || 0
+    // Sostén del pico con caída suave: los golpes breves se alcanzan a ver.
+    root.peakHold = Math.max(p, root.peakHold - 4)
+    root.peak = root.peakHold
+    root.db = Number(d.db) || -60
+    root.peakDb = Number(d.peak_db) || -60
     root.gain = Number(d.gain) || 0
     root.muted = !!d.mute
     root.device = String(d.device || "")
