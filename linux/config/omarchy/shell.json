@@ -45,6 +45,13 @@
       ],
       "right": [
         {
+          "id": "eztvn.lanmouse"
+        },
+        {
+          "id": "services",
+          "type": "qml"
+        },
+        {
           "id": "omarchy.agents"
         },
         {
