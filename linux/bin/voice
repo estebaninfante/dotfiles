@@ -421,13 +421,36 @@ repeat() {  # repeat [N] | repeat --index M [--restart]
     esac
   done
   if [ "$restart" = 1 ]; then
-    # Cortar lo que esté sonando (y vaciar la cola) para que el mensaje
-    # arranque de nuevo desde el principio.
-    if daemon_alive; then
-      exec 9<>"$FIFO"; printf '{"cmd":"stop"}\n' >&9; exec 9>&-
+    # Si hay un mensaje sonando AHORA, reiniciar ESE (no el anterior): el
+    # daemon publica el WAV en curso en speaking.json.
+    local cur="" speaking="${VOICE_SPEAKING_FILE:-$CACHE_DIR/speaking.json}"
+    if [ -f "$speaking" ]; then
+      cur=$(python3 - "$speaking" <<'PY' 2>/dev/null || true
+import json, os, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    w = d.get("wav") or ""
+    if w and os.path.isfile(w):
+        print(w)
+except Exception:
+    pass
+PY
+)
     fi
-    pkill -f pw-play 2>/dev/null || true
+    # Vaciar la cola del daemon para que no arranque el siguiente mensaje
+    # encima del replay. NO usamos "stop": su pkill global competía con
+    # nuestra reproducción y a veces la mataba.
+    if daemon_alive; then
+      exec 9<>"$FIFO"; printf '{"cmd":"flush"}\n' >&9; exec 9>&-
+    fi
+    # Cortar SOLO lo que dice el daemon (su stream se llama "Voice TTS"),
+    # así no matamos el replay que estamos por arrancar.
+    pkill -f 'Voice TTS' 2>/dev/null || true
     sleep 0.15
+    if [ -n "$cur" ] && [ -f "$cur" ]; then
+      pw-play --volume="$(tts_volume)" "$cur" >/dev/null 2>&1
+      return 0
+    fi
   fi
   local rows=""
   if [ -n "$index" ]; then

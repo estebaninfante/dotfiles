@@ -633,6 +633,7 @@ def _publish_speaking(text: str, wav: str, source: str, engine: str, voice: str)
     try:
         payload = {
             "text": text,
+            "wav": wav,
             "durationMs": _wav_duration_ms(wav),
             "startedAt": int(time.time() * 1000),
             "source": source or "",
