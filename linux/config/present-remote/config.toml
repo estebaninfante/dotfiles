@@ -41,9 +41,11 @@ tap = "handy --toggle-post-process"
 combo_with = "f14"
 combo = "omarchy-menu toggle"
 
-# mantener (Alt -> f18): Súper+Y. Mientras se mantiene, ignora los Tab repetidos.
+# mantener (Alt -> f18): alterna Hyprexpo (Súper+Y). Ojo: el layout es Dvorak,
+# asi que la "y" esta en la posicion fisica de la T (keycode 20), no 21.
+# Mientras se mantiene, ignora los Tab repetidos.
 [buttons.f18]
-hold = "wtype -M logo -k y -m logo"
+hold = "ydotool key 125:1 20:1 20:0 125:0"
 suppress = ["f14", "f17"]
 
 # ── Flechas ──────────────────────────────────────────────────────────────

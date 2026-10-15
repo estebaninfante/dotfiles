@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="${HOME}/.local/share/mise/shims:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+
+main_tree="${HOME}/developing/zentr0"
+
+target="${1:-developing}"
+
+case "$target" in
+    developing|dev)
+        tree="$main_tree"
+        port="${ZENTRO_DEV_PORT:-3050}"
+        ;;
+    *)
+        echo "uso: zentro-serve <developing>" >&2
+        exit 2
+        ;;
+esac
+
+if [ ! -d "$tree" ]; then
+    echo "zentro-serve: no existe el arbol $tree" >&2
+    exit 3
+fi
+
+cd "$tree"
+
+if [ ! -e .env.local ] && [ -e "$main_tree/.env.local" ]; then
+    ln -sfn "$main_tree/.env.local" .env.local
+fi
+
+if [ ! -d node_modules ]; then
+    echo "zentro-serve: instalando dependencias en $tree" >&2
+    pnpm install --frozen-lockfile || true
+    if [ ! -d node_modules ]; then
+        echo "zentro-serve: no se pudieron instalar las dependencias" >&2
+        exit 4
+    fi
+fi
+
+# Next limpia .next de forma segura; 'dev' sirve la rama activa en el checkout.
+exec pnpm exec next dev -p "$port" -H 127.0.0.1

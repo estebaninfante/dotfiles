@@ -124,8 +124,25 @@ def active_class():
         return ""
 
 
+def active_submap():
+    try:
+        return subprocess.check_output(
+            ["hyprctl", "submap"], text=True,
+            stderr=subprocess.DEVNULL, timeout=1,
+        ).strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def arrow(action):
     """action: 'prev' (izquierda) | 'next' (derecha)."""
+    # En el overview de hyprexpo, las flechas navegan la grilla (el submap las
+    # bindea a kb_focus). Mandamos Left/Right reales, que el submap consume.
+    if active_submap() == "hyprexpo":
+        log(f"flecha {action}: overview hyprexpo -> navegar")
+        code = "105" if action == "prev" else "106"  # KEY_LEFT / KEY_RIGHT
+        _spawn("ydotool", "key", f"{code}:1", f"{code}:0")
+        return
     cls = active_class()
     if cls in TERMINALES:
         log(f"flecha {action}: terminal ({cls}) -> ventana tmux")
