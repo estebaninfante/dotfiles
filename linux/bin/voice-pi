@@ -45,12 +45,5 @@ export PATH
 
 cd "$BRAIN_DIR" || exit 1
 
-# Pi a veces cierra sin texto final (sólo llamó herramientas). Reintentamos una
-# vez pidiendo explícitamente una frase, para no dejar mudo al asistente.
 out="$(timeout "$TIMEOUT" pi "${args[@]}" "$prompt")"
-if [ -z "$out" ]; then
-  out="$(timeout "$TIMEOUT" pi "${args[@]}" "$prompt
-
-IMPORTANTE: terminá SIEMPRE con una frase hablada en español, aunque hayas usado herramientas.")"
-fi
 [ -n "$out" ] && printf '%s\n' "$out"

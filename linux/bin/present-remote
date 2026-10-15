@@ -50,6 +50,8 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 PTT_PIDFILE = os.path.join(RUNTIME, "omnivoz-ptt.pid")
 PILL = os.path.join(HOME, "developing/omnivoz/packaging/quickshell/omar-pill.qml")
 OMAR_MODE = os.path.join(HOME, ".local/bin/omar-mode")
+OMNIVOZ_BIN = os.path.join(HOME, ".local/bin/omnivoz")
+LISTEN_LOG = os.path.join(HOME, ".local/state/omnivoz/listen.log")
 MODE_FILE = os.path.join(RUNTIME, "omar", "mode")
 LOG = open(os.devnull, "w")
 
@@ -155,13 +157,35 @@ def arrow(action):
         _scroll("up" if action == "prev" else "down")
 
 
+def _is_voice_session(pid):
+    """¿El PID es de verdad una sesión `node …/dist/index.js listen --no-wake`?
+
+    No alcanza con buscar el texto en la línea de comandos: un shell o un
+    editor que mencionen el patrón también matchean, y matarlos es peligroso
+    (llegó a matar al propio toggle). Se valida el ejecutable y los argumentos.
+    """
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            argv = [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return False
+    if len(argv) < 3 or "node" not in os.path.basename(argv[0]):
+        return False
+    try:
+        i = next(idx for idx, a in enumerate(argv) if a.endswith("dist/index.js"))
+    except StopIteration:
+        return False
+    rest = argv[i + 1:]
+    return "listen" in rest and "--no-wake" in rest
+
+
 def _ptt_pids():
     """PIDs de sesiones de voz activas (push-to-talk)."""
     pids = []
     try:
         with open(PTT_PIDFILE) as f:
             pid = int(f.read().strip())
-        if pid > 0 and _alive(pid):
+        if pid > 0 and _is_voice_session(pid):
             pids.append(pid)
     except (FileNotFoundError, ValueError):
         pass
@@ -172,7 +196,7 @@ def _ptt_pids():
         )
         for tok in out.split():
             pid = int(tok)
-            if pid not in pids and _alive(pid):
+            if pid not in pids and _is_voice_session(pid):
                 pids.append(pid)
     except Exception:  # noqa: BLE001
         pass
@@ -226,31 +250,59 @@ def pill_is_open():
         return False
 
 
-def listener_active():
-    """¿El listener de fondo (palabra clave) está corriendo de verdad?"""
-    try:
-        return subprocess.run(
-            ["systemctl", "--user", "is-active", "--quiet", "omnivoz-listen.service"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1,
-        ).returncode == 0
-    except Exception:  # noqa: BLE001
-        return False
-
-
 def omar_active():
-    """Omar está encendido si el listener corre, o hay píldora/PTT vivos."""
-    return listener_active() or pill_is_open() or ptt_active()
+    """Omar está encendido si hay píldora abierta o una sesión de voz viva."""
+    return pill_is_open() or ptt_active()
+
+
+def start_session():
+    """Arranca una sesión de voz directa (`--no-wake`), sin palabra clave.
+
+    Queda escuchando lo que digas hasta que la cortes (segundo toque o Escape).
+    """
+    try:
+        os.makedirs(os.path.dirname(LISTEN_LOG), exist_ok=True)
+        logf = open(LISTEN_LOG, "a")
+    except OSError:
+        logf = subprocess.DEVNULL  # type: ignore[assignment]
+    proc = subprocess.Popen(
+        [OMNIVOZ_BIN, "listen", "--no-wake"],
+        stdout=logf, stderr=logf, stdin=subprocess.DEVNULL,
+        start_new_session=True, env=ENV,
+    )
+    try:
+        with open(PTT_PIDFILE, "w") as f:
+            f.write(str(proc.pid))
+    except OSError:
+        pass
 
 
 def start_voice():
-    """Prende Omar: vuelve al modo comando y abre la píldora.
+    """Prende Omar: sesión directa (sin palabra clave) + píldora abierta.
 
-    No levantamos un push-to-talk aparte: el listener del modo comando ya es el
-    dueño del micrófono. Tener los dos a la vez era lo que duplicaba frases.
+    Suelta el micrófono del listener de fondo para que haya un solo dueño y abre
+    una sesión `--no-wake` que escucha directo: apretás el botón, decís "abre
+    spotify" y anda, sin decir "Omar".
     """
-    log("voice: prendo Omar (modo comando)")
-    _run_cmd(f"{OMAR_MODE} comando")
+    log("voice: prendo Omar (sesión directa)")
+    # Un solo dueño del micrófono. Se frena el listener de fondo ANTES de arrancar
+    # la sesión: `omar-mode` también libera Handy. Hay que esperarlo (sincrónico)
+    # porque su limpieza no debe tocar la sesión nueva.
+    try:
+        subprocess.run(
+            [OMAR_MODE, "dormido"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
+        )
+    except Exception:  # noqa: BLE001
+        try:
+            subprocess.run(
+                ["systemctl", "--user", "stop", "omnivoz-listen.service"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
+            )
+        except Exception:  # noqa: BLE001
+            pass
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
+    start_session()
 
 
 def cancel_voice():
