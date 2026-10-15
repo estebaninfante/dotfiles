@@ -116,9 +116,21 @@ export default function (pi: ExtensionAPI) {
   let outstanding = false;
   let working = false;
   let workStart = 0;
+  let thinkingBuf = "";
+  let textBuf = "";
   let uiCtx: { ui?: { setStatus?: (k: string, v?: string) => void; setWidget?: (k: string, v?: string[]) => void } } | undefined;
 
-  /** Muestra/actualiza el widget de progreso en la UI (sin mensajes). */
+  /** Un trozo del pensamiento del modelo (o de su respuesta, si no piensa). */
+  function snippet(): string {
+    const buf = (thinkingBuf || textBuf).replace(/\s+/g, " ").trim();
+    if (!buf) return "…";
+    const max = 280;
+    if (buf.length <= max) return buf;
+    const start = Math.floor(Math.random() * (buf.length - max));
+    return `…${buf.slice(start, start + max)}…`;
+  }
+
+  /** Muestra/actualiza el widget con el pensamiento en vivo y el tiempo. */
   function updateLatido(): void {
     if (!working) return;
     const ui = uiCtx?.ui;
@@ -126,11 +138,7 @@ export default function (pi: ExtensionAPI) {
     const secs = Math.round((Date.now() - workStart) / 1000);
     try {
       ui.setStatus?.("voz-latido", `⏱ ${secs}s`);
-      ui.setWidget?.("voz-latido", [
-        "Punto de control",
-        `Trabajando hace ${secs}s.`,
-        "¿Tenés una duda? Usá `preguntar_al_usuario` o `avisar`.",
-      ]);
+      ui.setWidget?.("voz-latido", [`⏱ Pensando hace ${secs}s`, snippet()]);
     } catch {
       /* sin UI (modo rpc/print): no importa */
     }
@@ -208,8 +216,19 @@ export default function (pi: ExtensionAPI) {
     working = true;
     workStart = Date.now();
     outstanding = false;
+    thinkingBuf = "";
+    textBuf = "";
     uiCtx = ctx;
     updateLatido();
+  });
+
+  // Razonamiento/respuesta en vivo: acumulo los deltas para mostrar un trozo.
+  pi.on("message_update", (event, ctx) => {
+    uiCtx = ctx;
+    const e = (event as { assistantMessageEvent?: { type?: string; delta?: string } }).assistantMessageEvent;
+    if (!e || typeof e.delta !== "string") return;
+    if (e.type === "thinking_delta") thinkingBuf += e.delta;
+    else if (e.type === "text_delta") textBuf += e.delta;
   });
 
   pi.on("turn_end", async (_event, ctx) => {

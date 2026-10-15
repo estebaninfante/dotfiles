@@ -572,7 +572,7 @@ Item {
   // resize the bar window and make its height jump. Keep this in sync with
   // GAP_MAX in ~/.config/hypr/hyprland.lua if you change it. Horizontal gaps
   // stay dynamic so the islands keep aligning with the tiled-window edge.
-  property int windowGapTop: 18
+  property int windowGapTop: 0
   property int windowGapRight: Style.gapsOut
   property int windowGapBottom: Style.gapsOut
   property int windowGapLeft: Style.gapsOut
@@ -1452,7 +1452,7 @@ Item {
           id: leftIsland
           color: root.background
           radius: root.islandRadius
-          border.width: 1
+          border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
           height: root.islandHeight
           width: leftContent.width + root.islandPadding * 2
@@ -1475,7 +1475,7 @@ Item {
           id: rightIsland
           color: root.background
           radius: root.islandRadius
-          border.width: 1
+          border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
           height: root.islandHeight
           width: rightContent.width + root.islandPadding * 2
@@ -1498,7 +1498,7 @@ Item {
           id: centerIsland
           color: root.background
           radius: root.islandRadius
-          border.width: 1
+          border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
           height: root.islandHeight
           width: centerContent.implicitWidth + root.islandPadding * 2
