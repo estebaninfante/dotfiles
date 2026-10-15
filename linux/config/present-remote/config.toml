@@ -51,6 +51,7 @@ suppress = ["f14", "f17"]
 [buttons.f15]
 tap = "@arrow prev"
 
-# Flecha derecha (diapositiva siguiente).
+# Flecha derecha (diapositiva siguiente). Doble toque -> Enter (enviar mensaje).
 [buttons.f16]
 tap = "@arrow next"
+double = "@enter"
