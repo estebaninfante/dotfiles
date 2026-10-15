@@ -95,6 +95,19 @@ if [[ "${1:-}" == "--toggle" ]]; then
     exit 0
 fi
 
+# Un solo sync a la vez. El timer (cada ~5 min) y una corrida manual (--force,
+# que AGENTS.md manda usar) pueden solaparse: el `git fetch` de cada uno reescribe
+# el MISMO .git/FETCH_HEAD y la pull siguiente ve dos "merge heads" -> git muere
+# con "Cannot rebase onto multiple branches." (run_rebase, builtin/pull.c). La
+# carrera tambien puede pisar un rebase en curso. Si ya hay uno corriendo, se
+# omite esta pasada; la que corre deja el repo al dia.
+RUN_LOCK="$HOME/.local/state/dotfiles-sync.lock"
+exec 9>"$RUN_LOCK"
+if ! flock -n 9; then
+    log "otro sync en curso — corrida omitida"
+    exit 0
+fi
+
 if [[ "${1:-}" == "--resolve" ]]; then
     shift
     spawn_resolver "${*:-prueba manual}"
