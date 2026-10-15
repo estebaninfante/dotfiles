@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# omar-open — abre la píldora de Omar y arranca el push-to-talk (tecla Windows).
+set -u
+PILL="/home/eztvn/developing/omnivoz/packaging/quickshell/omar-pill.qml"
+qs ipc -p "$PILL" call omar-pill open >/dev/null 2>&1 || true
+exec "$HOME/.local/bin/omnivoz-ptt"

@@ -217,6 +217,18 @@ else
   fail "tabs-policy" "rig no sigue la politica de espacio-por-cosa (space_meta/herdr_ensure_space/window_label_for_seat/herdr_kill_seats_in_space)"
 fi
 
+AGENTS_MD="${AGENTS_MD:-$(cd "$SCRIPT_DIR/../../.." 2>/dev/null && pwd)/AGENTS.md}"
+devok=1
+[ -f "$AGENTS_MD" ] || devok=0
+grep -q 'agentes-platform' "$AGENTS_MD" 2>/dev/null || devok=0
+grep -qE 'developing.*linea de integracion' "$AGENTS_MD" 2>/dev/null || devok=0
+grep -q -- '--base developing' "$AGENTS_MD" 2>/dev/null || devok=0
+if [ "$devok" = "1" ]; then
+  ok "developing-policy" "AGENTS.md define developing como linea de integracion de agentes-platform (fork y commit ahi, --base developing)"
+else
+  fail "developing-policy" "AGENTS.md perdio la regla developing de agentes-platform (fork/commit/--base developing)"
+fi
+
 if command -v sqlite3 >/dev/null 2>&1; then
   ok "sqlite3" "$(sqlite3 --version | awk '{print $1}')"
 else
@@ -675,6 +687,19 @@ if command -v jq >/dev/null 2>&1; then
   fi
 else
   skip "say-reply" "jq no disponible"
+fi
+if command -v jq >/dev/null 2>&1; then
+  if RIG_EVENTS_FILE="$evfile" "$SRC" say "verifier respuesta al hilo de la app" --to app --thread T14 >/dev/null 2>&1; then
+    if RIG_EVENTS_FILE="$evfile" "$SRC" events --kind reply --since 10m --porcelain 2>/dev/null | jq -e 'select(.kind=="reply" and .data.to=="app" and .data.thread=="T14")' >/dev/null 2>&1; then
+      ok "say-to-app" "say --to app --thread deja el reply con canal e hilo destino"
+    else
+      fail "say-to-app" "el reply de --to app no lleva data.to/data.thread"
+    fi
+  else
+    fail "say-to-app" "rig say --to app fallo"
+  fi
+else
+  skip "say-to-app" "jq no disponible"
 fi
 rm -rf "$evtmp"
 

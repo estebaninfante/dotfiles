@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Rescate de la píldora de Omar: la cierra, libera el teclado y la reinicia.
+#
+# Úsalo si la píldora se queda abierta reteniendo el teclado (foco exclusivo)
+# o si quedó una capa huérfana que no responde. Es un atajo global de Hyprland,
+# así que funciona aunque la píldora tenga el teclado capturado.
+set -u
+
+# 1) Pedir cierre ordenado a cada instancia viva.
+for pid in $(pgrep -f 'quickshell.*omar-pill\.qml' 2>/dev/null); do
+    qs ipc --pid "$pid" call omar-pill close >/dev/null 2>&1 || true
+done
+
+# 2) Detener el servicio y matar cualquier quickshell de la píldora.
+systemctl --user stop omar-pill.service >/dev/null 2>&1 || true
+pkill -f 'quickshell.*omar-pill\.qml' 2>/dev/null || true
+sleep 0.3
+
+# 3) Recargar Hyprland para soltar capas retenidas por el compositor.
+hyprctl reload >/dev/null 2>&1 || true
+
+# 4) Relanzar el servicio (arranca cerrada, sin tomar el teclado).
+systemctl --user start omar-pill.service >/dev/null 2>&1 || true
+
+notify-send "Omar" "Píldora reiniciada; teclado liberado" 2>/dev/null || true

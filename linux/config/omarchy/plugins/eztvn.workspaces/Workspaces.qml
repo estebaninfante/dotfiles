@@ -14,6 +14,10 @@ BarWidget {
   readonly property int cellSize: Math.max(3, Math.floor((root.barSize - cellMargin * 2 - cellSpacing * 2) / 3))
   readonly property real trailingGap: root.vertical ? 0 : Style.spaceReal(1.5)
 
+  // El espacio activo se marca en verde (el tema es monocromo, así que este
+  // acento se define aquí a propósito).
+  readonly property color activeColor: "#9ece6a"
+
   implicitWidth: cellSize * 3 + cellSpacing * 2 + trailingGap
   implicitHeight: root.barSize
 
@@ -36,7 +40,7 @@ BarWidget {
     var occupied = workspace !== null && workspace.toplevels.values.length > 0
     var focused = Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === id
 
-    if (focused) return Color.bar.active
+    if (focused) return root.activeColor
     if (occupied) return Util.alpha(Color.bar.text, 0.72)
     return Util.alpha(Color.bar.text, 0.22)
   }

@@ -123,7 +123,6 @@ Estos repos reales salieron como monolitos y son el motivo del contrato:
 
 - `foldertinder/static`: `app.js` 3548 lineas + `app.css` 3060 + `index.html` 291.
 - `hypr-remote/public/app.js`: 4266 lineas.
-- `noteriv`: `globals.css` 9037 lineas.
 
 Ninguno tiene owner, regla ni verificacion. Esta skill, el agente `app-architect`, el
 linter `app-arch-lint` y `verify run app-arch` cierran ese hueco para que **no vuelva a

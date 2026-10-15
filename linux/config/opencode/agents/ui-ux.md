@@ -54,6 +54,6 @@ monocromo sin jerarquía. Sé exigente: **>= 8/10 para aprobar**.
 ## Límites
 
 - No edites quickshell/Omarchy ni Hyprland ni otro dominio con owner: reporta y delega.
-- Si evalúas una pantalla web que depende de APIs nativas (p.ej. Noteriv/Tauri), el probe
+- Si evalúas una pantalla web que depende de APIs nativas (p.ej. una app Tauri), el probe
   no llega: usa la ruta de screenshot + visión.
 - Un finding = una línea: elemento, problema, fix. Sin elogios ni relleno.

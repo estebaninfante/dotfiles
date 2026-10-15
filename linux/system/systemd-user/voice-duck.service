@@ -1,0 +1,13 @@
+[Unit]
+Description=Baja el volumen mientras Omar escucha (ducking)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/eztvn/.local/bin/voice-duck
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

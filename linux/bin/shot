@@ -57,7 +57,9 @@ case "$MODE" in
         CAPTURE="grim - > $OUT"
         ;;
     area)
-        CAPTURE="g=\$(slurp); [ -n \"\$g\" ] && grim -g \"\$g\" - > $OUT"
+        # timeout: si slurp no recibe input (p. ej. otra capa retiene el
+        # teclado), no dejamos wayfreeze congelando la pantalla para siempre.
+        CAPTURE="g=\$(timeout 120 slurp); [ -n \"\$g\" ] && grim -g \"\$g\" - > $OUT"
         ;;
 esac
 

@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# omar — utilidades del agente Omar sobre la plataforma de agentes local.
+#
+# API local de agentes-platform (solo host):
+#   OMAR_PLATFORM_URL (default http://127.0.0.1:3031)
+#
+# Uso:
+#   omar ticket add "<titulo>" [--project P] [--owner O] [--status S]
+#   omar ticket list [--project P] [--status S]
+#   omar ticket done <id>
+#   omar ticket show <id>
+#   omar agents
+#   omar board            # resumen legible del tablero
+#   omar ask "texto"      # entrada de texto a Omar (cerebro Pi + TTS + subtítulo)
+#
+# Pensada para que la use el cerebro de voz (Pi) por bash.
+
+set -euo pipefail
+
+API="${OMAR_PLATFORM_URL:-http://127.0.0.1:3031}"
+PY="${PY:-python3}"
+
+die() { echo "omar: $*" >&2; exit 1; }
+api_get() { curl -fsS "$API$1"; }
+api_post() { curl -fsS "$API$1" -H 'content-type: application/json' -d "$2"; }
+api_patch() { curl -fsS "$API$1" -X PATCH -H 'content-type: application/json' -d "$2"; }
+
+ticket_add() {
+  local title="" project="omar" owner="omar" status="pending"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --project) project="${2:?}"; shift 2 ;;
+      --owner) owner="${2:?}"; shift 2 ;;
+      --status) status="${2:?}"; shift 2 ;;
+      *) title="${title:+$title }$1"; shift ;;
+    esac
+  done
+  [ -n "$title" ] || die "falta el título del ticket"
+  local id="OMAR-$(date +%s)"
+  local body
+  body=$("$PY" -c 'import json,sys; print(json.dumps({"id":sys.argv[1],"project":sys.argv[2],"title":sys.argv[3],"owner":sys.argv[4],"status":sys.argv[5]}, ensure_ascii=False))' \
+        "$id" "$project" "$title" "$owner" "$status")
+  api_post /api/tickets "$body" | "$PY" -c '
+import json,sys
+d=json.load(sys.stdin)
+if "ticket" in d:
+    t=d["ticket"]
+    print("Ticket %s creado: %s [%s] (%s)" % (t.get("id"), t.get("title"), t.get("status"), t.get("project")))
+else:
+    print("Error: %s" % d.get("error","?"))'
+}
+
+ticket_list() {
+  local project="" status=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --project) project="${2:?}"; shift 2 ;;
+      --status) status="${2:?}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  api_get /api/tickets | "$PY" -c '
+import json,sys
+proj=sys.argv[1] if len(sys.argv)>1 else ""
+stat=sys.argv[2] if len(sys.argv)>2 else ""
+ts=json.load(sys.stdin).get("tickets",[])
+if proj: ts=[t for t in ts if t.get("project")==proj]
+if stat: ts=[t for t in ts if t.get("status")==stat]
+print("%d tickets" % len(ts))
+for t in ts:
+    print("  %-12s %-12s %-16s %s" % (t.get("id"), t.get("status"), t.get("project"), str(t.get("title"))[:70]))' "$project" "$status"
+}
+
+ticket_done() {
+  [ $# -ge 1 ] || die "uso: omar ticket done <id>"
+  local body
+  body=$("$PY" -c 'import json,sys;print(json.dumps({"id":sys.argv[1],"status":"done"}))' "$1")
+  api_patch /api/tickets "$body" | "$PY" -c '
+import json,sys
+d=json.load(sys.stdin)
+print("OK" if "ticket" in d else "Error: %s" % d.get("error"))'
+}
+
+ticket_show() {
+  [ $# -ge 1 ] || die "uso: omar ticket show <id>"
+  api_get /api/tickets | "$PY" -c '
+import json,sys
+want=sys.argv[1]
+for t in json.load(sys.stdin).get("tickets",[]):
+    if t.get("id")==want:
+        for k in ("id","project","title","status","owner","evidence","branch","commits"):
+            v=t.get(k)
+            if v: print("%s: %s" % (k, v))
+        break
+else:
+    print("No existe: %s" % want)' "$1"
+}
+
+agents_list() {
+  api_get /api/agents | "$PY" -c '
+import json,sys
+d=json.load(sys.stdin)
+ags=d.get("agents") or d.get("items") or []
+print("%d agentes" % len(ags))
+for a in ags:
+    print("  %-20s %s" % (a.get("name") or a.get("id") or "?", a.get("division") or ""))'
+}
+
+board() {
+  api_get /api/tickets | "$PY" -c '
+import json,sys,collections
+ts=json.load(sys.stdin).get("tickets",[])
+by=collections.Counter(t.get("status","?") for t in ts)
+print("Tablero: %d tickets" % len(ts))
+for k in ("pending","in-progress","blocked","done"):
+    print("  %-12s %d" % (k, by.get(k,0)))
+print("Pendientes:")
+for t in ts:
+    if t.get("status")=="pending":
+        print("  %-12s %-16s %s" % (t.get("id"), t.get("project"), str(t.get("title"))[:64]))'
+}
+
+# ask: entrada de TEXTO a Omar (para la píldora cuando no se puede hablar).
+# Corre el cerebro (Pi), habla la respuesta e imprime el texto limpio en stdout
+# para los subtítulos.
+ask() {
+  local text="$*"
+  [ -n "$text" ] || { [ -t 0 ] && die "uso: omar ask <texto>"; text="$(cat)"; }
+  [ -n "$text" ] || die "uso: omar ask <texto>"
+
+  local voice_bin="$HOME/.local/bin/voice"
+  local omnivoz="$HOME/.local/bin/omnivoz"
+
+  # 1) Comando fijo (reglas del router): rápido y confiable.
+  if [ -x "$omnivoz" ]; then
+    local out rc say
+    out="$("$omnivoz" text --no-confirm "$text" 2>&1)"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+      say="$(printf '%s\n' "$out" | sed -n 's/^say: //p' | tail -1)"
+      [ -n "$say" ] || say="Listo."
+      "$voice_bin" say --force --source assistant "$say" >/dev/null 2>&1 &
+      printf '%s\n' "$say"
+      return 0
+    fi
+  fi
+
+  # 2) Cerebro (Pi), con un reintento si vuelve vacío.
+  local reply clean attempt
+  for attempt in 1 2; do
+    reply="$("$HOME/.local/bin/voice-pi" "$text" 2>/dev/null || true)"
+    clean="$(printf '%s' "$reply" | "$PY" "$HOME/dotfiles/linux/voice/spoken.py")"
+    [ -n "$clean" ] && break
+  done
+  [ -n "$clean" ] || clean="No pude resolver eso."
+  "$voice_bin" say --force --source assistant "$clean" >/dev/null 2>&1 &
+  printf '%s\n' "$clean"
+}
+
+case "${1:-help}" in
+  ticket)
+    shift; sub="${1:-list}"; shift || true
+    case "$sub" in
+      add) ticket_add "$@" ;;
+      list) ticket_list "$@" ;;
+      done) ticket_done "$@" ;;
+      show) ticket_show "$@" ;;
+      *) die "omar ticket add|list|done|show" ;;
+    esac ;;
+  agents) agents_list ;;
+  board) board ;;
+  ask) shift; ask "$@" ;;
+  help|-h|--help) sed -n '2,17p' "$0" ;;
+  *) die "comando desconocido: $1 (omar help)" ;;
+esac

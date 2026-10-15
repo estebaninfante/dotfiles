@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+SEAT="${RIG_KEEP_SEAT:-main-seat}"
+AGENT="${RIG_KEEP_AGENT:-main}"
+MODEL="${RIG_KEEP_MODEL:-opencode-go/deepseek-v4.1-flash}"
+CWD_DIR="${RIG_KEEP_CWD:-$HOME}"
+INTERVAL="${RIG_KEEP_INTERVAL:-30}"
+SELFTEST=0
+
+usage() {
+  echo "usage: rig-seat-keep [--selftest]" >&2
+  exit 2
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --selftest) SELFTEST=1 ;;
+    *) usage ;;
+  esac
+  shift
+done
+
+[[ "$INTERVAL" =~ ^[0-9]+$ ]] || INTERVAL=30
+export PATH="$HOME/.local/bin:$PATH"
+
+seat_alive() {
+  command -v tmux >/dev/null 2>&1 || return 1
+  tmux has-session -t "$SEAT" 2>/dev/null
+}
+
+keep_once() {
+  seat_alive && return 0
+  command -v rig >/dev/null 2>&1 || return 1
+  rig spawn "$SEAT" --agent "$AGENT" --model "$MODEL" --cwd "$CWD_DIR" --no-focus >/dev/null 2>&1 || return 1
+}
+
+selftest() {
+  local tmp log rc=0 oldpath
+  tmp=$(mktemp -d)
+  log="$tmp/calls.log"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >>"%s"\n' "$log" >"$tmp/rig"
+  chmod +x "$tmp/rig"
+  oldpath="$PATH"
+  PATH="$tmp:$PATH"
+  SEAT="_keep_selftest_$$"
+  tmux kill-session -t "$SEAT" 2>/dev/null || true
+  if seat_alive; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: la silla de prueba ya existe" >&2
+  fi
+  : >"$log"
+  if ! keep_once; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: keep_once fallo con la silla ausente" >&2
+  fi
+  if ! grep -q "spawn $SEAT" "$log"; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: no intento spawnear la silla ausente" >&2
+  fi
+  if ! tmux new-session -d -s "$SEAT"; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: no pude crear la silla de prueba" >&2
+  fi
+  : >"$log"
+  if ! keep_once; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: keep_once fallo con la silla viva" >&2
+  fi
+  if [ -s "$log" ]; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: spawneo una silla que ya estaba viva" >&2
+  fi
+  tmux kill-session -t "$SEAT" 2>/dev/null || true
+  PATH="$oldpath"
+  rm -rf "$tmp"
+  if [ "$rc" = "0" ]; then
+    echo "rig-seat-keep selftest OK"
+  else
+    echo "rig-seat-keep selftest FAIL" >&2
+    exit 1
+  fi
+}
+
+if [ "$SELFTEST" = "1" ]; then
+  selftest
+else
+  while :; do
+    keep_once || true
+    sleep "$INTERVAL"
+  done
+fi

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# voice-duck — baja el volumen de todo mientras Omar escucha.
+#
+# Mira el estado del loop de voz; mientras está "listening", baja el volumen del
+# sink por defecto (OMAR_DUCK_LEVEL, default 25%) y lo restaura al terminar. Así
+# la música/video no te tapa la voz. Corre como servicio de usuario.
+set -u
+STATUS="${XDG_RUNTIME_DIR:-/tmp}/omnivoz/status.json"
+SINK="${OMAR_DUCK_SINK:-@DEFAULT_AUDIO_SINK@}"
+DUCK="${OMAR_DUCK_LEVEL:-0.25}"
+
+saved=""; ducked=0
+restore() { [ -n "$saved" ] && wpctl set-volume "$SINK" "$saved" 2>/dev/null; saved=""; ducked=0; }
+trap 'restore; exit 0' TERM INT
+
+while true; do
+  state="$(sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$STATUS" 2>/dev/null | head -1)"
+  if [ "$state" = "listening" ] && [ "$ducked" = 0 ]; then
+    cur="$(wpctl get-volume "$SINK" 2>/dev/null | awk '{print $2}')"
+    if [ -n "$cur" ]; then
+      saved="$cur"; wpctl set-volume "$SINK" "$DUCK" 2>/dev/null; ducked=1
+    fi
+  elif [ "$state" != "listening" ] && [ "$ducked" = 1 ]; then
+    restore
+  fi
+  sleep 0.15
+done

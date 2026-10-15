@@ -454,6 +454,60 @@ owner. **Nunca** deja el pedido en `"¿lo lanzo?"`: o lo lanza, o lo cierra con 
   `tickets-live`) + `verify run rig` (checks `tickets-idle` y `launch-failed-blocked`, senal de
   sillas in-progress idle o con encargo no entregado).
 
+## Invariante: un problema = un ticket (el seguimiento vive en la misma unidad)
+
+REGLA DURA (pedido del usuario): un problema reportado es **UN** ticket, y todo el trabajo que lo
+resuelve —aunque toque otro dominio o repo— vive en **ese** ticket. Prohibido abrir un ticket
+nuevo para el seguimiento, y prohibido re-diagnosticar de cero lo que el agente que atiende ya
+sabe. Caso real: el arreglo del Gateway de OpenClaw (#187) se partio en un segundo ticket (#188)
+para un cambio de 2 lineas; fueron dos tickets, dos sillas y dos diagnosticos para un solo
+problema, y aun asi el resultado no quedo vivo hasta integrar.
+
+- **Cerrar el ciclo entero en la misma unidad**: diagnostico -> fix -> integracion -> verificacion
+  en vivo -> evidencia, todo bajo el mismo ticket. Un ticket `done` con el resultado a medias
+  (p.ej. el fix en un branch sin integrar a la rama que el usuario ve) **no** es cierre.
+- **Umbral de autofix vs silla del owner**: si el cambio es chico (1-2 archivos), de bajo riesgo,
+  ya diagnosticado y **no hay otro escritor en ese arbol**, el agente que atiende lo hace y lo
+  verifica directo (tier `micro`/`medio`, ver E3). La silla del owner del dominio se reserva para
+  multi-archivo, riesgo alto (foco, input, shell/QML, migraciones) o arbol con otro escritor (ver
+  el invariante de worktree). **No** se abre una silla nueva para lo que el agente actual resuelve.
+- **Cross-dominio sin ticket nuevo**: si hace falta tocar otro repo (p.ej. el gateway y la app), se
+  hace en el **mismo** ticket, en el worktree de ese repo; el owner del dominio aporta su
+  verificacion. Si el agente que atiende no puede editar ese repo, delega en una silla del owner
+  pero el ticket original sigue siendo el unico ticket del problema.
+- **`main` no edita** (`permission.edit/write: deny`): sigue delegando en silla, pero **mantiene el
+  mismo ticket**; no abre uno nuevo para continuar el mismo problema.
+- **Medir la via**: antes de spawnear, estimar el costo (tokens/costo) de la via elegida y preferir
+  la mas barata que cubra el riesgo; registrar la via usada en el ticket (`rig ticket metrics`). Una
+  silla nueva para lo trivial es costo sin retorno.
+- Dueño: `supervisor`. Verificacion: `verify run agents` (check `flow-policy`, falla si esta regla
+  desaparece del `AGENTS.md`).
+
+## Invariante: developing es la unica fuente de verdad (el usuario juzga lo que ve)
+
+REGLA DURA, pedido directo del usuario: en cualquier proyecto que tenga una rama `developing`,
+esa rama es la unica fuente de verdad y el arbol que el usuario ve. Un cambio **no existe**
+hasta que esta integrado y servido en developing; el usuario no lee las ramas `ticket/*` ni
+`main`, juzga por lo que la app servida le muestra. Dar por terminado un cambio que solo vive en
+una rama de ticket es el peor fallo de flujo: el usuario ve la app vieja, la cree rota y la
+reporta de nuevo.
+
+- **Definicion de terminado (todo o nada)**: commit en la rama del ticket -> merge a
+  `developing` -> app de `developing` reconstruida/servida mostrando el cambio -> `verify` en
+  verde **sobre `developing`**. Sin integrar y servir en developing, el ticket no se cierra ni se
+  reporta "listo".
+- **Prohibido reportar "arreglado" con el cambio solo en la rama `ticket/*` o en `main`**.
+  Caso real: el ancho de los mensajes de los hilos se arreglo en `ticket/plataforma-hilos-ancho`,
+  pero `developing` (lo que el usuario ve) seguia ancho; el usuario lo reporto otra vez.
+- **Verificacion determinista antes de cerrar** (desde el worktree de `developing`):
+  `git branch --contains <commit>` debe listar `developing`, o el marcador del cambio debe
+  aparecer en el archivo ya presente en `developing`. Si el cambio no esta ahi, el ticket queda
+  `in-progress`/`blocked`, nunca `done`.
+- **Si el proyecto no tiene `developing`**: aplica la rama/arbol que se sirve en vivo; preguntar
+  antes de asumir cual es.
+- Dueño: `supervisor`. Verificacion: `verify run agents` (check `developing-policy`, falla si esta
+  regla desaparece del `AGENTS.md`).
+
 ## Invariante: ciclo de vida de sillas (no cerrar ajenos; el space lo cierra el usuario)
 
 REGLA DURA, pedido directo del usuario: un agente **no cierra sillas, espacios ni tickets ajenos**.
@@ -525,6 +579,26 @@ subagentes tocando `static/` de foldertinder) y deja **trazabilidad** completa
   (checks `git`, `work-cli`, `tickets-work-shape`, `worktree-link` + selftest que crea
   worktree+branch, commitea via `work finish` y limpia via `work rm`) y anti-rot
   `verify run agents` (check `worktree-policy`). Config nueva -> reinicia opencode.
+
+## Invariante: linea `developing` en agentes-platform (forks y commits ahi)
+
+En la app `agentes-platform` (el cockpit de agentes y tickets), `main` es la **linea
+estable** y `developing` es la **linea de integracion**. Todo agente nuevo que trabaje en
+esa app **forkea de `developing`** (no de `main`), avanza en su propia rama/version y
+**commitea ahi**, para no pisarse entre si; `main` solo recibe lo ya integrado y estable.
+
+- **Worktree**: los tickets de `agentes-platform` se abren con `rig work new <id> --cwd
+  <repo agentes-platform> --base developing`; el `--base` es `developing`, nunca `main` ni
+  el `HEAD` de `main`.
+- **Integracion**: los branches de esos tickets se integran a `developing` (serial, con
+  verificacion entre cada paso); `developing` -> `main` solo cuando la linea esta estable.
+- **Alcance**: aplica solo a `agentes-platform`; el resto de los repos siguen la doctrina
+  general de worktree por ticket sobre su rama por defecto.
+- **Nota en el repo**: la app lleva su propia nota de esta regla en su `AGENTS.md`; su owner
+  es `app-architect` (ticket #178) y ese repo no se edita desde aca.
+- Dueño: `supervisor` (doctrina) + `app-architect` (owner de la app). Verificacion:
+  `verify run rig` (check `developing-policy`, falla si esta regla desaparece de este
+  `AGENTS.md`). Config nueva -> reinicia opencode.
 
 ## Metricas por ticket (tokens/costo/tiempo) — trazabilidad de costo
 
@@ -682,7 +756,7 @@ objetivo es escribir **menos y mas claro**, no mas LOC.
   `AGENTS.md` del proyecto, linter/typecheck/tests) en **PASS** para cerrar. El contrato AFA v1
   y los principios portados de pstack viven en la skill `agent-friendly-app`.
 - **Deuda conocida** (motivo de la regla): `foldertinder/static` (`app.js` 3548 + `app.css` 3060
-  + `index.html` 291), `hypr-remote/public/app.js` 4266, `noteriv` `globals.css` 9037.
+  + `index.html` 291), `hypr-remote/public/app.js` 4266.
 - Config nueva (agentes, skills, reglas) **no se hot-reloadea**: reinicia opencode.
 
 ## Regla: nunca compilar Qt5 desde fuente (AUR con deps retiradas)
@@ -906,7 +980,7 @@ agente `ui-ux` y su skill `~/.config/opencode/skills/ui-ux-scorer/`.
 - **Probe determinista** (UIs web): `node ~/.config/opencode/skills/ui-ux-scorer/probe.mjs <url>`
   -> `issues` + `score`. Checks: `content-flush`, `empty-box`, `misaligned`, `font-scale`,
   `small-target`, `too-many-colors`, `reduced-motion` (animaciones sin respetar
-  `prefers-reduced-motion`). Para nativas/Tauri/QML (p.ej. la barra Omarchy, Noteriv) el
+  `prefers-reduced-motion`). Para nativas/Tauri/QML (p.ej. la barra Omarchy) el
   probe no llega: screenshot con `grim` + evaluacion por vision.
 - **Verificacion**: `node .../probe.mjs --selftest` (debe dar `ok: true`) y
   `verify auto ~/.config/opencode/skills/ui-ux-scorer/probe.mjs`.
@@ -1006,12 +1080,13 @@ vivo. Si una accion no deja evento, es un hueco que hay que cerrar.
   abrir la central (`log`). Nunca rompen el comando: emiten fail-soft.
 - **Actor sin tool de rig**: `rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]`
   registra decisiones, diagnosticos y hallazgos (`main` lo usa con `bash`).
-- **Buzon de salida de main**: `rig say "<mensaje>" [--to telegram|hub] [--ticket X]` escribe
-  un evento `kind=reply` con `actor=main` en el **mismo** store (no hay archivo aparte): asi
-  `main` le responde al usuario por fuera de la terminal. El puente de mensajeria
-  (ticket MAIN-BRIDGE) y el hub web lo consumen con
+- **Buzon de salida de main**: `rig say "<mensaje>" [--to telegram|hub|app] [--ticket X]
+  [--thread ID]` escribe un evento `kind=reply` con `actor=main` en el **mismo** store (no hay
+  archivo aparte): asi `main` le responde al usuario por fuera de la terminal. El puente de
+  mensajeria (ticket MAIN-BRIDGE), la app y el hub web lo consumen con
   `rig events --kind reply --since 10m --porcelain` (ordenado, JSON lines). `--to` default
-  `telegram` y viaja en `data.to` junto al texto (`data.message`, `data.len`).
+  `telegram` y viaja en `data.to` junto al texto (`data.message`, `data.len`); `--thread` fija
+  `data.thread`, el hilo destino (lo usan el puente de Discord y la app).
 - **Vista viva**: `rig events [--watch] [--interval SEG] [--ticket X] [--seat S] [--kind K]`
   `[--since 30m] [--limit N] [--porcelain]`. Render legible por hora, coloreado por area
   (proyecto), sin desbordar el ancho. `--porcelain` = JSON lines (para el hub web);
@@ -1022,8 +1097,8 @@ vivo. Si una accion no deja evento, es un hueco que hay que cerrar.
   (`events`) + `board`/`scan`/`agents`/`queue`.
 - Dueño: `supervisor` (doctrina) + `dotfiles` (script). Verificacion: `verify run rig`
   (checks `events-append`, `events-shape`, `events-porcelain`, `events-watch-guard`,
-  `events-cli`, `log-cli`, `say-cli`, `say-to-guard`, `say-reply`, `central-events`) +
-  `rig --selftest` + `verify selftest`.
+  `events-cli`, `log-cli`, `say-cli`, `say-to-guard`, `say-reply`, `say-to-app`,
+  `central-events`) + `rig --selftest` + `verify selftest`.
 
 ## Regla: reporte verificado (re-consultar la fuente en el momento)
 
@@ -1039,6 +1114,24 @@ lectura vieja.**
 - Motivo: el usuario trabaja muchas cosas en paralelo y una lectura vieja produce caos (caso
   real: una silla cerro y verifico un ticket mientras el usuario todavia lo veia trabado).
 - Dueño: `supervisor`. Verificacion: dominio `agents`, check `report-policy`.
+
+## Invariante: agentes-platform es la fuente de verdad del usuario (canal unico)
+
+La app **agentes-platform** (el cockpit de agentes y tickets) es la **fuente de verdad del
+usuario y su unico canal para ver estado y evidencia**. `main` y los agentes **NO le piden al
+usuario verificar corriendo comandos de terminal** (`rig board`, `rig ticket show`, `rig scan`,
+etc.): el estado de los tickets, las sillas, la evidencia y los cambios **se le muestran en la
+app**.
+
+- **Prohibido** delegar la verificacion al usuario con un comando: nada de "corre `rig board`
+  para ver" ni "verifica con `rig ticket show <id>`". El comando es plomeria de los agentes; el
+  usuario lee la app, no la terminal.
+- **Hueco = ticket**: si algo que el usuario necesita ver no aparece en la app, eso es un
+  **hueco**: se abre ticket para agregarlo a la vista, no se improvisa un comando como salida.
+- **Materializacion de la vista**: la vista que expone estado y evidencia vive en
+  **PLATAFORMA-BITACORA-CAMBIOS (#182)**; este invariante es su base de doctrina.
+- Dueño: `supervisor` (doctrina) + `app-architect` (vista en la app). Verificacion: dominio
+  `agents`, check `app-channel-policy` (falla si esta regla desaparece de este `AGENTS.md`).
 
 ## Reparto de roles: conversar con main, observar en herdr
 
@@ -1058,6 +1151,23 @@ Estado real de herdr (para no reportarlo mal):
   **limitacion conocida**, no un bug abierto, salvo que el usuario lo pida.
 
 - Dueño: `supervisor`. Verificacion: dominio `agents`, check `observe-policy`.
+
+## Canal conversacional de la app: Hilos de agentes-platform
+
+La app agentes-platform tiene la vista **Hilos**: el usuario escribe ahi y **main** responde,
+sin terminal de por medio. El circuito completo:
+
+- La app escribe el mensaje como evento `conv-in` en `~/.local/state/rig/events.jsonl` y lo
+  entrega con `rig send main-seat "[app] t=<threadId> <texto>"`.
+- `main` corre como **silla residente** `main-seat`: la levanta y la repone
+  `rig-main-seat.service` (unidad de usuario) y `tmux-reap.sh` la exime del reaper. Al recibir
+  `[app] t=<id> ...` responde `rig say "<respuesta>" --to app --thread <id>`: el evento
+  `kind=reply` con `data.thread` cae en el hilo correcto y la app lo muestra.
+- Si la entrega falla (silla caida), la app muestra un **aviso visible** en el hilo; la
+  entrega no falla en silencio.
+- Dueño: `supervisor` (doctrina) + `dotfiles` (silla y unidad). Verificacion: `verify run
+  agents` (check `app-reply-policy`) + `verify run rig` (check `say-to-app`) + `verify auto
+  rig-seat-keep` (selftest + shellcheck).
 
 ## Registro versionado de agentes (agents-registry)
 

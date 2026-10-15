@@ -14,7 +14,13 @@
 #   status.sh enable | disable    -> fija el estado
 #   status.sh toggle              -> alterna el estado
 #   status.sh volume-set <v>      -> volumen relativo (0.0-1.0 o NN%)
-#   status.sh history [N]         -> JSON array del historial (reciente primero)
+#   status.sh messages [N]        -> JSON array del registro de mensajes
+#   status.sh pending-count       -> numero de mensajes pendientes (buzon)
+#   status.sh inbox [N]           -> JSON array de mensajes pendientes
+#   status.sh play-inbox [N]      -> reproduce el buzon
+#   status.sh clear-inbox         -> marca todo el buzon como escuchado
+#   status.sh repeat [N]          -> repite los ultimos N mensajes
+#   status.sh repeat-entry <N>    -> repite el mensaje N (1 = mas reciente)
 #   status.sh play <ruta.wav>     -> reproduce un WAV del historial
 set -euo pipefail
 
@@ -46,11 +52,12 @@ volume_fraction() {
 }
 
 print_status() {
-  local s v
+  local s v p
   s="$(state)"
   v="$(volume_fraction)"
-  printf '{"state":"%s","enabled":%s,"volume":%s,"source":"voice tts"}\n' \
-    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v"
+  p="$("$VOICE_BIN" inbox count 2>/dev/null | tr -dc '0-9')"; p="${p:-0}"
+  printf '{"state":"%s","enabled":%s,"volume":%s,"pending":%s,"source":"voice"}\n' \
+    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v" "$p"
 }
 
 case "${1:-status}" in
@@ -65,8 +72,23 @@ case "${1:-status}" in
     "$VOICE_BIN" volume "$v" >/dev/null 2>&1 ;;
   history)
     "$VOICE_BIN" history --json "${2:-200}" ;;
+  messages)
+    "$VOICE_BIN" messages --json "${2:-200}" ;;
+  inbox)
+    "$VOICE_BIN" inbox list --json "${2:-200}" ;;
+  pending-count)
+    "$VOICE_BIN" inbox count ;;
+  play-inbox)
+    "$VOICE_BIN" play-inbox "${2:-}" >/dev/null 2>&1 ;;
+  clear-inbox)
+    "$VOICE_BIN" inbox clear >/dev/null 2>&1 ;;
+  repeat)
+    "$VOICE_BIN" repeat "${2:-1}" >/dev/null 2>&1 ;;
+  repeat-entry)
+    [ "$#" -ge 2 ] || { echo "uso: status.sh repeat-entry <N>" >&2; exit 2; }
+    "$VOICE_BIN" repeat --index "$2" >/dev/null 2>&1 ;;
   play)
     [ "$#" -ge 2 ] || { echo "uso: status.sh play <ruta.wav>" >&2; exit 2; }
     "$VOICE_BIN" play "$2" >/dev/null 2>&1 ;;
-  *) echo "uso: status.sh [status|enable|disable|toggle|volume-set|history|play]" >&2; exit 2 ;;
+  *) echo "uso: status.sh [status|enable|disable|toggle|volume-set|messages|inbox|pending-count|play-inbox|clear-inbox|repeat|repeat-entry|play]" >&2; exit 2 ;;
 esac

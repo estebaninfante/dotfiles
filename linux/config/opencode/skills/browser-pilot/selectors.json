@@ -37,5 +37,25 @@
       "timelineReady": "article[data-testid=\"tweet\"]"
     },
     "verified": "2026-10-06"
+  },
+  "discord": {
+    "site": "discord",
+    "patterns": [
+      "https://discord.com/developers/applications",
+      "https://discord.com/oauth2/authorize"
+    ],
+    "selectors": {
+      "botTokenReset": "button:has-text(\"Restablecer token\")",
+      "oauthGuildSelect": "input[role=\"combobox\"]",
+      "oauthContinue": "button:has-text(\"Continuar\")",
+      "oauthAuthorize": "button:has-text(\"Autorizar\")",
+      "hcaptchaCheckboxFrame": "#frame=checkbox",
+      "hcaptchaChallengeFrame": "#frame=challenge"
+    },
+    "waits": {
+      "authDialog": "[role=dialog]",
+      "permissionList": "button:has-text(\"Autorizar\")"
+    },
+    "verified": "2026-10-13"
   }
 }

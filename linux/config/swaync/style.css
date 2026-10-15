@@ -19,17 +19,27 @@
 
 .notification-row {
   outline: none;
-  margin: 8px 16px;
+  /* Sin margen superior: la tarjeta nace pegada al borde de la barra. */
+  margin: 0 16px 8px 16px;
   padding: 0;
 }
 
+@keyframes notch-morph {
+  0%   { opacity: 0.0; transform: scale(0.6); margin-top: -10px; }
+  100% { opacity: 1.0; transform: scale(1.0); margin-top: 0px; }
+}
+
 .notification {
-  background: #1a1a22;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  /* Negro puro, sin borde ni sombra. Esquinas de arriba rectas para que se
+     funda con la barra superior y solo las de abajo queden redondeadas,
+     como un notch. */
+  background: #000000;
+  border: none;
+  border-radius: 0 0 16px 16px;
   padding: 14px 18px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
   outline: none;
+  animation: notch-morph 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .notification-content {

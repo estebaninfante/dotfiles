@@ -96,18 +96,28 @@ reinstalan con `omarchy plugin add` / `omarchy theme install`.
 automaticamente. No symlinkear `~/.config/omarchy`: Omarchy escribe ahi en vivo.
 
 **Auto-sync (para que no se desincronice):** `scripts/dotfiles-sync.sh` (timer
-`dotfiles-sync.timer`, cada ~5 min en ambas maquinas) corre `git pull` y, tras
-un pull exitoso, `omarchy-sync.sh import`. Flujo:
+`dotfiles-sync.timer`, cada ~5 min en ambas maquinas) publica y sincroniza, en
+este orden: **export -> commit -> pull -> import (si vino shell del otro) ->
+push**. Nada se pierde y ninguna maquina pisa a la otra:
 
-1. Personalizas en una maquina -> `omarchy-sync.sh export` (o `publish.sh`, que
-   exporta solo) -> commit + push.
-2. La otra maquina hace pull por el timer e **importa** la shell automaticamente.
+1. `export` de la config viva de Omarchy al repo (aditivo: nunca borra).
+2. `git add -A` + commit automatico de TODO cambio, aunque este a medias
+   (`autosync(<host>): <fecha>`).
+3. `git pull --rebase=merges --autostash` para integrar lo del otro equipo.
+4. Si el pull cambio `linux/config/omarchy/`, se corre `import` a la config viva
+   (seguro: lo local ya quedo exportado y commiteado en 1-2).
+5. `git push`.
 
-Al terminar de personalizar en cualquier maquina, **exporta antes de que el
-timer pise** tus cambios locales con el repo. Verificacion: `omarchy-sync.sh
-status` (o `verify auto ~/.config/omarchy/shell.json`) reporta `DRIFT` si el
-live difiere del repo. Machine-specific: `shell.<machine>.json` (laptop/desktop)
-gana sobre `shell.json` si existe; hoy no se usa (layout unico).
+Ante conflicto de rebase: aborta, notifica y **no** importa. La bandera de
+pausa es `~/.config/dotfiles-autosync.off` (menu de la barra: Dotfiles >
+Auto-sync). Verificacion manual: `omarchy-sync.sh status` reporta `DRIFT` si el
+live difiere del repo. Machine-specific: `shell.<machine>.json`
+(laptop/desktop) gana sobre `shell.json` si existe; hoy no se usa.
+
+**Regla para agentes:** despues de tocar la config viva de Omarchy
+(`~/.config/omarchy/`) o cualquier archivo del repo, correr
+`~/dotfiles/scripts/dotfiles-sync.sh --force` (o `publish.sh`) para no depender
+del timer. Ver skill `dotfiles-publish`.
 
 ### Linux config — archivos sueltos
 
@@ -126,6 +136,10 @@ Solo se versionan extensiones propias de Pi (la voz). El resto de `~/.pi/agent/`
 | Archivo | Ruta destino |
 |---------|-------------|
 | extensions/tts-summary.ts | `~/.pi/agent/extensions/tts-summary.ts` |
+
+La extensión es solo un cliente de `voice avisar --source Pi`: la lógica de voz,
+perfiles y registro vive en el sistema de voz (`linux/voice`), no en Pi, para
+que cualquier proceso la use igual.
 
 Cambios en una extension se aplican con `/reload` (o reiniciando Pi).
 
@@ -148,6 +162,16 @@ Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por
 | engine.py | Config/estado TTS (engines, idiomas, toggles) |
 | chatterbox_server.py | Server persistente Chatterbox (model in GPU memory) |
 | chatterbox_synth.py | Wrapper legacy (subprocess mode, fallback) |
+| asr_vosk.py | Streaming ASR (Vosk CPU) para el wake-word |
+| pi_shim.py | Puente Ollama->Pi: cerebro de OmniVoz sin tocar su código |
+| spoken.py | Limpia la respuesta para oído (código/HTML/markdown) |
+| pi-brain/AGENTS.md | Guía del cerebro Pi: cómo manejar el escritorio |
+| `linux/bin/voice-asr-stream` | Selector del motor del wake-word: GPU (`[wake] gpu_command`) o CPU (Vosk) |
+| `linux/bin/voice-pi` | Pi headless (sin razonamiento/extensiones) para el cerebro de voz |
+| `linux/bin/omar` | CLI de Omar sobre la API local de agentes-platform (tickets/agentes) |
+| `linux/bin/omnivoz-ptt` | Push-to-talk directo: una frase sin palabra clave |
+| `linux/bin/voice-key-listener` | Dispara el PTT desde keyd (tecla física de Windows → F13) |
+| `scripts/setup-wake.sh` | Prepara el wake-word: venv + vosk + modelo + servicio `talk-command.service` |
 
 ## Flujo de trabajo
 
@@ -247,6 +271,72 @@ voice engine X lang # cambiar motor (chatterbox/piper/espeak)
 ```
 
 **Chain de fallback:** chatterbox → piper → espeak
+
+**Registro unificado + API para cualquier proceso:** cada mensaje entregado
+(voz y notificaciones) queda en `~/.local/share/voice/tts/messages.jsonl`, con
+`voice messages` para verlo y `voice repeat` para releerlo. La interfaz que
+usan los procesos es el CLI `voice` (no depende de Pi):
+
+```bash
+voice avisar --source Pi "texto"   # mensaje al usuario (direct/buzón/híbrido)
+voice notify --app X --title T "texto"   # notifica sola
+voice say "texto"                  # solo habla
+voice repeat [N] | --index M       # repetir los últimos mensajes
+voice inbox | play-inbox           # buzón: ver / escuchar pendientes
+voice delivery [direct|mailbox|hybrid]  # inmediato, acumular o aviso+pausa+voz
+```
+
+**Entrega de mensajes:** `[tts] delivery` decide cómo entrega `avisar`:
+- `direct`: habla al instante (interrumpe).
+- `mailbox`: acumula en el buzón con su autor y solo suena un chime sutil; se
+escuchan cuando el usuario quiere con `voice play-inbox`, que narra de quién es
+cada uno y los marca escuchados. El widget de barra muestra el contador
+pendiente (badge).
+- `hybrid` (por defecto): suena el chime, espera `[tts] hybrid_pause` segundos
+y recién habla, para que el usuario alcance a prestar atención sin distraerse.
+No acumula nada en el buzón; el mensaje igual queda en el registro. Si la voz
+está apagada cae al buzón para no perderlo. Mientras habla pausa la música/video
+(`[tts] duck`, vía `playerctl`) para que no tape la voz, y los reanuda al terminar
+(no baja el volumen del sink, así la voz no se opaca).
+
+La voz es configurable por proceso (personalidad): `--source X` usa el perfil
+`[tts.profiles.X]` de `config.toml`; si no existe, `auto_profiles = true` le
+asigna una voz estable y distinta. Un perfil admite `--voice/--engine/--lang`,
+`--pitch` (semitonos) y `--speed` (tempo). Se gestiona con `voice profiles`,
+`voice profile show|set|remove|test|auto`. Las notificaciones se capturan con
+el script `voice ingest-notify` enganchado en
+`linux/config/swaync/config.json` (`scripts.exec`).
+
+**Wake-word ("dime"):** `talk-command` escucha continua y dispara por palabra
+clave; `dime` → `voice play-inbox`, `cuántos mensajes` → dice el conteo. El ASR
+lo elige `linux/bin/voice-asr-stream` según `[wake]`: GPU si hay `gpu_command`
+y AC, si no CPU (Vosk, sin VRAM). Servicio `talk-command.service` (unit en
+`linux/system/systemd-user/`); se prepara con `scripts/setup-wake.sh`.
+
+**Asistente y cerebro Pi:** OmniVoz (local, `~/developing/omnivoz`, servicio
+`omnivoz-listen`) hace wake word → VAD → STT → reglas → cerebro. El cerebro es
+**Pi headless** (`linux/bin/voice-pi`, sin razonamiento ni extensiones) vía
+`linux/voice/pi_shim.py` (traduce Ollama→Pi; servicio `voice-pi-shim.service`),
+así que no usa opencode. **Teclas**: Caps Lock = Super (`layer(meta)` en
+keyd); la tecla física de Windows se remapea a **F13** y `voice-key-listener.service`
+(lee `keyd monitor`) corre `linux/bin/omar-open`: abre la **píldora**
+(`omar-pill.service` + `packaging/quickshell/omar-pill.qml`: input de texto y
+subtítulos de lo que decís y de lo que responde Omar) y arranca el
+push-to-talk directo (`omnivoz-ptt`) sin palabra clave. El modo manos libres
+(palabra clave "Omar") es `omnivoz-listen`. Sin notificaciones de estado (RIP
+esa caja negra). `voice-duck.service` (`linux/bin/voice-duck`) **baja el volumen**
+del sink mientras está en "listening" y lo restaura. El bind de Hyprland resultó
+caprichoso, por eso se engancha en keyd. El **glow** tipo Google Assistant
+(`omnivoz-glow.service`) va
+**solo en el borde inferior**, es sutil y **sigue el nivel del micrófono**
+(`level` en `status.json`): sube cuando hablás y baja al silencio; si el
+`status.json` queda viejo (más de 4 s) vuelve a idle solo. El STT usa **Whisper large-v3-turbo en GPU**
+(`omnivoz-whisper.service`, faster-whisper + CUDA-12 en el venv; `stt.engine =
+"whisper"`) con **Parakeet CPU** de respaldo, mucho mejor en español que
+Parakeet solo. La CLI `linux/bin/omar` (tickets/agentes sobre la API local de
+agentes-platform) es la primera skill del cerebro; el resto entra en
+`linux/voice/pi-brain/AGENTS.md`. El cerebro por defecto es
+`opencode-go/qwen3.8-flash` vía Pi (`VOICE_PI_MODEL` cambia a uno local).
 
 **Archivos:**
 - `linux/voice/daemon.py` — daemon principal
@@ -422,6 +512,8 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
   show <id>`); **no** lee la base de opencode por su cuenta.
 - **`main` en silla**: `main` corre como silla tmux (`rig spawn main-seat --agent main`) para
   ser direccionable; el pane de herdr le hace attach para seguir viendolo en el escritorio.
+  La unidad `rig-main-seat.service` la mantiene viva (la levanta al iniciar sesion y la
+  repone si muere) y `tmux-reap.sh` la exime del reaper.
 - **Sin puertos**: el bot abre conexion **saliente** al Gateway (`wss://gateway.discord.gg`);
   nada escucha en la LAN/internet. Bot Python3 stdlib (WebSocket propio), sin `discord.js`.
 - **Seguridad**: allowlist estricta de **user id**; token, allowlist y `channel_id` en
@@ -432,7 +524,9 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
   Channel + Send Messages + Read Message History); luego pega el token/user id/channel id en
   `~/.config/rig/discord.env`. Paso a paso en `docs/main-bridge.md`.
 - **Regla para `main`**: un mensaje que empieza con `[dc]` se responde al usuario con
-  `rig say "<respuesta>"`.
+  `rig say "<respuesta>"`; un mensaje `[app] t=<hilo> <texto>` (Hilos de agentes-platform)
+  se responde con `rig say "<respuesta>" --to app --thread <hilo>` y la app lo muestra en
+  ese hilo.
 - **Escalado al humano (bidireccional)**: el canal tambien sirve para que **cualquier flujo que
   se trabe llame al usuario**. La silla pregunta con
   `rig-escalate "<pregunta>" --ticket X --seat S --priority alta|normal` (o `rig ask`, subcomando
@@ -467,5 +561,5 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
   los mismos `kind=reply`).
 - Dueño: `supervisor` (doctrina/canal) + `dotfiles` (script y unit).
   Verificacion: `verify run bridge` (py_compile + selftest + token-leak + unit + symlink, para
-  discord y telegram) y `verify run rig`. Config nueva -> reinicia opencode no aplica, pero la
-  silla `main-seat` se levanta con `rig spawn`.
+  discord y telegram) y `verify run rig`. Config nueva -> reinicia opencode no aplica; la silla
+  `main-seat` la mantiene `rig-main-seat.service` (manual: `rig spawn main-seat --agent main`).

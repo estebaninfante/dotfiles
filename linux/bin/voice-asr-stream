@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# voice-asr-stream — selector del motor ASR para el wake-word de voz.
+#
+# Lo usa talk-command como comando del motor `subprocess`: lee PCM s16le mono
+# (16 kHz) por stdin y escribe JSONL {"text","final":true} por stdout.
+#
+# Elige el motor segun `[wake] accelerator` (auto|gpu|cpu) y la energia
+# (espeja el selector de STT de Handy): GPU si hay NVIDIA y estas en AC, CPU si
+# no. Si no hay `[wake] gpu_command` configurado (p.ej. audio.cpp/Voxtral sin
+# instalar), usa CPU (Vosk) aunque el acelerador sea gpu.
+#
+# Config en ~/.config/voice/config.toml:
+#   [wake]
+#   accelerator = "auto"      # auto | gpu | cpu
+#   model = "~/.local/share/voice/asr/vosk-model-small-es-0.42"
+#   gpu_command = ""          # streaming GPU: lee PCM y emite JSONL
+#
+# Variables: VOICE_REPO, VOICE_ASR_VENV, PY.
+
+set -uo pipefail
+
+REPO="${VOICE_REPO:-$HOME/dotfiles}"
+VOICE_DIR="$REPO/linux/voice"
+PY="${PY:-python3}"
+VENV="${VOICE_ASR_VENV:-$HOME/.local/share/voice/asr-venv}"
+
+accel="$("$PY" "$VOICE_DIR/engine.py" wake-accelerator 2>/dev/null || echo cpu)"
+gpu_cmd="$("$PY" "$VOICE_DIR/engine.py" wake-gpu-command 2>/dev/null || true)"
+model="$("$PY" "$VOICE_DIR/engine.py" wake-model 2>/dev/null || true)"
+[ -n "$model" ] || model="$HOME/.local/share/voice/asr/vosk-model-small-es-0.42"
+
+if [ "$accel" = "gpu" ] && [ -n "$gpu_cmd" ]; then
+  # El comando GPU debe hablar el mismo protocolo (PCM por stdin, JSONL out).
+  exec bash -c "$gpu_cmd"
+fi
+
+# CPU (Vosk): no toca VRAM, ideal como respaldo o en bateria.
+exec "$VENV/bin/python" "$VOICE_DIR/asr_vosk.py" -m "$model"

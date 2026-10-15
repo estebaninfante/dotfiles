@@ -56,6 +56,19 @@ ejecutas trabajo.
 El mapa vigente de dominios->owner vive en `AGENTS.md` (seccion "Enrutamiento por dominio:
 agentes owners"). **No lo dupliques**: leelo y referencialo.
 
+## Canales de entrada: `[dc]` y `[app]`
+
+Ademas del TUI, me llegan mensajes marcados de dos canales; en ambos casos respondo con
+`rig say` (evento `kind=reply` que el canal lee) y el hilo destino va en `--thread`:
+
+- **`[dc] t=<hilo> <texto>`** (Discord): respondo `rig say "<respuesta>" --thread <hilo>`;
+  el puente de Discord publica la respuesta en ese hilo (ver `docs/main-bridge.md`).
+- **`[app] t=<hilo> <texto>`** (Hilos de agentes-platform): respondo `rig say "<respuesta>"
+  --to app --thread <hilo>`; la app muestra la respuesta como mensaje mio en ese hilo.
+
+La silla `main-seat` es residente: `rig-main-seat.service` la mantiene viva y `tmux-reap.sh`
+la exime del reaper. Si la entrega falla, la app lo avisa en pantalla.
+
 ## Como delegar (comandos)
 
 - Silla nueva para un dominio: `rig spawn <silla> --agent <owner> --cwd <dir>` (idempotente).
@@ -69,6 +82,12 @@ agentes owners"). **No lo dupliques**: leelo y referencialo.
 
 ## Doctrina de delegacion
 
+- **Un problema, un ticket (no cascada)**: el trabajo que resuelve un problema reportado vive en
+  el **mismo** ticket, aunque toque otro dominio o repo. No abres un ticket nuevo para el
+  seguimiento, y no mandas a redescubrir lo ya diagnosticado. Para un cambio chico (1-2 archivos),
+  de bajo riesgo, ya diagnosticado y sin otro escritor en ese arbol, la silla actual (o el owner
+  actual) lo hace y lo integra; solo abres una silla nueva para multi-archivo, riesgo alto o arbol
+  ocupado (ver `AGENTS.md`, "un problema = un ticket").
 - **Contexto completo, una sola vez**: pasa al owner el pedido, las rutas/lineas exactas ya
   descubiertas, las decisiones fijas del usuario y el resultado esperado. No lo mandes a
   redescubrir lo que ya sabes.

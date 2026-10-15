@@ -4,6 +4,19 @@
 # Uso:
 #   voice status                         estado completo
 #   voice speak "texto"                  TTS (via daemon si activo, si no directo)
+#   voice say "texto"                    alias de speak
+#   voice avisar [--source S] "texto"    mensaje al usuario (direct/mailbox/hybrid)
+#   voice notify [--app A] [--title T] "texto"  notificacion sola (queda en el registro)
+#   voice inbox [list|count|clear|play]   buzon de voz: mensajes pendientes de escuchar
+#   voice play-inbox [N|--all]           reproduce los pendientes y los marca escuchados
+#   voice think "texto"                  cerebro Pi headless: entiende y actúa, y responde
+#   voice ptt                            push-to-talk: habla y te responde (Pi, sin nube)
+#   voice delivery [direct|mailbox|hybrid]  inmediato, acumular en el buzon, o aviso+pausa+voz
+#   voice messages [--json] [N]          registro unificado (voz + notificaciones)
+#   voice repeat [N] | --index M         repetir los ultimos mensajes
+#   voice profiles [--all] [--json]      listar voces por agente/proceso
+#   voice profile show|set|remove|test   ver/cambiar/probar la voz de un agente
+#   voice profile auto [on|off]          reparto automatico de voces
 #   voice send --agent <nombre> --text "..."   API por-agente (Hermes, opencode, ...)
 #   voice test                           test TTS + STT
 #   voice accelerator [auto|gpu|cpu]     ver/cambiar dispositivo STT Handy
@@ -25,6 +38,11 @@
 #   voice history [--json] [N]           historial de la voz (mas reciente primero)
 #   voice history play <N>               reproducir la entrada N del historial
 #   voice play <archivo.wav>             reproducir un WAV del historial
+#
+# Opciones de voz (speak/say/avisar/send/synth): --profile P --voice V --engine E
+#   --lang L --pitch N (semitonos) --speed N (factor). Un --source nombre usa el
+#   perfil [tts.profiles.nombre]; si no existe, se le asigna una voz estable
+#   automaticamente. --no-record no guarda; --force ignora tts off.
 #
 # Arquitectura de capas:
 #   TTS  → linux/voice/daemon.py (cola, router kokoro/piper/espeak por-idioma)
@@ -125,34 +143,84 @@ tts_volume() {
 }
 
 # ── comandos ────────────────────────────────────────────────────────────
-speak() {  # speak <texto> [key] — key opcional = dedup en el daemon
-  local text="${1:-}"; local key="${2:-}"
+# Parser comun de opciones de sintesis. Deja el resultado en las variables
+# P_* del llamador (scope dinamico de bash). Acepta ademas texto por stdin.
+parse_speak_flags() {
+  P_PROFILE=""; P_VOICE=""; P_ENGINE=""; P_LANG=""; P_SOURCE=""
+  P_KEY=""; P_PITCH=""; P_SPEED=""; P_NO_RECORD=0; P_FORCE=0; P_TEXT=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --profile) P_PROFILE="${2:?falta valor para --profile}"; shift 2 ;;
+      --voice)   P_VOICE="${2:?falta valor para --voice}";   shift 2 ;;
+      --engine)  P_ENGINE="${2:?falta valor para --engine}"; shift 2 ;;
+      --lang)    P_LANG="${2:?falta valor para --lang}";     shift 2 ;;
+      --source)  P_SOURCE="${2:?falta valor para --source}"; shift 2 ;;
+      --key)     P_KEY="${2:?falta valor para --key}";       shift 2 ;;
+      --pitch)   P_PITCH="${2:?falta valor para --pitch}";   shift 2 ;;
+      --speed)   P_SPEED="${2:?falta valor para --speed}";   shift 2 ;;
+      --no-record) P_NO_RECORD=1; shift ;;
+      --force)   P_FORCE=1; shift ;;
+      -) shift; P_TEXT="$(cat)"; break ;;
+      --) shift; P_TEXT="$*"; break ;;
+      -*) echo "voice: opcion desconocida: $1" >&2; return 2 ;;
+      *) P_TEXT="$*"; break ;;
+    esac
+  done
+  [ -n "$P_TEXT" ] || { [ -t 0 ] || P_TEXT="$(cat)"; }
+}
+
+# Resuelve motor/voz/idioma efectivos para un mensaje. Un `--source` sin
+# `--profile` usa el perfil del mismo nombre, de modo que cada proceso pide su
+# propia voz con solo identificarse (`voice say --source agents "..."`).
+resolve_voice_flags() {  # resolve_voice_flags <profile> <voice> <engine> <lang>
+  local out
+  out=$("$PY" "$VOICE_DIR/engine.py" resolve \
+      --profile "${1:-}" --voice "${2:-}" --engine "${3:-}" --lang "${4:-}" 2>/dev/null) \
+    || out=""
+  if [ -n "$out" ]; then
+    IFS=$'\t' read -r V_ENGINE V_VOICE V_LANG V_PITCH V_SPEED <<<"$out"
+  else
+    V_LANG=$(config_val tts lang); V_LANG=${V_LANG:-es}
+    V_VOICE=$(config_val tts "voice_$V_LANG"); V_ENGINE=$(config_val tts "engine_$V_LANG")
+  fi
+  V_PITCH=${V_PITCH:-0}; V_SPEED=${V_SPEED:-1.0}
+}
+
+speak() {  # speak [--profile P] [--voice V] [--engine E] [--lang L] [--source S] [--key K] [--pitch N] [--speed N] [--no-record] [--force] <texto>
+  local P_PROFILE P_VOICE P_ENGINE P_LANG P_SOURCE P_KEY P_PITCH P_SPEED P_NO_RECORD P_FORCE P_TEXT
+  local V_ENGINE V_VOICE V_LANG V_PITCH V_SPEED
+  parse_speak_flags "$@" || return $?
+  local text="$P_TEXT"
   [ -n "$text" ] || { echo "voice: sin texto" >&2; return 1; }
-  local enabled; enabled=$(config_val tts enabled)
-  if [ "$enabled" = "false" ]; then return 0; fi
+  if [ "$P_FORCE" != 1 ] && [ "$(config_val tts enabled)" = "false" ]; then return 0; fi
+  local profile="${P_PROFILE:-$P_SOURCE}"
+  resolve_voice_flags "$profile" "$P_VOICE" "$P_ENGINE" "$P_LANG"
+  [ -n "$P_PITCH" ] && V_PITCH="$P_PITCH"
+  [ -n "$P_SPEED" ] && V_SPEED="$P_SPEED"
+  local key="$P_KEY"
   if daemon_alive; then
-    local voice engine lang
-    lang=$(config_val tts lang)
-    voice=$(config_val tts "voice_$lang"); [ -n "$voice" ] || voice=$(config_val tts voice_es)
-    engine=$(config_val tts "engine_$lang"); [ -n "$engine" ] || engine=$(config_val tts engine)
     exec 9<>"$FIFO"
-    local json="{\"text\":$(js_escape "$text"),\"voice\":$(js_escape "$voice"),\"engine\":$(js_escape "$engine"),\"lang\":$(js_escape "$lang")"
+    local json="{\"text\":$(js_escape "$text"),\"voice\":$(js_escape "$V_VOICE"),\"engine\":$(js_escape "$V_ENGINE"),\"lang\":$(js_escape "$V_LANG"),\"pitch\":$V_PITCH,\"speed\":$V_SPEED"
+    [ -n "$P_SOURCE" ] && json="$json,\"source\":$(js_escape "$P_SOURCE")"
     [ -n "$key" ] && json="$json,\"key\":$(js_escape "$key")"
+    [ "$P_NO_RECORD" = 1 ] && json="$json,\"record\":false"
     json="$json}"
     printf '%s\n' "$json" >&9
     exec 9>&-
   else
     # daemon caido → sintesis directa en background (no bloquea al llamador)
-    setsid nohup "$0" __speak_direct "$text" >/dev/null 2>&1 &
+    VOICE_OVERRIDE_ENGINE="$V_ENGINE" VOICE_OVERRIDE_VOICE="$V_VOICE" \
+      VOICE_OVERRIDE_LANG="$V_LANG" \
+      setsid nohup "$0" __speak_direct "$text" >/dev/null 2>&1 &
   fi
 }
 
 __speak_direct() {
   local text="$*"
   local voice engine lang
-  lang=$(config_val tts lang)
-  voice=$(config_val tts "voice_$lang"); [ -n "$voice" ] || voice=$(config_val tts voice_es)
-  engine=$(config_val tts "engine_$lang"); [ -n "$engine" ] || engine=$(config_val tts engine)
+  lang="${VOICE_OVERRIDE_LANG:-$(config_val tts lang)}"; lang="${lang:-es}"
+  voice="${VOICE_OVERRIDE_VOICE:-$(config_val tts "voice_$lang")}"
+  engine="${VOICE_OVERRIDE_ENGINE:-$(config_val tts "engine_$lang")}"
   if [ "$engine" = "espeak" ]; then
     espeak-ng -v "$lang" -s 160 -p 50 "$text"
     return $?
@@ -189,6 +257,275 @@ speak_core_piper() { # speak_core_piper <voz> <texto> — sin flock, sin daemon
   rate=$(jq -r '.audio.sample_rate // 22050' "$json" 2>/dev/null || echo 22050)
   piper --model "$model" --output-raw 2>/dev/null <<<"$*" |
     pw-play --volume="$(tts_volume)" --raw --format=s16 --rate "$rate" --channels=1 - >/dev/null 2>&1
+}
+
+# ── API para cualquier proceso ──────────────────────────────────────────
+# say: igual que speak (alias legible).
+say() { speak "$@"; }
+
+# Pausa del modo hibrido entre el aviso sonoro y la voz, para que el usuario
+# alcance a prestar atencion. Config: [tts] hybrid_pause (segundos).
+hybrid_pause() {
+  local p; p=$(config_val tts hybrid_pause); p=${p:-1.5}
+  [[ "$p" =~ ^[0-9]+([.][0-9]+)?$ ]] || p=1.5
+  printf '%s' "$p"
+}
+
+# Tono sutil de "llego un mensaje": corto, dos notas, a bajo volumen.
+# Se genera una vez y se cachea. Config: [tts] chime.
+chime() {
+  [ "$(config_val tts chime)" = "false" ] && return 0
+  local f="$CACHE_DIR/chime.wav"
+  if [ ! -f "$f" ]; then
+    mkdir -p "$CACHE_DIR"
+    sox -n "$CACHE_DIR/chime1.wav" synth 0.12 sine 880  vol 0.30 fade 0.01 0.12 0.05 2>/dev/null || return 0
+    sox -n "$CACHE_DIR/chime2.wav" synth 0.22 sine 1318 vol 0.26 fade 0.01 0.22 0.10 2>/dev/null || return 0
+    sox "$CACHE_DIR/chime1.wav" "$CACHE_DIR/chime2.wav" "$f" 2>/dev/null || return 0
+    rm -f "$CACHE_DIR/chime1.wav" "$CACHE_DIR/chime2.wav"
+  fi
+  [ -f "$f" ] || return 0
+  pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1 &
+}
+
+# avisar: entrega un mensaje al usuario. Segun `[tts] delivery`:
+#   direct  → notificacion + voz + registro (inmediato)
+#   mailbox → lo deja PENDIENTE en el buzon y suena un aviso sutil (no habla)
+#   hybrid  → aviso sutil, pausa (para prestar atencion) y voz; si la voz esta
+#             apagada cae al buzon para no perder el mensaje
+# Es la interfaz que usan los agentes (Pi) y cualquier proceso; admite
+# voz/motor/idioma/perfil por llamada.
+avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile P] <texto>
+  local args=("$@")
+  local P_PROFILE P_VOICE P_ENGINE P_LANG P_SOURCE P_KEY P_PITCH P_SPEED P_NO_RECORD P_FORCE P_TEXT
+  parse_speak_flags "${args[@]}" || return $?
+  [ -n "$P_TEXT" ] || { echo "voice avisar: falta el texto" >&2; return 2; }
+  local source="${P_SOURCE:-voice}" delivery
+  delivery=$(config_val tts delivery); delivery=${delivery:-direct}
+  case "$delivery" in
+    mailbox)
+      "$PY" "$VOICE_DIR/engine.py" record-message --source "$source" \
+        --text "$P_TEXT" --pending >/dev/null 2>&1 || true
+      chime
+      return 0
+      ;;
+    hybrid)
+      if [ "$(config_val tts enabled)" = "false" ]; then
+        # Sin voz no hay híbrido: al buzón para no perderlo.
+        "$PY" "$VOICE_DIR/engine.py" record-message --source "$source" \
+          --text "$P_TEXT" --pending >/dev/null 2>&1 || true
+        chime
+        return 0
+      fi
+      chime
+      sleep "$(hybrid_pause)"
+      speak "${args[@]}"
+      return 0
+      ;;
+  esac
+  # direct
+  if [ "$(config_val tts enabled)" = "false" ]; then return 0; fi
+  notify-send -a "$source" -i dialog-information "$source" "$P_TEXT" >/dev/null 2>&1 || true
+  speak "${args[@]}"
+}
+
+# notify: notificacion de escritorio sin voz (para avisos que no merecen sonar).
+# Queda en el registro, asi que `voice repeat` puede volver a leerla.
+notify_cmd() {  # notify [--app A] [--title T] [--body B] [--source S] <texto>
+  local app="voice" title="" body="" source=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --app)    app="${2:?}";    shift 2 ;;
+      --title)  title="${2:?}";  shift 2 ;;
+      --body)   body="${2:?}";   shift 2 ;;
+      --source) source="${2:?}"; shift 2 ;;
+      *) body="${body:+$body }$*"; break ;;
+    esac
+  done
+  [ -n "$body" ] || { echo "voice notify: falta el texto" >&2; return 2; }
+  [ -n "$title" ] || title="$app"
+  notify-send -a "$app" -i dialog-information "$title" "$body" >/dev/null 2>&1 || true
+  # Respaldo del registro por si swaync no esta capturando notificaciones.
+  "$PY" "$VOICE_DIR/engine.py" record-notify --app "$app" --title "$title" --body "$body" >/dev/null 2>&1 || true
+}
+
+# ingest-notify: la llama swaync (scripts.exec) con la notificacion en el
+# entorno (SWAYNC_*). Solo registra; nunca habla ni falla.
+ingest_notify() { "$PY" "$VOICE_DIR/engine.py" notify-ingest >/dev/null 2>&1 || true; }
+
+# messages: registro unificado (voz + notificaciones), mas reciente primero.
+messages_cmd() { "$PY" "$VOICE_DIR/engine.py" messages "$@"; }
+
+# profiles: lista los perfiles de voz (agentes/procesos) y su reparto.
+profiles_cmd() { "$PY" "$VOICE_DIR/engine.py" profiles "$@"; }
+
+# profile: gestiona la voz de cada agente/proceso.
+profile_cmd() {  # profile list|show|set|remove|test|auto
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    list|"") profiles_cmd "$@" ;;
+    show)
+      [ "$#" -ge 1 ] || { echo "uso: voice profile show <nombre>" >&2; return 2; }
+      "$PY" "$VOICE_DIR/engine.py" profile-show "$1" ;;
+    set)
+      [ "$#" -ge 1 ] || { echo "uso: voice profile set <nombre> [--voice V --engine E --lang L --pitch N --speed N]" >&2; return 2; }
+      "$PY" "$VOICE_DIR/engine.py" profile-set "$@" ;;
+    remove|rm)
+      [ "$#" -ge 1 ] || { echo "uso: voice profile remove <nombre>" >&2; return 2; }
+      "$PY" "$VOICE_DIR/engine.py" profile-remove "$1" ;;
+    test)
+      [ "$#" -ge 1 ] || { echo "uso: voice profile test <nombre> [texto]" >&2; return 2; }
+      local name="$1"; shift
+      local sample="${*:-Hola, soy la voz de $name. Así me vas a reconocer.}"
+      speak --force --no-record --source "$name" "$sample" ;;
+    auto)
+      case "${1:-}" in
+        on|true|1)   "$PY" "$VOICE_DIR/engine.py" set tts auto_profiles true ;;
+        off|false|0) "$PY" "$VOICE_DIR/engine.py" set tts auto_profiles false ;;
+        *) echo "perfiles automaticos: $(config_val tts auto_profiles)" ;;
+      esac ;;
+    *)
+      echo "uso: voice profile list|show|set|remove|test|auto" >&2; return 2 ;;
+  esac
+}
+
+# repeat: vuelve a leer los ultimos mensajes. Reutiliza el WAV si lo hay y, si
+# no (notificaciones), lo sintetiza sin volver a registrarlo.
+repeat() {  # repeat [N] | repeat --index M
+  local n=1 index=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --index) index="${2:?}"; shift 2 ;;
+      *) n="$1"; shift ;;
+    esac
+  done
+  local rows=""
+  if [ -n "$index" ]; then
+    rows=$("$PY" - "$VOICE_DIR" "$index" <<'PYEOF'
+import base64, os, sys
+sys.path.insert(0, os.path.abspath(sys.argv[1]))
+from engine import message_at
+rec = message_at(int(sys.argv[2]))
+if rec:
+    print("%s\x1f%s\x1f%s" % (rec.get("file", ""),
+                             rec.get("source") or rec.get("app", ""),
+                             base64.b64encode(rec.get("text", "").encode()).decode()))
+PYEOF
+)
+  else
+    rows=$("$PY" - "$VOICE_DIR" "$n" <<'PYEOF'
+import base64, os, sys
+sys.path.insert(0, os.path.abspath(sys.argv[1]))
+from engine import load_messages
+for rec in reversed(load_messages(int(sys.argv[2]))):  # mas viejo primero
+    print("%s\x1f%s\x1f%s" % (rec.get("file", ""),
+                           rec.get("source") or rec.get("app", ""),
+                           base64.b64encode(rec.get("text", "").encode()).decode()))
+PYEOF
+)
+  fi
+  [ -n "$rows" ] || { echo "voice: no hay mensajes que repetir" >&2; return 1; }
+  while IFS=$'\x1f' read -r file source b64; do
+    [ -n "$b64" ] || continue
+    local text; text=$(printf '%s' "$b64" | base64 -d)
+    if [ -n "$file" ] && [ -f "$file" ]; then
+      pw-play --volume="$(tts_volume)" "$file" >/dev/null 2>&1
+      continue
+    fi
+    local wav; wav=$(mktemp /tmp/voice-repeat-XXXXXX.wav)
+    if daemon_alive && synth --source "$source" "$text" "$wav" >/dev/null 2>&1 && [ -s "$wav" ]; then
+      pw-play --volume="$(tts_volume)" "$wav" >/dev/null 2>&1
+    else
+      __speak_direct "$text"
+    fi
+    rm -f "$wav"
+  done <<<"$rows"
+}
+
+# play_inbox: reproduce los mensajes pendientes (mas antiguo primero), narrando
+# de quien es cada uno, y los marca como escuchados al terminar cada uno.
+play_inbox() {  # play_inbox [N|--all]
+  local n=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --all) n=""; shift ;;
+      *) n="$1"; shift ;;
+    esac
+  done
+  local rows
+  rows=$("$PY" - "$VOICE_DIR" "$n" <<'PYEOF'
+import base64, os, sys
+sys.path.insert(0, os.path.abspath(sys.argv[1]))
+from engine import pending_messages
+limit = int(sys.argv[2]) if sys.argv[2] else None
+for rec in pending_messages(limit):
+    print("%s\x1f%s\x1f%s\x1f%s" % (
+        rec.get("file", ""),
+        rec.get("source") or rec.get("app", ""),
+        base64.b64encode(rec.get("text", "").encode()).decode(),
+        rec.get("ts", "")))
+PYEOF
+)
+  [ -n "$rows" ] || { echo "voice: no hay mensajes pendientes"; return 0; }
+  while IFS=$'\x1f' read -r file source b64 ts; do
+    [ -n "$b64" ] || continue
+    local text; text=$(printf '%s' "$b64" | base64 -d)
+    # Narracion: decir de quien es el mensaje (asi se identifica el autor).
+    local spoken="$text"
+    if [ -n "$source" ] && [ "$source" != "voice" ] && [ "$source" != "sistema" ]; then
+      spoken="Mensaje de $source. $text"
+    fi
+    if [ -n "$file" ] && [ -f "$file" ]; then
+      pw-play --volume="$(tts_volume)" "$file" >/dev/null 2>&1
+    else
+      local wav; wav=$(mktemp /tmp/voice-inbox-XXXXXX.wav)
+      if daemon_alive && synth --source "$source" "$spoken" "$wav" >/dev/null 2>&1 && [ -s "$wav" ]; then
+        pw-play --volume="$(tts_volume)" "$wav" >/dev/null 2>&1
+      else
+        __speak_direct "$spoken"
+      fi
+      rm -f "$wav"
+    fi
+    [ -n "$ts" ] && "$PY" "$VOICE_DIR/engine.py" mark-heard --ts "$ts" >/dev/null 2>&1
+  done <<<"$rows"
+}
+
+inbox_cmd() {  # inbox [list|count|clear|play]
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    count) "$PY" "$VOICE_DIR/engine.py" pending-count ;;
+    clear) "$PY" "$VOICE_DIR/engine.py" mark-heard >/dev/null; echo "buzon vaciado" ;;
+    play) play_inbox "$@" ;;
+    list|"") "$PY" "$VOICE_DIR/engine.py" pending "$@" ;;
+    *) echo "uso: voice inbox [list|count|clear|play]" >&2; return 2 ;;
+  esac
+}
+
+# think: manda el texto al cerebro Pi (headless, sin razonamiento) y habla la
+# respuesta con la voz del asistente. Es el fallback "no es un comando fijo".
+think() {  # think <texto>
+  local text="$*"
+  [ -n "$text" ] || { [ -t 0 ] && return 2; text="$(cat)"; }
+  [ -n "$text" ] || { echo "voice think: falta el texto" >&2; return 2; }
+  local reply
+  reply=$(VOICE_PI_TIMEOUT="${VOICE_PI_TIMEOUT:-60}" "$HOME/.local/bin/voice-pi" "$text" 2>/dev/null)
+  # Limpieza para oido: fuera codigo, HTML, markdown y saltos de linea.
+  reply=$(printf '%s' "$reply" | "$PY" "$VOICE_DIR/spoken.py")
+  [ -n "$reply" ] || reply="No pude resolver eso."
+  speak --force --source assistant "$reply"
+}
+
+# ptt: push-to-talk. Graba una frase (VAD), la transcribe (Handy) y la manda al
+# cerebro (pi). Para el modo "hablo y me responde" sin palabra clave.
+ptt() {
+  echo "Escuchando… (hablá; corta al silencio)" >&2
+  local text
+  text=$(listen 2>/dev/null | tail -n1)
+  if [ -z "$text" ]; then
+    speak --force --source assistant "No te entendí."
+    return 1
+  fi
+  echo "→ $text" >&2
+  think "$text"
 }
 
 listen() {
@@ -254,31 +591,38 @@ PYEOF
   fi
 }
 
-synth() {  # synth <texto> [salida.wav] [--lang es] [--stdout] — TTS a archivo/stdout
-  local text="${1:-}"
-  [ -n "$text" ] || { echo "uso: voice synth <texto> [salida.wav] [--lang es] [--stdout]" >&2; return 2; }
-  shift
-  local out="" langarg="" to_stdout=0
+synth() {  # synth [--source S|--profile P] [--voice V] [--engine E] [--lang L] [--pitch N] [--speed N] [--stdout] <texto> [salida.wav]
+  local text="" out="" to_stdout=0
+  local profile="" voice="" engine="" lang="" pitch="" speed=""
   while [ "$#" -ge 1 ]; do
     case "$1" in
-      --lang) langarg="${2:-}"; shift 2 ;;
-      --stdout) to_stdout=1; shift ;;
-      *) [ -n "$out" ] || out="$1"; shift ;;
+      --profile|--source) profile="${2:-}"; shift 2 ;;
+      --voice)   voice="${2:-}";  shift 2 ;;
+      --engine)  engine="${2:-}"; shift 2 ;;
+      --lang)    lang="${2:-}";   shift 2 ;;
+      --pitch)   pitch="${2:-}";  shift 2 ;;
+      --speed)   speed="${2:-}";  shift 2 ;;
+      --stdout)  to_stdout=1; shift ;;
+      *) if [ -z "$text" ]; then text="$1"; else out="$1"; fi; shift ;;
     esac
   done
+  [ -n "$text" ] || { echo "uso: voice synth [opciones] <texto> [salida.wav]" >&2; return 2; }
   if [ "$to_stdout" = "1" ] && [ -z "$out" ]; then
     out="$(mktemp /tmp/voice-synth-XXXXXX.wav)"
   fi
-  [ -n "$out" ] || { echo "uso: voice synth <texto> [salida.wav] [--lang es] [--stdout]" >&2; return 2; }
+  [ -n "$out" ] || { echo "uso: voice synth [opciones] <texto> [salida.wav]" >&2; return 2; }
+  local V_ENGINE V_VOICE V_LANG V_PITCH V_SPEED
+  resolve_voice_flags "$profile" "$voice" "$engine" "$lang"
+  [ -n "$pitch" ] && V_PITCH="$pitch"
+  [ -n "$speed" ] && V_SPEED="$speed"
   daemon_alive || { echo "voice: daemon no activo (voice daemon start)" >&2; return 1; }
   local got
-  got=$("$PY" - "$CACHE_DIR/synth.sock" "$text" "$out" "$langarg" <<'PYEOF'
+  got=$("$PY" - "$CACHE_DIR/synth.sock" "$text" "$out" "$V_ENGINE" "$V_VOICE" "$V_LANG" "$V_PITCH" "$V_SPEED" <<'PYEOF'
 import json, os, socket, sys
-sock_path, text, out, lang = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+sock_path, text, out, engine, voice, lang, pitch, speed = sys.argv[1:9]
 out = os.path.abspath(os.path.expanduser(out))
-req = {"text": text, "output": out}
-if lang:
-    req["lang"] = lang
+req = {"text": text, "output": out, "engine": engine, "voice": voice,
+       "lang": lang, "pitch": float(pitch or 0), "speed": float(speed or 1.0)}
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.settimeout(600)
 try:
@@ -313,26 +657,39 @@ PYEOF
   fi
 }
 
-usage() { sed -n '2,27p' "$0"; }
+usage() { sed -n '2,/^# Arquitectura/p' "$0" | grep '^#'; }
 
-send_agent() {  # send_agent --agent <nombre> --text "texto"
-  local agent="" text=""
-  while [ "$#" -ge 2 ]; do
+send_agent() {  # send_agent --agent <nombre> --text "texto" [--voice V] [--engine E] [--lang L] [--profile P]
+  local agent="" text="" extra=()
+  while [ "$#" -ge 1 ]; do
     case "$1" in
       --agent) agent="${2:?falta nombre agente}"; shift 2 ;;
       --text)  text="${2:?falta texto}"; shift 2 ;;
+      --voice|--engine|--lang|--profile|--pitch|--speed) extra+=("$1" "$2"); shift 2 ;;
       *) break ;;
     esac
   done
   if [ -z "$text" ]; then echo "uso: voice send --agent <nombre> --text \"texto\"" >&2; return 2; fi
-  speak "$text" "${agent:-send}"
+  speak --key "${agent:-send}" --source "${agent:-send}" "${extra[@]}" "$text"
 }
 
 # ── despacho ────────────────────────────────────────────────────────────
 case "${1:-status}" in
   __speak_direct) shift; __speak_direct "$@" ;;
   status) "$PY" "$VOICE_DIR/engine.py" status ;;
-  speak) shift; speak "$@" ;;
+  speak|say) shift; speak "$@" ;;
+  avisar) shift; avisar "$@" ;;
+  notify) shift; notify_cmd "$@" ;;
+  ingest-notify) ingest_notify ;;
+  messages) shift; messages_cmd "$@" ;;
+  inbox) shift; inbox_cmd "$@" ;;
+  think) shift; think "$@" ;;
+  ptt) shift; ptt "$@" ;;
+  play-inbox) shift; play_inbox "$@" ;;
+  profiles) shift; profiles_cmd "$@" ;;
+  profile) shift; profile_cmd "$@" ;;
+  repeat) shift; repeat "$@" ;;
+  resolve) shift; "$PY" "$VOICE_DIR/engine.py" resolve "$@" ;;
   synth) shift; synth "$@" ;;
   listen) listen ;;
   test)
@@ -407,6 +764,16 @@ PYEOF
     if [ "$#" -ge 2 ]; then get_set tts mode "$2"; echo "modo: $2 (summary|full)"
     else echo "modo: $(config_val tts mode)"; fi
     ;;
+  delivery)
+    # Como entrega `avisar`: direct (habla ya), mailbox (acumula en el buzon)
+    # o hybrid (aviso + pausa + voz).
+    if [ "$#" -ge 2 ]; then
+      case "$2" in
+        direct|mailbox|hybrid) get_set tts delivery "$2"; echo "entrega: $2" ;;
+        *) echo "voice: delivery direct|mailbox|hybrid" >&2; exit 2 ;;
+      esac
+    else echo "entrega: $(config_val tts delivery)"; fi
+    ;;
   volume)
     # Volumen relativo del TTS sobre el general: 0.0-1.0 o NN%.
     if [ "$#" -ge 2 ]; then
@@ -432,7 +799,7 @@ PYEOF
       clear)
         [ -d "$HISTORY_RECORDINGS" ] && \
           find "$HISTORY_RECORDINGS" -maxdepth 1 -name 'tts-*.wav' -delete 2>/dev/null
-        mkdir -p "$HISTORY_DIR"; : > "$HISTORY_DIR/history.jsonl"
+        mkdir -p "$HISTORY_DIR"; : > "$HISTORY_DIR/messages.jsonl"; : > "$HISTORY_DIR/history.jsonl"
         echo "voice: historial vaciado"
         ;;
       *) "$PY" "$VOICE_DIR/engine.py" history "$@" ;;

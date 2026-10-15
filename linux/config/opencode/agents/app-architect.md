@@ -60,8 +60,7 @@ portados de pstack, sin excepcion.
 ## Anti-patrones que existen para cerrar
 
 Monolitos reales sin owner/regla/verificacion: `foldertinder/static` (`app.js` 3548 +
-`app.css` 3060 + `index.html` 291), `hypr-remote/public/app.js` 4266, `noteriv`
-`globals.css` 9037. Si vuelves a ver un archivo acercandose a 300 lineas, parte la feature
+`app.css` 3060 + `index.html` 291), `hypr-remote/public/app.js` 4266. Si vuelves a ver un archivo acercandose a 300 lineas, parte la feature
 **antes** de cruzarlo. Si un repo ya es un monolito, propon el plan de particion (unidades
 verificables) y ejecutalo por partes con `verify run app-arch` en cada una.
 

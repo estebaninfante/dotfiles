@@ -1,0 +1,18 @@
+[Unit]
+Description=Silla residente de main (main-seat) para los canales conversacionales
+After=graphical-session.target
+PartOf=graphical-session.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+Environment=RIG_KEEP_SEAT=main-seat
+Environment=RIG_KEEP_AGENT=main
+Environment=RIG_KEEP_MODEL=opencode-go/deepseek-v4.1-flash
+ExecStart=%h/.local/bin/rig-seat-keep
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=graphical-session.target

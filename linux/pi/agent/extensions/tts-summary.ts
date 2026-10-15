@@ -1,6 +1,7 @@
 /**
  * tts-summary — el agente le HABLA al usuario al terminar (y cuando haga falta),
- * por el sistema de voz del equipo (Kokoro vía `voice speak`, con su volumen
+ * por el sistema de voz del equipo (`voice avisar`, que decide motor y volumen,
+ * y registra el mensaje para poder repetirlo).
  * relativo al general configurable con `voice volume`).
  *
  * Motivo: el usuario se distrae y no se entera de que el agente terminó o de
@@ -22,12 +23,11 @@
  *
  * Config:
  *   PI_TTS_VOICE_BIN   binario del sistema de voz (default: ~/.local/bin/voice)
- *   PI_TTS_NOTIFY_BIN  binario de notificacion (default: notify-send)
  *   PI_TTS_DRY=1       no habla ni notifica; escribe en PI_TTS_DRY_FILE o /tmp
  */
 
 import { spawn } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -114,63 +114,20 @@ function condense(text: string): string {
   return out.length > MAX_SUMMARY ? `${out.slice(0, MAX_SUMMARY).trimEnd()}…` : out;
 }
 
-/* Estado efectivo de la voz del sistema: [tts].enabled de config.toml con
-   override de state.json. El toggle del bar escribe ahí, así que hay un único
-   interruptor para toda la voz TTS. */
-function ttsEnabled(): boolean {
-  let value = "true";
-  try {
-    const toml = readFileSync(`${HOME}/.config/voice/config.toml`, "utf8");
-    let inTts = false;
-    for (const rawLine of toml.split("\n")) {
-      const line = rawLine.replace(/#.*$/, "").trim();
-      if (!line) continue;
-      const header = line.match(/^\[(.+)\]$/);
-      if (header) {
-        inTts = header[1].trim() === "tts";
-        continue;
-      }
-      if (!inTts) continue;
-      const eq = line.indexOf("=");
-      if (eq < 0) continue;
-      if (line.slice(0, eq).trim() === "enabled") {
-        value = line.slice(eq + 1).trim().replace(/^"|"$/g, "");
-      }
-    }
-  } catch {
-    /* sin config.toml: habilitado */
-  }
-  try {
-    const state = JSON.parse(readFileSync(`${HOME}/.local/state/voice/state.json`, "utf8")) as
-      | { tts?: { enabled?: unknown } }
-      | undefined;
-    if (state?.tts && typeof state.tts.enabled !== "undefined") value = String(state.tts.enabled);
-  } catch {
-    /* sin state.json */
-  }
-  return !["false", "0", "off"].includes(value.trim().toLowerCase());
-}
-
-function speak(line: string): void {
+/* La extensión es solo un CLIENTE del sistema de voz (`voice`): el CLI decide
+   si hablar, con qué voz y cómo registrarlo. Aquí no se relee la config ni se
+   duplica el interruptor, así Pi deja de ser el dueño de la voz. El mismo
+   `voice avisar` lo pueden usar opencode, la barra o cualquier otro proceso. */
+function voiceAvisar(line: string): void {
   const bin = process.env.PI_TTS_VOICE_BIN ?? `${HOME}/.local/bin/voice`;
   try {
-    const child = spawn(bin, ["speak", line], { detached: true, stdio: "ignore" });
-    child.unref();
-  } catch {
-    /* sin sistema de voz disponible: no rompe el turno */
-  }
-}
-
-function notify(line: string): void {
-  const bin = process.env.PI_TTS_NOTIFY_BIN ?? "notify-send";
-  try {
-    const child = spawn(bin, ["-a", "Pi", "-i", "dialog-information", "Pi", line], {
+    const child = spawn(bin, ["avisar", "--source", "Pi", "--", line], {
       detached: true,
       stdio: "ignore",
     });
     child.unref();
   } catch {
-    /* sin notificaciones disponibles: no rompe el turno */
+    /* sin sistema de voz disponible: no rompe el turno */
   }
 }
 
@@ -190,8 +147,7 @@ function deliver(text: string, limit = MAX_SUMMARY): void {
     appendFileSync(process.env.PI_TTS_DRY_FILE ?? "/tmp/pi-tts-summary.txt", `${line}\n`);
     return;
   }
-  notify(line);
-  speak(line);
+  voiceAvisar(line);
 }
 
 export default function (pi: ExtensionAPI) {
@@ -202,7 +158,7 @@ export default function (pi: ExtensionAPI) {
     name: "avisar",
     label: "Avisar por voz",
     description:
-      "Habla en voz alta lo que el usuario debe saber. Llámala SIEMPRE al " +
+      "Avisa al usuario lo que debe saber (el sistema de voz lo habla o lo deja en su buzón). Llámala SIEMPRE al " +
       "terminar tu respuesta, y también en cualquier momento del trabajo si " +
       "surge algo que valga la pena avisar o preguntar, con una sola frase " +
       "breve en español natural y respetuoso, como quien le reporta un avance a " +
@@ -210,12 +166,13 @@ export default function (pi: ExtensionAPI) {
       "hacerle. Sin tecnicismos, sin rutas, sin nombres de herramientas o " +
       "funciones. No uses apelativos ni lo llames 'jefe'. Sirve para llamar su " +
       "atención: puede estar distraído y no mirar la pantalla.",
-    promptSnippet: "Avisar al usuario por voz (obligatoria al terminar; disponible en cualquier momento)",
+    promptSnippet: "Avisar al usuario (voz o buzón; obligatoria al terminar; disponible en cualquier momento)",
     promptGuidelines: [
       "SIEMPRE, al terminar cada respuesta, llama a `avisar` con una sola frase " +
         "breve, en español natural y respetuoso (como quien le reporta un avance " +
         "a otra persona): qué pasó o qué necesitas preguntarle. Nunca incluyas " +
-        "tecnicismos, rutas ni nombres de herramientas; se leerá en voz alta.",
+        "tecnicismos, rutas ni nombres de herramientas; se dirá en voz alta o se " +
+        "dejará en su buzón.",
       "También puedes usar `avisar` en cualquier momento, no sólo al final, si " +
         "aparece algo que convenga que el usuario sepa o tenga que decidir.",
       "No uses apelativos ni la palabra 'jefe': habla directo.",
@@ -225,7 +182,7 @@ export default function (pi: ExtensionAPI) {
       announced = true;
       // Sin tope: el aviso lo escribe el agente y ya viene en una frase breve;
       // recortarlo partia la oración a mitad.
-      if (ttsEnabled()) deliver(String(params.mensaje ?? ""), 0);
+      deliver(String(params.mensaje ?? ""), 0);
       return {
         content: [{ type: "text", text: "Avisado al usuario." }],
         details: undefined,
@@ -264,7 +221,7 @@ export default function (pi: ExtensionAPI) {
     run = { texts: [], errors: 0 };
     const agentAlreadySpoke = announced;
     announced = false;
-    if (!ttsEnabled() || agentAlreadySpoke) return;
+    if (agentAlreadySpoke) return;
 
     const raw = (snapshot.texts[snapshot.texts.length - 1] ?? "").trim();
     if (!raw && snapshot.errors === 0) return;

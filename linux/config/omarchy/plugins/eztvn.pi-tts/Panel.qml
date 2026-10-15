@@ -6,7 +6,9 @@ import qs.Commons
 import qs.Ui
 
 // Widget de barra: interruptor maestro de la voz TTS del sistema (`voice
-// tts`), con volumen relativo e historial de lo que dijo el agente. Muestra si
+// tts`), con volumen relativo y el registro de mensajes del sistema (lo que
+// dijo el agente y las notificaciones que llegaron), para repetir cualquiera.
+// Muestra si
 // la voz esta activa y la activa/desactiva; como es el mismo `tts.enabled`
 // que respetan los agentes, aplica al instante y sin reiniciar Pi. El volumen
 // (`voice volume`) y el historial (`voice history`) salen del mismo sistema de
@@ -32,17 +34,22 @@ Panel {
   property bool busy: false
   // Volumen relativo (0-1) de la voz TTS sobre el volumen general de salida.
   property real volume: 1.0
-  // Historial de la voz, mas reciente primero (lo llena status.sh history).
+  // Registro de mensajes del sistema (voz + notificaciones), mas reciente
+  // primero (lo llena status.sh messages).
   property var history: []
   property bool historyLoaded: false
   property int playingIndex: -1
+  // Mensajes pendientes de escuchar (buzon).
+  property int pending: 0
 
-  readonly property string glyph: root.ttsEnabled ? "󰕾" : "󰖁"
+  readonly property string glyph: root.pending > 0 ? "󰂚" : (root.ttsEnabled ? "󰕾" : "󰖁")
   readonly property string stateLabel: root.ttsEnabled ? "Activado" : "Desactivado"
   readonly property color stateColor: root.ttsEnabled ? root.accent : Qt.darker(root.foreground, 1.6)
   readonly property int historyCount: root.history ? root.history.length : 0
   readonly property string tooltipText: "Voz TTS · " + root.stateLabel + " · " +
-    Math.round(root.volume * 100) + "% · clic derecho: activar/desactivar"
+    Math.round(root.volume * 100) + "%" +
+    (root.pending > 0 ? " · " + root.pending + " pendientes" : "") +
+    " · clic derecho: activar/desactivar"
 
   function cfg(key, fallback) {
     if (settings && settings[key] !== undefined && settings[key] !== null && settings[key] !== "")
@@ -79,9 +86,16 @@ Panel {
   function playEntry(index) {
     if (index < 0 || index >= root.historyCount) return
     var entry = root.history[index]
-    if (!entry || !entry.file) return
+    if (!entry) return
     root.playingIndex = index
-    playProc.cmd = [root.scriptPath, "play", String(entry.file)]
+    playProc.cmd = [root.scriptPath, "repeat-entry", String(index + 1)]
+    if (!playProc.running) playProc.running = true
+  }
+
+  function repeatLast() {
+    if (root.historyCount === 0) return
+    root.playingIndex = 0
+    playProc.cmd = [root.scriptPath, "repeat", "1"]
     if (!playProc.running) playProc.running = true
   }
 
@@ -92,6 +106,18 @@ Panel {
     if (parsed.state) root.ttsEnabled = String(parsed.state) === "enabled"
     if (parsed.source) root.source = String(parsed.source)
     if (typeof parsed.volume === "number") root.volume = parsed.volume
+    if (typeof parsed.pending === "number") root.pending = parsed.pending
+  }
+
+  function playInbox() {
+    if (root.pending === 0 || playProc.running) return
+    playProc.cmd = [root.scriptPath, "play-inbox", ""]
+    playProc.running = true
+  }
+
+  function clearInbox() {
+    if (root.pending === 0 || inboxProc.running) return
+    inboxProc.running = true
   }
 
   function applyHistory(text) {
@@ -164,7 +190,7 @@ Panel {
 
   Process {
     id: historyProc
-    command: [scriptPath, "history", "200"]
+    command: [scriptPath, "messages", "200"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyHistory(text)
@@ -176,7 +202,14 @@ Panel {
     property var cmd: []
     command: cmd
     stdout: StdioCollector { waitForEnd: true }
-    onExited: root.playingIndex = -1
+    onExited: { root.playingIndex = -1; root.refresh() }
+  }
+
+  Process {
+    id: inboxProc
+    command: [scriptPath, "clear-inbox"]
+    stdout: StdioCollector { waitForEnd: true }
+    onExited: root.refresh()
   }
 
   BarIconButton {
@@ -187,15 +220,41 @@ Panel {
     slotSize: Style.bar.statusSlot
     fontSize: Style.bar.iconCanvas
     tooltipText: root.tooltipText
-    active: root.ttsEnabled
+    active: root.ttsEnabled || root.pending > 0
     useActiveColor: true
-    activeColor: root.stateColor
+    activeColor: root.pending > 0 ? root.accent : root.stateColor
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) {
         root.toggleEnabled()
       } else {
         root.toggle()
       }
+    }
+  }
+
+  // Badge del buzon: cuantos mensajes hay por escuchar (visual sutil).
+  Rectangle {
+    id: badge
+    visible: root.pending > 0
+    z: 10
+    width: Math.max(badgeText.implicitWidth + Style.space(6), Style.space(13))
+    height: Style.space(13)
+    radius: height / 2
+    color: root.accent
+    anchors.right: button.right
+    anchors.top: button.top
+    anchors.rightMargin: Style.space(1)
+    anchors.topMargin: Style.space(1)
+
+    Text {
+      id: badgeText
+      anchors.centerIn: parent
+      textFormat: Text.PlainText
+      text: root.pending > 99 ? "99+" : String(root.pending)
+      color: Color.background
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
     }
   }
 
@@ -215,6 +274,8 @@ Panel {
       onCloseRequested: root.close()
       onTextKey: function(text) {
         if (text === " " || text === "t" || text === "T") root.toggleEnabled()
+        else if (text === "b" || text === "B") root.playInbox()
+        else if (text === "l" || text === "L") root.repeatLast()
         else if (text === "r" || text === "R") { root.refresh(); root.refreshHistory() }
         else if (text === "+" || text === "=") root.setVolume(root.volume + 0.05)
         else if (text === "-" || text === "_") root.setVolume(root.volume - 0.05)
@@ -235,7 +296,8 @@ Panel {
           PanelHero {
             width: parent.width
             title: "Voz (TTS)"
-            meta: root.stateLabel
+            meta: root.stateLabel +
+                  (root.pending > 0 ? " · " + root.pending + " sin escuchar" : "")
             foreground: root.foreground
             fontFamily: root.fontFamily
           }
@@ -346,6 +408,24 @@ Panel {
             }
 
             Button {
+              text: "Escuchar buzón" + (root.pending > 0 ? " (" + root.pending + ")" : "")
+              enabled: root.pending > 0
+              onClicked: root.playInbox()
+            }
+
+            Button {
+              text: "Repetir última"
+              enabled: root.historyCount > 0
+              onClicked: root.repeatLast()
+            }
+
+            Button {
+              text: "Vaciar buzón"
+              enabled: root.pending > 0
+              onClicked: root.clearInbox()
+            }
+
+            Button {
               text: "Estado"
               onClicked: { root.refresh(); root.refreshHistory() }
             }
@@ -359,7 +439,7 @@ Panel {
 
             PanelSectionHeader {
               id: historyHeader
-              text: "HISTORIAL"
+              text: "MENSAJES"
               foreground: root.foreground
               fontFamily: root.fontFamily
               anchors.left: parent.left
@@ -369,7 +449,7 @@ Panel {
             Text {
               id: historyCountText
               textFormat: Text.PlainText
-              text: root.historyCount + (root.historyCount === 1 ? " frase" : " frases")
+              text: root.historyCount + (root.historyCount === 1 ? " mensaje" : " mensajes")
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -384,7 +464,7 @@ Panel {
             width: parent.width
             visible: root.historyLoaded && root.historyCount === 0
             textFormat: Text.PlainText
-            text: "Todavia no hay frases guardadas."
+            text: "Todavía no hay mensajes guardados."
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -432,7 +512,8 @@ Panel {
                     id: rowText
                     width: Math.max(0, rowLayout.width - timeText.width - rowLayout.spacing)
                     textFormat: Text.PlainText
-                    text: String(modelData.text || "").replace(/\s+/g, " ")
+                    text: (modelData.kind === "voice" || modelData.file ? "󰕾 " : "󰂚 ") +
+                          String(modelData.text || "").replace(/\s+/g, " ")
                     color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -457,7 +538,7 @@ Panel {
           Text {
             width: parent.width
             textFormat: Text.PlainText
-            text: "T · activar/desactivar   ·   + / − · volumen   ·   R · recargar   ·   clic en una frase · repetirla"
+            text: "T · voz   ·   B · escuchar buzón   ·   + / − · volumen   ·   L · repetir última   ·   R · recargar   ·   clic en un mensaje · repetirlo"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

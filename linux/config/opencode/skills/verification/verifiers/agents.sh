@@ -131,6 +131,16 @@ else
   fail "lifecycle-policy" "falta la politica de ciclo de vida de sillas (no cerrar ajenos + cierre del space = done + estado fiel) en $policy_file"
 fi
 
+if [[ -f "$policy_file" ]] \
+   && grep -qF 'unica fuente de verdad y el arbol que el usuario ve' "$policy_file" \
+   && grep -qF 'Definicion de terminado' "$policy_file" \
+   && grep -qF 'integrado y servido en developing' "$policy_file" \
+   && grep -qF 'git branch --contains' "$policy_file"; then
+  ok "developing-policy" "AGENTS.md: developing es la unica fuente de verdad; no se cierra sin integrar y servir ahi"
+else
+  fail "developing-policy" "falta la regla de developing como fuente de verdad (integrar y servir antes de cerrar) en $policy_file"
+fi
+
 tickets_file="${RIG_TICKETS_FILE:-$HOME/.config/opencode/tickets.json}"
 if [[ ! -f "$tickets_file" ]]; then
   skip "tickets-live" "sin $tickets_file"
@@ -303,6 +313,38 @@ else
   fail "report-policy" "$report_reason"
 fi
 
+flow_reason=""
+if [[ ! -f "$policy_file" ]] \
+   || ! grep -qF 'un problema = un ticket' "$policy_file" \
+   || ! grep -qF 'el seguimiento vive en la misma unidad' "$policy_file" \
+   || ! grep -qF 'Umbral de autofix vs silla del owner' "$policy_file"; then
+  flow_reason="falta la regla de flujo (un problema = un ticket + umbral de autofix) en $policy_file"
+elif [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF 'Un problema, un ticket' "$style_main_md"; then
+  flow_reason="falta la regla de un problema = un ticket (no cascada) en $style_main_md"
+fi
+if [[ -z "$flow_reason" ]]; then
+  ok "flow-policy" "regla de flujo presente: un problema = un ticket, seguimiento en la misma unidad, umbral de autofix"
+else
+  fail "flow-policy" "$flow_reason"
+fi
+
+conversational_reason=""
+if [[ ! -f "$style_main_md" ]] \
+   || ! grep -qF '[app]' "$style_main_md" \
+   || ! grep -qF -- '--to app' "$style_main_md"; then
+  conversational_reason="falta la regla del canal [app] (Hilos: rig send main-seat + rig say --to app --thread) en $style_main_md"
+elif [[ ! -f "$policy_file" ]] \
+   || ! grep -qF -- '--to app' "$policy_file" \
+   || ! grep -qF 'rig-main-seat.service' "$policy_file"; then
+  conversational_reason="falta el canal conversacional de la app (--to app + silla residente rig-main-seat.service) en $policy_file"
+fi
+if [[ -z "$conversational_reason" ]]; then
+  ok "app-reply-policy" "canal de Hilos presente: [app] t=<hilo> -> rig say --to app --thread, silla main-seat residente"
+else
+  fail "app-reply-policy" "$conversational_reason"
+fi
+
 reply_reason=""
 if [[ ! -f "$style_agents_md" ]] \
    || ! grep -qF 'Una respuesta por mensaje del usuario' "$style_agents_md" \
@@ -346,6 +388,19 @@ if [[ -z "$observe_reason" ]]; then
   ok "observe-policy" "reparto de roles presente (conversar con main, observar en herdr)"
 else
   fail "observe-policy" "$observe_reason"
+fi
+
+app_channel_reason=""
+if [[ ! -f "$style_agents_md" ]] \
+   || ! grep -qF 'el cockpit de agentes y tickets' "$style_agents_md" \
+   || ! grep -qF 'corriendo comandos de terminal' "$style_agents_md" \
+   || ! grep -qF 'PLATAFORMA-BITACORA-CAMBIOS' "$style_agents_md"; then
+  app_channel_reason="falta la regla de agentes-platform como fuente de verdad/canal unico del usuario en $style_agents_md"
+fi
+if [[ -z "$app_channel_reason" ]]; then
+  ok "app-channel-policy" "agentes-platform es la fuente de verdad/canal unico del usuario (no se le comanda la verificacion)"
+else
+  fail "app-channel-policy" "$app_channel_reason"
 fi
 
 spec_err=$(mktemp)

@@ -1,0 +1,13 @@
+[Unit]
+Description=Alterna OmniVoz con la tecla física de Windows (keyd -> F13)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/eztvn/.local/bin/voice-key-listener
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

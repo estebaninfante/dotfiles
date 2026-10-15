@@ -12,6 +12,25 @@ mode = "summary"          # summary = resumen de la respuesta; full = texto comp
 # salida: 1.0 = igual que el general; menos = mas bajo en proporcion. NO es un
 # volumen independiente (si bajas el general, baja tambien). Config: `voice volume`.
 volume = 1.0
+# Si un agente/proceso no tiene perfil propio, asignarle una voz estable y
+# distinta automáticamente (misma siempre, según su nombre).
+auto_profiles = true
+# Como entrega `avisar` los mensajes de agentes:
+#   direct  = los habla al instante (interrumpe)
+#   mailbox = los acumula en el buzon y solo suena un aviso sutil; los escuchas
+#             cuando quieras con `voice play-inbox`. El mensaje se guarda con
+#             su autor, asi al leerlo dice de quien es y usa su voz.
+#   hybrid  = aviso sutil, pausa breve y recien habla. Te da un momento para
+#             prestar atencion sin acumular nada en el buzon. Si la voz esta
+#             apagada cae al buzon para no perder el mensaje.
+delivery = "hybrid"
+# Aviso sonoro sutil al llegar un mensaje (dos notas, bajo volumen).
+chime = true
+# Segundos de silencio entre el aviso y la voz del modo hybrid.
+hybrid_pause = 1.5
+# Al hablar, pausa la musica/video (via playerctl) para que no tape la voz, y
+# los reanuda al terminar. No baja el volumen del sink, asi la voz no se opaca.
+duck = true
 
 # Router por-idioma: cada idioma tiene su motor + voz.
 # es → piper (es_MX-claude-high suena mejor que el es de kokoro, que es thin)
@@ -20,6 +39,43 @@ engine_es = "piper"       # piper | kokoro | espeak  (motor para es)
 voice_es = "es_MX-claude-high"
 engine_en = "kokoro"      # piper | kokoro | espeak  (motor para en)
 voice_en = "af_heart"
+
+# ── Perfiles de voz por proceso (personalidad) ─────────────────────────
+# Cada agente/proceso se identifica al hablar con `--source <nombre>` (Pi,
+# agents, opencode...). Si existe [tts.profiles.<nombre>], esa es su voz;
+# `pitch` son semitonos (0 = normal, ±1.5 cambia bastante) y `speed` un factor
+# de tempo (1.0 = normal). Un campo ausente cae al router global de arriba.
+#
+# Si el nombre NO tiene perfil y auto_profiles = true, se le asigna una voz
+# estable automáticamente: cualquier agente nuevo se distingue sin configurar
+# nada y siempre suena igual. Así se identifica quién habla.
+#
+# En caliente (se guarda en estado por-máquina, no toca este archivo):
+#   voice profile set Pi --voice em_alex --engine kokoro --lang es --pitch 0
+#   voice profile test Pi          # lo escuchás
+#   voice profiles --all           # lista perfiles + voces automáticas usadas
+[tts.profiles.Pi]
+engine = "kokoro"
+voice  = "em_alex"        # masculina
+lang   = "es"
+
+[tts.profiles.agents]
+engine = "kokoro"
+voice  = "ef_dora"        # femenina, con tono propio
+lang   = "es"
+pitch  = 1.5
+
+[tts.profiles.opencode]
+engine = "kokoro"
+voice  = "em_santa"       # masculina distinta
+lang   = "es"
+
+# El asistente (Pi headless) responde con su propia voz.
+[tts.profiles.assistant]
+engine = "kokoro"
+voice  = "em_alex"
+lang   = "es"
+pitch  = -1.0
 
 # Voces kokoro disponibles (es): ef_dora (f), em_alex, em_santa (m)
 # Voces kokoro disponibles (en): af_heart (A), af_bella (A-), af_nicole, bf_emma
@@ -30,6 +86,18 @@ voice_en = "af_heart"
 accelerator = "auto"      # auto | gpu | cpu  (Handy: GPU via Vulkan / CPU)
 model = "whisper-medium"  # modelo Handy instalado (ver: voice model list)
 lang = "es"
+
+# Wake-word ("dime") via talk-command. Motor ASR del escucha continua.
+[wake]
+# auto = GPU si hay NVIDIA y estas en AC; si no, CPU. gpu|cpu lo fuerzan.
+accelerator = "auto"
+# Modelo Vosk (CPU). Se descarga de alphacephei.com/vosk/models.
+model = "~/.local/share/voice/asr/vosk-model-small-es-0.42"
+# Comando de streaming GPU (audio.cpp/Voxtral...): debe leer PCM s16le 16k por
+# stdin y emitir JSONL {"text","final":true}. Vacio = usar CPU aunque haya GPU.
+# Ejemplo (requiere audiocpp_cli + un GGUF de Voxtral Realtime):
+# gpu_command = "audiocpp_cli --task asr --family voxtral_realtime --backend cuda --mode streaming --model /ruta/voxtral.gguf"
+gpu_command = ""
 
 [power]
 cpu_on_battery = true     # batería → STT/TTS prefieren CPU (no GPU)

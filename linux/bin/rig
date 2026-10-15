@@ -119,7 +119,7 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
                                      (~/.local/state/rig/events.jsonl); --watch refresca
   rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]
                                      registra un evento propio (decision/diagnostico) en el feed
-  rig say "<mensaje>" [--to telegram|hub] [--ticket X] [--thread ID]
+  rig say "<mensaje>" [--to telegram|hub|app] [--ticket X] [--thread ID]
                                      buzon de salida de main: respuesta al usuario (kind=reply)
   rig ask "<pregunta>" [--ticket X] [--seat S] [--priority alta|normal]
                                      una silla pide una decision y queda esperando: delega en
@@ -2945,7 +2945,7 @@ rig events - feed en vivo de lo que hacen main y las sillas (~/.local/state/rig/
   --porcelain emite JSON lines (para el hub web) y no combina con --watch.
   --watch refresca en el lugar (Ctrl-C sale); --interval default 2 seg.
   Registra tus propios eventos con: rig log "<mensaje>" [--ticket X] [--seat S] [--kind K]
-  El buzon de salida de main es: rig say "<mensaje>" [--to telegram|hub] (kind=reply);
+  El buzon de salida de main es: rig say "<mensaje>" [--to telegram|hub|app] (kind=reply);
   el puente y el hub lo leen con: rig events --kind reply --since 10m --porcelain
 EOF
 }
@@ -3118,16 +3118,16 @@ say_usage() {
   cat >&2 <<'EOF'
 rig say - buzon de salida de main: respuesta al usuario fuera de la terminal
 
-  rig say "<mensaje>" [--to telegram|hub] [--ticket X] [--thread ID]
+  rig say "<mensaje>" [--to telegram|hub|app] [--ticket X] [--thread ID]
 
   Escribe un evento kind=reply con actor=main en el mismo store append-only
   (~/.local/state/rig/events.jsonl). El puente de mensajeria y el hub lo leen con:
 
     rig events --kind reply --since 10m --porcelain
 
-  --to default "telegram" (valores: telegram|hub); viaja en data.to junto al texto.
-  --thread ID fija el hilo destino (data.thread); el puente de Discord lo usa para
-  responder en el hilo donde nacio el pedido y no mezclar conversaciones.
+  --to default "telegram" (valores: telegram|hub|app); viaja en data.to junto al texto.
+  --thread ID fija el hilo destino (data.thread); el puente de Discord y la app lo usan
+  para responder en el hilo donde nacio el pedido y no mezclar conversaciones.
 EOF
 }
 
@@ -3145,8 +3145,8 @@ cmd_say() {
       *) parts+=("$1"); shift ;;
     esac
   done
-  case "$to" in telegram|hub) ;; *) die "to invalido: $to (telegram|hub)" ;; esac
-  [ ${#parts[@]} -gt 0 ] || die "uso: rig say \"<mensaje>\" [--to telegram|hub] [--ticket X] [--thread ID]"
+  case "$to" in telegram|hub|app) ;; *) die "to invalido: $to (telegram|hub|app)" ;; esac
+  [ ${#parts[@]} -gt 0 ] || die "uso: rig say \"<mensaje>\" [--to telegram|hub|app] [--ticket X] [--thread ID]"
   msg="${parts[*]}"
   RIG_ACTOR=main event_emit reply "$msg" --ticket "$ticket" --area "" \
     --data "$(jq -nc --arg m "$msg" --arg t "$to" --arg th "$thread" '{message:$m,to:$t,len:($m|length),thread:$th}' 2>/dev/null)"

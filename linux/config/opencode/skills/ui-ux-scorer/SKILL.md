@@ -68,7 +68,7 @@ Score final = suma ponderada, 0-10. **>= 8 = aprobado**. < 8 = rediseñar antes 
 
 - **Web / app con dev server**: `node <skill>/probe.mjs <url> [--viewport WxH] [--json]`.
   Devuelve issues deterministas + score. Requiere que la pagina no dependa de APIs de
-  electron; si el target es Noteriv (Tauri), el probe no llega y se usa vision (abajo).
+  electron; si el target es una app Tauri, el probe no llega y se usa vision (abajo).
 - **Nativa / Tauri / QML (barra Omarchy)**: screenshot con `grim` (workspace activo) y
   analizar la imagen. El agente `ui-ux` la lee como imagen y la evalua contra la rubrica.
   Antes de capturar QML, `omarchy restart shell` (el hot reload no repinta plugins).

@@ -49,14 +49,16 @@ export_config() {
         fi
     done
 
+    # Export ADITIVO a proposito: sobrescribe y agrega, pero nunca borra.
+    # Con auto-export en ambas maquinas, un borrado local no debe eliminar
+    # archivos que la otra maquina todavia no importo. Para quitar algo del
+    # repo, usar `git rm`.
     for d in "${DIRS[@]}"; do
         [[ -d "$LIVE/$d" ]] || continue
-        rm -rf "$SRC/$d"
         copy_tree "$LIVE/$d" "$SRC/$d"
     done
 
     # Plugins locales (sin .git) — los git se restauran por url
-    rm -rf "$SRC/plugins"
     for p in "$LIVE"/plugins/*/; do
         [[ -d "$p/.git" ]] && continue
         id="$(basename "$p")"
@@ -73,7 +75,6 @@ export_config() {
     done
     # Temas: los locales (sin .git) se copian; los git se restauran por url.
     : > "$SRC/themes-git.txt"
-    rm -rf "$SRC/themes"
     for p in "$LIVE"/themes/*/; do
         [[ -d "$p" ]] || continue
         id="$(basename "$p")"
@@ -150,7 +151,7 @@ import_config() {
         if [[ -f "$SRC/theme-current.txt" ]]; then
             tname="$(cat "$SRC/theme-current.txt")"
             if [[ -n "$tname" && -d "$LIVE/themes/$tname" ]]; then
-                cur="$(basename "$(readlink -f "$HOME/.local/state/omarchy/current/theme" 2>/dev/null)" 2>/dev/null)"
+                cur="$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)"
                 if [[ "$cur" != "$tname" ]]; then
                     omarchy theme set "$tname" >/dev/null 2>&1 \
                         && ok "Tema aplicado: $tname" || warn "No se pudo aplicar el tema: $tname"

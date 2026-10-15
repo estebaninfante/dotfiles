@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# investigaciones — explorador rápido de notas de investigación del vault.
+#
+# Lista notas del vault de Logseq, muestra una vista previa en un picker (fzf)
+# y abre la elegida en Logseq mediante deep link (logseq://).
+#
+# Uso:
+#   investigaciones           notas de investigación (tag 'investigacion' o con '## Fuentes')
+#   investigaciones --inbox   todas las notas de Inbox/
+#   investigaciones --all     todas las notas del vault
+#   investigaciones --print   imprime el deep link de la nota elegida (no abre Logseq)
+#   investigaciones --help
+#
+# Variables:
+#   ALICIA_VAULT   ruta del vault (default: ~/alicia)
+#   LOGSEQ_GRAPH   nombre del grafo en Logseq (default: basename del vault)
+#
+# Nota: para que el deep link funcione, el grafo debe estar agregado una vez en
+# Logseq (Add a graph -> ~/alicia). Si no, Logseq avisa que no lo encuentra.
+set -euo pipefail
+
+VAULT="${ALICIA_VAULT:-$HOME/alicia}"
+GRAPH="${LOGSEQ_GRAPH:-$(basename "$VAULT")}"
+INBOX="$VAULT/Inbox"
+
+die() { printf 'investigaciones: %s\n' "$*" >&2; exit 1; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+
+command -v fzf >/dev/null 2>&1 || die "falta fzf"
+command -v bat >/dev/null 2>&1 || die "falta bat"
+
+MODE=research
+PRINT_ONLY=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --inbox)    MODE=inbox ;;
+    --all)      MODE=all ;;
+    --research) MODE=research ;;
+    --print)    PRINT_ONLY=1 ;;
+    -h|--help)  usage; exit 0 ;;
+    *) die "opción desconocida: $1 (usa --help)" ;;
+  esac
+  shift
+done
+
+[ -d "$VAULT" ] || die "no existe el vault: $VAULT"
+
+list_files() {
+  case "$MODE" in
+    research)
+      {
+        rg -l -i '^tags:.*investigacion' --glob '*.md' "$VAULT" 2>/dev/null || true
+        rg -l '^## Fuentes' --glob '*.md' "$VAULT" 2>/dev/null || true
+      } | sort -u
+      ;;
+    inbox)
+      [ -d "$INBOX" ] && find "$INBOX" -maxdepth 1 -name '*.md' 2>/dev/null || true
+      ;;
+    all)
+      find "$VAULT" -name '*.md' -not -path '*/.git/*' -not -path '*/logseq/*' 2>/dev/null
+      ;;
+  esac
+}
+
+rel() { case "$1" in "$VAULT"/*) printf '%s' "${1#"$VAULT"/}" ;; *) printf '%s' "$1" ;; esac; }
+urlenc() { python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"; }
+
+mapfile -t rels < <(list_files | while IFS= read -r f; do rel "$f"; done | sort -r)
+[ "${#rels[@]}" -gt 0 ] || die "no hay notas de investigación todavía (prueba: investigaciones --all)"
+
+sel="$(
+  printf '%s\n' "${rels[@]}" \
+    | fzf --ansi --prompt='investigaciones> ' \
+          --header='Enter: abrir en Logseq · Ctrl-O: app por defecto · Ctrl-Y: copiar ruta · Esc: salir' \
+          --preview="bat --style=plain --color=always --pager=never --line-range=:200 \"$VAULT/{}\"" \
+          --preview-window='right:60%:wrap' \
+          --bind="ctrl-o:execute-silent(xdg-open \"$VAULT/{}\")" \
+          --bind="ctrl-y:execute-silent(printf '%s' \"$VAULT/{}\" | wl-copy)"
+)" || exit 0
+[ -n "$sel" ] || exit 0
+sel="${sel%%$'\n'*}"  # por si el picker devuelve más de una línea, quedarnos con la primera
+
+link="logseq://graph/${GRAPH}?file=$(urlenc "$sel")"
+
+if [ "$PRINT_ONLY" -eq 1 ]; then
+  printf '%s\n' "$link"
+  exit 0
+fi
+
+# El deep link solo resuelve si el grafo ya está registrado en Logseq.
+# El archivo se llama p.ej. logseq_local_++home++eztvn++alicia.transit,
+# así que buscamos por sufijo y no por nombre exacto.
+enc="${VAULT//:/+3A+}"; enc="${enc//\//++}"
+shopt -s nullglob
+graph_files=("$HOME"/.logseq/graphs/*"${enc}.transit")
+shopt -u nullglob
+if [ "${#graph_files[@]}" -eq 0 ]; then
+  printf 'El grafo "%s" aun no esta registrado en Logseq.\n' "$GRAPH" >&2
+  printf 'Abriendo Logseq: usa Add a graph y elige %s (una sola vez).\n' "$VAULT" >&2
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a investigaciones 'Logseq: falta el grafo' "Agrega el grafo \"$GRAPH\" (Add a graph -> $VAULT) una vez." || true
+  fi
+  (setsid uwsm-app -- logseq >/dev/null 2>&1 || setsid logseq >/dev/null 2>&1) &
+  exit 0
+fi
+
+xdg-open "$link" >/dev/null 2>&1 || { printf 'No pude abrir Logseq. Deep link:\n%s\n' "$link" >&2; exit 1; }

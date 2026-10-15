@@ -1,6 +1,6 @@
 {
   "$schema": "/etc/xdg/swaync/configSchema.json",
-  "positionX": "right",
+  "positionX": "center",
   "positionY": "top",
   "layer": "overlay",
   "control-center-layer": "top",
@@ -22,11 +22,16 @@
   "notification-window-width": 500,
   "keyboard-shortcuts": true,
   "image-visibility": "when-available",
-  "transition-time": 300,
+  "transition-time": 420,
   "hide-on-clear": false,
   "hide-on-action": true,
   "script-fail-notify": true,
-  "scripts": {},
+  "scripts": {
+    "voice-log": {
+      "exec": "/home/eztvn/.local/bin/voice ingest-notify",
+      "run-on": "receive"
+    }
+  },
   "widgets": [
     "notifications"
   ]

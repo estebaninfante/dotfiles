@@ -405,6 +405,14 @@ for svc in lan-mouse hyprpolkitagent voice-daemon; do
     systemctl --user enable "$svc" 2>/dev/null && ok "$svc habilitado" || warn "$svc no pudo habilitarse"
 done
 
+# talk-command (wake-word "dime"): solo si ya se corrió scripts/setup-wake.sh
+if [[ -x "$HOME/developing/talk-command/.venv/bin/talk-command" ]]; then
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/talk-command.service" \
+        "$SYSTEMD_DIR/talk-command.service" 2>/dev/null || true
+    systemctl --user enable talk-command 2>/dev/null \
+        && ok "talk-command habilitado" || warn "talk-command no pudo habilitarse"
+fi
+
 # ══════════════════════════════════════════════════════════════
 # FASE 9: Servicios de sistema
 # ══════════════════════════════════════════════════════════════
@@ -485,6 +493,15 @@ if [[ -f "$DOTFILES_SYSTEM/systemd-user/agentes-platform-main.service" ]] && [[ 
     ok "agentes-platform (user) habilitado (main 10000->3031, developing 10001->3040)"
 else
     warn "Falta $DOTFILES_SYSTEM/systemd-user/agentes-platform-*.service"
+fi
+
+if [[ -f "$DOTFILES_SYSTEM/systemd-user/rig-main-seat.service" ]]; then
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/rig-main-seat.service" "$SYSTEMD_DIR/rig-main-seat.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now rig-main-seat.service 2>/dev/null || true
+    ok "rig-main-seat (user) habilitado (silla residente de main)"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd-user/rig-main-seat.service"
 fi
 
 # Sudoers: permite al panel de bateria (eztvn.power) reiniciar el guard al

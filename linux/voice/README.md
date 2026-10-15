@@ -10,9 +10,8 @@ MICROFONO
 STT (Handy, GPU Vulkan / CPU)
    │
    ▼
-voice-daemon (orquestador)  ◄── FIFO ~/.cache/voice/tts.fifo
-   │
-   ├─► OpenCode (plugin voice: session.idle / permiso / error)
+voice-daemon (orquestador)  ◄── FIFO/socket + CLI `voice`
+   │                              ▲ Pi · OpenCode · barra · notificaciones (swaync)
    │
    ▼
 TTS Router (por idioma): kokoro → piper → espeak-ng
@@ -32,6 +31,8 @@ AUDIO (PipeWire / pw-play)
 | STT | `linux/voice/stt.py` | wrapper de `handy --transcribe-file` |
 | CLI | `linux/bin/voice` | comandos (status, speak, listen, benchmark...) |
 | OpenCode | `~/.config/opencode/plugins/voice/plugin.js` | resumen al terminar, permiso, error, inyección de voz |
+| Puente notificaciones | `linux/config/swaync/config.json` (script `voice ingest-notify`) | registra cada notificación para poder repetirla |
+| Widget barra | `omarchy/plugins/eztvn.pi-tts` | interruptor TTS, volumen, registro de mensajes y repetir |
 
 Toda configuración vive en el repo (`~/dotfiles`). Los destinos
 (`~/.config/voice`, `~/.local/bin/voice`, `~/.local/bin/voice-daemon`) son
@@ -86,28 +87,132 @@ aplicaciones que solo hacen `voice speak`.
 - Config (committed, symlink a `~/.config/voice/config.toml`): defaults.
 - Estado runtime (`~/.local/state/voice/state.json`): sobreescrituras locales
   por máquina (fuera del repo). `voice set stt accelerator gpu` escribe aquí.
-- Historial de la voz (`~/.local/share/voice/tts/`): WAVs + `history.jsonl`
-  de lo que dijo el agente (ver más abajo).
+- Registro de mensajes (`~/.local/share/voice/tts/`): WAVs + `messages.jsonl`
+  de todo lo que se habló o notificó (ver más abajo).
 
-## Historial de la voz
+## Registro de mensajes del sistema
 
-Cada frase que reproduce el daemon se guarda en `~/.local/share/voice/tts/`:
-`recordings/tts-*.wav` y una línea JSON por frase en `history.jsonl` (fecha,
-texto, motor y voz). Se conservan las **últimas 200**; al superarlas se borran
-las más viejas junto con sus WAV. `VOICE_HISTORY_MAX` cambia el tope y
-`VOICE_HISTORY_DIR` la ruta.
+Cada mensaje que el sistema le entrega al usuario queda en
+`~/.local/share/voice/tts/`, en `messages.jsonl` (una línea JSON por mensaje)
+y los audios en `recordings/tts-*.wav`. Hay dos clases:
 
-El widget de barra `eztvn.pi-tts` lista el historial y reproduce cualquier
-entrada con un clic; el volumen relativo de la voz se ajusta ahí mismo o con
+- `kind="voice"`: además hay WAV en `recordings/` y se reproduce tal cual.
+- `kind="notify"`: notificación de escritorio capturada por el puente de
+  swaync (ver abajo); al repetirla se sintetiza.
+
+Una notificación y su versión hablada con el mismo texto (dentro de
+`VOICE_MESSAGE_MERGE_MS`, 120 s) se funden en una sola entrada que conserva el
+audio. Se conservan las **últimas 200**; `VOICE_HISTORY_MAX` cambia el tope y
+`VOICE_HISTORY_DIR` la ruta. (El antiguo `history.jsonl` se migra solo la
+primera vez.)
+
+El widget de barra `eztvn.pi-tts` lista los mensajes (con un icono por tipo),
+reproduce cualquiera con un clic, tiene «Repetir última» y muestra un contador
+(badge) de mensajes pendientes; el volumen relativo se ajusta ahí mismo o con
 `voice volume`.
 
 ```bash
-voice history                # últimas frases (más reciente primero)
-voice history --json 200     # para consumir desde el widget
-voice history play 1         # reproduce la entrada 1 (la última)
-voice play ~/.local/share/voice/tts/recordings/tts-*.wav
+voice messages [--json] [N]  # registro unificado (más reciente primero)
+voice repeat                 # repite el último mensaje
+voice repeat 3               # repite los últimos 3 (en orden cronológico)
+voice repeat --index 2       # repite el mensaje 2 (1 = el más reciente)
+voice history [--json] [N]   # solo las frases habladas (compatibilidad)
+voice history play 1         # reproduce el WAV de la entrada 1
 voice history clear          # vacía índice y WAVs
 ```
+
+## Entrega de mensajes
+
+`[tts] delivery` decide cómo entrega `avisar` el mensaje de un agente:
+
+- **`hybrid` (por defecto):** suena el aviso sutil (`[tts] chime`), espera
+  `[tts] hybrid_pause` segundos (1.5) y **recién habla**. Te da un momento para
+  prestar atención sin que la voz te caiga encima de golpe. No acumula nada en
+  el buzón: el mensaje igual queda en el registro. Si la voz está apagada cae
+  al buzón para no perderlo. Mientras habla **pausa la música/video**
+  (`[tts] duck`, vía `playerctl`) para que no tape la voz, y los reanuda al
+  terminar (no baja el volumen del sink, así la voz no se opaca).
+- **`mailbox`:** no lo habla en el momento (interrumpir molesta y encima no se
+  escucha). Lo deja en el **buzón** con su autor y suena solo el aviso sutil. El
+  contador aparece en la barra; escuchás cuando querés, en orden, y cada mensaje
+  queda marcado como escuchado. Al leerlo dice de quién es (`Mensaje de Pi. …`) y
+  usa la voz de ese agente.
+- **`direct`:** habla al instante (interrumpe).
+
+```bash
+voice delivery                # ver modo de entrega
+voice delivery hybrid         # aviso + pausa + voz (por defecto)
+voice delivery direct         # volver a hablar al instante
+voice delivery mailbox        # acumular
+voice inbox                   # listar pendientes
+voice inbox count             # cuántos hay
+voice play-inbox              # escuchar todos los pendientes
+voice inbox clear             # marcar todo como escuchado
+```
+
+## Wake word ("dime")
+
+Para no usar el atajo, `talk-command` escucha continua y dispara por palabra
+clave. Las palabras viven en `~/.config/talk-command/config.yaml`:
+
+- **"dime"** (alias: leeme, buzón, contestadora, correo) → `voice play-inbox`.
+- **"cuántos mensajes"** → dice la cantidad pendiente.
+
+El motor ASR lo elige `voice-asr-stream` ([wake] en `config.toml`):
+**GPU si hay `gpu_command` y estás en AC**, **CPU con Vosk** si no (o a
+batería). Es liviano, no toca la VRAM que usan los motores TTS. La pata CPU se
+prepara una vez con `scripts/setup-wake.sh` (venv + `vosk` + modelo chico es).
+
+```bash
+python3 ~/dotfiles/linux/voice/engine.py wake-status   # motor/modelo elegido
+systemctl --user status talk-command.service           # escucha continua
+systemctl --user stop  talk-command.service            # pausar (o el widget)
+```
+
+Para GPU real (audio.cpp/Voxtral Realtime) instalá `audiocpp_cli` + un GGUF y
+definí `[wake] gpu_command`; el selector lo preferirá en AC y caerá a Vosk en
+batería o si falta.
+
+## Asistente (Pi headless)
+
+Cuando la frase **no es un comando fijo**, el cerebro es **Pi** corriendo
+headless, sin razonamiento, sin extensiones ni skills, con `bash` como
+herramienta: entiende tu escritorio (Hyprland Lua, `wpctl`, `playerctl`, las
+CLIs `voice`/`omnivoz`) y hace la tarea. Su guía vive en
+`linux/voice/pi-brain/AGENTS.md`.
+
+- `voice think "<texto>"` — manda el texto a Pi y habla la respuesta.
+- `voice ptt` — push-to-talk: graba, transcribe (Handy) y responde con Pi.
+- En OmniVoz, el cerebro se enchufa sin tocar su código con
+  `linux/voice/pi_shim.py` (servicio `voice-pi-shim.service`): traduce el
+  protocolo de Ollama a Pi. Así las reglas van primero y, si no hay comando
+  fijo, responde Pi.
+- Teclas: **Caps Lock = Super** (via `layer(meta)` en keyd). La **tecla física
+de Windows** queda remapeada a **F13** y **alterna OmniVoz** on/off en Hyprland.
+`SUPER+ALT+P` sigue siendo push-to-talk explícito (una frase).
+
+El cerebro por defecto es `opencode-go/qwen3.8-flash` vía Pi (rápido y confiable).
+Se puede usar uno local con `VOICE_PI_MODEL=ollama/qwen3.5:4b` (Ollama ya queda
+instalado); se probó y el 4B alucina en este setup, por eso el default es el de
+opencode.
+
+La latencia típica del cerebro es ~3–4 s (modelo + arranque). Para bajarla: una
+sesión RPC persistente de Pi o un modelo más chico.
+
+## Captura de notificaciones (swaync)
+
+Para que «repetir» incluya lo que el sistema notifica (no solo lo que habla un
+agente), `linux/config/swaync/config.json` engancha cada notificación:
+
+```json
+"scripts": {
+  "voice-log": { "exec": "/home/eztvn/.local/bin/voice ingest-notify", "run-on": "receive" }
+}
+```
+
+swaync pasa la notificación en el entorno (`SWAYNC_SUMMARY`, `SWAYNC_BODY`,
+`SWAYNC_APP_NAME`…); `voice ingest-notify` solo la registra, nunca habla ni
+falla. Cualquier notificación de cualquier programa queda así en el registro.
 
 ## Servicio systemd (usuario)
 
@@ -127,6 +232,12 @@ journalctl --user -u voice-daemon -f
 ```
 voice status                 estado: TTS/STT/daemon/hardware
 voice speak "hola"           genera y reproduce (por idioma actual)
+voice say "hola"             alias de speak
+voice avisar "texto"         notificación + voz + registro (agentes)
+voice notify --app A "txt"   notificación sola (queda en el registro)
+voice messages [--json] [N]  registro unificado (voz + notificaciones)
+voice repeat [N]             repetir los últimos mensajes (--index M)
+voice send --agent N --text "..."   habla con la voz de ese agente
 voice listen                 graba (silencio auto-stop) → STT → copia
 voice test                   frase de prueba
 voice stop                   corta cola TTS
@@ -156,6 +267,13 @@ arquitectura del daemon lo permite añadir después.
 
 Cuando OpenCode está corriendo, `voice listen` inyecta la transcripción en
 la sesión activa (plugin ve `~/.cache/voice/to-opencode.json`).
+
+### Repetir
+
+- `SUPER + ALT + V` — repite el último mensaje (voz o notificación).
+- `SUPER + ALT + SHIFT + V` — repite los últimos 3.
+- En el widget de la barra: botón «Repetir última», tecla `L`, o clic en
+  cualquier mensaje de la lista.
 
 ## GPU / batería
 
@@ -195,10 +313,69 @@ Resultado en tabla.
 
 ## Añadir una integración nueva
 
-Cualquier proceso puede pedir TTS escribiendo una línea JSON al FIFO
-`~/.cache/voice/tts.fifo`:
-```json
-{"text": "mensaje", "engine": "kokoro", "voice": "af_heart", "lang": "en", "key": "dedupe"}
+Cualquier proceso usa el sistema con el CLI `voice` (no depende de Pi ni de
+ningún agente):
+
+```bash
+voice avisar --source mi-app "Listo, terminé lo que pediste."   # notifica + habla + registra
+voice notify --app mi-app --title "Aviso" "texto"               # solo notifica
+voice say "texto"                                               # solo habla
+voice repeat                                                    # repite el último mensaje
 ```
-O simplemente llamando `~/.local/bin/voice speak "mensaje"`. La cola, el
-fallback y el dedup los gestiona el daemon.
+
+### Voz por proceso (personalidad)
+
+Cada agente o proceso se identifica al hablar con `--source <nombre>` (Pi,
+agents, opencode...). Si existe `[tts.profiles.<nombre>]`, esa es su voz;
+si no, con `auto_profiles = true` se le asigna **automáticamente** una voz
+estable y distinta según el nombre: cada agente suena igual siempre y se
+distingue de los demás sin configurar nada.
+
+Además de `voice`/`engine`/`lang`, un perfil admite `pitch` (semitonos,
+−12..12) y `speed` (factor de tempo); el daemon los aplica con `sox` después
+de sintetizar, así una misma voz base puede dar varias “personalidades”:
+
+```toml
+[tts.profiles.Pi]
+engine = "kokoro"
+voice  = "em_alex"        # masculina
+
+[tts.profiles.agents]
+engine = "kokoro"
+voice  = "ef_dora"
+pitch  = 1.5              # misma voz, tono propio
+speed  = 1.05
+```
+
+```bash
+voice profiles --all                 # perfiles + voces automáticas usadas
+voice profile show Pi                # ver la voz efectiva de un agente
+voice profile set Pi --voice em_alex --engine kokoro --pitch 0
+voice profile test Pi                # la escuchás
+voice profile remove Pi              # quita el override del estado
+voice profile auto off               # desactiva el reparto automático
+
+# por llamada, sin perfil:
+voice say --source agents "Hola desde la plataforma"
+voice avisar --voice ef_dora --engine kokoro --lang es "Otra voz"
+voice say --no-record ...            # no guardar en el registro
+voice say --force ...                # hablar aunque tts.enabled esté en false
+```
+
+`voice profile set` guarda en `state.json` (por máquina), no en el repo; los
+defectos viven en `config.toml`. El comando `voice profile test` habla una
+frase de muestra para reconocerla.
+
+### API de bajo nivel (daemon)
+
+El CLI es la forma recomendada. Para integraciones que ya hablan el protocolo,
+el FIFO sigue disponible:
+
+```json
+{"text": "mensaje", "engine": "kokoro", "voice": "af_heart", "lang": "en", "pitch": 0, "speed": 1.0, "source": "mi-app", "key": "dedupe", "record": false}
+```
+
+`~/.cache/voice/tts.fifo`, una línea JSON por petición. `voice synth` (socket
+`~/.cache/voice/synth.sock`) sintetiza a un WAV sin reproducir, útil para
+plataformas que quieren el audio y lo reproducen ellas. La cola, el fallback y
+el dedup los gestiona el daemon.

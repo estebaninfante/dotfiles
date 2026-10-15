@@ -89,9 +89,7 @@
         "~/.bashrc",
         "~/dotfiles/linux/home/.bashrc",
         "~/dotfiles/linux/bin/ssh-desktop",
-        "~/.local/bin/ssh-desktop",
-        "~/dotfiles/linux/bin/noteriv-dev",
-        "~/.local/bin/noteriv-dev"
+        "~/.local/bin/ssh-desktop"
       ]
     },
     "audio": {
@@ -124,7 +122,7 @@
       "desc": "toolchain Rust + deps de sistema para app Tauri 2 (Arch)",
       "priority": 12,
       "globs": [
-        "~/Projects/noteriv/src-tauri/Cargo.toml"
+        "~/Projects/**/src-tauri/Cargo.toml"
       ]
     },
     "browser": {

@@ -1,0 +1,15 @@
+[Unit]
+Description=talk-command — wake-word local ("dime") sobre voice-asr-stream
+After=graphical-session.target voice-daemon.service
+PartOf=graphical-session.target
+Requisite=voice-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/home/eztvn/developing/talk-command/.venv/bin/talk-command listen --quiet
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=graphical-session.target

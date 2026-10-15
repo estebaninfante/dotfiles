@@ -5,8 +5,8 @@
 #
 # Uso: tmux-grid.sh [colsxrows|auto] [window-target]
 #   colsxrows  ej. 4x2 (4 columnas, 2 filas = 8 agentes), 3x3, 2x4...
-#   auto       elige la grilla que mejor aprovecha el aspect ratio de la
-#              ventana (default si se omite el argumento)
+#   auto       minimo MIN_W de ancho y MIN_H de alto por panel (ver abajo),
+#              maximizando las lineas visibles de cada agente (default)
 #   window     target tmux de la ventana (default: TMUX_PANE)
 #
 # El pane 0 queda arriba-izquierda; el resto fila por fila (row-major).
@@ -20,8 +20,8 @@ if [[ -z "$TARGET" ]]; then
     exit 0
 fi
 
-MIN_W=20
-MIN_H=6
+MIN_W="${TMUX_MIN_W:-72}"
+MIN_H="${TMUX_MIN_H:-12}"
 
 # Dimensiones + panes de la ventana target (ids ordenados por indice;
 # el layout string de tmux referencia panes por id, sin el '%')
@@ -37,30 +37,37 @@ if [[ "$MODE" != "auto" && "$MODE" != "" ]]; then
     cols="${MODE%%x*}"
 fi
 if (( cols < 1 )); then
-    # ── Auto: probar filas r=1..n, cols=ceil(n/r), elegir mejor aspect ──
-    # Celda objetivo ~16:9 (1.7); penalizar celdas muy chicas.
-    best_cost=0
-    best_r=0
-    for ((r = 1; r <= n; r++)); do
-        c=$(( (n + r - 1) / r ))
+    # ── Auto: maximizar alto de panel respetando MIN_W x MIN_H ──
+    # Se prueban cantidades de columnas c=1..n. Cada panel debe medir al
+    # menos MIN_W de ancho (para leer bloques de codigo sin cortar) y
+    # MIN_H de alto. Entre los validos se elige el de mayor alto (mas
+    # lineas visibles por agente). Si ninguno cumple, se degrada al que
+    # maximiza el peor margen relativo (misma logica, sin minimos).
+    # Overridables: TMUX_MIN_W / TMUX_MIN_H en el entorno.
+    best_c=0; best_h=-1; best_w=-1
+    fb_c=0; fb_score=-1
+    for ((c = 1; c <= n; c++)); do
+        r=$(( (n + c - 1) / c ))
         cellw=$(( (W - (c - 1)) / c ))
         cellh=$(( (H - (r - 1)) / r ))
-        if (( cellw < MIN_W || cellh < MIN_H )); then
-            continue
-        fi
-        ratio=$(( cellw * 1000 / cellh ))
-        dist=$(( ratio - 1700 ))
-        (( dist < 0 )) && dist=$(( -dist ))
-        cost=$(( dist * dist / 1000 ))
-        if (( best_r == 0 || cost < best_cost )); then
-            best_cost=$cost
-            best_r=$r
+        (( cellw < 1 )) && cellw=1
+        (( cellh < 1 )) && cellh=1
+        sw=$(( cellw * 1000 / MIN_W ))
+        sh=$(( cellh * 1000 / MIN_H ))
+        s=$(( sw < sh ? sw : sh ))
+        if (( s > fb_score )); then fb_score=$s; fb_c=$c; fi
+        if (( cellw >= MIN_W && cellh >= MIN_H )); then
+            if (( cellh > best_h || (cellh == best_h && cellw > best_w) )); then
+                best_h=$cellh; best_w=$cellw; best_c=$c
+            fi
         fi
     done
-    if (( best_r == 0 )); then
-        best_r=$(( n > 4 ? 4 : n ))   # fallback: filas de a uno por ancho
+    if (( best_c > 0 )); then
+        cols=$best_c
+    else
+        cols=$fb_c
+        (( cols < 1 )) && cols=1
     fi
-    cols=$(( (n + best_r - 1) / best_r ))
 fi
 
 rows=$(( (n + cols - 1) / cols ))
