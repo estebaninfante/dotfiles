@@ -130,8 +130,10 @@ voice history clear          # vacía índice y WAVs
   prestar atención sin que la voz te caiga encima de golpe. No acumula nada en
   el buzón: el mensaje igual queda en el registro. Si la voz está apagada cae
   al buzón para no perderlo. Mientras habla **pausa la música/video**
-  (`[tts] duck`, vía `playerctl`) para que no tape la voz, y los reanuda al
-  terminar (no baja el volumen del sink, así la voz no se opaca).
+  (`[tts] duck`, vía `playerctl`) y **acalla cualquier otro audio** que
+  `playerctl` no maneje (video del navegador, apps sin MPRIS) muteando sus
+  streams por PipeWire; al terminar reanuda y restaura todo. No baja el volumen
+  del sink, así la voz no se opaca.
 - **`mailbox`:** no lo habla en el momento (interrumpir molesta y encima no se
   escucha). Lo deja en el **buzón** con su autor y suena solo el aviso sutil. El
   contador aparece en la barra; escuchás cuando querés, en orden, y cada mensaje

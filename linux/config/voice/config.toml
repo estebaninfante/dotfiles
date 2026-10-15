@@ -28,8 +28,10 @@ delivery = "hybrid"
 chime = true
 # Segundos de silencio entre el aviso y la voz del modo hybrid.
 hybrid_pause = 1.5
-# Al hablar, pausa la musica/video (via playerctl) para que no tape la voz, y
-# los reanuda al terminar. No baja el volumen del sink, asi la voz no se opaca.
+# Al hablar, pausa la musica/video (via playerctl) y acalla cualquier otro
+# audio que no exponga MPRIS (video del navegador, etc.) muteando sus streams
+# por PipeWire; al terminar reanuda y restaura. No baja el volumen del sink,
+# asi la voz no se opaca.
 duck = true
 
 # Router por-idioma: cada idioma tiene su motor + voz.
