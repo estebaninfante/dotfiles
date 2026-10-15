@@ -1,5 +1,68 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-10-15 — un solo wallpaper (desktop + overview) y soporte Wallpaper Engine
+
+**Motivo (reporte del usuario)**: el escritorio mostraba el wallpaper del tema
+(Porsche, via symlink canonico) y al abrir la overview se veia todo negro: el
+plugin pintaba su backdrop propio con
+`background_image = ~/.config/omarchy/backgrounds/black/amoled-black.png`, con
+tiles transparentes encima. Dos fondos distintos; ademas pidio poder usar
+cualquier foto estatica (jpg/png) y wallpapers de Wallpaper Engine (Steam).
+
+**Estado del modo transparente hoy**: `background_transparent = 1`
+(desde el cambio 2026-09-25c) dejo de funcionar en la sesion viva: al abrir la grilla se
+renderiza SOLO el wallpaper contino, sin tiles ningun preview, y
+`kb_focus` no cambia un pixel (0-diff entre capturas con grim); con backdrop
+interno (`background_transparent = 0` + imagen canonica) la grilla DIBUJA
+tiles + previews (verificado con grim). La activacion de ese flag en la config
+no produce `configerrors`, asi que el hilo del hook de render directo
+(`hkRenderWorkspace`) esta mismamente cambiado desde la reorganizacion del
+2026-10-15/actualizacion de la sesion. Sin rebuild del `.so`; el flag queda
+OFF hasta diagnosticar eso.
+
+**Cambio (solo config, sin rebuild; `hyprctl reload` basta)**:
+
+- `plugins/hyprexpo.lua`:
+  - Nuevo resolver de `bg_image`: apunta al symlink canonico ->
+    `~/.local/state/omarchy/current/background` (la misma fuente que el
+    escritorio; si el usuario cambia el fondo con `omarchy theme bg set`
+    / `sync-wallpaper.sh`, la expo sigue automaticamente en la proxima
+    apertura: `loadBackgroundImage()` corre por-open en el constructor).
+  - Si `~/.config/wallpaper-source` = `video`, usa el frame PNG del
+    wallpaper activo (`~/.cache/wallpaper-frames/<id>.png`, capturado por
+    `wallpaper-switch.sh`) — desktop con video en vivo, expo con el frame
+    del MISMO wallpaper.
+  - Fallback al amoled-black del tema si el resuelto no existe.
+  - `background_transparent = 0` (ver arriba: roto hoy).
+- `~/.local/bin/wallpaper-switch.sh` (dotfiles `linux/bin/`):
+  - `WORKSHOP_DIR` ahora se resuelve con `resolve_workshop_root()`:
+    `.steam/steam` (symlink) -> `~/.local/share/Steam` -> Steam Flatpak;
+    fallback `.steam/steam`. Antes hardcodeado.
+  - `use_video` y `use_static` corren `hyprctl reload` al final: sin esto el
+    string de `background_image` en la config quedaba viejo al cambiar la
+    fuente (static<->video cambia el path symlink<->frame).
+- `~/.config/systemd/user/linux-wallpaperengine.service`: instalada desde
+  `~/dotfiles/linux/system/systemd-user/` (faltaba en la maquina pese a que
+  `autostart.lua` la arranca si source=video) + `daemon-reload` + `enable`.
+- Build de `linux-wallpaperengine-git` (AUR) lanzada en background
+  (`/tmp/lwe-build.log`); la maquina hoy NO tiene ni Steam ni el binario.
+
+**Flujo uniforme** (una sola fuente de verdad):
+- Estatico: `omarchy theme bg set <imagen.jpg|png|webp>` (o
+  `sync-wallpaper.sh <imagen>`) → hook theme-set propaga hyprpaper + symlink;
+  la expo apunta al symlink (re-lee el archivo en cada apertura).
+- Video: `wallpaper-switch.sh list` / `set <id>` → LWE dibuja el workshop
+  item; la expo usa su frame cacheado; `use static` vuelve al fondo canónico.
+
+**Aplicar**: ya aplicado con `hyprctl reload`; `hyprctl configerrors` vacio.
+
+### Revertir
+En `plugins/hyprexpo.lua`: `background_image = os.getenv("HOME") ..
+"/.config/omarchy/backgrounds/black/amoled-black.png"` y quitar el bloque
+del resolver; `hyprctl reload`. Para el modo transparente (cuando se
+diagnostique el hook): `background_transparent = 1`. Los de `wallpaper-switch.sh`
+con `git checkout` del repo dotfiles.
+
 Config del overview/grilla de workspaces (`SUPER + Y`). Todo vive en
 `~/.config/hypr/hyprland.lua`, bloque **HYPREXPO** (aprox. lineas 390–446).
 

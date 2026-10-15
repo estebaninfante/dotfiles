@@ -8,7 +8,24 @@ readonly CONFIG_DIR="$HOME/.config"
 readonly STATE_DIR="$HOME/.local/state/omarchy/current"
 readonly FRAME_DIR="$HOME/.cache/wallpaper-frames"
 readonly POWER_DIR="$HOME/.cache/wallpaper-power"
-readonly WORKSHOP_DIR="$HOME/.steam/steam/steamapps/workshop/content/431960"
+# Raíz del workshop con fallback multi-instalación (symlink .steam, root estándar
+# de Steam y Flatpak). Sin esto list/set no encuentran wallpapers si Steam usa
+# otra raíz que ~/.steam/steam.
+resolve_workshop_root() {
+    local candidate
+    for candidate in \
+        "$HOME/.steam/steam/steamapps/workshop/content/431960" \
+        "$HOME/.local/share/Steam/steamapps/workshop/content/431960" \
+        "$HOME/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/workshop/content/431960"
+    do
+        if [ -d "$candidate" ]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    printf '%s' "$HOME/.steam/steam/steamapps/workshop/content/431960"
+}
+readonly WORKSHOP_DIR="$(resolve_workshop_root)"
 readonly ASSETS_DIR="$HOME/.local/share/Steam/steamapps/common/wallpaper_engine/assets"
 readonly SOURCE_FILE="$CONFIG_DIR/wallpaper-source"
 readonly ID_FILE="$CONFIG_DIR/wallpaper-current"
@@ -271,6 +288,10 @@ use_video() {
     systemctl --user restart "$SERVICE" > /dev/null 2>&1 || systemctl --user start "$SERVICE" > /dev/null 2>&1 || true
     frame="$(frame_path "$id")"
     [ -f "$frame" ] || capture_frame_async "$id"
+    # Re-parse de la config: el resolver de plugins/hyprexpo.lua relee
+    # wallpaper-source/wallpaper-current y apunta el backdrop de la expo al frame
+    # del nuevo wallpaper (un solo wallpaper en desktop y overview).
+    hyprctl reload > /dev/null 2>&1 || true
     echo "fondo: video (linux-wallpaperengine, id $id)"
 }
 
@@ -279,6 +300,8 @@ use_static() {
     systemctl --user stop "$SERVICE" > /dev/null 2>&1 || true
     restore_bg > /dev/null 2>&1 || true
     start_hyprpaper
+    # Mismo motivo que en use_video: que la expo re-resuelva su fondo.
+    hyprctl reload > /dev/null 2>&1 || true
     echo "fondo: estatico (hyprpaper sobre el fondo canonico de Omarchy)"
 }
 

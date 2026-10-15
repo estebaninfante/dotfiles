@@ -2,6 +2,33 @@ local theme = require("base.theme")
 
 local HOME = os.getenv("HOME")
 
+-- Resuelve la IMAGEN de fondo del overview apuntando SIEMPRE a la misma fuente
+-- unica que el escritorio (~/.local/state/omarchy/current/background, el symlink
+-- que escribe `omarchy theme bg set` y sigue el hook theme-set + sync-wallpaper).
+-- Con Wallpaper Engine (source=video) usa el frame PNG que captura
+-- wallpaper-switch.sh del mismo wallpaper, asi el desktop (video en vivo) y la
+-- grilla (frame del mismo efecto) comparten un solo wallpaper.
+local function read_trim(path)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local s = f:read("*a") or ""
+    f:close()
+    return (s:match("^%s*(.-)%s*$"))
+end
+
+local bg_link     = HOME .. "/.local/state/omarchy/current/background"
+local bg_source   = read_trim(HOME .. "/.config/wallpaper-source") or "static"
+local bg_id       = read_trim(HOME .. "/.config/wallpaper-current") or ""
+local bg_frame    = (bg_id ~= "") and (HOME .. "/.cache/wallpaper-frames/" .. bg_id .. ".png") or nil
+local bg_image    = bg_link
+if bg_source == "video" and bg_frame and io.open(bg_frame, "r") then
+    bg_image = bg_frame
+end
+-- Si el resuelto no existe (symlink roto/refresco), cae al negro del tema.
+if not io.open(bg_image, "r") then
+    bg_image = HOME .. "/.config/omarchy/backgrounds/black/amoled-black.png"
+end
+
 -- IMPORTANT: never call hl.plugin.load(...) from Lua config code.
 -- Doing so re-enters Hyprland's plugin-load pass (handlePluginLoads -> reload
 -- -> parse config -> hl.plugin.load again -> ...), which recurses until the
@@ -25,15 +52,15 @@ local style = {
     border_focus = "rgba(ffe9a9e6)",
     border_hover = "rgba(ffffff35)",
     border_default = "rgba(ffffff26)",
-    -- Un solo wallpaper: con background_transparent = 1 el plugin NO pinta backdrop
-    -- propio; muestra la capa BACKGROUND real del compositor detras de la grilla
-    -- (hyprpaper estatico o linux-wallpaperengine/video de Steam EN VIVO). Asi el
-    -- overview siempre usa el mismo fondo que el escritorio, sin sincronizar nada.
-    -- El fallback (si esto vuelve a 0) apunta al symlink canonico de Omarchy:
-    -- el mismo archivo que usa el escritorio (~/.local/state/omarchy/current/background).
-    background_image = os.getenv("HOME") .. "/.local/state/omarchy/current/background",
+    -- UN SOLO WALLPAPER para desktop y overview: el plugin pinta su backdrop con
+    -- la MISMA imagen canonica (o el frame del wallpaper de video). Se uso
+    -- background_transparent = 1 (capa BACKGROUND real del compositor) pero hoy la
+    -- sesion viva renderiza la grilla SIN tiles en ese modo (0-diff con kb_focus;
+    -- con backdrop interno se ve grilla+previews, verificado con grim). Si se
+    -- restaura el modo transparente, poner 1 aqui y borrar el resolver de arriba.
+    background_image = bg_image,
     background_dim = 0,
-    background_transparent = 1,
+    background_transparent = 0,
     threed_enable = 1,
     threed_tilt = 15,
     threed_yaw = 0,
