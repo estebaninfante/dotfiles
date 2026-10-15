@@ -21,6 +21,7 @@
 
 import json
 import os
+import re
 import select
 import shutil
 import signal
@@ -565,6 +566,60 @@ def _resume_players(paused: list[str]) -> None:
             pass
 
 
+def _sink_inputs() -> list[tuple[int, bool]]:
+    """(index, muteado) de cada stream de salida (sink-input).
+
+    Sirve para acallar TODO lo que este sonando, incluso lo que playerctl no
+    controla (video del navegador, apps sin MPRIS, juegos...).
+    """
+    try:
+        r = subprocess.run(["pactl", "list", "sink-inputs"],
+                           capture_output=True, text=True, timeout=5)
+    except Exception:
+        return []
+    items: list[tuple[int, bool]] = []
+    idx: int | None = None
+    muted = False
+    for line in (r.stdout or "").splitlines():
+        m = re.match(r"Sink Input #(\d+)", line)
+        if m:
+            if idx is not None:
+                items.append((idx, muted))
+            idx, muted = int(m.group(1)), False
+        elif idx is not None and re.match(r"\s*Mute:\s*yes", line):
+            muted = True
+    if idx is not None:
+        items.append((idx, muted))
+    return items
+
+
+def _set_stream_mute(index: int, muted: bool) -> None:
+    try:
+        subprocess.run(["pactl", "set-sink-input-mute", str(index),
+                        "1" if muted else "0"], capture_output=True, timeout=3)
+    except Exception:
+        pass
+
+
+def _mute_other_streams() -> list[tuple[int, bool]]:
+    """Acalla lo que ya estaba sonando; devuelve el estado para restaurar.
+
+    Se hace ANTES de arrancar pw-play, asi el stream de la voz nace sin mutear
+    y no hay que identificarlo. Red de seguridad ademas del pause via MPRIS:
+    cubre el audio que playerctl no puede pausar (p.ej. video en el navegador).
+    """
+    saved = _sink_inputs()
+    for index, muted in saved:
+        if not muted:
+            _set_stream_mute(index, True)
+    return saved
+
+
+def _restore_streams(saved: list[tuple[int, bool]]) -> None:
+    for index, muted in saved:
+        _set_stream_mute(index, muted)
+
+
 def _wav_duration_ms(wav: str) -> int:
     """Duración del WAV en ms (para sincronizar el resaltado palabra a palabra)."""
     try:
@@ -610,9 +665,18 @@ def _play(wav: str, text: str | None = None, source: str = "",
         vol = tts_volume()
     except Exception:
         vol = 1.0
-    argv = ["pw-play", f"--volume={vol:.3f}", wav]
-    # Ducking: pausa musica/video mientras habla y los reanuda al terminar.
-    paused = _pause_players() if _duck_enabled() else []
+    # Nombre propio para el stream de la voz: asi el mute de "lo demás"
+    # (module-stream-restore guarda el estado por application.name) nunca
+    # deja muda a la propia voz en la proxima reproduccion.
+    argv = ["pw-play", "-P", '{ application.name = "Voice TTS" }',
+            f"--volume={vol:.3f}", wav]
+    # Ducking: mientras habla, pausa la musica/video (MPRIS) y acalla cualquier
+    # otro audio que playerctl no maneje; al terminar, restaura todo.
+    duck = _duck_enabled()
+    paused = _pause_players() if duck else []
+    muted = _mute_other_streams() if duck else []
+    if duck and (paused or len([m for _, m in muted if not m]) > 0):
+        log(f"duck: pausados={paused or '[]'} acallados={len([m for _, m in muted if not m])}")
     published = False
     try:
         # Publicar qué se está diciendo, para que el glow muestre los subtítulos.
@@ -629,6 +693,8 @@ def _play(wav: str, text: str | None = None, source: str = "",
     finally:
         if published:
             _clear_speaking()
+        if muted:
+            _restore_streams(muted)
         if paused:
             _resume_players(paused)
 
