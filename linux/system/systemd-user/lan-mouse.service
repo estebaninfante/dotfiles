@@ -1,0 +1,17 @@
+[Unit]
+Description=LAN-Mouse KVM daemon
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -c 'sleep 5'
+ExecStartPre=/home/eztvn/.local/bin/lan-mouse-wait-keymap
+ExecStart=/usr/bin/lan-mouse --capture-backend layer-shell daemon
+Restart=on-failure
+RestartSec=120
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+
+[Install]
+WantedBy=graphical-session.target
