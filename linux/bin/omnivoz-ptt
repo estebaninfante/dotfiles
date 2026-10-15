@@ -20,8 +20,9 @@ if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
   exit 0
 fi
 
-# Mata cualquier escucha previa (evita procesos duplicados que inflan la RAM).
-pkill -f "developing/omnivoz/dist/index.js listen" 2>/dev/null || true
+# Mata solo los push-to-talk previos (con --no-wake); NO toca el listener de
+# fondo del modo comando, que es otro proceso y systemd reiniciaría.
+pkill -f "developing/omnivoz/dist/index.js listen --no-wake" 2>/dev/null || true
 
 setsid "$OMNIVOZ_BIN" listen --no-wake --once >>"$LOG" 2>&1 </dev/null &
 echo $! >"$PIDFILE"
