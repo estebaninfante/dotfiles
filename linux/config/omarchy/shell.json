@@ -1,33 +1,16 @@
 {
-  "version": 1,
-  "idle": {
-    "screensaver": 150,
-    "lock": 300
-  },
   "bar": {
-    "position": "top",
-    "transparent": false,
     "centerAnchor": "eztvn.workspaces",
+    "id": "eztvn.bar",
     "layout": {
-      "left": [
-        {
-          "id": "eztvn.menu"
-        },
-        {
-          "id": "omarchy.system-update"
-        },
-        {
-          "id": "vm.sysmem"
-        }
-      ],
       "center": [
         {
           "id": "omarchy.indicators"
         },
         {
-          "id": "eztvn.clock",
           "format": "dddd HH:mm",
           "formatAlt": "d MMMM 'W'ww yyyy",
+          "id": "eztvn.clock",
           "verticalFormat": "HH\n—\nmm"
         },
         {
@@ -45,34 +28,27 @@
         },
         {
           "id": "io.github.keegan-sucks.flowstate",
-          "workMinutes": 50,
-          "shortBreakMinutes": 10
+          "shortBreakMinutes": 10,
+          "workMinutes": 50
+        }
+      ],
+      "left": [
+        {
+          "id": "eztvn.menu"
+        },
+        {
+          "id": "omarchy.system-update"
+        },
+        {
+          "id": "vm.sysmem"
         }
       ],
       "right": [
         {
-          "id": "eztvn.grid"
-        },
-        {
-          "id": "eztvn.animations"
-        },
-        {
-          "id": "omarchy.keyboard-layout"
-        },
-        {
-          "id": "eztvn.power"
-        },
-        {
-          "id": "local.opencode-go"
-        },
-        {
-          "id": "eztvn.tmux"
-        },
-        {
           "id": "omarchy.agents"
         },
         {
-          "id": "eztvn.hypr-remote"
+          "id": "omarchy.keyboard-layout"
         },
         {
           "id": "omarchy.network"
@@ -84,22 +60,24 @@
           "id": "omarchy.audio"
         },
         {
-          "id": "io.github.dragosol.better-displays-pro"
-        },
-        {
-          "id": "services",
-          "type": "qml"
+          "id": "eztvn.power"
         }
       ]
     },
-    "id": "eztvn.bar"
+    "position": "top",
+    "transparent": false
   },
-  "plugins": [],
+  "cloneSourceRestores": [
+    "eztvn.menu"
+  ],
   "disabledPlugins": [
     "omarchy.menu",
     "tomv.battery-usage"
   ],
-  "cloneSourceRestores": [
-    "eztvn.menu"
-  ]
+  "idle": {
+    "lock": 300,
+    "screensaver": 150
+  },
+  "plugins": [],
+  "version": 1
 }

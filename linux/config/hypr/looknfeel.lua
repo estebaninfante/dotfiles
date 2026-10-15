@@ -37,9 +37,9 @@ local blur_enabled = not power.low_power()
 
 hl.config({
     general = {
-        gaps_in = 10,
-        gaps_out = 10,
-        border_size = 2,
+        gaps_in = 0,
+        gaps_out = 0,
+        border_size = 0,
         ["col.active_border"] = active_border("rgba(cdcdcdf2)"),
         ["col.inactive_border"] = "rgba(00000000)"
     },

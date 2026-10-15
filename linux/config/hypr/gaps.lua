@@ -1,5 +1,6 @@
-local GAP_MAX = 18
-local GAP_MIN = 8
+-- Sin gaps: el usuario quiere todo pegado (barra y ventanas).
+local GAP_MAX = 0
+local GAP_MIN = 0
 local GAP_DECAY = 2
 
 local function gaps_for(count)
