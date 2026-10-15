@@ -57,6 +57,7 @@ ENV["PATH"] = os.path.join(HOME, ".local/bin") + ":" + ENV.get("PATH", "/usr/bin
 DEFAULT_SETTINGS = {
     "hold_ms": 600,
     "multi_gap_ms": 320,
+    "combo_ms": 600,
     "cancel_key": "esc",
 }
 
@@ -262,17 +263,23 @@ def load_config(path=CONFIG_PATH):
     for k, v in (data.get("settings") or {}).items():
         settings[k] = v
 
-    for name, gestures in (data.get("buttons") or {}).items():
-        if not isinstance(gestures, dict):
+    for name, spec in (data.get("buttons") or {}).items():
+        if not isinstance(spec, dict):
             continue
         table = {}
-        for g, cmd in gestures.items():
-            if g not in GESTURES:
-                log(f"{name}: gesto desconocido «{g}» (ignorado)")
-                continue
-            cmd = str(cmd).strip()
-            if cmd:
-                table[g] = cmd
+        for g in GESTURES:  # tap / double / triple / hold
+            cmd = spec.get(g)
+            if cmd is not None and str(cmd).strip():
+                table[g] = str(cmd).strip()
+        # Combo: este boton espera `combo_ms` por `combo_with`; si llega, corre
+        # `combo`; si no, corre su gesto normal.
+        if spec.get("combo_with") and spec.get("combo"):
+            table["combo_with"] = str(spec["combo_with"]).strip()
+            table["combo"] = str(spec["combo"]).strip()
+        # Supresion: mientras este boton esta apretado, se ignoran los listados.
+        sup = spec.get("suppress")
+        if sup:
+            table["suppress"] = [str(x).strip() for x in (sup if isinstance(sup, list) else [sup])]
         if table:
             buttons[name] = table
     return settings, buttons
@@ -280,7 +287,8 @@ def load_config(path=CONFIG_PATH):
 
 # ── máquina de gestos ────────────────────────────────────────────────────
 class Button:
-    __slots__ = ("name", "pressed", "press_at", "hold_fired", "taps", "fire_at", "max_taps")
+    __slots__ = ("name", "pressed", "press_at", "hold_fired", "taps", "fire_at",
+                 "max_taps", "suppress", "combo_with", "pending_at", "pending_gesture")
 
     def __init__(self, name, gestures):
         self.name = name
@@ -294,6 +302,10 @@ class Button:
             if g in gestures:
                 n = max(n, i)
         self.max_taps = n
+        self.suppress = set(gestures.get("suppress") or [])
+        self.combo_with = gestures.get("combo_with") or ""
+        self.pending_at = None
+        self.pending_gesture = "tap"
 
 
 def _fire(button, gesture, gestures):
@@ -326,6 +338,12 @@ def handle_event(out, buttons, settings, states):
             cancel_voice()
         return True
 
+    # Supresion: si algun boton apretado suprime esta tecla, la ignoramos
+    # (p. ej. el boton que manda Alt durante "mantener" suprime los Tab repetidos).
+    for other in states.values():
+        if other.pressed and key in other.suppress:
+            return True
+
     b = states.get(key)
     if b is None:
         return True
@@ -347,7 +365,7 @@ def handle_event(out, buttons, settings, states):
         else:
             b.taps += 1
             if b.taps >= b.max_taps:
-                _fire(b, TAP_GESTURE[b.taps], buttons[b.name])
+                fire_tap(b, TAP_GESTURE[b.taps], buttons, settings, states)
                 b.taps = 0
                 b.fire_at = None
             else:
@@ -355,18 +373,41 @@ def handle_event(out, buttons, settings, states):
     return True
 
 
+def fire_tap(b, gesture, buttons, settings, states):
+    """Dispara un toque, resolviendo combos (p. ej. doble+simple = triple)."""
+    now = time.monotonic()
+    combo_s = settings.get("combo_ms", 600) / 1000
+    # ¿Esta pulsacion completa un combo que estaba esperando?
+    for x in states.values():
+        if (x.pending_at is not None and x.combo_with == b.name
+                and now - x.pending_at <= combo_s):
+            x.pending_at = None
+            _fire(x, "combo", buttons[x.name])
+            return
+    # ¿Este boton inicia un combo? Se demora para ver si llega el otro.
+    if b.combo_with:
+        b.pending_at = now
+        b.pending_gesture = gesture
+        log(f"{b.name} {gesture} pendiente (combo con {b.combo_with})")
+        return
+    _fire(b, gesture, buttons[b.name])
+
+
 def tick(buttons, settings, states):
     now = time.monotonic()
     hold_s = settings["hold_ms"] / 1000
-    gap_s = settings["multi_gap_ms"] / 1000
+    combo_s = settings.get("combo_ms", 600) / 1000
     for b in states.values():
         if b.pressed and not b.hold_fired and now - b.press_at >= hold_s:
             b.hold_fired = True
             _fire(b, "hold", buttons[b.name])
         if b.fire_at is not None and not b.pressed and now >= b.fire_at:
-            _fire(b, TAP_GESTURE.get(b.taps, "tap"), buttons[b.name])
+            fire_tap(b, TAP_GESTURE.get(b.taps, "tap"), buttons, settings, states)
             b.taps = 0
             b.fire_at = None
+        if b.pending_at is not None and now - b.pending_at > combo_s:
+            _fire(b, b.pending_gesture, buttons[b.name])
+            b.pending_at = None
     # next deadline (informativo para el timeout del select)
     deadlines = []
     for b in states.values():
@@ -374,6 +415,8 @@ def tick(buttons, settings, states):
             deadlines.append(b.press_at + hold_s)
         if b.fire_at is not None:
             deadlines.append(b.fire_at)
+        if b.pending_at is not None:
+            deadlines.append(b.pending_at + combo_s)
     if not deadlines:
         return 0.05
     return max(0.0, min(0.05, min(deadlines) - now))

@@ -1,36 +1,52 @@
 # Mapeo de gestos del control de presentaciones (SHARKOON "Wireless Present").
 #
-# present-remote lee `keyd monitor` y traduce cada botón a gestos. Cada gesto
-# ejecuta el comando que pongas acá. Es la fuente de verdad: editá y reiniciá el
-# servicio (`systemctl --user restart present-remote`).
+# El control tiene 4 botones físicos: 3 útiles + el láser (no emite nada).
+# El botón del "cuadrito" es INTELIGENTE: el propio control distingue el gesto
+# y manda códigos distintos (por eso la config usa teclas distintas, no cuenta
+# toques):
 #
-# Gestos por botón:
-#   tap     1 toque
-#   double  2 toques seguidos
-#   triple  3 toques seguidos
-#   hold    mantener apretado (umbral hold_ms)
+#   1 toque    -> Tab   -> f14
+#   2 toques   -> Enter -> f17
+#   mantener   -> Alt+Tab (repite) -> f18 (el Alt) [los Tab se ignoran]
 #
-# El valor es un comando de shell (se ejecuta con `sh -c`). Los que empiezan
-# con `@` son acciones internas de present-remote:
-#   @arrow prev   flecha contextual: terminal -> ventana tmux previa; otro -> scroll arriba
-#   @arrow next   flecha contextual: terminal -> ventana tmux siguiente; otro -> scroll abajo
-#   @cancel       cancela la sesión de voz activa
+# present-remote lee `keyd monitor` y ejecuta el comando de cada gesto.
+# Editá este archivo y reiniciá:  systemctl --user restart present-remote
 #
-# Si un gesto no está definido, no hace nada. Ojo: si un botón define `hold`,
-# mantener dispara `hold` (o nada si está vacío) y NO cae en `tap`.
+# Claves de un botón:
+#   tap / double / triple / hold  = comandos por gesto (shell; con `@` son internas)
+#   combo_with + combo            = este botón espera `combo_ms`; si llega
+#                                   `combo_with`, corre `combo` (ej.: 2+1 = 3 toques)
+#   suppress                      = mientras este botón está apretado, ignora esas teclas
+#
+# Acciones internas:
+#   @voice   toggle de Omar (prende/apaga)
+#   @arrow prev|next   flecha contextual (terminal->tmux, otro->scroll)
+#   @enter   manda Enter
+#   @cancel  corta la sesión de voz
 
 [settings]
-hold_ms = 600        # ms que hay que mantener para el gesto `hold`
-multi_gap_ms = 500   # ventana entre toques para encadenar double/triple
+hold_ms = 600        # ms para el gesto `hold`
+multi_gap_ms = 320   # ventana entre toques (para botones que cuentan toques)
+combo_ms = 600       # ventana para encadenar combos (ej. Enter + Tab = triple)
 cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactivado)
 
-# Botón "extra" (el del cuadrito / pantalla negra).
+# ── Botón del cuadrito (inteligente: Tab / Enter / Alt+Tab) ──────────────
+# 1 toque (Tab -> f14): toggle de Omar
 [buttons.f14]
-tap    = "@voice"                          # 1 toque -> toggle de Omar
-double = "handy --toggle-post-process"      # 2 toques -> Handy (dictado)
-triple = "omarchy-menu toggle"             # 3 toques -> launcher
-hold   = "wtype -M logo -k y -m logo"      # mantener  -> Súper+Y
+tap = "@voice"
 
+# 2 toques (Enter -> f17): Handy. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
+[buttons.f17]
+tap = "handy --toggle-post-process"
+combo_with = "f14"
+combo = "omarchy-menu toggle"
+
+# mantener (Alt -> f18): Súper+Y. Mientras se mantiene, ignora los Tab repetidos.
+[buttons.f18]
+hold = "wtype -M logo -k y -m logo"
+suppress = ["f14", "f17"]
+
+# ── Flechas ──────────────────────────────────────────────────────────────
 # Flecha izquierda (diapositiva anterior).
 [buttons.f15]
 tap = "@arrow prev"
@@ -38,10 +54,3 @@ tap = "@arrow prev"
 # Flecha derecha (diapositiva siguiente).
 [buttons.f16]
 tap = "@arrow next"
-
-# Cuarto boton: el que manda Enter nativo. Mismo esquema de gestos.
-[buttons.f17]
-tap    = "@voice"
-double = "handy --toggle-post-process"
-triple = "omarchy-menu toggle"
-hold   = "wtype -M logo -k y -m logo"

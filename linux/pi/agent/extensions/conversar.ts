@@ -18,21 +18,23 @@
  * El nombre del agente (que decide su voz) sale de PI_VOICE_AGENT (default "pi").
  *
  * El widget de latido muestra, mientras el modelo trabaja:
- *   - Hace cuánto piensa (segundos).
- *   - El último pedido del usuario (para no perder de vista el objetivo).
- *   - Los subtítulos del pensamiento en vivo: una ventana de pocas palabras,
- *     siempre entera (nunca corta a mitad de palabra), que avanza palabra por
- *     palabra al ritmo de lectura y resalta la palabra actual. Si el modelo
- *     piensa mucho más rápido de lo que se puede leer, se descartan las
- *     palabras más viejas para no quedar atrasado.
+ *   - Hace cuánto piensa: por turno y acumulado de la sesión, en horas,
+ *     minutos y segundos según corresponda.
+ *   - El último pedido del usuario (para no perder de vista el objetivo);
+ *     queda a la vista también cuando el modelo termina.
+ *   - Los subtítulos del pensamiento: se toma una oración corta y se deja fija
+ *     en pantalla; se ilumina palabra por palabra al ritmo de lectura. El
+ *     párrafo no se mueve ni cambia: recién cuando se termina de iluminar
+ *     entra el siguiente. Si el modelo piensa mucho más rápido de lo que se
+ *     puede leer, se descartan las oraciones más viejas para no quedar atrasado.
  *
  * Config:
  *   PI_AGENTE_BIN        ruta al bus (default ~/developing/voz-agentes/agente)
  *   PI_VOICE_AGENT       nombre del agente / perfil de voz (default "pi")
  *   PI_LATIDO=0          apaga el latido
- *   PI_LATIDO_WORDS      palabras visibles en la ventana (default 14)
+ *   PI_LATIDO_PARAGRAPH_WORDS  palabras tope por oración (default 24)
  *   PI_LATIDO_WORD_MS    ritmo de lectura, ms por palabra (default 360)
- *   PI_LATIDO_BACKLOG    máximo de palabras en espera antes de descartar (default 80)
+ *   PI_LATIDO_BACKLOG    máximo de palabras en espera antes de descartar (default 120)
  *   PI_LATIDO_PROMPT_CHARS  largo máximo del pedido mostrado (default 96)
  */
 
@@ -47,10 +49,11 @@ const AGENT_NAME = process.env.PI_VOICE_AGENT ?? "pi";
 
 const LATIDO_ENABLED = process.env.PI_LATIDO !== "0";
 
-// Subtítulos del pensamiento: ventana corta, palabras enteras, ritmo legible.
-const VISIBLE_WORDS = Math.max(4, Number(process.env.PI_LATIDO_WORDS ?? "14") || 14);
+// Subtítulos del pensamiento: una oración fija que se ilumina palabra por
+// palabra al ritmo de lectura; no es una ventana que se desplaza.
+const PARAGRAPH_WORDS = Math.max(6, Number(process.env.PI_LATIDO_PARAGRAPH_WORDS ?? "24") || 24);
 const WORD_MS = Math.max(120, Number(process.env.PI_LATIDO_WORD_MS ?? "360") || 360);
-const MAX_BACKLOG = Math.max(VISIBLE_WORDS, Number(process.env.PI_LATIDO_BACKLOG ?? "80") || 80);
+const MAX_BACKLOG = Math.max(PARAGRAPH_WORDS, Number(process.env.PI_LATIDO_BACKLOG ?? "120") || 120);
 const PROMPT_MAX = Math.max(20, Number(process.env.PI_LATIDO_PROMPT_CHARS ?? "96") || 96);
 const PACER_TICK_MS = 120;
 
@@ -139,19 +142,27 @@ export default function (pi: ExtensionAPI) {
     ui?: {
       setStatus?: (k: string, v?: string) => void;
       setWidget?: (k: string, v?: string[]) => void;
-      theme?: { style?: (text: string, options: Record<string, unknown>) => string };
+      theme?: {
+        style?: (text: string, options: Record<string, unknown>) => string;
+        fg?: (token: string, text: string) => string;
+      };
     };
   } | undefined;
 
-  // Subtítulos del pensamiento: cola de palabras que se libera al ritmo de
-  // lectura para poder seguirle el paso (karaoke), sin cortar palabras.
-  let wordCarry = ""; // resto de la última palabra todavía incompleta
-  let wordQueue: string[] = []; // palabras completas pendientes de mostrar
-  let visibleWords: string[] = []; // ventana móvil que se está leyendo
-  let dropped = false; // se descartaron palabras por ir muy detrás del modelo
+  // Subtítulos del pensamiento: se acumula el texto que llega, se corta por
+  // oración y se muestra una oración fija; la iluminación avanza palabra por
+  // palabra al ritmo de lectura. No hay ventana que se desplaza.
+  let sentenceBuf = ""; // texto de la oración que todavía no cerró
+  let paragraphs: string[][] = []; // oraciones listas, ya en palabras
+  let current: string[] | null = null; // oración fija que se está iluminando
+  let currentIndex = 0; // palabra iluminada dentro de `current`
+  let dropped = false; // se descartaron oraciones por ir muy detrás del modelo
   let lastRelease = 0;
   let lastRender = 0;
+  let lastRenderedKey = "";
   let lastPrompt = ""; // último pedido del usuario, para recordar el objetivo
+  let sessionThinkingMs = 0; // acumulado de la sesión
+  let lastTurnMs = 0; // duración del último turno
 
   /** Normaliza espacios sin romper palabras. */
   function cleanText(s: unknown): string {
@@ -200,28 +211,50 @@ export default function (pi: ExtensionAPI) {
     return "";
   }
 
-  /** Encola palabras completas; guarda el resto para el próximo fragmento. */
-  function feedWords(chunk: string): void {
-    wordCarry += chunk;
-    const m = /^(.*\s)(\S*)$/s.exec(wordCarry);
-    if (!m) return;
-    wordCarry = m[2];
-    for (const w of m[1].split(/\s+/)) if (w) wordQueue.push(w);
-    if (wordQueue.length > MAX_BACKLOG) {
-      wordQueue.splice(0, wordQueue.length - MAX_BACKLOG);
+  /** Corta el texto en palabras enteras. */
+  function words(text: string): string[] {
+    return cleanText(text).split(/\s+/).filter(Boolean);
+  }
+
+  /** Encola una oración; si el atraso crece, descarta las más viejas. */
+  function pushParagraph(text: string): void {
+    const w = words(text);
+    if (!w.length) return;
+    paragraphs.push(w);
+    let total = paragraphs.reduce((n, p) => n + p.length, 0);
+    while (paragraphs.length > 1 && total > MAX_BACKLOG) {
+      total -= paragraphs[0].length;
+      paragraphs.shift();
       dropped = true;
     }
   }
 
-  /** Libera una palabra al ritmo de lectura y la suma a la ventana visible. */
-  function releaseWord(): void {
-    if (!wordQueue.length) return;
-    visibleWords.push(wordQueue.shift() as string);
-    if (visibleWords.length > VISIBLE_WORDS) {
-      visibleWords.splice(0, visibleWords.length - VISIBLE_WORDS);
+  /** Acumula el pensamiento y cierra oraciones al ritmo en que aparecen. */
+  function feedThinking(chunk: string): void {
+    if (!chunk) return;
+    sentenceBuf += chunk;
+    for (;;) {
+      const m = /^(.*?[.!?…\n])(\s+|$)/s.exec(sentenceBuf);
+      if (!m) break;
+      const sentence = m[1].replace(/\n/g, " ");
+      sentenceBuf = sentenceBuf.slice(m[0].length);
+      pushParagraph(sentence);
     }
+    // sin puntuación durante demasiado tiempo: cortamos por cantidad de palabras
+    const pending = words(sentenceBuf);
+    if (pending.length >= PARAGRAPH_WORDS) {
+      pushParagraph(pending.slice(0, PARAGRAPH_WORDS).join(" "));
+      sentenceBuf = pending.slice(PARAGRAPH_WORDS).join(" ");
+    }
+  }
+
+  /** Toma la próxima oración de la cola y la deja fija para iluminarla. */
+  function startNextParagraph(): void {
+    const next = paragraphs.shift();
+    if (!next || !next.length) return;
+    current = next;
+    currentIndex = 0;
     lastRelease = Date.now();
-    updateLatido();
   }
 
   /** Resalta una palabra con el tema activo (inverso como respaldo). */
@@ -240,36 +273,80 @@ export default function (pi: ExtensionAPI) {
     return `\x1b[4;7m${word}\x1b[0m`;
   }
 
-  /** El trozo visible: solo palabras enteras; la última va resaltada. */
-  function snippet(): string {
-    if (!visibleWords.length) return "…";
-    const head = visibleWords.slice(0, -1).join(" ");
-    const tail = visibleWords[visibleWords.length - 1];
-    return `${dropped ? "… " : ""}${head ? `${head} ` : ""}${highlight(tail)}`;
+  /** Apaga una palabra que aún no se leyó (queda visible pero tenue). */
+  function muted(word: string): string {
+    try {
+      const styled = uiCtx?.ui?.theme?.fg?.("muted", word);
+      if (styled) return styled;
+    } catch {
+      /* tema sin "muted": cae al respaldo */
+    }
+    return `\x1b[2m${word}\x1b[0m`;
   }
 
-  /** Muestra/actualiza el widget con el pedido, el tiempo y el pensamiento vivo. */
-  function updateLatido(): void {
-    if (!working) return;
+  /** La oración fija: lo ya leído, la palabra actual iluminada y lo que falta. */
+  function snippet(): string {
+    if (!current) return "…";
+    const parts = current.map((w, i) => {
+      if (i === currentIndex) return highlight(w);
+      if (i < currentIndex) return w;
+      return muted(w);
+    });
+    return `${dropped ? "… " : ""}${parts.join(" ")}`;
+  }
+
+  /** Duración en horas, minutos y segundos según corresponda. */
+  function formatDuration(ms: number): string {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+    if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+    return `${s}s`;
+  }
+
+  /** Muestra/actualiza el widget con el pedido, los tiempos y el pensamiento. */
+  function updateLatido(force = false): void {
     const ui = uiCtx?.ui;
     if (!ui) return;
-    lastRender = Date.now();
-    const secs = Math.round((Date.now() - workStart) / 1000);
+    const now = Date.now();
+    const turnMs = working ? now - workStart : lastTurnMs;
+    const sessionMs = sessionThinkingMs + (working ? now - workStart : 0);
     const goal = lastPrompt ? `🎯 ${truncateWords(lastPrompt, PROMPT_MAX)}` : "🎯 (sin pedido aún)";
+    const head = working
+      ? `⏱ Pensando hace ${formatDuration(turnMs)} · Sesión ${formatDuration(sessionMs)}`
+      : `✓ ${formatDuration(lastTurnMs)} · Sesión ${formatDuration(sessionThinkingMs)}`;
+    const key = `${head}|${goal}|${currentIndex}|${current ? current.join(" ") : ""}|${dropped}`;
+    if (!force && key === lastRenderedKey) return;
+    lastRenderedKey = key;
+    lastRender = now;
+    const lines = [head, goal];
+    if (working && current) lines.push(snippet());
     try {
-      ui.setStatus?.("voz-latido", `⏱ ${secs}s`);
-      ui.setWidget?.("voz-latido", [`⏱ Pensando hace ${secs}s`, goal, snippet()]);
+      ui.setStatus?.("voz-latido", `⏱ ${formatDuration(turnMs)}`);
+      ui.setWidget?.("voz-latido", lines);
     } catch {
       /* sin UI (modo rpc/print): no importa */
     }
   }
 
-  /** Ritmo: libera una palabra cuando toca y mantiene el reloj al día. */
+  /** Ritmo: ilumina la siguiente palabra cuando toca y mantiene el reloj. */
   function tickLatido(): void {
-    const now = Date.now();
     if (!working) return;
-    if (wordQueue.length && now - lastRelease >= WORD_MS) releaseWord();
-    else if (now - lastRender >= 1000) updateLatido();
+    const now = Date.now();
+    if (!current) startNextParagraph();
+    while (current && now - lastRelease >= WORD_MS) {
+      lastRelease += WORD_MS;
+      currentIndex++;
+      if (currentIndex >= current.length) {
+        current = null;
+        currentIndex = 0;
+        if (paragraphs.length) startNextParagraph();
+        break;
+      }
+    }
+    updateLatido();
   }
 
   function clearLatido(): void {
@@ -279,6 +356,22 @@ export default function (pi: ExtensionAPI) {
     } catch {
       /* noop */
     }
+  }
+
+  /** Al terminar dejamos a la vista el pedido y los tiempos del turno. */
+  function settleLatido(): void {
+    current = null;
+    currentIndex = 0;
+    paragraphs = [];
+    sentenceBuf = "";
+    dropped = false;
+    lastRenderedKey = "";
+    try {
+      uiCtx?.ui?.setStatus?.("voz-latido", undefined);
+    } catch {
+      /* noop */
+    }
+    updateLatido(true);
   }
 
   pi.registerTool({
@@ -355,17 +448,21 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", (_event, ctx) => {
+    // Si un turno anterior no llegó a asentarse, no perdemos su tiempo.
+    if (working && workStart) sessionThinkingMs += Date.now() - workStart;
     working = true;
     workStart = Date.now();
     outstanding = false;
     hasThinking = false;
-    wordCarry = "";
-    wordQueue = [];
-    visibleWords = [];
+    sentenceBuf = "";
+    paragraphs = [];
+    current = null;
+    currentIndex = 0;
     dropped = false;
     lastRelease = Date.now();
+    lastRenderedKey = "";
     uiCtx = ctx;
-    updateLatido();
+    updateLatido(true);
   });
 
   // Razonamiento/respuesta en vivo: encolo palabras enteras para los subtítulos.
@@ -376,9 +473,9 @@ export default function (pi: ExtensionAPI) {
     if (!e || typeof e.delta !== "string") return;
     if (e.type === "thinking_delta") {
       hasThinking = true;
-      feedWords(e.delta);
+      feedThinking(e.delta);
     } else if (e.type === "text_delta" && !hasThinking) {
-      feedWords(e.delta);
+      feedThinking(e.delta);
     }
   });
 
@@ -389,11 +486,14 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
+    if (working && workStart) {
+      lastTurnMs = Date.now() - workStart;
+      sessionThinkingMs += lastTurnMs;
+    }
     working = false;
     outstanding = false;
-    wordQueue = [];
     uiCtx = ctx;
-    clearLatido();
+    settleLatido();
   });
 
   // El "punto de control" ya NO es un mensaje al modelo (se perdía y lo
