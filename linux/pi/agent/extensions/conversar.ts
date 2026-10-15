@@ -33,7 +33,7 @@
  *   PI_VOICE_AGENT       nombre del agente / perfil de voz (default "pi")
  *   PI_LATIDO=0          apaga el latido
  *   PI_LATIDO_PARAGRAPH_WORDS  palabras tope por oración (default 24)
- *   PI_LATIDO_WORD_MS    ritmo de lectura, ms por palabra (default 360)
+ *   PI_LATIDO_WORD_MS    ritmo de lectura, ms por palabra (default 300)
  *   PI_LATIDO_BACKLOG    máximo de palabras en espera antes de descartar (default 120)
  *   PI_LATIDO_PROMPT_CHARS  largo máximo del pedido mostrado (default 96)
  */
@@ -52,7 +52,7 @@ const LATIDO_ENABLED = process.env.PI_LATIDO !== "0";
 // Subtítulos del pensamiento: una oración fija que se ilumina palabra por
 // palabra al ritmo de lectura; no es una ventana que se desplaza.
 const PARAGRAPH_WORDS = Math.max(6, Number(process.env.PI_LATIDO_PARAGRAPH_WORDS ?? "24") || 24);
-const WORD_MS = Math.max(120, Number(process.env.PI_LATIDO_WORD_MS ?? "360") || 360);
+const WORD_MS = Math.max(120, Number(process.env.PI_LATIDO_WORD_MS ?? "300") || 300);
 const MAX_BACKLOG = Math.max(PARAGRAPH_WORDS, Number(process.env.PI_LATIDO_BACKLOG ?? "120") || 120);
 const PROMPT_MAX = Math.max(20, Number(process.env.PI_LATIDO_PROMPT_CHARS ?? "96") || 96);
 const PACER_TICK_MS = 120;
