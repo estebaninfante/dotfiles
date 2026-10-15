@@ -79,7 +79,7 @@ Item {
   property color foreground: themeForeground
   property color barForeground: useTransparentForeground ? transparentForeground : themeForeground
   property bool foregroundAnimationEnabled: true
-  property color background: Qt.rgba(0.12, 0.12, 0.13, 0.90)
+  property color background: Qt.rgba(0, 0, 0, 0.90)
   property color urgent: Color.accent
 
   Behavior on barForeground { enabled: root.foregroundAnimationEnabled; ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
