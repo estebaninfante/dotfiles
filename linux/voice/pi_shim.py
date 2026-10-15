@@ -42,15 +42,19 @@ def extract_request(content: str) -> str:
     return (content or "").strip()
 
 
-def ask_pi(text: str) -> str:
+def ask_pi(text: str, dry: bool = False) -> str:
     if not text:
         return ""
+    env = dict(os.environ)
+    if dry:
+        env["VOICE_PI_DRY"] = "1"
     try:
         proc = subprocess.run(
             [VOICE_PI, text],
             capture_output=True,
             text=True,
             timeout=TIMEOUT,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return "Me tardé demasiado en resolver eso."
@@ -102,7 +106,7 @@ class Handler(BaseHTTPRequestHandler):
                 user_content = str(msg.get("content", ""))
                 break
         text = extract_request(user_content)
-        reply = ask_pi(text)
+        reply = ask_pi(text, dry=bool(req.get("omnivoz_dry")))
         self._json({"message": {"role": "assistant", "content": reply}, "done": True})
 
 
