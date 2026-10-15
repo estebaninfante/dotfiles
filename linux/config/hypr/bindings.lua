@@ -38,6 +38,8 @@ hl.bind(main_mod .. " + SHIFT + X", hl.dsp.exit())
 -- Voz del sistema: repetir los últimos mensajes (voz + notificaciones).
 hl.bind(main_mod .. " + ALT + V", hl.dsp.exec_cmd("~/.local/bin/voice repeat"))
 hl.bind(main_mod .. " + ALT + SHIFT + V", hl.dsp.exec_cmd("~/.local/bin/voice repeat 3"))
+-- Terminal nueva con pi (panel tmux + foco), desde el teclado.
+hl.bind(main_mod .. " + ALT + RETURN", hl.dsp.exec_cmd("~/.local/bin/pi-new"), { description = "Terminal nueva con pi" })
 -- Buzón de voz: escuchar los mensajes pendientes (SUPER+ALT+B).
 hl.bind(main_mod .. " + ALT + B", hl.dsp.exec_cmd("~/.local/bin/voice play-inbox"))
 -- OmniVoz ahora corre SIEMPRE (servicio omnivoz-listen). Se quitaron los

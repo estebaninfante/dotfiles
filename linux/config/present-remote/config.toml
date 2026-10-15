@@ -28,6 +28,7 @@
 #   flecha izq x2 -> Enter (enviar mensaje)
 #   flecha izq (mantener) -> voice repeat (repetir el último mensaje)
 #   flecha der x2 -> nueva terminal (kitty) con pi cargado y enfocado
+# (desactivado: los atajos de Omar van por teclado)
 
 [settings]
 hold_ms = 600        # ms para el gesto `hold`
@@ -54,14 +55,10 @@ hold = "ydotool key 125:1 20:1 20:0 125:0"
 suppress = ["f14", "f17"]
 
 # ── Flechas ──────────────────────────────────────────────────────────────
-# Flecha izquierda (diapositiva anterior). Doble toque -> Enter.
-# Mantener -> repetir por voz el último mensaje que te llegó (como Súper+Alt+V).
+# Solo pasan diapositiva / scroll. Los atajos de Omar van por teclado
+# (Súper+Alt+V repetir, Súper+Alt+Return terminal con pi).
 [buttons.f15]
 tap = "@arrow prev"
-double = "@enter"
-hold = "voice repeat"
 
-# Flecha derecha (diapositiva siguiente). Doble toque -> nueva terminal con pi.
 [buttons.f16]
 tap = "@arrow next"
-double = "pi-new"
