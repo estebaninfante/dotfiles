@@ -6,13 +6,6 @@ local ws_keys = variables.workspace_keys
 local EXPO_3D = hyprexpo.threed
 local plugin = hl.plugin.hyprexpo
 
--- TEMP DEBUG (quitar antes de publicar)
-local DBG_LOG = "/tmp/expo_dbg.log"
-local function dbg(msg)
-    local f = io.open(DBG_LOG, "a")
-    if f then f:write(msg .. "\n"); f:close() end
-end
-
 local expo_focus
 local expo_ui_toggle
 local expo_fly_super_up
@@ -166,7 +159,6 @@ end
 
 fly_commit_now = function()
     if not expo_fly.open then return end
-    dbg("COMMIT want=" .. tostring(expo_fly.want))
     if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
     if expo_fly.want then
         plugin.kb_selectn(expo_fly.want)
@@ -207,7 +199,6 @@ fly_poll_step = function()
         if expo_fly.busy == 0 and expo_fly.pending then
             local n = expo_fly.want
             expo_fly.pending = false
-            dbg("POLL-pending-fire i=" .. tostring(n))
             if n then fly_open_and_go(n) end
         end
     end
@@ -219,8 +210,6 @@ end
 
 fly_open_and_go = function(n)
     local cur = hl.get_active_workspace()
-    dbg("FLY_OPEN_AND_GO i=" .. tostring(n) .. " cur=" .. tostring(cur and cur.id))
-    hl.exec_cmd("sleep 0.12; grim /tmp/fly_i" .. tostring(n) .. ".png")
     plugin.expo("on")
     expo_fly.open = true
     expo_fly.sel  = cur and ws_grid_index(cur.id) or nil
@@ -309,7 +298,6 @@ expo_focus = function(i)
     end
 
     if expo_fly.open then
-        dbg("OPEN-branch i=" .. tostring(i))
         expo_fly.want = i
         fly_goto(i)
         fly_schedule_commit()
@@ -321,10 +309,10 @@ expo_focus = function(i)
             return
         end
         -- El overview anterior todavía se está cerrando (closing == true) y
-        -- kb_focus no anima en ese estado. En vez de saltar directo con
-        -- kb_selectn, encolamos el destino: cuando el cierre termina,
-        -- fly_poll_step reabre el expo y vuela hasta i (animado).
-        dbg("BUSY-branch i=" .. tostring(i) .. " busy=" .. tostring(expo_fly.busy) .. " -> queue pending")
+        -- kb_focus no anima en ese estado, por eso no se puede volar todavía.
+        -- Antes se saltaba directo con kb_selectn (sin animación); ahora se
+        -- encola el destino y, cuando el cierre termina, fly_poll_step reabre
+        -- el expo y vuela hasta i, así también anima el salto siguiente.
         expo_fly.want = i
         expo_fly.pending = true
         ensure_poll()
@@ -532,15 +520,5 @@ if plugin ~= nil then
         end
     end, { timeout = HOT_POLL_MS, type = "repeat" })
 end
-
--- TEMP TEST (quitar antes de publicar)
-hl.timer(function()
-    dbg("TEST: focus(5)")
-    expo_focus(5)
-    hl.timer(function()
-        dbg("TEST: focus(4)")
-        expo_focus(4)
-    end, { timeout = 500, type = "oneshot" })
-end, { timeout = 800, type = "oneshot" })
 
 return true
