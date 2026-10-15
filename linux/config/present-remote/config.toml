@@ -21,7 +21,7 @@
 
 [settings]
 hold_ms = 600        # ms que hay que mantener para el gesto `hold`
-multi_gap_ms = 450   # ventana entre toques para encadenar double/triple
+multi_gap_ms = 500   # ventana entre toques para encadenar double/triple
 cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactivado)
 
 # Botón "extra" (el del cuadrito / pantalla negra).
