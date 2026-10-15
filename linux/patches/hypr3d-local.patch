@@ -1,6 +1,6 @@
-diff --git i/README.md w/README.md
+diff --git c/README.md w/README.md
 index 918548a..34eedfb 100644
---- i/README.md
+--- c/README.md
 +++ w/README.md
 @@ -51,10 +51,13 @@ hl.bind("SUPER + F12", hl.plugin.hypr3d.toggle)
  | Input                         | Action                                         |
@@ -25,35 +25,51 @@ index 918548a..34eedfb 100644
          },
          player = {
              look_sensitivity = 0.0025, -- mouse look, radians per pointer count
-diff --git i/src/HyprlandCompat/WindowsCompat.cpp w/src/HyprlandCompat/WindowsCompat.cpp
-index 4f0b169..453bc7b 100644
---- i/src/HyprlandCompat/WindowsCompat.cpp
+diff --git c/src/HyprlandCompat/WindowsCompat.cpp w/src/HyprlandCompat/WindowsCompat.cpp
+index 4f0b169..c9bb6e1 100644
+--- c/src/HyprlandCompat/WindowsCompat.cpp
 +++ w/src/HyprlandCompat/WindowsCompat.cpp
-@@ -191,15 +191,15 @@ void restoreWindowLayout(SWindowLayoutSave& save) {
+@@ -176,10 +176,7 @@ void applyWindowGhost(SWindowLayoutSave& save) {
+     if (!WINDOW || !WINDOW->m_target)
+         return;
+ 
+-    // The 3D view owns geometry. Force the target floating first, then ghost
+-    // it out of the layout so a tiled layout cannot overwrite our changes.
+     WINDOW->m_target->setFloating(true);
+-    WINDOW->m_target->setSpaceGhost(save.space);
+ }
+ 
+ void restoreWindowLayout(SWindowLayoutSave& save) {
+@@ -191,20 +188,12 @@ void restoreWindowLayout(SWindowLayoutSave& save) {
      if (!WINDOW || !WINDOW->m_target)
          return;
  
 -    // Put the target back into its space while it is still floating. For a
 -    // window that was floating before 3D, retain the real box produced by the
 -    // 3D resize. Tiled windows deliberately return to their original layout.
-     const CBox RESTORE_BOX = save.wasFloating ? WINDOW->m_target->position() : save.box;
- 
+-    const CBox RESTORE_BOX = save.wasFloating ? WINDOW->m_target->position() : save.box;
+-
 -    if (save.space)
-+    const auto SAVED_WORKSPACE = save.space ? save.space->workspace() : nullptr;
-+    const bool CAN_RESTORE = SAVED_WORKSPACE && SAVED_WORKSPACE->m_monitor;
-+
-+    WINDOW->m_target->assignToSpace(nullptr);
-+
-+    if (CAN_RESTORE)
-         WINDOW->m_target->assignToSpace(save.space);
+-        WINDOW->m_target->assignToSpace(save.space);
 -    else
 -        WINDOW->m_target->setSpaceGhost(nullptr);
+-
+-    WINDOW->m_target->setFloating(true);
+-    WINDOW->m_target->setPositionGlobal(RESTORE_BOX);
+-    WINDOW->m_target->rememberFloatingSize(Vector2D{RESTORE_BOX.w, RESTORE_BOX.h});
+-    WINDOW->m_target->setFloating(save.wasFloating);
++    if (save.wasFloating) {
++        WINDOW->m_target->setFloating(true);
++        WINDOW->m_target->setPositionGlobal(save.box);
++        WINDOW->m_target->rememberFloatingSize(Vector2D{save.box.w, save.box.h});
++    } else
++        WINDOW->m_target->setFloating(false);
  
-     WINDOW->m_target->setFloating(true);
-     WINDOW->m_target->setPositionGlobal(RESTORE_BOX);
-diff --git i/src/Input/AimFocus.hpp w/src/Input/AimFocus.hpp
+     g_pHyprRenderer->damageWindow(WINDOW);
+ }
+diff --git c/src/Input/AimFocus.hpp w/src/Input/AimFocus.hpp
 index 478b44a..f1376c4 100644
---- i/src/Input/AimFocus.hpp
+--- c/src/Input/AimFocus.hpp
 +++ w/src/Input/AimFocus.hpp
 @@ -4,39 +4,63 @@
  
@@ -160,7 +176,7 @@ index 478b44a..f1376c4 100644
  
 -} // namespace H3D
 +}
-diff --git i/src/Input/LauncherDelegate.hpp w/src/Input/LauncherDelegate.hpp
+diff --git c/src/Input/LauncherDelegate.hpp w/src/Input/LauncherDelegate.hpp
 new file mode 100644
 index 0000000..db82ced
 --- /dev/null
@@ -191,7 +207,7 @@ index 0000000..db82ced
 +}
 +
 +}
-diff --git i/src/Input/MovementKeys.hpp w/src/Input/MovementKeys.hpp
+diff --git c/src/Input/MovementKeys.hpp w/src/Input/MovementKeys.hpp
 new file mode 100644
 index 0000000..9f15bcf
 --- /dev/null
@@ -242,9 +258,9 @@ index 0000000..9f15bcf
 +}
 +
 +}
-diff --git i/src/main.cpp w/src/main.cpp
+diff --git c/src/main.cpp w/src/main.cpp
 index bac9fa5..af0d84e 100644
---- i/src/main.cpp
+--- c/src/main.cpp
 +++ w/src/main.cpp
 @@ -32,6 +32,8 @@ extern "C" {
  
@@ -899,7 +915,7 @@ index bac9fa5..af0d84e 100644
      stopFramePump();
      g_transition = 0.0f;
      g_transitionTarget = 0.0f;
-diff --git i/tests/test_logic.cpp w/tests/test_logic.cpp
+diff --git c/tests/test_logic.cpp w/tests/test_logic.cpp
 new file mode 100644
 index 0000000..ceec308
 --- /dev/null
