@@ -1,39 +1,69 @@
 #!/usr/bin/env python3
-# present-remote — bindings del control remoto de presentaciones.
-#
-# Lee la salida de `keyd monitor` y actúa según el botón del control, que
-# `present.conf` mapea a teclas dedicadas:
-#
-#   f14  botón extra (Tab)   mantener (>= HOLD_MS) → Handy (dictado) on/off
-#                            tocar                  → Omar push-to-talk (sin keyword)
-#   f15  flecha izquierda    terminal → ventana tmux anterior
-#                            otro     → scroll arriba
-#   f16  flecha derecha      terminal → ventana tmux siguiente
-#                            otro     → scroll abajo
-#
-# Sintetiza teclas/rueda con ydotool (ydotoold ya corre como servicio) y usa
-# `hyprctl activewindow` para saber qué app tiene el foco. Corre como servicio
-# de usuario (present-remote.service). Los eventos y decisiones van al journal.
-#
-# Variables:
-#   PRESENT_HOLD_MS      umbral tap/hold en ms (default 450)
-#   PRESENT_HANDY_TOGGLE comando para Handy (default: handy --toggle-post-process)
-#   PRESENT_OMAR         comando de push-to-talk (default: omnivoz-ptt)
-#   PRESENT_DISABLE=1    desactiva sin desinstalar
+"""present-remote — mapeo de gestos del control de presentaciones.
+
+Lee `keyd monitor` y traduce las pulsaciones del control (remapeadas en
+present.conf a teclas dedicadas) en **gestos**, y cada gesto ejecuta el
+comando que diga la config.
+
+Gestos por botón:
+    tap     1 toque
+    double  2 toques seguidos
+    triple  3 toques seguidos
+    hold    mantener apretado (umbral hold_ms)
+
+Los comandos se ejecutan con `sh -c`. Los que empiezan con `@` son acciones
+internas de present-remote:
+
+    @arrow prev    flecha contextual (terminal->tmux prev | otro->scroll arriba)
+    @arrow next    flecha contextual (terminal->tmux next | otro->scroll abajo)
+    @cancel        cancela la sesión de voz activa
+
+Config: ~/.config/present-remote/config.toml (o $PRESENT_CONFIG).
+
+Uso:
+    present-remote                 demonio (lo levanta present-remote.service)
+    present-remote --check         valida la config y sale
+    present-remote --learn         imprime los eventos crudos de keyd (sin actuar)
+    present-remote --replay        procesa eventos keyd por stdin (para test)
+    present-remote cancel          cancela la sesión de voz activa
+    present-remote arrow prev|next acción contextual de las flechas
+
+Notas de implementación:
+  - Se ignoran los "down" repetidos mientras la tecla sigue apretada: el control
+    (y keyd) reemiten "down" al mantener, y eso rompía la detección de `hold`.
+  - Si un botón no define `hold`, mantener no dispara nada (y tampoco cae en tap).
+"""
 import json
 import os
 import select
-import shlex
+import signal
 import subprocess
 import sys
 import time
+import tomllib
 
-HOLD_MS = int(os.environ.get("PRESENT_HOLD_MS", "450"))
-HANDY_TOGGLE = shlex.split(os.environ.get("PRESENT_HANDY_TOGGLE", "handy --toggle-post-process"))
-OMAR_PTT = os.environ.get("PRESENT_OMAR", os.path.expanduser("~/.local/bin/omnivoz-ptt"))
+HOME = os.path.expanduser("~")
+CONFIG_PATH = os.environ.get(
+    "PRESENT_CONFIG", os.path.join(HOME, ".config/present-remote/config.toml")
+)
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+PTT_PIDFILE = os.path.join(RUNTIME, "omnivoz-ptt.pid")
+PILL = os.path.join(HOME, "developing/omnivoz/packaging/quickshell/omar-pill.qml")
+LOG = open(os.devnull, "w")
 
-# Clases de ventana que tratamos como terminal (ahí las flechas cambian de
-# ventana tmux en vez de scrollear).
+ENV = dict(os.environ)
+ENV["PATH"] = os.path.join(HOME, ".local/bin") + ":" + ENV.get("PATH", "/usr/bin:/bin")
+
+DEFAULT_SETTINGS = {
+    "hold_ms": 600,
+    "multi_gap_ms": 320,
+    "cancel_key": "esc",
+}
+
+GESTURES = ("tap", "double", "triple", "hold")
+TAP_GESTURE = {1: "tap", 2: "double", 3: "triple"}
+
+# Clases de ventana que tratamos como terminal.
 TERMINALES = {
     "kitty", "foot", "footclient", "alacritty", "ghostty", "wezterm",
     "konsole", "gnome-terminal", "xterm", "st", "urxvt", "terminator",
@@ -48,34 +78,48 @@ def log(msg):
     print(f"[present-remote] {msg}", file=sys.stderr, flush=True)
 
 
-def _run(*cmd):
+def _spawn(*cmd):
     try:
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(
+            cmd, stdout=LOG, stderr=LOG, stdin=subprocess.DEVNULL,
+            start_new_session=True, env=ENV,
+        )
     except FileNotFoundError as e:
         log(f"no encontré {cmd[0]}: {e}")
 
 
+def _run_cmd(cmd):
+    """Ejecuta un comando de shell en segundo plano (fire-and-forget)."""
+    try:
+        subprocess.Popen(
+            ["sh", "-c", cmd], stdout=LOG, stderr=LOG, stdin=subprocess.DEVNULL,
+            start_new_session=True, env=ENV,
+        )
+    except Exception as e:  # noqa: BLE001
+        log(f"no pude ejecutar «{cmd}»: {e}")
+
+
+# ── acciones internas ────────────────────────────────────────────────────
 def _ctrl(codes):
     seq = [f"{CTRL}:1"]
     for k in codes:
         seq += [f"{k}:1", f"{k}:0"]
     seq.append(f"{CTRL}:0")
-    _run("ydotool", "key", *seq)
+    _spawn("ydotool", "key", *seq)
 
 
 def _scroll(direction):
-    # Rueda: botón 4 = arriba, botón 5 = abajo.
-    _run("ydotool", "click", "4" if direction == "up" else "5")
+    _spawn("ydotool", "click", "4" if direction == "up" else "5")
 
 
 def active_class():
     try:
         out = subprocess.check_output(
-            ["hyprctl", "activewindow", "-j"],
-            text=True, stderr=subprocess.DEVNULL, timeout=1,
+            ["hyprctl", "activewindow", "-j"], text=True,
+            stderr=subprocess.DEVNULL, timeout=1,
         )
         return ((json.loads(out) or {}).get("class") or "").lower()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -90,55 +134,289 @@ def arrow(action):
         _scroll("up" if action == "prev" else "down")
 
 
-def main():
-    if os.environ.get("PRESENT_DISABLE") == "1":
+def _ptt_pids():
+    """PIDs de sesiones de voz activas (push-to-talk)."""
+    pids = []
+    try:
+        with open(PTT_PIDFILE) as f:
+            pid = int(f.read().strip())
+        if pid > 0 and _alive(pid):
+            pids.append(pid)
+    except (FileNotFoundError, ValueError):
+        pass
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-f", r"dist/index\.js listen --no-wake"],
+            text=True, stderr=subprocess.DEVNULL,
+        )
+        for tok in out.split():
+            pid = int(tok)
+            if pid not in pids and _alive(pid):
+                pids.append(pid)
+    except Exception:  # noqa: BLE001
+        pass
+    return pids
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def ptt_active():
+    return bool(_ptt_pids())
+
+
+def cancel_voice():
+    """Corta la sesión de voz activa y cierra la píldora."""
+    pids = _ptt_pids()
+    if pids:
+        log(f"cancel: corto {pids}")
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGINT)
+            except OSError:
+                pass
+        time.sleep(0.4)
+        for pid in pids:
+            if _alive(pid):
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+    else:
+        log("cancel: no había sesión de voz activa")
+    try:
+        os.remove(PTT_PIDFILE)
+    except FileNotFoundError:
+        pass
+    # Cerrar la píldora (mejor esfuerzo).
+    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
+
+
+def builtin(cmd):
+    parts = cmd[1:].split()
+    if not parts:
         return
-    proc = subprocess.Popen(["keyd", "monitor"], stdout=subprocess.PIPE, text=True)
+    if parts[0] == "arrow" and len(parts) >= 2 and parts[1] in ("prev", "next"):
+        arrow(parts[1])
+    elif parts[0] == "cancel":
+        cancel_voice()
+    else:
+        log(f"acción interna desconocida: {cmd}")
+
+
+# ── configuración ────────────────────────────────────────────────────────
+def load_config(path=CONFIG_PATH):
+    settings = dict(DEFAULT_SETTINGS)
+    buttons = {}
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except FileNotFoundError:
+        log(f"sin config en {path}; no hay bindings")
+        return settings, buttons
+    except tomllib.TOMLDecodeError as e:
+        log(f"config inválida ({path}): {e}")
+        return settings, buttons
+
+    for k, v in (data.get("settings") or {}).items():
+        settings[k] = v
+
+    for name, gestures in (data.get("buttons") or {}).items():
+        if not isinstance(gestures, dict):
+            continue
+        table = {}
+        for g, cmd in gestures.items():
+            if g not in GESTURES:
+                log(f"{name}: gesto desconocido «{g}» (ignorado)")
+                continue
+            cmd = str(cmd).strip()
+            if cmd:
+                table[g] = cmd
+        if table:
+            buttons[name] = table
+    return settings, buttons
+
+
+# ── máquina de gestos ────────────────────────────────────────────────────
+class Button:
+    __slots__ = ("name", "pressed", "press_at", "hold_fired", "taps", "fire_at", "max_taps")
+
+    def __init__(self, name, gestures):
+        self.name = name
+        self.pressed = False
+        self.press_at = 0.0
+        self.hold_fired = False
+        self.taps = 0
+        self.fire_at = None
+        n = 1
+        for i, g in TAP_GESTURE.items():
+            if g in gestures:
+                n = max(n, i)
+        self.max_taps = n
+
+
+def _fire(button, gesture, gestures):
+    cmd = gestures.get(gesture)
+    if not cmd:
+        log(f"{button.name} {gesture} (sin comando)")
+        return
+    log(f"{button.name} {gesture} -> {cmd}")
+    if cmd.startswith("@"):
+        builtin(cmd)
+    else:
+        _run_cmd(cmd)
+
+
+def handle_event(out, buttons, settings, states):
+    """Procesa una línea de keyd monitor. Devuelve False si se cerró el stream."""
+    line = out.readline()
+    if not line:
+        return False
+    parts = line.rstrip("\r\n").split("\t")
+    if len(parts) < 3:
+        return True
+    key, _, state = parts[2].partition(" ")
+    state = state.strip()
+    if os.environ.get("PRESENT_DEBUG"):
+        log(f"evt {key} {state}")
+
+    if settings.get("cancel_key") and key == settings["cancel_key"] and state == "down":
+        if ptt_active():
+            cancel_voice()
+        return True
+
+    b = states.get(key)
+    if b is None:
+        return True
+
+    now = time.monotonic()
+    if state == "down":
+        if b.pressed:
+            return True  # repetido al mantener: no reiniciar el gesto
+        b.pressed = True
+        b.press_at = now
+        b.hold_fired = False
+        b.fire_at = None  # un nuevo toque cancela el disparo pendiente
+    elif state == "up":
+        b.pressed = False
+        if b.hold_fired:
+            b.hold_fired = False
+            b.taps = 0
+            b.fire_at = None
+        else:
+            b.taps += 1
+            if b.taps >= b.max_taps:
+                _fire(b, TAP_GESTURE[b.taps], buttons[b.name])
+                b.taps = 0
+                b.fire_at = None
+            else:
+                b.fire_at = now + settings["multi_gap_ms"] / 1000
+    return True
+
+
+def tick(buttons, settings, states):
+    now = time.monotonic()
+    hold_s = settings["hold_ms"] / 1000
+    gap_s = settings["multi_gap_ms"] / 1000
+    for b in states.values():
+        if b.pressed and not b.hold_fired and now - b.press_at >= hold_s:
+            b.hold_fired = True
+            _fire(b, "hold", buttons[b.name])
+        if b.fire_at is not None and not b.pressed and now >= b.fire_at:
+            _fire(b, TAP_GESTURE.get(b.taps, "tap"), buttons[b.name])
+            b.taps = 0
+            b.fire_at = None
+    # next deadline (informativo para el timeout del select)
+    deadlines = []
+    for b in states.values():
+        if b.pressed and not b.hold_fired:
+            deadlines.append(b.press_at + hold_s)
+        if b.fire_at is not None:
+            deadlines.append(b.fire_at)
+    if not deadlines:
+        return 0.05
+    return max(0.0, min(0.05, min(deadlines) - now))
+
+
+# ── modos de ejecución ───────────────────────────────────────────────────
+def run_daemon(source="keyd"):
+    settings, buttons = load_config()
+    if not buttons:
+        log("no hay bindings configurados; nada para hacer")
+        return
+    states = {name: Button(name, g) for name, g in buttons.items()}
+    if source == "keyd":
+        proc = subprocess.Popen(
+            ["keyd", "monitor"], stdout=subprocess.PIPE, text=True, bufsize=1,
+        )
+        out = proc.stdout
+    else:
+        out = sys.stdin
+    assert out is not None
+    log(f"listo (hold={settings['hold_ms']}ms, gap={settings['multi_gap_ms']}ms, "
+        f"botones={','.join(sorted(buttons))})")
+    while True:
+        timeout = tick(buttons, settings, states)
+        r, _, _ = select.select([out], [], [], timeout)
+        if r and not handle_event(out, buttons, settings, states):
+            log("el stream de eventos terminó; salgo")
+            break
+
+
+def run_learn():
+    proc = subprocess.Popen(["keyd", "monitor"], stdout=subprocess.PIPE, text=True, bufsize=1)
     out = proc.stdout
     assert out is not None
-
-    f14_down_at = None
-    hold_fired = False
-    log(f"listo (hold={HOLD_MS}ms)")
-
+    log("--learn: mostrando eventos crudos (Ctrl-C para salir)")
     while True:
-        r, _, _ = select.select([out], [], [], 0.05)
+        line = out.readline()
+        if not line:
+            break
+        parts = line.rstrip("\r\n").split("\t")
+        if len(parts) >= 3:
+            print(parts[2], flush=True)
 
-        if r:
-            line = out.readline()
-            if not line:
-                log("keyd monitor terminó; salgo")
-                break
-            partes = line.rstrip("\r\n").split("\t")
-            if len(partes) >= 3:
-                key, _, state = partes[2].partition(" ")
-                state = state.strip()
-                if key == "f14":
-                    if state == "down":
-                        f14_down_at = time.monotonic()
-                        hold_fired = False
-                    elif state == "up":
-                        if f14_down_at is not None and not hold_fired:
-                            log("f14 tap -> Omar")
-                            _run(OMAR_PTT)
-                        f14_down_at = None
-                        hold_fired = False
-                elif key == "f15" and state == "down":
-                    arrow("prev")
-                elif key == "f16" and state == "down":
-                    arrow("next")
 
-        # ¿Se mantuvo f14 más que el umbral? Dispara Handy en el momento,
-        # sin esperar a soltar.
-        if (f14_down_at is not None and not hold_fired
-                and (time.monotonic() - f14_down_at) * 1000 >= HOLD_MS):
-            hold_fired = True
-            log("f14 hold -> Handy")
-            _run(*HANDY_TOGGLE)
+def run_check():
+    settings, buttons = load_config()
+    print(f"config: {CONFIG_PATH}")
+    print("settings:", {k: settings[k] for k in DEFAULT_SETTINGS if k in settings})
+    if not buttons:
+        print("buttons: (ninguno)")
+        return 1
+    for name in sorted(buttons):
+        print(f"  {name}: {buttons[name]}")
+    return 0
+
+
+def main(argv):
+    if len(argv) >= 2 and argv[1] in ("cancel", "arrow"):
+        if argv[1] == "cancel":
+            cancel_voice()
+        elif len(argv) >= 3 and argv[2] in ("prev", "next"):
+            arrow(argv[2])
+        return 0
+    if len(argv) >= 2 and argv[1] == "--check":
+        return run_check()
+    if len(argv) >= 2 and argv[1] == "--learn":
+        run_learn()
+        return 0
+    if len(argv) >= 2 and argv[1] == "--replay":
+        run_daemon(source="stdin")
+        return 0
+    if os.environ.get("PRESENT_DISABLE") == "1":
+        return 0
+    run_daemon(source="keyd")
+    return 0
 
 
 if __name__ == "__main__":
     try:
-        main()
+        sys.exit(main(sys.argv))
     except KeyboardInterrupt:
         pass

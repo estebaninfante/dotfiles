@@ -1,0 +1,39 @@
+# Mapeo de gestos del control de presentaciones (SHARKOON "Wireless Present").
+#
+# present-remote lee `keyd monitor` y traduce cada botón a gestos. Cada gesto
+# ejecuta el comando que pongas acá. Es la fuente de verdad: editá y reiniciá el
+# servicio (`systemctl --user restart present-remote`).
+#
+# Gestos por botón:
+#   tap     1 toque
+#   double  2 toques seguidos
+#   triple  3 toques seguidos
+#   hold    mantener apretado (umbral hold_ms)
+#
+# El valor es un comando de shell (se ejecuta con `sh -c`). Los que empiezan
+# con `@` son acciones internas de present-remote:
+#   @arrow prev   flecha contextual: terminal -> ventana tmux previa; otro -> scroll arriba
+#   @arrow next   flecha contextual: terminal -> ventana tmux siguiente; otro -> scroll abajo
+#   @cancel       cancela la sesión de voz activa
+#
+# Si un gesto no está definido, no hace nada. Ojo: si un botón define `hold`,
+# mantener dispara `hold` (o nada si está vacío) y NO cae en `tap`.
+
+[settings]
+hold_ms = 600        # ms que hay que mantener para el gesto `hold`
+multi_gap_ms = 320   # ventana entre toques para encadenar double/triple
+cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactivado)
+
+# Botón "extra" (el del cuadrito / pantalla negra).
+[buttons.f14]
+tap    = "$HOME/.local/bin/omar-open"      # 1 toque -> Omar (voz, con píldora)
+double = "handy --toggle-post-process"     # 2 toques -> Handy (dictado)
+# hold sin definir -> mantener no hace nada
+
+# Flecha izquierda (diapositiva anterior).
+[buttons.f15]
+tap = "@arrow prev"
+
+# Flecha derecha (diapositiva siguiente).
+[buttons.f16]
+tap = "@arrow next"
