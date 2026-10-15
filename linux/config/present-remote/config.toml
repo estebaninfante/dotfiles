@@ -21,12 +21,12 @@
 
 [settings]
 hold_ms = 600        # ms que hay que mantener para el gesto `hold`
-multi_gap_ms = 320   # ventana entre toques para encadenar double/triple
+multi_gap_ms = 450   # ventana entre toques para encadenar double/triple
 cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactivado)
 
 # Botón "extra" (el del cuadrito / pantalla negra).
 [buttons.f14]
-tap    = "$HOME/.local/bin/omar-open"      # 1 toque -> Omar (voz, con píldora)
+tap    = "@voice"                          # 1 toque -> toggle de Omar (prende/apaga)
 double = "handy --toggle-post-process"     # 2 toques -> Handy (dictado)
 # hold sin definir -> mantener no hace nada
 
