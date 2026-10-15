@@ -1,0 +1,1 @@
+-- minimal para probar carga de plugin
