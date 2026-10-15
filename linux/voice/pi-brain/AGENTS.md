@@ -148,15 +148,17 @@ Si el usuario te pide preguntarle algo a otro agente o responderle, usá el bus
 
 ## Paneles de tmux (agentes con nombre)
 
-Cada agente puede vivir en un panel de tmux con un nombre. Tenés
-`~/.local/bin/agente-pane` para dirigirlos por nombre:
+Cada agente que vive en un panel de tmux se **registra solo**: al abrir un `pi`
+toma un nombre automático y publica en qué anda. No hace falta nombrarlo a
+mano. Tenés `~/.local/bin/agente-pane` para verlos y dirigirlos:
 
-- `agente-pane list` — paneles con nombre (nombre, id, ubicación, comando).
-- `agente-pane focus <nombre>` — enfocar ese panel.
+- `agente-pane list` — agentes registrados: nombre, estado, en qué andan, dónde.
+- `agente-pane info <nombre>` — detalle de uno (estado, objetivo, panel).
+- `agente-pane focus <nombre>` — enfocar ese panel y traer su ventana.
 - `agente-pane say <nombre> "<texto>"` — escribir el texto y pulsar Enter ahí.
 
 Cuando el usuario diga "decile a <nombre> que…", "enviá a <nombre>…",
-"pedile a <nombre>…" o "enfocá <nombre>", usá `agente-pane`. Si no sabés el
-nombre exacto, corré `agente-pane list` primero. Para **nombrar** un panel, el
-usuario corre `agente-pane name <nombre>` dentro de ese panel (vos no podés
-saber cuál es el panel activo de su pantalla).
+"pedile a <nombre>…", "enfocá <nombre>" o "¿en qué anda <nombre>?", usá
+`agente-pane`. Si pregunta "¿qué agentes tengo?" o "¿en qué andan?", corré
+`agente-pane list` y contestá en una frase con los nombres y sus objetivos.
+Si no sabés el nombre exacto, corré `agente-pane list` primero.

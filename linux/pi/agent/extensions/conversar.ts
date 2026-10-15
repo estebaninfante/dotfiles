@@ -29,9 +29,11 @@
  *     entra el siguiente. Si el modelo piensa mucho más rápido de lo que se
  *     puede leer, se descartan las oraciones más viejas para no quedar atrasado.
  *
- * Nombre del agente: decide su voz, su color y a quién le hablás. Prioridad:
- *   PI_VOICE_AGENT > nombre del panel tmux (@agent_name) > carpeta del
- *   proyecto > "pi". Así el usuario ve QUIÉN habla, no el harness.
+ * Nombre del agente: decide su voz, su color y a quién le hablás. Se resuelve
+ * solo y se registra en el panel de tmux, así cada agente que abrís ya tiene
+ * nombre. Prioridad: PI_VOICE_AGENT > nombre del panel > carpeta del proyecto
+ * > nombre al azar (lista propia). Además publica @agent_status y @agent_goal
+ * para que `agente-pane list/info` muestre quién es, en qué anda y dónde está.
  *
  * Config (archivo ~/.config/pi/latido.json o variables de entorno; la variable
  * gana):
@@ -54,42 +56,89 @@ import { Type } from "typebox";
 const HOME = process.env.HOME ?? "";
 const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/agente`;
 
-/** Nombre del agente: identifica su voz, su color y su panel. Prioridad:
- *  PI_VOICE_AGENT > nombre del panel tmux (@agent_name) > carpeta del
- *  proyecto > "pi". Así el usuario sabe QUIÉN habla, no el harness. */
-function resolveAgentName(): string {
-  const explicit = process.env.PI_VOICE_AGENT?.trim();
-  if (explicit) return explicit;
-  const pane = process.env.TMUX_PANE?.trim();
-  if (pane) {
-    try {
-      const name = execFileSync(
-        "tmux",
-        ["display-message", "-p", "-t", pane, "#{@agent_name}"],
-        { encoding: "utf8", timeout: 1500, stdio: ["ignore", "pipe", "ignore"] },
-      ).trim();
-      if (name) return name;
-    } catch {
-      /* sin tmux o panel sin nombre: probamos la carpeta */
-    }
-  }
+const TMUX_PANE = process.env.TMUX_PANE?.trim() ?? "";
+
+/** Corre tmux sin romper si no hay servidor; devuelve stdout o "". */
+function tmux(args: string[]): string {
   try {
-    const cwd = process.cwd();
-    if (cwd && cwd !== HOME && !cwd.startsWith("/tmp") && !cwd.startsWith(`${HOME}/.`)) {
-      const base = basename(cwd);
-      if (base) return base;
-    }
+    return execFileSync("tmux", args, {
+      encoding: "utf8",
+      timeout: 1500,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
-    /* sin cwd: no importa */
+    return "";
   }
-  return "pi";
 }
+
+/** Deja el nombre apto para panel/voz: minúsculas, guiones, sin adornos. */
+function sanitizeName(raw: string): string {
+  return String(raw ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+}
+
+/** Nombres de reserva: si la carpeta no da un nombre único, cada agente recibe
+ *  uno al azar y estable mientras viva su panel. */
+const NAME_POOL = [
+  "andino", "quetzal", "condor", "pampa", "ombu", "yaguar", "colibri",
+  "zorro", "puma", "nandu", "tucan", "jaguar", "alpaca", "vicuna",
+  "carpincho", "hornero", "lechuza", "halcon", "tordo", "peludo",
+  "comadreja", "mulita", "flamenco", "cardenal",
+];
 
 let agentNameCache: string | undefined;
 
+/** Nombre automático del agente. Prioridad: PI_VOICE_AGENT > nombre del panel
+ *  > carpeta del proyecto > nombre al azar. Se registra en el panel de tmux
+ *  para que `agente-pane list/focus <nombre>` funcione solo, sin nombrar nada
+ *  a mano. Así cada agente que abrís ya tiene nombre y podés saltar a él. */
+function ensureAgentName(): string {
+  if (agentNameCache) return agentNameCache;
+
+  const explicit = process.env.PI_VOICE_AGENT?.trim();
+  if (explicit) {
+    if (TMUX_PANE) tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_name", explicit]);
+    return (agentNameCache = explicit);
+  }
+  if (TMUX_PANE) {
+    const existing = tmux(["display-message", "-p", "-t", TMUX_PANE, "#{@agent_name}"]);
+    if (existing) return (agentNameCache = existing);
+  }
+
+  const used = new Set(
+    tmux(["list-panes", "-a", "-F", "#{@agent_name}"])
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  const cwd = process.cwd();
+  const base =
+    cwd && cwd !== HOME && !cwd.startsWith("/tmp") && !cwd.startsWith(`${HOME}/.`)
+      ? sanitizeName(basename(cwd))
+      : "";
+  let candidate = base && !used.has(base) ? base : "";
+  if (!candidate) {
+    const free = NAME_POOL.filter((n) => !used.has(n));
+    candidate = free.length
+      ? free[Math.floor(Math.random() * free.length)]!
+      : NAME_POOL[Math.floor(Math.random() * NAME_POOL.length)]!;
+  }
+  let name = candidate;
+  let i = 2;
+  while (used.has(name)) name = `${candidate}-${i++}`;
+
+  if (TMUX_PANE) tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_name", name]);
+  return (agentNameCache = name);
+}
+
 /** Lazy: no toca tmux al cargar la extensión, recién cuando hace falta. */
 function agentName(): string {
-  return (agentNameCache ??= resolveAgentName());
+  return ensureAgentName();
 }
 
 const LATIDO_ENABLED = process.env.PI_LATIDO !== "0";
@@ -248,6 +297,13 @@ export default function (pi: ExtensionAPI) {
   /** Normaliza espacios sin romper palabras. */
   function cleanText(s: unknown): string {
     return String(s ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  /** Escribe una opción del panel de tmux (si el agente vive en tmux), así
+   *  `agente-pane` puede listar quién es, en qué anda y dónde está. */
+  function tmuxSet(key: string, value: string): void {
+    if (!TMUX_PANE) return;
+    tmux(["set-option", "-p", "-t", TMUX_PANE, key, value]);
   }
 
   /** Recorta por caracteres respetando el límite de palabra. */
@@ -569,18 +625,27 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // Recuerda el último pedido del usuario para mostrarlo mientras trabaja.
+  // Recuerda el último pedido del usuario para mostrarlo mientras trabaja y lo
+  // publica en el panel, para que `agente-pane list` diga en qué anda cada uno.
   pi.on("input", (event) => {
     const e = event as { source?: string; text?: string };
     if (e?.source === "extension") return;
     const t = cleanText(e?.text);
-    if (t) lastPrompt = t;
+    if (t) {
+      lastPrompt = t;
+      tmuxSet("@agent_goal", truncateWords(t, 80));
+    }
   });
 
   pi.on("session_start", async (_event, ctx) => {
     uiCtx = ctx;
+    agentName(); // registra el nombre en el panel (o lo lee)
     const restored = lastUserPrompt(ctx as never);
-    if (restored) lastPrompt = restored;
+    if (restored) {
+      lastPrompt = restored;
+      tmuxSet("@agent_goal", truncateWords(restored, 80));
+    }
+    tmuxSet("@agent_status", "idle");
   });
 
   pi.on("before_agent_start", (_event, ctx) => {
@@ -588,6 +653,8 @@ export default function (pi: ExtensionAPI) {
     if (working && workStart) sessionThinkingMs += Date.now() - workStart;
     working = true;
     workStart = Date.now();
+    tmuxSet("@agent_status", "working");
+    tmuxSet("@agent_since", String(workStart));
     outstanding = false;
     hasThinking = false;
     sentenceBuf = "";
@@ -629,6 +696,7 @@ export default function (pi: ExtensionAPI) {
     working = false;
     outstanding = false;
     uiCtx = ctx;
+    tmuxSet("@agent_status", "idle");
     settleLatido();
   });
 
