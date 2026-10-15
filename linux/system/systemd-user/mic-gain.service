@@ -1,0 +1,13 @@
+[Unit]
+Description=Ganancia de micrófono por dispositivo (PipeWire)
+After=pipewire.service wireplumber.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/mic-gain watch
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

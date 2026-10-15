@@ -41,6 +41,9 @@
         },
         {
           "id": "vm.sysmem"
+        },
+        {
+          "id": "eztvn.mic"
         }
       ],
       "right": [

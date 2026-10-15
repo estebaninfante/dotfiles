@@ -232,5 +232,19 @@ BarWidget {
     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
     onEntered: if (root.bar) root.bar.showTooltip(root, root.tooltip)
     onExited: if (root.bar) root.bar.hideTooltip(root)
+    onClicked: function(m) {
+      // Click = silenciar/activar; click del medio = recargar la lectura.
+      if (m.button === Qt.MiddleButton) monitor.running = false, monitor.running = true
+      else muteProc.running = true
+    }
+    onWheel: function(w) {
+      // Rueda = subir/bajar la ganancia del micrófono activo (±5%).
+      var dir = w.angleDelta.y > 0 ? "5%+" : "5%-"
+      gainProc.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", dir]
+      gainProc.running = true
+    }
   }
+
+  Process { id: muteProc; command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"] }
+  Process { id: gainProc; command: ["true"] }
 }
