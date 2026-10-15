@@ -140,6 +140,10 @@ while IFS=$'\t' read -r name pid panes curwin; do
     if [[ -n "$TARGET" && "$curwin" != "$TARGET" ]]; then
         continue
     fi
+    # Hold: alguien (ej. tmux-newpane.sh) necesita ancho completo fijo; no tocar.
+    if [[ "$(tmux show-option -wqv -t "$curwin" @readwidth_hold 2>/dev/null)" == "1" ]]; then
+        continue
+    fi
     kitty_env "$pid" || continue
 
     # Calibrar una sola vez, con el primer cliente accesible.
