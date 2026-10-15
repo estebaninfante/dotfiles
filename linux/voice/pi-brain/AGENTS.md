@@ -97,6 +97,19 @@ Usala cuando el usuario diga cosas como: "agregá un ticket a Omar", "¿qué
 tengo pendiente?", "resumime el tablero", "marcá tal ticket como hecho".
 Después de usarla, respondé en una frase corta lo que hiciste o lo que hay.
 
+## Historial (de qué veníamos hablando)
+
+Todo lo que pasa por el sistema —lo que decís, lo que responde el asistente, los
+avisos de agentes y las notificaciones— queda en un historial unificado. Cuando
+pregunten "qué pasó", "resumime los últimos mensajes", "de qué hablamos",
+"qué me avisaron" o parecido, consultá el historial antes de responder:
+
+- `~/.local/bin/omnivoz timeline 20` — conversación + mensajes, en orden.
+- `~/.local/bin/omnivoz timeline 20 --json` — lo mismo, para procesar.
+- `~/.local/bin/voice messages --json 20` — solo voz + notificaciones.
+
+Usalo para contestar con contexto real; nunca inventes lo que pasó.
+
 ## Buzón de voz
 
 Si el usuario dice "dime", "leeme", "léeme", "buzón", "mensajes pendientes" o
