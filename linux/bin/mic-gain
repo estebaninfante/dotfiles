@@ -51,7 +51,7 @@ USB2.0 Device             = 0.80
 HW_CARD_MATCH = "HD-Audio Generic"
 HW_CONTROLS = {
     "Internal Mic Boost": "0",   # 0 dB (antes estaba al máximo, +30 dB)
-    "Capture": "100%",
+    "Capture": "35%",            # antes 100% (+30 dB): saturaba la señal
 }
 
 
@@ -77,6 +77,8 @@ def load_rules():
                 val = str(float(val[:-1]) / 100.0)
             try:
                 gain = float(val)
+                if gain > 1.5:          # "80" sin % se interpreta como 80%
+                    gain = gain / 100.0
             except ValueError:
                 continue
             try:
@@ -168,8 +170,11 @@ def cmd_apply(dry):
 
 def cmd_set(pattern, value):
     if value.endswith("%"):
-        value = str(float(value[:-1]) / 100.0)
-    gain = float(value)
+        gain = float(value[:-1]) / 100.0
+    else:
+        gain = float(value)
+        if gain > 1.5:
+            gain = gain / 100.0
     lines = []
     if os.path.exists(CONFIG):
         with open(CONFIG, encoding="utf-8") as f:

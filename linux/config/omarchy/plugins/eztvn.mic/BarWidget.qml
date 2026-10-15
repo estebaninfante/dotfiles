@@ -5,10 +5,14 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Bar widget: ganancia y nivel del micrófono en vivo.
-// Un ícono de micrófono, una escalera de LEDs que sigue el nivel de entrada y
-// el porcentaje de ganancia de la fuente activa. Lee una línea JSON cada ~64 ms
-// del script `mic-monitor.py` (PipeWire: ganancia + nivel RMS del source default).
+// Bar widget: medidor de nivel y ganancia del micrófono en vivo.
+// Un ícono de micrófono, una escalera de LEDs (VU en dB) y el % de ganancia.
+// Lee una línea JSON cada ~64 ms de `mic-monitor.py` (PipeWire).
+//
+// Interacción (vía WidgetButton, para que la barra reparta la rueda):
+//   rueda            → sube/baja la ganancia del micrófono activo (±5%)
+//   click            → silenciar / activar
+//   click del medio  → recargar la lectura
 BarWidget {
   id: root
   moduleName: "eztvn.mic"
@@ -33,7 +37,8 @@ BarWidget {
   readonly property string tooltip:
     "Micrófono: " + (root.device || "—") + "\n" +
     "Ganancia: " + Math.round(root.gain) + "%" + (root.muted ? " (silenciado)" : "") + "\n" +
-    "Nivel: " + Math.round(root.db) + " dB  ·  pico " + Math.round(root.peakDb) + " dB"
+    "Nivel: " + Math.round(root.db) + " dB  ·  pico " + Math.round(root.peakDb) + " dB\n" +
+    "Rueda para subir/bajar · click para silenciar"
 
   function apply(line) {
     let d
@@ -41,7 +46,6 @@ BarWidget {
     if (!d) return
     root.level = Number(d.level) || 0
     var p = Number(d.peak) || 0
-    // Sostén del pico con caída suave: los golpes breves se alcanzan a ver.
     root.peakHold = Math.max(p, root.peakHold - 4)
     root.peak = root.peakHold
     root.db = Number(d.db) || -60
@@ -51,27 +55,13 @@ BarWidget {
     root.device = String(d.device || "")
   }
 
-  // Anchos fijos (texto más largo posible) para que la barra no se mueva.
   readonly property real labelW: measureGlyph.implicitWidth
   readonly property real valueW: measureValue.implicitWidth
   readonly property real hPad: Style.spaceReal(10)
   readonly property real fixedWidth: hPad * 2 + labelW + Style.space(6) + ledW + Style.space(7) + valueW
 
-  Text {
-    id: measureGlyph
-    visible: false
-    text: "󰍬"
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-  }
-
-  Text {
-    id: measureValue
-    visible: false
-    text: "100%"
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-  }
+  Text { id: measureGlyph; visible: false; text: "󰍬"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+  Text { id: measureValue; visible: false; text: "100%"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
 
   visible: true
   implicitWidth: root.vertical ? Style.bar.statusSlot : root.fixedWidth
@@ -86,82 +76,111 @@ BarWidget {
     id: monitor
     running: true
     command: ["python3", root.scriptPath]
-    stdout: SplitParser {
-      onRead: function(line) { root.apply(line) }
-    }
+    stdout: SplitParser { onRead: function(line) { root.apply(line) } }
     onExited: restartTimer.restart()
   }
 
-  // Si el monitor se cae (o parec se traba), lo relanzamos.
   Timer {
     id: restartTimer
     interval: 800
     onTriggered: monitor.running = true
   }
 
-  // Una fila: [󰍬] [LED ladder] [ganancia].
-  Row {
-    id: row
-    visible: !root.vertical
-    anchors.centerIn: parent
-    spacing: 0
+  Process { id: muteProc; command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"] }
+  Process { id: gainProc; command: ["true"] }
 
-    Text {
-      width: root.labelW
-      height: row.height
-      verticalAlignment: Text.AlignVCenter
-      text: root.muted ? "󰍭" : "󰍬"
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      color: root.muted ? "#ff5a5a" : Util.alpha(Color.foreground, 0.8)
+  WidgetButton {
+    id: button
+    anchors.fill: parent
+    bar: root.bar
+    text: ""
+    labelVisible: false
+    hasVisualContent: true
+    keepSpace: true
+    fixedWidth: root.fixedWidth
+    fixedHeight: root.barSize
+    tooltipText: root.tooltip
+
+    onPressed: function(b) {
+      if (b === Qt.MiddleButton) {
+        monitor.running = false
+        monitor.running = true
+      } else {
+        muteProc.running = true
+      }
     }
 
-    Item { width: Style.space(6); height: 1 }
-
-    LedLadder {
-      width: root.ledW
-      height: root.segH
-      pct: root.muted ? 0 : root.peak
-      anchors.verticalCenter: parent.verticalCenter
+    onWheelMoved: function(delta) {
+      if (delta === 0) return
+      // Ajuste optimista para que se sienta inmediato; el monitor lo confirma.
+      root.gain = Math.max(0, Math.min(150, root.gain + (delta > 0 ? 5 : -5)))
+      gainProc.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", delta > 0 ? "5%+" : "5%-"]
+      gainProc.running = false
+      gainProc.running = true
     }
 
-    Item { width: Style.space(7); height: 1 }
+    // Una fila: [󰍬] [LED ladder] [ganancia].
+    Row {
+      id: row
+      visible: !root.vertical
+      anchors.centerIn: parent
+      spacing: 0
 
-    Text {
-      width: root.valueW
-      height: row.height
-      verticalAlignment: Text.AlignVCenter
-      horizontalAlignment: Text.AlignRight
-      text: Math.round(root.gain) + "%"
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      color: root.muted ? "#ff5a5a"
-           : root.gain <= 0 ? "#ff5a5a"
-           : Util.alpha(Color.foreground, 0.82)
+      Text {
+        width: root.labelW
+        height: row.height
+        verticalAlignment: Text.AlignVCenter
+        text: root.muted ? "󰍭" : "󰍬"
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        color: root.muted ? "#ff5a5a" : Util.alpha(Color.foreground, 0.8)
+      }
+
+      Item { width: Style.space(6); height: 1 }
+
+      LedLadder {
+        width: root.ledW
+        height: root.segH
+        pct: root.muted ? 0 : root.peak
+        anchors.verticalCenter: parent.verticalCenter
+      }
+
+      Item { width: Style.space(7); height: 1 }
+
+      Text {
+        width: root.valueW
+        height: row.height
+        verticalAlignment: Text.AlignVCenter
+        horizontalAlignment: Text.AlignRight
+        text: Math.round(root.gain) + "%"
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        color: root.muted ? "#ff5a5a" : (root.gain <= 0 ? "#ff5a5a" : Util.alpha(Color.foreground, 0.82))
+      }
     }
-  }
 
-  // Vista vertical (barra lateral): ícono + ganancia.
-  Column {
-    id: vcol
-    visible: root.vertical
-    anchors.centerIn: parent
-    spacing: 2
+    // Vista vertical: ícono + ganancia.
+    Column {
+      id: vcol
+      visible: root.vertical
+      anchors.centerIn: parent
+      spacing: 2
 
-    Text {
-      anchors.horizontalCenter: parent.horizontalCenter
-      text: root.muted ? "󰍭" : "󰍬"
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      color: root.muted ? "#ff5a5a" : Color.foreground
-    }
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: root.muted ? "󰍭" : "󰍬"
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        color: root.muted ? "#ff5a5a" : Color.foreground
+      }
 
-    Text {
-      anchors.horizontalCenter: parent.horizontalCenter
-      text: Math.round(root.gain) + "%"
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      color: root.muted ? "#ff5a5a" : Util.alpha(Color.foreground, 0.82)
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: Math.round(root.gain) + "%"
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        color: root.muted ? "#ff5a5a" : Util.alpha(Color.foreground, 0.82)
+      }
     }
   }
 
@@ -232,27 +251,4 @@ BarWidget {
       }
     }
   }
-
-  MouseArea {
-    id: mouse
-    anchors.fill: parent
-    hoverEnabled: true
-    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-    onEntered: if (root.bar) root.bar.showTooltip(root, root.tooltip)
-    onExited: if (root.bar) root.bar.hideTooltip(root)
-    onClicked: function(m) {
-      // Click = silenciar/activar; click del medio = recargar la lectura.
-      if (m.button === Qt.MiddleButton) monitor.running = false, monitor.running = true
-      else muteProc.running = true
-    }
-    onWheel: function(w) {
-      // Rueda = subir/bajar la ganancia del micrófono activo (±5%).
-      var dir = w.angleDelta.y > 0 ? "5%+" : "5%-"
-      gainProc.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", dir]
-      gainProc.running = true
-    }
-  }
-
-  Process { id: muteProc; command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"] }
-  Process { id: gainProc; command: ["true"] }
 }
