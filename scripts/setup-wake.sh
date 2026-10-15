@@ -48,6 +48,9 @@ mkdir -p "$SYSTEMD_DIR"
 install -m 0644 "$REPO/linux/system/systemd-user/talk-command.service" \
     "$SYSTEMD_DIR/talk-command.service"
 systemctl --user daemon-reload
+# El servicio vive enmascarado por defecto (ver setup-omarchy.sh); correr
+# este script es la forma explícita de volver a habilitarlo.
+systemctl --user unmask talk-command.service 2>/dev/null || true
 systemctl --user enable --now talk-command.service
 
 echo

@@ -410,13 +410,12 @@ for svc in lan-mouse hyprpolkitagent voice-daemon; do
     systemctl --user enable "$svc" 2>/dev/null && ok "$svc habilitado" || warn "$svc no pudo habilitarse"
 done
 
-# talk-command (wake-word "dime"): solo si ya se corrió scripts/setup-wake.sh
-if [[ -x "$HOME/developing/talk-command/.venv/bin/talk-command" ]]; then
-    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/talk-command.service" \
-        "$SYSTEMD_DIR/talk-command.service" 2>/dev/null || true
-    systemctl --user enable talk-command 2>/dev/null \
-        && ok "talk-command habilitado" || warn "talk-command no pudo habilitarse"
-fi
+# talk-command (wake-word "dime"): DESHABILITADO a propósito.
+# Se enmascara para que NADA lo reactive solo (ni enable, ni preset-all, ni
+# este script). Para volver atrás a mano: scripts/setup-wake.sh
+systemctl --user mask talk-command.service 2>/dev/null \
+    && ok "talk-command enmascarado (nunca se habilita solo)" \
+    || warn "talk-command no pudo enmascararse"
 
 # ══════════════════════════════════════════════════════════════
 # FASE 9: Servicios de sistema
