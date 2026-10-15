@@ -239,6 +239,8 @@ def builtin(cmd):
         cancel_voice()
     elif parts[0] == "voice":
         toggle_voice()
+    elif parts[0] == "enter":
+        _spawn("ydotool", "key", "28:1", "28:0")
     else:
         log(f"acción interna desconocida: {cmd}")
 

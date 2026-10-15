@@ -37,3 +37,8 @@ tap = "@arrow prev"
 # Flecha derecha (diapositiva siguiente).
 [buttons.f16]
 tap = "@arrow next"
+
+# Cuarto boton: el que manda Enter. Por defecto reenvia Enter (enviar mensaje);
+# cambialo por lo que quieras.
+[buttons.f17]
+tap = "@enter"
