@@ -308,13 +308,14 @@ def start_voice():
 
 
 def cancel_voice():
-    """Apaga Omar del todo: cierra la píldora, deja de escuchar y corta el PTT.
+    """Apaga Omar: cierra la píldora, corta el PTT y le devuelve el micrófono al
+    listener de fondo (modo comando), para que sigan la palabra clave y la campana.
 
-    Cierra la UI PRIMERO (para que desaparezca al instante), después apaga el
-    listener de fondo (modo dormido) y recién al final corta cualquier proceso
-    de push-to-talk suelto. Omnivoz atiende SIGINT pero puede tardar unos
-    segundos (cargando modelos), asi que esperamos a que muera de verdad antes
-    de escalar a SIGTERM/SIGKILL.
+    Cierra la UI PRIMERO (para que desaparezca al instante), después corta
+    cualquier proceso de push-to-talk suelto y recién al final reactiva el
+    listener de fondo. Omnivoz atiende SIGINT pero puede tardar unos segundos
+    (cargando modelos), asi que esperamos a que muera de verdad antes de escalar
+    a SIGTERM/SIGKILL.
     """
     # 1) Cerrar la pildora YA: la UI no espera al proceso.
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
@@ -323,35 +324,41 @@ def cancel_voice():
     except FileNotFoundError:
         pass
 
-    # 2) Apagar el listener de fondo: nadie mas usa el microfono.
-    _run_cmd(f"{OMAR_MODE} dormido")
-
-    # 3) Recien ahora, cortar cualquier proceso de voz que haya quedado suelto.
+    # 2) Cortar cualquier proceso de voz que haya quedado suelto.
     pids = _ptt_pids()
-    if not pids:
-        log("cancel: escucha apagada (sin PTT suelto)")
-        return
-    log(f"cancel: corto {pids}")
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGINT)
-        except OSError:
-            pass
-    if not _wait_dead(pids, 3.0):
+    if pids:
+        log(f"cancel: corto {pids}")
         for pid in pids:
-            if _alive(pid):
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except OSError:
-                    pass
-        if not _wait_dead(pids, 1.0):
+            try:
+                os.kill(pid, signal.SIGINT)
+            except OSError:
+                pass
+        if not _wait_dead(pids, 3.0):
             for pid in pids:
                 if _alive(pid):
                     try:
-                        os.kill(pid, signal.SIGKILL)
+                        os.kill(pid, signal.SIGTERM)
                     except OSError:
                         pass
-            _wait_dead(pids, 0.5)
+            if not _wait_dead(pids, 1.0):
+                for pid in pids:
+                    if _alive(pid):
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                _wait_dead(pids, 0.5)
+    else:
+        log("cancel: sin PTT suelto")
+
+    # 3) Devolverle el micrófono al listener de fondo: modo comando. Sin esto,
+    #    Omar quedaba en "dormido" y no volvían la palabra clave ni la campana.
+    try:
+        subprocess.run([OMAR_MODE, "comando"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=8, env=ENV)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def toggle_voice():
