@@ -166,34 +166,57 @@ def _alive(pid):
         return False
 
 
+def _wait_dead(pids, timeout):
+    """Espera hasta `timeout` segundos a que mueran todos los pids."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not any(_alive(pid) for pid in pids):
+            return True
+        time.sleep(0.1)
+    return not any(_alive(pid) for pid in pids)
+
+
 def ptt_active():
     return bool(_ptt_pids())
 
 
 def cancel_voice():
-    """Corta la sesión de voz activa y cierra la píldora."""
+    """Corta la sesión de voz activa y cierra la píldora.
+
+    Omnivoz atiende SIGINT pero puede tardar unos segundos (cargando modelos),
+    así que esperamos a que muera de verdad antes de escalar a SIGTERM/SIGKILL.
+    """
     pids = _ptt_pids()
-    if pids:
+    if not pids:
+        log("cancel: no había sesión de voz activa")
+    else:
         log(f"cancel: corto {pids}")
         for pid in pids:
             try:
                 os.kill(pid, signal.SIGINT)
             except OSError:
                 pass
-        time.sleep(0.4)
-        for pid in pids:
-            if _alive(pid):
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except OSError:
-                    pass
-    else:
-        log("cancel: no había sesión de voz activa")
+        if not _wait_dead(pids, 3.0):
+            for pid in pids:
+                if _alive(pid):
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+            if not _wait_dead(pids, 1.0):
+                for pid in pids:
+                    if _alive(pid):
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                _wait_dead(pids, 0.5)
+
+    # Limpieza común: pidfile y píldora.
     try:
         os.remove(PTT_PIDFILE)
     except FileNotFoundError:
         pass
-    # Cerrar la píldora (mejor esfuerzo).
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
 
 
@@ -406,9 +429,12 @@ def run_check():
 
 
 def main(argv):
-    if len(argv) >= 2 and argv[1] in ("cancel", "arrow"):
-        if argv[1] == "cancel":
-            cancel_voice()
+    if len(argv) >= 2 and argv[1] in ("cancel", "arrow", "toggle", "voice"):
+        if argv[1] in ("cancel", "toggle", "voice"):
+            if argv[1] == "cancel":
+                cancel_voice()
+            else:
+                toggle_voice()
         elif len(argv) >= 3 and argv[2] in ("prev", "next"):
             arrow(argv[2])
         return 0

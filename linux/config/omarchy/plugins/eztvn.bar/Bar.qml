@@ -1350,9 +1350,10 @@ Item {
 
     implicitWidth: root.vertical ? root.barSize : 0
     implicitHeight: root.vertical ? 0 : root.barWindowSize
-    // Horizontal bars paint transparent and let each island carry the
-    // background; vertical bars keep the single slab.
-    color: root.vertical ? (root.transparent ? "transparent" : root.background) : "transparent"
+    // Una sola pieza: tanto la barra horizontal como la vertical pintan el
+    // slab completo. Las islas de abajo quedan solo como contenedores de
+    // layout (color transparente), así se ve una única barra unificada.
+    color: root.transparent ? "transparent" : root.background
     surfaceFormat.opaque: false
     WlrLayershell.namespace: "omarchy-bar"
     WlrLayershell.layer: WlrLayer.Top
@@ -1447,10 +1448,10 @@ Item {
         // transparency while widget clicks stay on top.
         CenterGestureArea { anchors.fill: parent }
 
-        // Left island
+        // Left island (solo layout; el fondo lo pinta el slab de la barra)
         Rectangle {
           id: leftIsland
-          color: root.background
+          color: "transparent"
           radius: root.islandRadius
           border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
@@ -1470,10 +1471,10 @@ Item {
           }
         }
 
-        // Right island
+        // Right island (solo layout; el fondo lo pinta el slab de la barra)
         Rectangle {
           id: rightIsland
-          color: root.background
+          color: "transparent"
           radius: root.islandRadius
           border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
@@ -1493,10 +1494,10 @@ Item {
           }
         }
 
-        // Center island
+        // Center island (solo layout; el fondo lo pinta el slab de la barra)
         Rectangle {
           id: centerIsland
-          color: root.background
+          color: "transparent"
           radius: root.islandRadius
           border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)

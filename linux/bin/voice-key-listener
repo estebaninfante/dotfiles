@@ -2,16 +2,16 @@
 # voice-key-listener — dispara OmniVoz cuando se presiona la tecla física de
 # Windows, que keyd remapea a F13.
 #
-# Acción por defecto: push-to-talk DIRECTO (`omnivoz-ptt`): tocás y decís la
-# instrucción sin palabra clave. Se engancha a la salida de `keyd monitor` (no
-# depende de un bind de Hyprland, que resultó caprichoso). Corre como servicio de
-# usuario. Antirrebote de 800 ms por si el evento aparece duplicado.
+# Acción por defecto: toggle de Omar (`present-remote toggle`): un toque prende,
+# otro apaga. Se engancha a la salida de `keyd monitor` (no depende de un bind de
+# Hyprland, que resultó caprichoso). Corre como servicio de usuario. Antirrebote
+# de 800 ms por si el evento aparece duplicado.
 #
-# Variables: VOICE_KEY_BIN (acción; default omnivoz-ptt), VOICE_KEY_DISABLE=1.
+# Variables: VOICE_KEY_BIN (acción; default present-remote toggle), VOICE_KEY_DISABLE=1.
 set -u
 
 [ "${VOICE_KEY_DISABLE:-0}" = "1" ] && exit 0
-TOGGLE="${VOICE_KEY_BIN:-$HOME/.local/bin/omar-open}"
+TOGGLE="${VOICE_KEY_BIN:-$HOME/.local/bin/present-remote toggle}"
 last=0
 
 keyd monitor 2>/dev/null | while IFS= read -r line; do
