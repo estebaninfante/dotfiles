@@ -30,7 +30,7 @@ fi
 
 # Modo evaluación: decidir y responder sin ejecutar nada (lo usa el scorer).
 if [ "${VOICE_PI_DRY:-0}" = "1" ]; then
-  prompt="MODO EVALUACIÓN (no cambies nada): podés LEER estado (archivos, hyprctl, voice, omarchy), pero no ejecutes acciones que modifiquen el sistema ni crees/modifiques datos. Decidí qué harías y respondé en 1 o 2 frases lo que dirías, como si lo hubieras hecho. Sin markdown.
+  prompt="MODO EVALUACIÓN. Podés LEER estado (archivos, hyprctl, voice, omarchy) pero NO ejecutes acciones que modifiquen el sistema ni crees/modifiques datos. Decidí qué harías y respondé en 1 o 2 frases, en primera persona y en pasado, COMO SI YA LO HUBIERAS HECHO. No aclares que estás evaluando ni que no ejecutaste; hablá natural. Sin markdown.
 
 $prompt"
 fi
