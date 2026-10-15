@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+# present-id — identifica los botones del control remoto de presentaciones
+# "Wireless Present" (USB 1ea7:1068).
+#
+# El control expone una interfaz teclado (hidraw2 / event23) que manda usos HID
+# crudos. Este script lee esa interfaz (requiere root, hidraw es root-only) y
+# pregunta botón por botón para mapear símbolo -> código.
+#
+# Uso:
+#   sudo present-id              # botones 1..4 guiados
+#   sudo present-id --raw        # solo escucha y muestra lo que llegue
+#
+# Ver CONTROL-REMOTO.md (voz-agentes) para la ingeniería inversa completa.
+import os, select, sys, time
+
+HID_TECLADO = "/dev/hidraw2"   # interfaz teclado del control
+HID_COMPUESTO = "/dev/hidraw3" # mouse + consumer + system del control
+
+NOMBRES = {
+    0x28: "ENTER", 0x29: "ESCAPE", 0x2A: "BACKSPACE", 0x2B: "TAB",
+    0x2C: "ESPACIO", 0x4A: "INICIO (Home)", 0x4B: "PAGE UP",
+    0x4C: "SUPRIMIR", 0x4D: "FIN (End)", 0x4E: "PAGE DOWN",
+    0x4F: "FLECHA DERECHA", 0x50: "FLECHA IZQUIERDA",
+    0x51: "FLECHA ABAJO", 0x52: "FLECHA ARRIBA",
+}
+
+def abrir(p):
+    try:
+        return os.open(p, os.O_RDONLY | os.O_NONBLOCK)
+    except Exception as e:
+        print(f"  (no pude abrir {p}: {e})")
+        return None
+
+def esperar_boton(timeout=60):
+    """Espera una pulsación nueva en la interfaz teclado y devuelve el código."""
+    fd = abrir(HID_TECLADO)
+    if fd is None:
+        return None
+    prev = set()
+    fin = time.time() + timeout
+    while time.time() < fin:
+        r, _, _ = select.select([fd], [], [], 0.5)
+        if r:
+            d = os.read(fd, 64)
+            codes = set(d[2:8]) - {0}
+            nuevos = codes - prev
+            prev = codes
+            if nuevos:
+                os.close(fd)
+                return sorted(nuevos)
+    os.close(fd)
+    return None
+
+def modo_raw():
+    fd = abrir(HID_TECLADO)
+    fd3 = abrir(HID_COMPUESTO)
+    if fd is None:
+        sys.exit(1)
+    print("Escuchando el control (Ctrl+C para salir)...")
+    prev = set()
+    while True:
+        r, _, _ = select.select([x for x in (fd, fd3) if x], [], [], 1)
+        for x in r:
+            d = os.read(x, 64)
+            if x == fd:
+                codes = set(d[2:8]) - {0}
+                for c in sorted(codes - prev):
+                    print(f"  teclado    HID 0x{c:02x}  {NOMBRES.get(c, '?')}")
+                prev = codes
+            elif d and d[1:].strip(b"\x00"):
+                print(f"  compuesto  {d.hex(' ')}")
+
+def main():
+    if "--raw" in sys.argv:
+        try:
+            modo_raw()
+        except KeyboardInterrupt:
+            print("\nCortado.")
+        return
+
+    print("=" * 56)
+    print("  IDENTIFICADOR DE BOTONES — Wireless Present")
+    print("=" * 56)
+    print("Voy a pedirte cada botón de a uno. Apretalo una vez,")
+    print("soltalo, y Enter para seguir. (Ctrl+C para salir)\n")
+    resultados = []
+    for etq in ["1er botón", "2do botón", "3er botón", "4to botón"]:
+        input(f"Presioná el {etq} y después Enter... ")
+        print(f"  Escuchando el {etq} (60 s)...")
+        codes = esperar_boton(60)
+        if not codes:
+            print("  (no llegó nada)\n")
+            resultados.append((etq, None))
+            continue
+        for c in codes:
+            print(f"  ✔ {etq}: HID 0x{c:02x} = {NOMBRES.get(c, 'desconocido')}")
+            resultados.append((etq, c))
+        print()
+    print("=" * 56)
+    print("RESUMEN:")
+    for etq, c in resultados:
+        print(f"  {etq}: {'sin señal' if c is None else f'HID 0x{c:02x} ({NOMBRES.get(c, chr(63))})'}")
+    print("=" * 56)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCortado.")
