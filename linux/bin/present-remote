@@ -136,12 +136,13 @@ def active_submap():
 
 def arrow(action):
     """action: 'prev' (izquierda) | 'next' (derecha)."""
-    # En el overview de hyprexpo, las flechas navegan la grilla (el submap las
-    # bindea a kb_focus). Mandamos Left/Right reales, que el submap consume.
+    # En el overview de hyprexpo, las flechas alternan de workspace. Ojo: no
+    # sirve mandar Left/Right sinteticos (el catchall del submap cierra el
+    # overview); hay que despertar el workspace directo.
     if active_submap() == "hyprexpo":
-        log(f"flecha {action}: overview hyprexpo -> navegar")
-        code = "105" if action == "prev" else "106"  # KEY_LEFT / KEY_RIGHT
-        _spawn("ydotool", "key", f"{code}:1", f"{code}:0")
+        delta = "-1" if action == "prev" else "+1"
+        log(f"flecha {action}: overview hyprexpo -> workspace {delta}")
+        _spawn("hyprctl", "dispatch", f'hl.dsp.focus({{workspace="{delta}"}})')
         return
     cls = active_class()
     if cls in TERMINALES:
