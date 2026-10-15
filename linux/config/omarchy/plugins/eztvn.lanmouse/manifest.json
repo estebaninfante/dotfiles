@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.lanmouse",
+  "name": "LAN Mouse",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Cambia en caliente la posición relativa del otro equipo en lan-mouse arrastrando su pantalla en un lienzo de disposición, alterna su activación y sincroniza los monitores locales.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "LAN Mouse",
+    "description": "Disposición visual (arrastrar y soltar) del peer lan-mouse: posición relativa, activación del cliente y sincronización de monitores locales.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshSeconds": 4
+    },
+    "schema": [
+      {
+        "key": "refreshSeconds",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 4
+      }
+    ]
+  }
+}

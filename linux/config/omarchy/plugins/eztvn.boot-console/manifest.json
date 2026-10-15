@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.boot-console",
+  "name": "Boot console",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Overlay fullscreen de handoff a Windows: transicion de consola antes del reboot",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "BootConsole.qml"
+  }
+}
