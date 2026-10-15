@@ -240,6 +240,7 @@ export default function (pi: ExtensionAPI) {
   let lastRelease = 0;
   let lastRender = 0;
   let lastRenderedKey = "";
+  let lastBeatLog = 0;
   let lastPrompt = ""; // último pedido del usuario, para recordar el objetivo
   let sessionThinkingMs = 0; // acumulado de la sesión
   let lastTurnMs = 0; // duración del último turno
@@ -311,7 +312,7 @@ export default function (pi: ExtensionAPI) {
     if (!s) return true;
     const codeChars = (s.match(/[{}<>[\]()=;:+*/\\|_$#@~^]/g) ?? []).length;
     if (codeChars / s.length > 0.16) return true;
-    return /(=>|::|\(\)|\{\}|\b(const|import|export|function|return|class|def|npm|pnpm|sudo|curl)\b|<\/?[a-z]+>|\.(ts|tsx|js|jsx|py|json|sh|rs|go)\b|\/[\w.-]+\/)/i.test(
+    return /(=>|::|\(\)|\{\}|\b(const|import|export|function|return|class|def|npm|pnpm|sudo|curl)\b|<\/?[a-z]+>)/i.test(
       s,
     );
   }
@@ -463,6 +464,14 @@ export default function (pi: ExtensionAPI) {
       }
     }
     updateLatido();
+    // Registro de depuración (PI_LATIDO_DEBUG=1): sirve para verificar el
+    // latido headless, donde no hay UI que mirar.
+    if (now - lastBeatLog >= 2000) {
+      lastBeatLog = now;
+      beatLog(
+        `working=${working} cola=${paragraphs.length} actual=${current ? current.join(" ") : "-"}`,
+      );
+    }
   }
 
   function clearLatido(): void {

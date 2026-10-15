@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.mic",
+  "name": "Micrófono",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Ganancia y nivel del micrófono en vivo en la barra (PipeWire).",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Micrófono",
+    "description": "Escalera de LEDs con el nivel de entrada y el % de ganancia del micrófono activo",
+    "category": "Audio",
+    "aliases": ["mic", "microfono", "micrófono", "ganancia", "gain", "nivel"],
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {},
+    "schema": []
+  }
+}
