@@ -1,7 +1,14 @@
 local theme = require("base.theme")
 
-local user = os.getenv("USER") or "eztvn"
-hl.plugin.load("/var/cache/hyprpm/" .. user .. "/hyprexpo/hyprexpo.so")
+local HOME = os.getenv("HOME")
+
+-- IMPORTANT: never call hl.plugin.load(...) from Lua config code.
+-- Doing so re-enters Hyprland's plugin-load pass (handlePluginLoads -> reload
+-- -> parse config -> hl.plugin.load again -> ...), which recurses until the
+-- stack overflows and the session dies with a SIGSEGV before it is up.
+-- Load it out-of-process instead; .local/bin/hyprexpo-load.sh is idempotent
+-- and no-ops when hyprexpo is already loaded.
+hl.exec_cmd(HOME .. "/.local/bin/hyprexpo-load.sh")
 
 local EXPO_3D = true
 
