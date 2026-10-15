@@ -14,6 +14,7 @@
 #   status.sh enable | disable    -> fija el estado
 #   status.sh toggle              -> alterna el estado
 #   status.sh volume-set <v>      -> volumen relativo (0.0-1.0 o NN%)
+#   status.sh speed [factor]      -> velocidad de lectura TTS (1.0 = normal)
 #   status.sh messages [N]        -> JSON array del registro de mensajes
 #   status.sh pending-count       -> numero de mensajes pendientes (buzon)
 #   status.sh inbox [N]           -> JSON array de mensajes pendientes
@@ -51,13 +52,23 @@ volume_fraction() {
   fi
 }
 
+# `voice speed` imprime "velocidad TTS: 1.15x". Normaliza al factor.
+speed_factor() {
+  local raw
+  raw="$("$VOICE_BIN" speed 2>/dev/null | sed 's/.*: *//')" || raw=""
+  raw="${raw:-1.0}"
+  raw="${raw%x}"
+  awk "BEGIN{printf \"%.2f\", $raw}"
+}
+
 print_status() {
-  local s v p
+  local s v p sp
   s="$(state)"
   v="$(volume_fraction)"
+  sp="$(speed_factor)"
   p="$("$VOICE_BIN" inbox count 2>/dev/null | tr -dc '0-9')"; p="${p:-0}"
-  printf '{"state":"%s","enabled":%s,"volume":%s,"pending":%s,"source":"voice"}\n' \
-    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v" "$p"
+  printf '{"state":"%s","enabled":%s,"volume":%s,"speed":%s,"pending":%s,"source":"voice"}\n' \
+    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v" "$sp" "$p"
 }
 
 case "${1:-status}" in
@@ -70,6 +81,11 @@ case "${1:-status}" in
     v="$2"
     if [[ "$v" != *% ]] && awk "BEGIN{exit !($v>1)}"; then v="${v}%"; fi
     "$VOICE_BIN" volume "$v" >/dev/null 2>&1 ;;
+  speed)
+    "$VOICE_BIN" speed >/dev/null 2>&1 ;;
+  speed-set)
+    [ "$#" -ge 2 ] || { echo "uso: status.sh speed-set <factor>" >&2; exit 2; }
+    "$VOICE_BIN" speed "$2" >/dev/null 2>&1 ;;
   history)
     "$VOICE_BIN" history --json "${2:-200}" ;;
   messages)
@@ -90,5 +106,5 @@ case "${1:-status}" in
   play)
     [ "$#" -ge 2 ] || { echo "uso: status.sh play <ruta.wav>" >&2; exit 2; }
     "$VOICE_BIN" play "$2" >/dev/null 2>&1 ;;
-  *) echo "uso: status.sh [status|enable|disable|toggle|volume-set|messages|inbox|pending-count|play-inbox|clear-inbox|repeat|repeat-entry|play]" >&2; exit 2 ;;
+  *) echo "uso: status.sh [status|enable|disable|toggle|volume-set|speed|speed-set|messages|inbox|pending-count|play-inbox|clear-inbox|repeat|repeat-entry|play]" >&2; exit 2 ;;
 esac

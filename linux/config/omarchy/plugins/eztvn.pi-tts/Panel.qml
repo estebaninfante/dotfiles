@@ -34,6 +34,8 @@ Panel {
   property bool busy: false
   // Volumen relativo (0-1) de la voz TTS sobre el volumen general de salida.
   property real volume: 1.0
+  // Velocidad de lectura del TTS (factor de tempo; 1.0 = normal).
+  property real speed: 1.0
   // Registro de mensajes del sistema (voz + notificaciones), mas reciente
   // primero (lo llena status.sh messages).
   property var history: []
@@ -83,6 +85,15 @@ Panel {
     if (!volumeProc.running) volumeProc.running = true
   }
 
+  // El slider informa el valor crudo; persistirlo escribe `voice speed`.
+  function setSpeed(value) {
+    var next = Math.max(0.5, Math.min(2.0, value))
+    if (Math.abs(next - root.speed) < 0.001) return
+    root.speed = next
+    speedProc.cmd = [root.scriptPath, "speed-set", next.toFixed(2)]
+    if (!speedProc.running) speedProc.running = true
+  }
+
   function playEntry(index) {
     if (index < 0 || index >= root.historyCount) return
     var entry = root.history[index]
@@ -106,6 +117,7 @@ Panel {
     if (parsed.state) root.ttsEnabled = String(parsed.state) === "enabled"
     if (parsed.source) root.source = String(parsed.source)
     if (typeof parsed.volume === "number") root.volume = parsed.volume
+    if (typeof parsed.speed === "number") root.speed = parsed.speed
     if (typeof parsed.pending === "number") root.pending = parsed.pending
   }
 
@@ -179,6 +191,17 @@ Panel {
 
   Process {
     id: volumeProc
+    property var cmd: []
+    command: cmd
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.refresh()
+    }
+    onExited: root.refresh()
+  }
+
+  Process {
+    id: speedProc
     property var cmd: []
     command: cmd
     stdout: StdioCollector {
@@ -390,6 +413,60 @@ Panel {
               width: parent.width
               textFormat: Text.PlainText
               text: "Relativo al volumen general. El historial de abajo se reproduce a este nivel."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(6)
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(speedHeader.implicitHeight, speedFactor.implicitHeight)
+
+              PanelSectionHeader {
+                id: speedHeader
+                text: "VELOCIDAD DE LECTURA"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                id: speedFactor
+                textFormat: Text.PlainText
+                text: (speedSlider.dragging ? speedSlider.liveValue : root.speed).toFixed(2) + "×"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            PanelSlider {
+              id: speedSlider
+              bar: root.bar
+              width: parent.width
+              minimum: 0.5
+              maximum: 2.0
+              step: 0.05
+              value: root.speed
+              onMoved: function(v) { root.speed = v }
+              onReleased: function(v) { root.setSpeed(v) }
+            }
+
+            Text {
+              width: parent.width
+              textFormat: Text.PlainText
+              text: "Velocidad con la que hablan y se leen los mensajes. 1.00× = normal; más alto, más rápido."
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
