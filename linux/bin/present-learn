@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""present-learn — captura guiada de los botones del control.
+
+Pitido → hacés la acción → registra. Repite paso por paso y al final muestra
+todo agrupado, para depurar con detalle qué manda cada botón.
+
+Uso:
+    present-learn            # solo la capa de keyd (sin root)
+    sudo -E present-learn    # ademas, los reportes USB crudos del control
+
+La salida queda tambien en ~/present-learn.log (decime y la leo).
+"""
+import os
+import select
+import subprocess
+import sys
+import time
+
+SUDO_USER = os.environ.get("SUDO_USER") or ""
+if SUDO_USER:
+    HOME = os.path.expanduser(f"~{SUDO_USER}")
+    RUNTIME = f"/run/user/{os.environ.get('SUDO_UID', '1000')}"
+else:
+    HOME = os.path.expanduser("~")
+    RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+
+LOG_PATH = os.path.join(HOME, "present-learn.log")
+_archivo = open(LOG_PATH, "w", buffering=1)
+
+
+def emit(line=""):
+    print(line, flush=True)
+    _archivo.write(line + "\n")
+
+
+# ── pitido ───────────────────────────────────────────────────────────────
+SONIDO = "/usr/share/sounds/freedesktop/stereo/bell.oga"
+SONIDO_FIN = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+
+
+def beep(archivo=SONIDO):
+    # campana del terminal (siempre disponible)
+    sys.stdout.write("\a")
+    sys.stdout.flush()
+    # sonido real, con el entorno del usuario aunque corra con sudo
+    env = dict(os.environ)
+    env.setdefault("XDG_RUNTIME_DIR", RUNTIME)
+    speed = "unix:" + os.path.join(RUNTIME, "pulse", "native")
+    env.setdefault("PULSE_SERVER", speed)
+    for cmd in (["paplay", archivo], ["pw-play", archivo], ["canberra-gtk-play", "-i", "complete"]):
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+            return
+        except FileNotFoundError:
+            continue
+
+
+# ── decodificación USB (page 0x07, teclado) ─────────────────────────────
+USOS = {
+    0x28: "Enter", 0x29: "Esc", 0x2B: "Tab", 0x2C: "Space", 0x39: "CapsLock",
+    0x3A: "F1", 0x3B: "F2", 0x3C: "F3", 0x3D: "F4", 0x3E: "F5", 0x3F: "F6",
+    0x40: "F7", 0x41: "F8", 0x42: "F9", 0x43: "F10", 0x44: "F11", 0x45: "F12",
+    0x49: "Insert", 0x4A: "Home", 0x4B: "PageUp", 0x4C: "Delete",
+    0x4D: "End", 0x4E: "PageDown",
+    0x4F: "Right", 0x50: "Left", 0x51: "Down", 0x52: "Up",
+    0xE0: "LeftCtrl", 0xE1: "LeftShift", 0xE2: "LeftAlt", 0xE3: "LeftMeta",
+    0xE4: "RightCtrl", 0xE5: "RightShift", 0xE6: "RightAlt", 0xE7: "RightMeta",
+}
+for i, ch in enumerate("abcdefghijklmnopqrstuvwxyz"):
+    USOS[0x04 + i] = ch
+for i, ch in enumerate("1234567890"):
+    USOS[0x1E + i] = ch
+
+
+def uso(u):
+    return USOS.get(u, f"0x{u:02x}")
+
+
+def ts():
+    t = time.time()
+    return f"{time.strftime('%H:%M:%S', time.localtime(t))}.{int((t % 1) * 1000):03d}"
+
+
+def decodificar(data):
+    if len(data) >= 8:  # reporte de teclado estilo boot
+        usos = [u for u in data[2:8] if u]
+        mods = [uso(0xE0 + i) for i in range(8) if data[0] & (1 << i)]
+        if not usos and not mods:
+            return "(suelta)"
+        partes = (["+" + "+".join(mods)] if mods else []) + [uso(u) for u in usos]
+        return " ".join(partes)
+    if data:
+        return "raw " + data.hex(" ")
+    return "(vacío)"
+
+
+def hidraws_control():
+    base = "/sys/class/hidraw"
+    out = []
+    try:
+        nombres = sorted(os.listdir(base))
+    except FileNotFoundError:
+        return out
+    for h in nombres:
+        try:
+            txt = open(os.path.join(base, h, "device", "uevent")).read()
+        except OSError:
+            continue
+        if "Wireless Present" in txt or "SHARKOON" in txt:
+            out.append(os.path.join("/dev", h))
+    return out
+
+
+# ── pasos ────────────────────────────────────────────────────────────────
+PASOS = [
+    ("0 · baseline (no toques nada)", 2),
+    ("1 · UNA vez el boton del cuadrito (y solta)", 4),
+    ("2 · DOS veces rapido el boton del cuadrito", 5),
+    ("3 · TRES veces rapido el boton del cuadrito", 6),
+    ("M · MANTENE apretado el boton del cuadrito 2.5s y solta", 6),
+    ("I · UNA vez la flecha IZQUIERDA", 4),
+    ("D · UNA vez la flecha DERECHA", 4),
+    ("E · UNA vez el cuarto boton (el que mandaba Enter)", 4),
+]
+
+
+def main():
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+    emit("╔══════════════════════════════════════════════════════════════╗")
+    emit("║  present-learn — captura guiada del control                  ║")
+    emit("╚══════════════════════════════════════════════════════════════╝")
+    if os.geteuid() != 0:
+        emit("(sin root: solo capa keyd. Para USB crudo: sudo -E present-learn)")
+
+    abiertos = {}
+    for h in hidraws_control():
+        try:
+            abiertos[os.open(h, os.O_RDONLY | os.O_NONBLOCK)] = os.path.basename(h)
+        except OSError:
+            pass
+    if abiertos:
+        emit("USB crudo: " + ", ".join(abiertos.values()))
+    emit("Resultado tambien en: " + LOG_PATH)
+    emit()
+
+    km = subprocess.Popen(["keyd", "monitor"], stdout=subprocess.PIPE, text=True, bufsize=1)
+    km_out = km.stdout
+    assert km_out is not None
+    km_fd = km_out.fileno()
+    fds = list(abiertos) + [km_fd]
+
+    for titulo, segundos in PASOS:
+        emit("─" * 64)
+        emit(f"PASO {titulo}")
+        beep()
+        emit("  🔔 ¡AHORA!  (capturando %ds…)" % segundos)
+        fin = time.monotonic() + segundos
+        while time.monotonic() < fin:
+            r, _, _ = select.select(fds, [], [], 0.1)
+            for fd in r:
+                if fd == km_fd:
+                    line = km_out.readline()
+                    if not line:
+                        continue
+                    if "device added" in line:
+                        continue
+                    parts = line.rstrip("\r\n").split("\t")
+                    if len(parts) >= 3:
+                        emit(f"  [{ts()}] keyd   {parts[2]}")
+                else:
+                    try:
+                        data = os.read(fd, 64)
+                    except OSError:
+                        continue
+                    if data:
+                        emit(f"  [{ts()}] USB    {abiertos[fd]:<9} {decodificar(data)}")
+        beep(SONIDO_FIN)
+        emit()
+
+    emit("═" * 64)
+    emit("Listo. Decile a la IA que lea ~/present-learn.log.")
+    km.terminate()
+    for fd in abiertos:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        emit("\n(interrumpido)")
