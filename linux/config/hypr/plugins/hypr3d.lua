@@ -4,14 +4,6 @@ local PLUGIN_SO = HOME .. "/.local/share/hypr3d-src/build/hypr3d.so"
 local PANORAMA = HOME .. "/.local/share/hypr3d-world/panorama/city_rooftop.jpg"
 local MAP = HOME .. "/.local/share/hypr3d-world/map/map.glb"
 
-local function ensure_loaded()
-    if hl.plugin.hypr3d ~= nil then
-        return true
-    end
-    pcall(function() hl.plugin.load(PLUGIN_SO) end)
-    return hl.plugin.hypr3d ~= nil
-end
-
 local function apply()
     if hl.plugin.hypr3d == nil then
         return false
@@ -44,15 +36,18 @@ local function apply()
     return true
 end
 
-local available = ensure_loaded()
-if available then
+-- IMPORTANT: never call hl.plugin.load(PLUGIN_SO) from Lua config code.
+-- Doing so re-enters Hyprland's plugin-load pass (handlePluginLoads -> reload
+-- -> parse config -> hl.plugin.load again -> ...), which recurses until the
+-- stack overflows and the session dies with a SIGSEGV before it is up.
+-- Load it out-of-process instead; .local/bin/hypr3d-load.sh is idempotent and
+-- no-ops when hypr3d is already loaded.
+hl.exec_cmd(HOME .. "/.local/bin/hypr3d-load.sh")
+
+-- The plugin's PLUGIN_INIT triggers a config reload, so this runs again with
+-- hypr3d present and the settings get applied. It also covers later reloads.
+if hl.plugin.hypr3d ~= nil then
     apply()
 end
 
-hl.on("hyprland.start", function()
-    if ensure_loaded() then
-        apply()
-    end
-end)
-
-return { available = available }
+return { available = hl.plugin.hypr3d ~= nil }

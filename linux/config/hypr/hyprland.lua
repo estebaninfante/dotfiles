@@ -8,7 +8,7 @@ require("animations")
 require("autostart")
 
 require("plugins.hyprexpo")
--- [hypr3d fix] temporal: require("plugins.hypr3d")
+require("plugins.hypr3d")
 require("navigation")
 
 require("windowrules")
