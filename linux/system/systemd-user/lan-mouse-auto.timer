@@ -1,0 +1,11 @@
+[Unit]
+Description=Sondea ethernet para auto-gestionar lan-mouse
+
+[Timer]
+OnBootSec=20
+OnUnitActiveSec=10
+AccuracySec=1
+Persistent=false
+
+[Install]
+WantedBy=timers.target

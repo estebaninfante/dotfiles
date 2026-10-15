@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# lan-mouse-auto — Auto-gestiona lan-mouse según el ethernet de la laptop.
+#
+# Regla: cuando la laptop pasa a tener ethernet conectada, asegura que el
+# daemon esté arriba y deja el peer (el desktop) a la DERECHA. Solo actúa en
+# TRANSICIONES (guarda el último estado en disco), así no pisa cambios de
+# posición hechos a mano desde el menú de LAN Mouse.
+#
+# Variables (por si querés cambiarlo sin editar):
+#   LANMOUSE_PEER_ID   id del cliente/peer (default 0)
+#   LANMOUSE_PEER_POS  posición en ethernet (default right)
+#   LANMOUSE_STOP_ON_DISCONNECT  "1" para apagar lan-mouse al caer el ethernet
+#                                (default 0: no lo apaga, lo dejás desde el menú)
+set -uo pipefail
+
+PEER_ID="${LANMOUSE_PEER_ID:-0}"
+PEER_POS="${LANMOUSE_PEER_POS:-right}"
+STOP_ON_DOWN="${LANMOUSE_STOP_ON_DISCONNECT:-0}"
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/lan-mouse-auto"
+STATE_FILE="$STATE_DIR/ethernet"
+mkdir -p "$STATE_DIR"
+
+ethernet_up() {
+    nmcli -t -f TYPE,STATE device status 2>/dev/null \
+        | grep -q '^ethernet:connected'
+}
+
+svc_up() { systemctl --user is-active --quiet lan-mouse.service; }
+
+wait_ipc() {
+    local i
+    for i in $(seq 1 40); do
+        lan-mouse cli list >/dev/null 2>&1 && return 0
+        sleep 0.25
+    done
+    return 1
+}
+
+place_peer() {
+    lan-mouse cli set-position "$PEER_ID" "$PEER_POS" >/dev/null 2>&1 || true
+    lan-mouse cli activate     "$PEER_ID"            >/dev/null 2>&1 || true
+    lan-mouse cli save-config                        >/dev/null 2>&1 || true
+}
+
+now="down"
+ethernet_up && now="up"
+prev="$(cat "$STATE_FILE" 2>/dev/null || true)"
+
+# Sin cambio de estado: no tocamos nada (respeta ajustes manuales).
+[ "$now" = "$prev" ] && exit 0
+
+if [ "$now" = "up" ]; then
+    if ! svc_up; then
+        systemctl --user start lan-mouse.service || exit 1
+    fi
+    wait_ipc && place_peer
+    printf 'up\n' > "$STATE_FILE"
+else
+    if [ "$STOP_ON_DOWN" = "1" ] && svc_up; then
+        systemctl --user stop lan-mouse.service || true
+    fi
+    printf 'down\n' > "$STATE_FILE"
+fi
