@@ -23,6 +23,10 @@
 #   @arrow prev|next   flecha contextual (terminal->tmux, otro->scroll)
 #   @enter   manda Enter
 #   @cancel  corta la sesión de voz
+#
+# Doble toque en las flechas:
+#   flecha izq x2 -> Enter (enviar mensaje)
+#   flecha der x2 -> nueva terminal (kitty) con pi cargado y enfocado
 
 [settings]
 hold_ms = 600        # ms para el gesto `hold`
@@ -49,11 +53,12 @@ hold = "ydotool key 125:1 20:1 20:0 125:0"
 suppress = ["f14", "f17"]
 
 # ── Flechas ──────────────────────────────────────────────────────────────
-# Flecha izquierda (diapositiva anterior).
+# Flecha izquierda (diapositiva anterior). Doble toque -> Enter.
 [buttons.f15]
 tap = "@arrow prev"
+double = "@enter"
 
-# Flecha derecha (diapositiva siguiente). Doble toque -> Enter (enviar mensaje).
+# Flecha derecha (diapositiva siguiente). Doble toque -> nueva terminal con pi.
 [buttons.f16]
 tap = "@arrow next"
-double = "@enter"
+double = "pi-new"

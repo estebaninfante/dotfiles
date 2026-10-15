@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# pi-new — abre una terminal nueva (kitty) con pi ya cargado y la enfoca.
+#
+# Abre un panel tmux nuevo corriendo pi, dentro de una ventana kitty nueva.
+# Con tmux, pi se registra solo en `agente-pane`, así después lo podés
+# enfocar/hablarle por voz como a cualquier otro agente.
+#
+# Uso:
+#   pi-new [carpeta] [nombre-de-sesión]
+#
+# Pensado para el control remoto: doble flecha derecha -> pi-new.
+set -uo pipefail
+
+dir="${1:-$HOME}"
+sess="${2:-}"
+term="${TERMINAL:-kitty}"
+
+# Si no hay tmux, igual abrimos pi en la terminal (sin panel).
+if ! command -v tmux >/dev/null 2>&1; then
+    setsid "$term" -d "$dir" pi >/dev/null 2>&1 &
+    exit 0
+fi
+
+if [ -n "$sess" ]; then
+    tmux_args=(new-session -s "$sess" pi)
+else
+    tmux_args=(new-session pi)
+fi
+
+setsid "$term" -d "$dir" "${tmux_args[@]}" >/dev/null 2>&1 &
+pid=$!
+
+# Enfocar la ventana nueva (Hyprland ya suele hacerlo al abrir; esto lo asegura).
+if command -v hyprctl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    for _ in $(seq 1 40); do
+        addr="$(hyprctl clients -j 2>/dev/null \
+            | jq -r --argjson p "$pid" '.[] | select(.pid == $p) | .address' \
+            2>/dev/null | head -1)"
+        if [ -n "$addr" ] && [ "$addr" != "null" ]; then
+            hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+            break
+        fi
+        if ! kill -0 "$pid" 2>/dev/null; then
+            break  # la terminal ya se cerró: no hay nada que enfocar
+        fi
+        sleep 0.05
+    done
+fi
