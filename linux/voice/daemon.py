@@ -45,6 +45,8 @@ FIFO = os.environ.get("VOICE_TTS_FIFO", os.path.join(CACHE_DIR, "tts.fifo"))
 PID_FILE = os.path.join(CACHE_DIR, "daemon.pid")
 LOG_FILE = os.environ.get("VOICE_LOG", os.path.join(CACHE_DIR, "daemon.log"))
 SYNTH_SOCK = os.environ.get("VOICE_SYNTH_SOCK", os.path.join(CACHE_DIR, "synth.sock"))
+# Estado de lo que se está hablando AHORA (para subtítulos karaoke en el glow).
+SPEAKING_FILE = os.environ.get("VOICE_SPEAKING_FILE", os.path.join(CACHE_DIR, "speaking.json"))
 DEDUP_TTL = float(os.environ.get("VOICE_DEDUP_TTL", "20"))
 
 _last_key: dict[str, float] = {}
@@ -257,11 +259,23 @@ def synth_and_play(req: dict) -> bool:
 
     # Cadena de motores a probar en orden. engine puede estar explícito en req.
     chain = [engine] + [s for s in ("piper", "espeak") if s != engine]
+    pitch = _as_float(req.get("pitch"), 0.0)
+    speed = _as_float(req.get("speed"), 1.0)
     ok = False
     played_engine = ""
     for eng in chain:
-        ok = _synth(eng, voice, lang, text, wav) and _play(wav)
-        if ok:
+        if not _synth(eng, voice, lang, text, wav):
+            log(f"fallback: {eng} -> siguiente motor de la cadena")
+            if os.path.exists(wav):
+                try:
+                    os.remove(wav)
+                except OSError:
+                    pass
+            continue
+        # Tono/velocidad del perfil ("personalidad"): mismo motor, otra voz.
+        _apply_effects(wav, pitch, speed)
+        if _play(wav, text=text, source=req.get("source") or "voice", engine=eng, voice=voice):
+            ok = True
             played_engine = eng
             break
         log(f"fallback: {eng} -> siguiente motor de la cadena")
@@ -271,10 +285,11 @@ def synth_and_play(req: dict) -> bool:
             except OSError:
                 pass
 
-    if ok:
+    if ok and req.get("record", True):
         # El WAV pasa al historial (se mueve): queda disponible para repasarlo
         # desde el widget de la barra. No se borra si falla la anotacion.
-        record_history(wav, text, played_engine, voice, lang)
+        record_history(wav, text, played_engine, voice, lang,
+                       req.get("source") or "voice")
     # Si record_history lo movio, esto ya no encuentra nada; si fallo la
     # sintesis, limpia el temporal.
     try:
@@ -283,6 +298,45 @@ def synth_and_play(req: dict) -> bool:
     except OSError:
         pass
     return ok
+
+
+def _as_float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _apply_effects(wav: str, pitch: float, speed: float) -> None:
+    """Aplica tono (semitonos) y tempo (factor) con sox, in place.
+
+    Multiplica las "personalidades" posibles: la misma voz base con distinto
+    tono suena a alguien distinto. Si sox falta o falla, deja el WAV intacto.
+    """
+    if abs(pitch) < 1e-3 and abs(speed - 1.0) < 1e-3:
+        return
+    if not os.path.isfile(wav) or not shutil.which("sox"):
+        return
+    out = wav + ".fx.wav"
+    argv = ["sox", wav, out]
+    if abs(pitch) >= 1e-3:
+        argv += ["pitch", str(int(round(pitch * 100)))]
+    if abs(speed - 1.0) >= 1e-3:
+        argv += ["tempo", f"{speed:.3f}"]
+    try:
+        r = subprocess.run(argv, capture_output=True, timeout=180)
+    except Exception as e:
+        log(f"sox effects error: {e}")
+        return
+    if r.returncode == 0 and os.path.isfile(out):
+        os.replace(out, wav)
+    else:
+        log(f"sox effects fallo rc={r.returncode}: {r.stderr[-200:]}")
+        try:
+            if os.path.exists(out):
+                os.remove(out)
+        except OSError:
+            pass
 
 
 def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
@@ -370,6 +424,8 @@ def _synth_to_file(req: dict) -> tuple[bool, str]:
     chain = [engine] + [s for s in ("piper", "espeak") if s != engine]
     for eng in chain:
         if _synth(eng, voice, lang, text, output):
+            _apply_effects(output, _as_float(req.get("pitch"), 0.0),
+                           _as_float(req.get("speed"), 1.0))
             return True, eng
     return False, "todos los motores fallaron"
 
@@ -458,7 +514,93 @@ def _run(argv: list[str], text: str | None) -> bool:
         return False
 
 
-def _play(wav: str) -> bool:
+def _duck_enabled() -> bool:
+    """Si pausar la musica/video mientras habla el TTS."""
+    try:
+        tts = load_config().get("tts", {})
+    except Exception:
+        return False
+    return str(tts.get("duck", True)).strip().lower() not in ("false", "0", "no", "off")
+
+
+def _players() -> list[str]:
+    try:
+        r = subprocess.run(["playerctl", "-l"], capture_output=True, text=True, timeout=3)
+        return [p.strip() for p in (r.stdout or "").splitlines() if p.strip()]
+    except Exception:
+        return []
+
+
+def _player_status(player: str) -> str:
+    try:
+        r = subprocess.run(["playerctl", "-p", player, "status"],
+                           capture_output=True, text=True, timeout=3)
+        return (r.stdout or "").strip()
+    except Exception:
+        return ""
+
+
+def _pause_players() -> list[str]:
+    """Pausa los reproductores que estaban sonando; devuelve cuales pausamos.
+
+    Se pausa la fuente (musica/video) en lugar de bajar el sink: asi la voz
+    conserva su volumen y no queda tapada ni opacada por el ducking.
+    """
+    paused = []
+    for p in _players():
+        if _player_status(p) == "Playing":
+            try:
+                subprocess.run(["playerctl", "-p", p, "pause"], capture_output=True, timeout=3)
+                paused.append(p)
+            except Exception:
+                pass
+    return paused
+
+
+def _resume_players(paused: list[str]) -> None:
+    for p in paused:
+        try:
+            subprocess.run(["playerctl", "-p", p, "play"], capture_output=True, timeout=3)
+        except Exception:
+            pass
+
+
+def _wav_duration_ms(wav: str) -> int:
+    """Duración del WAV en ms (para sincronizar el resaltado palabra a palabra)."""
+    try:
+        out = subprocess.run(["soxi", "-D", wav], capture_output=True, text=True, timeout=5).stdout.strip()
+        return max(0, int(float(out) * 1000))
+    except Exception:
+        return 0
+
+
+def _publish_speaking(text: str, wav: str, source: str, engine: str, voice: str) -> None:
+    try:
+        payload = {
+            "text": text,
+            "durationMs": _wav_duration_ms(wav),
+            "startedAt": int(time.time() * 1000),
+            "source": source or "",
+            "engine": engine or "",
+            "voice": voice or "",
+        }
+        tmp = f"{SPEAKING_FILE}.{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False)
+        os.replace(tmp, SPEAKING_FILE)
+    except Exception:
+        pass
+
+
+def _clear_speaking() -> None:
+    try:
+        os.remove(SPEAKING_FILE)
+    except OSError:
+        pass
+
+
+def _play(wav: str, text: str | None = None, source: str = "",
+          engine: str = "", voice: str = "") -> bool:
     if not os.path.isfile(wav):
         return False
     # El volumen es un factor relativo sobre el volumen general de salida
@@ -469,7 +611,14 @@ def _play(wav: str) -> bool:
     except Exception:
         vol = 1.0
     argv = ["pw-play", f"--volume={vol:.3f}", wav]
+    # Ducking: pausa musica/video mientras habla y los reanuda al terminar.
+    paused = _pause_players() if _duck_enabled() else []
+    published = False
     try:
+        # Publicar qué se está diciendo, para que el glow muestre los subtítulos.
+        if text:
+            _publish_speaking(text, wav, source, engine, voice)
+            published = True
         r = subprocess.run(argv, capture_output=True, timeout=900)
         if r.returncode != 0:
             return False
@@ -477,6 +626,11 @@ def _play(wav: str) -> bool:
     except Exception as e:
         log(f"play error: {e}")
         return False
+    finally:
+        if published:
+            _clear_speaking()
+        if paused:
+            _resume_players(paused)
 
 
 # ── Cola ────────────────────────────────────────────────────────────────

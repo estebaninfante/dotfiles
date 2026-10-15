@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# voice-omarchy-index — regenera el índice de comandos de Omarchy que lee el
+# cerebro de voz (Pi headless). Corre `omarchy commands --json` y lo vuelca
+# legible a omarchy-commands.txt, tanto en el directorio vivo como en el repo.
+#
+#   voice-omarchy-index            regenera
+#   voice-omarchy-index --check    avisa si el índice quedó viejo (sin escribir)
+#
+# Se puede correr a mano o desde un hook de Omarchy (p. ej. `post-update`).
+set -euo pipefail
+
+LIVE="${VOICE_BRAIN_DIR:-$HOME/.local/share/voice/pi-brain}"
+REPO="${VOICE_DOTFILES:-$HOME/dotfiles}/linux/voice/pi-brain"
+CHECK=0
+[ "${1:-}" = "--check" ] && CHECK=1
+
+command -v omarchy >/dev/null 2>&1 || { echo "voice-omarchy-index: falta omarchy" >&2; exit 1; }
+
+tmp="$(mktemp)"
+omarchy commands --json > "$tmp" || { echo "voice-omarchy-index: omarchy commands falló" >&2; rm -f "$tmp"; exit 1; }
+
+python3 - "$tmp" <<'PY' > "$tmp.txt"
+import json,sys,collections
+data=json.load(open(sys.argv[1]))["commands"]
+by=collections.defaultdict(list)
+for c in data:
+    by[c.get("group","otros")].append(c)
+out=[]
+out.append("# Índice de comandos de Omarchy (generado por voice-omarchy-index).")
+out.append("# No editar a mano. Buscar con: grep -i palabra omarchy-commands.txt")
+out.append("# Total: %d comandos." % len(data))
+for g in sorted(by):
+    out.append("")
+    out.append("## %s" % g)
+    for c in sorted(by[g], key=lambda x:x["route"]):
+        args=c.get("args") or ""
+        line="%-44s %s" % (c["route"], c["summary"])
+        if args:
+            line+="   [args: %s]" % args
+        out.append(line)
+print("\n".join(out))
+PY
+
+if [ "$CHECK" = 1 ]; then
+  if [ -f "$LIVE/omarchy-commands.txt" ] && cmp -s "$tmp.txt" "$LIVE/omarchy-commands.txt"; then
+    echo "voice-omarchy-index: al día"
+  else
+    echo "voice-omarchy-index: DESACTUALIZADO (corré voice-omarchy-index)"
+    rm -f "$tmp" "$tmp.txt"; exit 1
+  fi
+  rm -f "$tmp" "$tmp.txt"; exit 0
+fi
+
+mkdir -p "$LIVE" "$REPO"
+cp "$tmp.txt" "$LIVE/omarchy-commands.txt"
+cp "$tmp.txt" "$REPO/omarchy-commands.txt"
+n=$(grep -c '^omarchy' "$tmp.txt" || true)
+rm -f "$tmp" "$tmp.txt"
+echo "voice-omarchy-index: $n comandos escritos en $LIVE y $REPO"

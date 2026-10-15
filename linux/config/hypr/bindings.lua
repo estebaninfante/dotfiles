@@ -3,9 +3,10 @@ local helpers = require("windowhelpers")
 
 local main_mod = variables.main_mod
 
-hl.bind(main_mod .. " + RETURN", hl.dsp.exec_cmd("~/.local/bin/herdr-open.sh"))
+hl.bind(main_mod .. " + RETURN", hl.dsp.exec_cmd(variables.terminal))
 hl.bind(main_mod .. " + SHIFT + RETURN", hl.dsp.exec_cmd(variables.terminal .. " --class ssh-desktop --title \"SSH: desktop\" ~/.local/bin/ssh-desktop"))
 hl.bind(main_mod .. " + SPACE",  hl.dsp.exec_cmd("omarchy-menu toggle"))
+hl.bind(main_mod .. " + SHIFT + I", hl.dsp.exec_cmd("omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""), { description = "Investigaciones (Logseq)" })
 hl.bind(main_mod .. " + A", hl.dsp.exec_cmd("~/.local/bin/antigravity-ui.sh"))
 hl.bind(main_mod .. " + Z", hl.dsp.exec_cmd("firefox"))
 
@@ -33,6 +34,22 @@ hl.bind(main_mod .. " + P", hl.dsp.exec_cmd("beckon"))
 
 hl.bind(main_mod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
 hl.bind(main_mod .. " + SHIFT + X", hl.dsp.exit())
+
+-- Voz del sistema: repetir los últimos mensajes (voz + notificaciones).
+hl.bind(main_mod .. " + ALT + V", hl.dsp.exec_cmd("~/.local/bin/voice repeat"))
+hl.bind(main_mod .. " + ALT + SHIFT + V", hl.dsp.exec_cmd("~/.local/bin/voice repeat 3"))
+-- Buzón de voz: escuchar los mensajes pendientes (SUPER+ALT+B).
+hl.bind(main_mod .. " + ALT + B", hl.dsp.exec_cmd("~/.local/bin/voice play-inbox"))
+-- OmniVoz ahora corre SIEMPRE (servicio omnivoz-listen). Se quitaron los
+-- atajos que arrancaban una segunda instancia (peleaban por el micrófono y
+-- abrían la píldora con foco exclusivo, trabando el teclado).
+-- hl.bind(main_mod .. " + V", hl.dsp.exec_cmd("~/.local/bin/omnivoz-listen"))
+-- hl.bind("F13", hl.dsp.exec_cmd("~/.local/bin/omnivoz-listen"))
+
+-- Rescate de la píldora de Omar: cierra/reinicia y libera el teclado.
+hl.bind(main_mod .. " + ALT + O", hl.dsp.exec_cmd("~/.local/bin/omar-pill-rescue"), { description = "Omar: rescatar teclado (reinicia píldora)" })
+-- Alternativa push-to-talk explicita (deshabilitada: conflictúa con el servicio).
+-- hl.bind(main_mod .. " + ALT + P", hl.dsp.exec_cmd("~/.local/bin/omnivoz listen --no-wake --once"))
 
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 3%+ && swayosd-client --output-volume raise"), { repeating = true })
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 3%- && swayosd-client --output-volume lower"), { repeating = true })

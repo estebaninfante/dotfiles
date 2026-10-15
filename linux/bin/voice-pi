@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# voice-pi — puente headless a Pi para el cerebro del asistente de voz.
+#
+#   voice-pi "¿en qué workspace estoy?"      # responde en stdout
+#   echo "sube el volumen" | voice-pi
+#
+# Pi corre en un directorio propio con su AGENTS.md que le enseña a manejar el
+# escritorio. Sin razonamiento, sin extensiones ni skills, sin sesión: lo más
+# liviano y rápido posible. La respuesta final de Pi sale por stdout.
+#
+# Config: VOICE_PI_BRAIN_DIR, VOICE_PI_MODEL (vacío = default de Pi),
+#         VOICE_PI_TOOLS, VOICE_PI_TIMEOUT (segundos).
+
+set -uo pipefail
+
+BRAIN_DIR="${VOICE_PI_BRAIN_DIR:-$HOME/.local/share/voice/pi-brain}"
+MODEL="${VOICE_PI_MODEL:-opencode-go/qwen3.8-flash}"
+TOOLS="${VOICE_PI_TOOLS:-bash,read}"
+TIMEOUT="${VOICE_PI_TIMEOUT:-60}"
+
+prompt="$*"
+if [ -z "$prompt" ] && [ ! -t 0 ]; then
+  prompt="$(cat)"
+fi
+[ -n "$prompt" ] || { echo "voice-pi: falta el texto" >&2; exit 2; }
+[ -d "$BRAIN_DIR" ] || { echo "voice-pi: no existe $BRAIN_DIR" >&2; exit 1; }
+
+args=(--print --no-session --no-extensions --no-skills --thinking off --tools "$TOOLS")
+[ -n "$MODEL" ] && args+=(--model "$MODEL")
+
+# Guardián: sólo dentro del cerebro, `omarchy`/`systemctl` destructivos pasan
+# por confirmación hablada (no afecta a tu shell normal).
+PATH="$BRAIN_DIR/guard:$PATH"
+export PATH
+
+cd "$BRAIN_DIR" || exit 1
+timeout "$TIMEOUT" pi "${args[@]}" "$prompt"

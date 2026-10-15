@@ -1,0 +1,504 @@
+# Índice de comandos de Omarchy (generado por voice-omarchy-index).
+# No editar a mano. Buscar con: grep -i palabra omarchy-commands.txt
+# Total: 371 comandos.
+
+## agent
+omarchy agent                                Launch the default coding agent in a terminal   [args: [--inline] [--pick]]
+omarchy agent crash                          Diagnose a crashed process with the default coding agent   [args: <pid> [comm] [exe] [signal]]
+omarchy agent prompt                         Launch the default coding agent with a prompt   [args: [--inline] <prompt...>]
+omarchy agent usage update                   Regenerate the AI agent usage data files   [args: [--force] [--limits-only] [--except <agent>] [agent...]]
+
+## audio
+omarchy audio input mute                     Toggle microphone mute. Drives the hardware mic-mute LED on laptops that expose one.
+omarchy audio input set default              Set the default audio input and move active streams   [args: <node-id> <source-name>]
+omarchy audio output set default             Set the default audio output and move active streams   [args: <node-id> <sink-name>]
+omarchy audio output sink                    Print the sink whose volume and mute a given output really uses   [args: [sink-name]]
+omarchy audio output switch                  Switch between audio outputs while preserving the mute status
+omarchy audio output volume                  Adjust output volume and show the Omarchy OSD   [args: <raise|lower|mute-toggle|+N|-N>]
+omarchy audio sink availability              Print PulseAudio sink availability for the shell
+omarchy audio source switch                  Cycle to the next media source and transfer playback when the current source is playing   [args: [next|previous]]
+omarchy audio tuning                         Manage the speaker tuning for this laptop   [args: <on|off|status|match|fronted-sink> [--force]]
+
+## bar
+omarchy bar                                  Configure the bar and its widget layout   [args: use <id> | reset | defaults | position <top|bottom|left|right> | transparent <true|false|toggle> | put <id> [placement] | move <id> [placement] | set <id> <key> <value> [--json] [placement]]
+
+## battery
+omarchy battery present                      Returns true if a battery is present on the system.
+omarchy battery status                       Returns a formatted battery status string with percentage and power draw/charge.   [args: [--shell]]
+
+## bluetooth
+omarchy bluetooth device                     Control a Bluetooth device   [args: [pair|connect|disconnect|forget] <address>]
+omarchy bluetooth power                      Turn Bluetooth on or off, remembered across reboots   [args: <on|off|toggle|is-on>]
+
+## branding
+omarchy branding about                       Edit, set, or reset About branding   [args: <image|text|reset>]
+omarchy branding screensaver                 Edit, set, or reset screensaver branding   [args: <image|text|reset>]
+
+## brightness
+omarchy brightness display                   Show or adjust brightness on the focused display.   [args: [--no-osd] [--monitor name] [+N%|N%-|N%|off|on]]
+omarchy brightness display apple             Show or adjust Apple Studio Display and Apple XDR Display brightness using asdcontrol.   [args: [--no-osd] [+N%|N%-|N%]]
+omarchy brightness display ddc               Show or adjust DDC/CI display brightness for a Hyprland monitor.   [args: <monitor> [+N%|N%-|N%]]
+omarchy brightness keyboard                  Adjust keyboard backlight brightness using available steps.   [args: [--no-osd] <up|down|cycle|off|restore>]
+omarchy brightness keyboard mute             Set the mic-mute indicator LED on laptops that expose a platform::micmute LED node.   [args: <on|off>]
+
+## capture
+omarchy capture qr                           Decode a QR code from a screenshot region
+omarchy capture screenrecording              Start or stop screen recording   [args: [--fullscreen] [--with-desktop-audio] [--with-microphone-audio] [--with-webcam] [--webcam-device=<device>] [--webcam-size=<small|medium|large>] [--resolution=<size>] [--stop-recording]]
+omarchy capture screenrecording with webcam  Pick a webcam and start a screen recording with it
+omarchy capture screenshot                   Take a screenshot   [args: [smart|region|windows|fullscreen] [slurp|copy|save] [--editor=<name>]]
+omarchy capture text                         Extract text from a screenshot region with OCR
+omarchy capture webcam resize                Resize the active webcam recording overlay   [args: <smaller|larger|reset|small|medium|large>]
+
+## channel
+omarchy channel current                      Print the active Omarchy package channel
+omarchy channel set                          Set the Omarchy package channel.   [args: <stable|rc|edge|dev>]
+
+## cmd
+omarchy cmd missing                          Check whether any required commands are missing
+omarchy cmd present                          Check whether all required commands are available
+
+## debug
+omarchy debug                                Print debugging information   [args: [--no-sudo] [--print]]
+omarchy debug idle                           Show idle, screensaver, and lock diagnostics   [args: [log-lines]]
+
+## default
+omarchy default agent                        Set and launch the default coding agent   [args: [pi|omp|opencode|claude|codex|grok|gemini|openclaw|hermes|copilot|crush|cursor-agent|muse]]
+omarchy default browser                      Set the default browser for Omarchy and XDG handlers   [args: [chromium|chrome|brave|brave-origin|edge|firefox|zen]]
+omarchy default editor                       Set the default editor used by omarchy-launch-editor   [args: [code|cursor|zed|sublime_text|helix|vim|emacs|nvim]]
+omarchy default terminal                     Set the default terminal used by xdg-terminal-exec   [args: [alacritty|foot|ghostty|kitty]]
+
+## dev
+omarchy dev add migration                    Create a new Omarchy migration in the current source tree.   [args: [--no-edit]]
+omarchy dev benchmark cli                    Measure Omarchy CLI response times   [args: [--repeat=<count>]]
+omarchy dev benchmark theme switcher         Measure theme switcher cache and selector prep times   [args: [--repeat=<count>] [--keep-cache]]
+omarchy dev font                             Add branded glyphs to the Omarchy icon font   [args: [list|add] <name> <svg-file-or-url> [--codepoint U+E9xx] [--font PATH]]
+omarchy dev install ydoo                     Install and enable ydotool mouse automation for Omarchy development
+omarchy dev link                             Point Omarchy at a local checkout after reboot   [args: <path-to-checkout> [--no-reboot]]
+omarchy dev pkg test                         Build and install an Omarchy package from a local checkout   [args: [package-name] [path-to-checkout]]
+omarchy dev status                           Show the current Omarchy dev-link state
+omarchy dev theme preview                    Preview an Omarchy theme palette in the terminal   [args: [theme-name|theme-dir|colors.toml] [--no-color] [--no-osc|--osc]]
+omarchy dev ui preview                       Open the omarchy-shell dev gallery (qs.Ui kit preview)   [args: [section]]
+omarchy dev unlink                           Restore Omarchy to the package install after reboot   [args: [--no-reboot]]
+
+## disk
+omarchy disk speedtest                       Measure live disk read and write speed   [args: [target-dir]]
+
+## display
+omarchy display text size                    Scale text everywhere — omarchy shell, GTK apps, and terminals   [args: [size|reset]]
+
+## dns
+omarchy dns                                  Show or configure the system DNS provider   [args: [Cloudflare|Google|DHCP|Custom]]
+
+## drive
+omarchy drive info                           Print drive information such as size, model, and mount details   [args: <drive>]
+omarchy drive password                       Set a new encryption password for a drive selected.
+omarchy drive select                         Select a drive from a list with info that includes space and brand. Used by omarchy-drive-password.
+
+## file
+omarchy file select                          Pick files with the desktop file chooser   [args: [--title <title>] [--multiple] [--directory] [--extensions "<ext ext...>"]]
+
+## font
+omarchy font current                         Show current monospace font
+omarchy font list                            List available monospace fonts
+omarchy font set                             Set the system monospace font   [args: <font-name>]
+
+## games
+omarchy games retro cores                    List installed RetroArch core names
+omarchy games retro install                  Create a desktop launcher for a RetroArch game   [args: [core path-to-game]]
+
+## hibernation
+omarchy hibernation available                Check if hibernation is supported
+omarchy hibernation remove                   Remove hibernation setup including swap and boot resume settings
+omarchy hibernation setup                    Set up hibernation with swap and boot resume configuration   [args: [--force] [--no-rebuild]]
+
+## hook
+omarchy hook                                 Run a named hook from ~/.config/omarchy/hooks/<name> and ~/.config/omarchy/hooks/<name>.d/.   [args: [name] [args...]]
+omarchy hook install                         Install a hook into ~/.config/omarchy/hooks/<type>.d/   [args: <type> <file>]
+
+## hw
+omarchy hw asus expertbook b9406             Detect ASUS ExpertBook B9406 series laptops on Intel Panther Lake.
+omarchy hw asus rog                          Detect whether the computer is an Asus ROG machine.
+omarchy hw asus zenbook ux5406aa             Detect ASUS Zenbook UX5406AA series laptops on Intel Panther Lake.
+omarchy hw dell xps haptic touchpad          Match Dell XPS systems with the Synaptics haptic touchpad.
+omarchy hw dell xps oled                     Match Dell XPS systems with LG OLED panel on Intel Panther Lake (Xe3) GPU.
+omarchy hw display                           Print the most likely display backlight device.
+omarchy hw external monitors                 Returns true when an external monitor is physically connected.
+omarchy hw framework16                       Detect whether the computer is a Framework Laptop 16.
+omarchy hw hybrid gpu                        Detect whether the system has an active hybrid GPU configuration
+omarchy hw intel                             Detect whether the computer has an Intel CPU.
+omarchy hw intel ptl                         Detect whether the computer has an Intel Panther Lake GPU.
+omarchy hw intel sof                         Detect an Intel SOF-capable audio DSP
+omarchy hw laptop                            Returns true when running on a laptop (has a lid or laptop chassis).
+omarchy hw match                             Match against the computer's DMI product name or product family (case-insensitive).   [args: <pattern>]
+omarchy hw nvidia                            Detect whether the computer has an NVIDIA GPU.
+omarchy hw nvidia gsp                        Detect whether the computer has an NVIDIA GPU with GSP firmware (Turing or newer).
+omarchy hw nvidia without gsp                Detect whether the computer has an NVIDIA GPU without GSP firmware (Maxwell/Pascal/Volta).
+omarchy hw recover internal monitor          Clear the internal-monitor-disable toggle if no external display is connected.
+omarchy hw surface                           Detect whether the computer is a Microsoft Surface device.
+omarchy hw touchpad                          Print the detected Hyprland touchpad or trackpad device name
+omarchy hw touchscreen                       Print the detected Hyprland touchscreen or tablet device name
+omarchy hw vulkan                            Detect whether Vulkan is available.
+omarchy hw webcam                            Check whether a webcam is available
+
+## hyprland
+omarchy hyprland focus app                   Focus a Hyprland window by application identity   [args: <app-name>]
+omarchy hyprland monitor focused             Print the name of the currently focused Hyprland monitor.
+omarchy hyprland monitor focused apple       Return success if the focused or named Hyprland monitor is an Apple display.   [args: [monitor]]
+omarchy hyprland monitor internal            Enable, disable, toggle, or recover the internal laptop display   [args: <on|off|toggle|recover>]
+omarchy hyprland monitor internal mirror     Enable, disable, toggle, or recover mirroring the internal display to an external monitor   [args: <on|off|toggle|recover>]
+omarchy hyprland monitor laptop              Print the name of the built-in laptop display, including disabled outputs.
+omarchy hyprland monitor scaling             Show, set, or adjust focused Hyprland monitor scaling   [args: [up|down|SCALE]]
+omarchy hyprland monitor watch               Watch Hyprland monitor events and recover monitor toggles when a monitor is removed
+omarchy hyprland toggle                      Toggle permanent Hyprland flags by copying them into a directory that's sourced entirely.   [args: <flag-name> [on|off|toggle]]
+omarchy hyprland toggle disabled             Check if a Hyprland toggle is currently disabled (missing).   [args: <flag-name>]
+omarchy hyprland toggle enabled              Check if a Hyprland toggle is currently enabled.   [args: <flag-name>]
+omarchy hyprland window close all            Close all open windows
+omarchy hyprland window gaps toggle          Toggles the window gaps globally between no gaps and the default.
+omarchy hyprland window pop                  Toggle to pop-out a tile to stay fixed on a display basis.   [args: [width height x y]]
+omarchy hyprland window single square aspect toggle Toggle single-window square aspect ratio.
+omarchy hyprland window tiled fullscreen toggle Toggle tiled fullscreen for the focused Hyprland window
+omarchy hyprland window transparency toggle  Toggles transparency for the currently focused window.
+omarchy hyprland window width                Save or restore the focused Hyprland window width   [args: <save|restore>]
+omarchy hyprland workspace layout toggle     Toggle the layout on the current active workspace between dwindle and scrolling
+
+## install
+omarchy install ai chatgpt                   Install the ChatGPT desktop app
+omarchy install ai hermes                    Install the Hermes desktop app
+omarchy install ai openclaw                  Install the OpenClaw agent platform and its Control UI web app
+omarchy install ai t3 code                   Install T3 Code and point it at the Omarchy palette
+omarchy install and launch                   Install a packaged app and launch it once it finishes   [args: <display-name> <packages> <desktop-id>]
+omarchy install app                          Install a packaged app, surfacing the install in a floating terminal   [args: <display-name> <packages>]
+omarchy install browser                      Install a supported browser   [args: <chrome|brave|brave-origin|edge|firefox|zen>]
+omarchy install chromium copy url            Install the native messaging host for the Copy URL Chromium extension
+omarchy install chromium google account      Allow Chromium to sign in to Google accounts by adding the required OAuth credentials
+omarchy install chromium ytdlp               Install the native messaging host for the yt-dlp Chromium extension
+omarchy install dev-env                      Install a supported development environment   [args: <ruby|node|bun|deno|go|laravel|symfony|php|python|elixir|phoenix|rust|java|zig|ocaml|dotnet|clojure|scala>]
+omarchy install docker dbs                   Install one of the supported databases in a Docker container with the suitable development options.
+omarchy install editor emacs                 Install Emacs with Omarchy theme and font integration via the omarchy-emacs AUR package
+omarchy install editor helix                 Install Helix and configure it to use the current Omarchy theme
+omarchy install editor vscode                Install VS Code and configure Omarchy defaults for secrets, updates, and theme
+omarchy install editor zed                   Install Zed Editor and configure it with the current Omarchy theme
+omarchy install font                         Install a Nerd Font package and switch the system to it   [args: <display-name> <package> <family>]
+omarchy install gaming battlenet             Install Battle.net standalone via umu-launcher + GE-Proton (no Steam, no Lutris, no Heroic).
+omarchy install gaming geforce-now           Install and launch Geforce Now.
+omarchy install gaming gpu-lib32             Install lib32 graphics drivers (Vulkan + NVIDIA) for any detected GPUs.
+omarchy install gaming heroic                Install Heroic Games Launcher (Epic, GOG, Amazon Prime Gaming) with graphics drivers.
+omarchy install gaming lutris                Install Lutris with Wine + DXVK for running Windows games (Battle.net, EA, Ubisoft Connect, etc.)
+omarchy install gaming retroarch             Install RetroArch with the full libretro core set plus FBNeo and a ~/Games ROM directory.
+omarchy install gaming steam                 Install Steam and graphics drivers selected for this system
+omarchy install gaming xbox-cloud            Install Xbox Cloud Gaming as a web app and launch it.
+omarchy install gaming xbox-controllers      Install support for using Xbox controllers with Steam/RetroArch/etc.
+omarchy install hermes cli                   Install the Hermes CLI as a mise-backed wrapper in ~/.local/bin   [args: [--check|--now|--owns|--remove]]
+omarchy install openclaw cli                 Ensure the OpenClaw CLI is installed for the default agent   [args: [--check|--now]]
+omarchy install preinstalls                  Restore the preinstalled Omarchy applications (web apps, TUIs, and selected packages).
+omarchy install service 1password            Install 1Password and its Chromium extension.
+omarchy install service dropbox              Install and start the Dropbox service. Must then be authenticated via the web.
+omarchy install service nordvpn              Install the NordVPN service with optional GUI.
+omarchy install service once                 Install the ONCE service, enable its background service, and launch the TUI.
+omarchy install service signal               Install Signal and launch it.
+omarchy install service spotify              Install Spotify.
+omarchy install service sunshine             Install Sunshine and open Moonlight streaming ports for LAN and Tailscale.
+omarchy install service tailscale            Install the Tailscale mesh VPN service and a web app for the Tailscale Admin Console.
+omarchy install terminal                     Install one of the approved terminals and set it as the default for Omarchy (Super + Return etc).   [args: <alacritty|foot|ghostty|kitty>]
+
+## launch
+omarchy launch 1password                     Launch 1Password or start its installer when missing.
+omarchy launch about                         Launch the fastfetch TUI that gives information about the current system.
+omarchy launch battlenet                     Launch the installed Battle.net client via umu-launcher + GE-Proton.   [args: [--with-mangohud]]
+omarchy launch browser                       Launch the default browser as determined by xdg-settings.   [args: [url]]
+omarchy launch config editor                 Open a config file in the user's editor and surface a toast   [args: <path>]
+omarchy launch discord community             Open the Omarchy Discord community in the Discord app or a browser.
+omarchy launch editor                        Launch the default editor selected via Omarchy defaults.   [args: [--inline] <path>]
+omarchy launch floating terminal with presentation Launch a floating terminal with the Omarchy presentation wrapper   [args: <command>]
+omarchy launch nautilus                      Launch Files
+omarchy launch nautilus cwd                  Launch Files in the active terminal's current directory
+omarchy launch openclaw                      Open the OpenClaw Control UI (or its terminal UI with --tui), onboarding or starting the gateway first when needed.   [args: [--tui [--message <text>]]]
+omarchy launch or focus                      Launch an app or focus an existing window matching a pattern   [args: <window-pattern> <launch-command>]
+omarchy launch or focus tui                  Launch a TUI or focus an existing terminal window for it   [args: [--app-id=<app-id>] <command> [args...]]
+omarchy launch or focus webapp               Launch or focus on a given web app identified by the window-pattern.   [args: <window-pattern> <url-and-flags...>]
+omarchy launch screensaver                   Launch the Omarchy screensaver in the default terminal on the system with the correct font configuration.
+omarchy launch signal                        Launch Signal or start its installer when missing.
+omarchy launch spotify                       Launch Spotify or start its installer when missing.
+omarchy launch terminal                      Launch a terminal in the active terminal's current directory   [args: [command...]]
+omarchy launch terminal herdr                Launch or attach to the persistent herdr session in a terminal
+omarchy launch terminal tmux                 Launch or attach to the Work tmux session in a terminal
+omarchy launch tui                           Launch a TUI command in the default terminal with Omarchy styling   [args: [--app-id=<app-id>] <command> [args...]]
+omarchy launch webapp                        Launch a URL as a web app in the default supported browser   [args: <url>]
+
+## menu
+omarchy menu                                 Control the Omarchy menu (toggle / summon / close / refresh)   [args: [toggle|summon|close|refresh|ping] [route]]
+omarchy menu clipboard                       Launch the clipboard manager
+omarchy menu emoji                           Launch emojis
+omarchy menu file                            Pick a file from a menu   [args: label paths formats [menu args...]]
+omarchy menu herdr keybindings               Display annotated Herdr keybindings using an interactive search menu.   [args: [--print|-p] [--config <path>]]
+omarchy menu images                          Open a generic image selector menu   [args: [--selected <image>] [--print-name] [--show-labels] [--filterable] [--lazy-thumbnails] [--preload] [--cache-only] <image-dir>...]
+omarchy menu input                           Prompt for text input from a menu   [args: prompt [menu args...]]
+omarchy menu keybindings                     Display Hyprland keybindings defined in your configuration using an interactive search menu.
+omarchy menu plugin                          Pick a shell plugin to enable, disable, clone, or remove   [args: <enable|disable|clone|remove>]
+omarchy menu select                          Pick one option from a menu   [args: prompt [option...] [-- menu args...]]
+omarchy menu timezone                        Select and set the system timezone
+omarchy menu tmux keybindings                Display annotated Tmux keybindings using an interactive search menu.   [args: [--print|-p] [--config <path>]]
+
+## migrate
+omarchy migrate                              Run pending Omarchy migrations.   [args: [--pending]]
+omarchy migrate notify                       Notify the user when Omarchy has pending migrations
+
+## mise
+omarchy mise install                         Install a small mise-backed wrapper for a given tool.   [args: <package> [command-name [bin-name]]]
+
+## monitor
+omarchy monitor state                        Print monitor panel state for the shell
+
+## network
+omarchy network band                         Show or pin the Wi-Fi band for the active connection   [args: [auto|2.4|5|6]]
+omarchy network password                     Print the active Wi-Fi connection's password   [args: <interface>]
+omarchy network qr                           Generate a Wi-Fi QR matrix for the shell   [args: [--meta] [interface]]
+omarchy network speedtest                    Measure live internet speed for one direction   [args: [down|up]]
+omarchy network status                       Print active network status for the shell   [args: [--verbose]]
+
+## notification
+omarchy notification battery                 Show the current battery status notification
+omarchy notification dismiss                 Dismiss a notification by summary substring. Used by the first-run notifications to dismiss them after clicking for action.   [args: <summary>]
+omarchy notification send                    Send an Omarchy desktop notification   [args: [--app-name <app-name>] [-g <glyph>] [-u <low|normal|critical>] [-i <icon>] [-t <ms>] [-r <id>] [-p] [--image <path-or-uri>] <headline> [description] [--exec <program> [args...]]]
+omarchy notification time                    Show the current time and date notification
+omarchy notification weather                 Toggle the current weather panel
+
+## nvim
+omarchy nvim refresh                         Setup/refresh script for omarchy-nvim
+omarchy nvim setup                           Setup/refresh script for omarchy-nvim
+
+## openclaw
+omarchy openclaw onboard                     Run OpenClaw's setup wizard the way Omarchy needs it: in the terminal, installing the gateway as a user service, and returning when it is done.
+
+## osd
+omarchy osd                                  Show the Omarchy Quickshell on-screen display   [args: [-i|--icon <icon>] [-m|--message <text>] [-p|--progress <0-100>] [-d|--duration <ms>]]
+
+## pkg
+omarchy pkg add                              Install Arch packages if they are missing   [args: <packages...>]
+omarchy pkg aur accessible                   Returns true if the AUR is up and available.
+omarchy pkg aur add                          Add the named packages to the system from the AUR if they're missing. Returns false if it couldn't be done.   [args: <packages...>]
+omarchy pkg aur install                      Show a fuzzy-finder TUI for picking new AUR packages to install.
+omarchy pkg drop                             Remove all the named packages from the system if they're installed (otherwise ignore).   [args: <packages...>]
+omarchy pkg install                          Show a fuzzy-finder TUI for picking new Arch and OPR packages to install.
+omarchy pkg missing                          Returns true if any of the named packages are missing from the system (or false if they're all there).   [args: <packages...>]
+omarchy pkg present                          Returns true if all of the named packages are installed on the system (or false if any of them are missing).   [args: <packages...>]
+omarchy pkg remove                           Show a fuzzy-finder TUI for picking packages installed on the system to be removed.
+
+## plugin
+omarchy plugin add                           Add a shell plugin from git   [args: [git-url] [--enable] [--yes]]
+omarchy plugin clone                         Clone a built-in Omarchy shell plugin into your own config   [args: <source-id> [--edit]]
+omarchy plugin disable                       Disable a shell plugin   [args: <id>]
+omarchy plugin enable                        Enable a shell plugin   [args: <id> [placement]]
+omarchy plugin list                          List discovered shell plugins   [args: [--json]]
+omarchy plugin remove                        Remove an installed shell plugin   [args: [id] [--yes]]
+omarchy plugin update                        Update installed git-managed plugins   [args: [id] [--yes]]
+omarchy plugin validate                      Validate a plugin folder against the Omarchy plugin manifest schema   [args: <plugin-folder>]
+
+## plymouth
+omarchy plymouth current                     Show which theme is styling the Plymouth boot screen
+omarchy plymouth list                        List themes that can style the Plymouth boot screen
+omarchy plymouth preview                     Preview a Plymouth boot screen with custom colors and logo   [args: <background-hex> <text-hex> <path-to-logo.png> <output-path>]
+omarchy plymouth reset                       Restore the default Omarchy Plymouth boot theme and SDDM login screen
+omarchy plymouth set                         Set the Plymouth boot theme colors and logo   [args: <background-hex> <text-hex> <path-to-logo.png>]
+omarchy plymouth set by theme                Set the Plymouth boot theme from an Omarchy theme   [args: <theme-name>]
+omarchy plymouth switcher                    Open the Plymouth unlock screen switcher
+
+## power
+omarchy power present                        Returns true if external power is connected.
+
+## powerprofiles
+omarchy powerprofiles init                   Set the correct power profile on boot based on current AC/battery state.
+omarchy powerprofiles list                   Returns a list of all the available power profiles on the system.   [args: [--active-state]]
+omarchy powerprofiles set                    Set and remember the power profile for AC or battery use   [args: [autodetect|ac|battery] [power-saver|balanced|performance]]
+
+## refresh
+omarchy refresh applications                 Ensure default application launchers and mise wrappers are installed.
+omarchy refresh chromium                     Refresh the ~/.config/chromium-flags.conf file from the Omarchy defaults.
+omarchy refresh config                       Copy a shipped user config from $OMARCHY_PATH/config into ~/.config (backs up your version).   [args: <config-path>]
+omarchy refresh herdr                        Overwrite the user herdr config with the Omarchy default and reload herdr.
+omarchy refresh hyprland                     Overwrite all the user Hyprland Lua configs in ~/.config/hypr with the Omarchy defaults.
+omarchy refresh hyprsunset                   Overwrite the user config for hyprsunset with the Omarchy default and restart the service.
+omarchy refresh limine                       Overwrite the user config for the Limine bootloader and rebuild it.
+omarchy refresh pacman                       Overwrite the package configuration for /etc/pacman with the Omarchy default of using its dedicated mirrors and repositories, then update all packages.
+omarchy refresh plymouth                     Overwrite the user config for the Plymouth drive decryption and boot sequence with the Omarchy default and rebuild it.
+omarchy refresh sddm                         Refresh the SDDM theme from default
+omarchy refresh shell                        Reset shell.json to Omarchy defaults
+omarchy refresh tmux                         Overwrite the user tmux config with the Omarchy default and reload tmux.
+
+## reinstall
+omarchy reinstall                            Reinstall Omarchy packages and reset default configs
+omarchy reinstall configs                    Reset Omarchy user configs and shipped defaults in $HOME (destructive)
+omarchy reinstall pkgs                       Reinstall all default Omarchy packages from the stable channel
+
+## reminder
+omarchy reminder                             Set and show lightweight desktop notification reminders   [args: [-i|--interactive] | <minutes> [message] | show [-j|--json] | clear]
+
+## remove
+omarchy remove ai hermes                     Remove the Hermes desktop app along with the Hermes runtime it installed.
+omarchy remove ai openclaw                   Remove the OpenClaw agent platform along with its gateway service and web app.
+omarchy remove ai perplexity                 Remove the Perplexity desktop app along with its runtime caches.
+omarchy remove ai t3 code                    Remove T3 Code along with its configuration and workspaces.
+omarchy remove browser                       Remove a supported browser and clean up Omarchy browser defaults   [args: <chrome|brave|brave-origin|edge|firefox|zen>]
+omarchy remove dev env                       Remove a development environment that was previously installed via omarchy-install-dev-env.   [args: <ruby|node|bun|deno|go|php|laravel|symfony|python|elixir|phoenix|zig|rust|java|dotnet|ocaml|clojure|scala>]
+omarchy remove gaming battlenet              Remove Battle.net, its Proton prefix, installed games, and desktop entry.
+omarchy remove gaming geforce-now            Remove the GeForce NOW Flatpak app and its data.
+omarchy remove gaming heroic                 Remove Heroic Games Launcher and its game libraries, configs, and caches.
+omarchy remove gaming lutris                 Remove Lutris, Wine, umu-launcher, and all their configs and caches.
+omarchy remove gaming minecraft              Remove the Minecraft launcher along with its worlds, mods, and caches.
+omarchy remove gaming retroarch              Remove RetroArch, all libretro cores, and its config/saves. Leaves ~/Games/roms and ~/Games/bios alone.
+omarchy remove gaming steam                  Remove Steam and all of its game libraries, configs, and caches.
+omarchy remove gaming xbox cloud             Remove the Xbox Cloud Gaming web app.
+omarchy remove gaming xbox-controllers       Remove the xpadneo Xbox controller driver and undo its module/blacklist config.
+omarchy remove preinstalls                   Remove preinstalled Omarchy applications (web apps, TUIs, and selected packages).
+omarchy remove security fido2                Remove FIDO2 authentication from sudo and polkit
+omarchy remove security fingerprint          Remove fingerprint authentication from sudo, polkit, and lock screen
+omarchy remove security sshd                 Disable the OpenSSH server, close the firewall port, and optionally remove authorized keys
+omarchy remove security sudoless docker      Disable sudoless Docker by removing your user from the docker group
+omarchy remove service 1password             Remove 1Password and its Chromium extension.
+omarchy remove service dropbox               Remove Dropbox and its bar plugin.
+omarchy remove service sunshine              Remove Sunshine and close Omarchy-managed Moonlight streaming ports.
+omarchy remove service tailscale             Remove Tailscale and its bar plugin.
+
+## restart
+omarchy restart app                          Restart an application by killing it and relaunching via uwsm.   [args: <application-name> [application-args...]]
+omarchy restart audio                        Restart audio services and recover stuck USB audio devices.
+omarchy restart bluetooth                    Unblock and restart the bluetooth service.
+omarchy restart btop                         Reload btop configuration (used by the Omarchy theme switching).
+omarchy restart helix                        Reload Helix configuration
+omarchy restart herdr                        Reload herdr if running with the latest configuration
+omarchy restart hyprctl                      Reload hyprland configuration (used by the Omarchy theme switching).
+omarchy restart hyprsunset                   Restart the hyprsunset service (used for blue light filtering/night light).
+omarchy restart opencode                     Reload opencode configuration (used by the Omarchy theme switching).
+omarchy restart shell                        Restart the Omarchy shell
+omarchy restart terminal                     Reload supported terminal emulators after config changes
+omarchy restart tmux                         Restart tmux if running with the latest configuration
+omarchy restart trackpad                     Reset the trackpad by unbinding and rebinding its driver.
+omarchy restart wifi                         Unblock and restart the Wi-Fi service.
+omarchy restart xcompose                     Restart the XCompose input method service (fcitx5) to apply new compose key settings.
+
+## screensaver
+omarchy screensaver                          Run the Omarchy screensaver using random effects from TTE.
+
+## setup
+omarchy setup direct boot                    Add or remove an EFI boot entry for the Omarchy UKI, allowing the system to boot directly
+omarchy setup factory reset                  Factory-reset this machine back to its freshly-installed state
+omarchy setup security fido2                 Set up FIDO2 authentication for sudo and polkit
+omarchy setup security fingerprint           Set up fingerprint authentication for sudo, polkit, and lock screen
+omarchy setup security sshd                  Set up the OpenSSH server, open the firewall, and authorize an SSH key   [args: [--key=<public-key>]]
+omarchy setup security sudoless docker       Enable sudoless Docker by adding your user to the docker group (root-equivalent!)
+
+## share
+omarchy share                                Share clipboard, files, or folders with LocalSend   [args: <clipboard|file|folder> [path...]]
+
+## shell
+omarchy shell                                Send an IPC call to the running Omarchy shell   [args: [-q] <target> <method> [args...]]
+
+## show
+omarchy show done                            Display a "Done!" message and wait for user to press any key.
+omarchy show logo                            Display the Omarchy logo in the terminal using green color.
+
+## snapshot
+omarchy snapshot                             Create or restore system snapshots with snapper   [args: <create|restore>]
+
+## sudo
+omarchy sudo keepalive                       Prompt for sudo once and keep the credential alive in the background.
+omarchy sudo passwordless                    Toggle passwordless sudo for the current user.   [args: [MINUTES]]
+
+## system
+omarchy system lock                          Lock the computer and turn off the display
+omarchy system logout                        Log out after closing application windows
+omarchy system reboot                        Reboot after closing application windows
+omarchy system shutdown                      Shut down after closing application windows
+omarchy system stats                         Print CPU and memory stats for the shell   [args: [--bar-widget]]
+omarchy system wake                          Wake displays and restore brightness after idle
+
+## tailscale
+omarchy tailscale receive                    Save incoming Taildrop files and announce them   [args: [--once] [directory]]
+omarchy tailscale send                       Send files to a machine on your tailnet with Taildrop   [args: <machine> [file...]]
+
+## theme
+omarchy theme bg cache                       Cache background switcher thumbnails for the current theme
+omarchy theme bg current                     Show current background
+omarchy theme bg install                     Open the current theme's user background folder
+omarchy theme bg next                        Cycle to the next background for the current theme
+omarchy theme bg set                         Set the current background image   [args: <path-to-image>]
+omarchy theme bg-switcher                    Open the Omarchy background switcher
+omarchy theme current                        Show current theme
+omarchy theme dir                            Print the directory holding a theme, preferring a user-installed copy   [args: <theme-name>]
+omarchy theme extras                         List the user-installed themes that came from a git clone
+omarchy theme install                        Install a theme from a git repository   [args: [git-repo-url]]
+omarchy theme list                           List available themes
+omarchy theme refresh                        Refresh the current theme from its templates.
+omarchy theme remove                         Remove a user-installed theme   [args: [theme-name]]
+omarchy theme set                            Apply an Omarchy theme   [args: <theme-name>]
+omarchy theme switcher                       Open the Omarchy theme switcher
+omarchy theme update                         Update user-installed git themes
+
+## toggle
+omarchy toggle                               Toggle Omarchy features between enabled and disabled   [args: <flag-name> [toggle|on|off]]
+omarchy toggle bar                           Toggle bar visibility without killing the Omarchy shell   [args: [toggle|on|off]]
+omarchy toggle crash capture                 Toggle crash capture notifications
+omarchy toggle enabled                       Check if a toggle is enabled (flag file exists)   [args: <flag-name>]
+omarchy toggle hybrid gpu                    Toggle dedicated vs integrated GPU mode via supergfxd (for hybrid gpu laptops, like Asus G14).
+omarchy toggle idle                          Toggle idle behavior so the system either idles normally or stays awake   [args: [toggle|stay-awake|allow-idle|status]]
+omarchy toggle nightlight                    Toggle nightlight screen temperature   [args: [--status]]
+omarchy toggle notification silencing        Toggle notification do-not-disturb mode
+omarchy toggle screensaver                   Toggle screensaver availability
+omarchy toggle suspend                       Toggle suspend availability in the system menu
+omarchy toggle touchpad                      Enable, disable, or toggle the touchpad   [args: [on|off|toggle]]
+omarchy toggle touchscreen                   Enable, disable, or toggle the touch functionality of the screen   [args: [on|off|toggle]]
+
+## transcode
+omarchy transcode                            Transcode pictures and videos for sharing   [args: [--path path] [input] [format] [resolution]]
+omarchy transcode ascii                      Transcode an image into ASCII/Unicode art text   [args: <input-image.svg|png> <output-path> [--width <columns>] [--height <rows>] [--mode <braille|block>] [--threshold <percent>] [--invert]]
+
+## tui
+omarchy tui install                          Create a desktop launcher for a terminal UI app   [args: [name command window-style icon-url-or-name]]
+omarchy tui remove                           Remove a terminal UI desktop launcher   [args: [name]]
+omarchy tui remove all                       Remove all TUIs installed via omarchy-tui-install.
+
+## update
+omarchy update                               Update Omarchy and system packages   [args: [-y]]
+omarchy update analyze logs                  Check the update log for known failure conditions
+omarchy update aur pkgs                      Update AUR packages if any are installed
+omarchy update available                     Check whether Omarchy updates are available.
+omarchy update confirm                       Prompt for confirmation before starting an update
+omarchy update dev                           Update the active Omarchy dev checkout
+omarchy update firmware                      Update system firmware using fwupd. Ensures the fwupd EFI binary is installed
+omarchy update keyring                       Ensure the Omarchy and Arch keyring packages are installed and populated
+omarchy update mise                          Update mise-managed tools
+omarchy update orphan pkgs                   Review and optionally remove orphaned system packages after updates
+omarchy update pkg prune                     Prune superseded versions from the pacman package cache
+omarchy update restart                       Prompt for required reboot or service restarts after updates
+omarchy update system pkgs                   Update system packages with pacman
+omarchy update time                          Restart system time synchronization
+
+## upgrade
+omarchy upgrade to quattro                   Upgrade a legacy Omarchy install to the package-backed Omarchy quattro layout.   [args: [--yes] [--reboot] [--dev] [--channel stable|rc|edge] [--user USER]]
+
+## version
+omarchy version                              Print the installed Omarchy version
+omarchy version channel                      Print the active Omarchy mirror and package channel
+omarchy version pkgs                         Print when system packages were last upgraded
+
+## voxtype
+omarchy voxtype config                       Open Voxtype configuration
+omarchy voxtype install                      Install and configure Voxtype dictation
+omarchy voxtype model                        Open Voxtype AI model setup
+omarchy voxtype remove                       Remove Voxtype dictation and its configuration
+omarchy voxtype status                       Stream voxtype --follow status as bar-friendly JSON
+
+## weather
+omarchy weather icon                         Returns a weather condition icon, adjusted for live sunrise and sunset.
+omarchy weather location                     Show or set the location used for weather reports
+omarchy weather status                       Returns a formatted weather status string with temperature and wind speed.
+
+## webapp
+omarchy webapp handler hey                   Open HEY webmail and translate mailto links   [args: [url]]
+omarchy webapp handler zoom                  Open Zoom web meetings from browser protocol links   [args: [url]]
+omarchy webapp install                       Create a desktop launcher for a web app   [args: [name url icon-url-or-name [custom-exec] [mime-types]]]
+omarchy webapp remove                        Remove a web app desktop launcher   [args: [name]]
+omarchy webapp remove all                    Remove all web apps installed via omarchy-webapp-install.
+
+## windows
+omarchy windows vm                           Install, launch, stop, inspect, or remove the Windows VM   [args: <install|remove|launch|stop|status> [options]]

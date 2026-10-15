@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# guardián del cerebro de voz: intercepta comandos destructivos y exige
+# confirmación hablada. Se invoca como `omarchy`, `systemctl`, `reboot`,
+# `poweroff` o `shutdown` mediante symlinks, y sólo actúa dentro del PATH de
+# `voice-pi` (no afecta tu shell normal).
+set -uo pipefail
+
+name="${0##*/}"
+args=("$@")
+danger=0
+real="/usr/bin/$name"
+
+case "$name" in
+  omarchy)
+    joined=" $* "
+    case "$joined" in
+      *" shutdown "*|*" reboot "*|*" logout "*|*" reinstall "*|\
+      *" hyprland window close all "*|*" pkg drop "*|*" pkg remove "*|\
+      *" hibernation remove "*|*" drive password "*|*" theme remove "*|\
+      *" plugin remove "*|*" refresh "*|*" remove "*)
+        danger=1 ;;
+    esac
+    ;;
+  systemctl)
+    case "${1:-}" in poweroff|reboot|halt|suspend|hibernate) danger=1 ;; esac
+    ;;
+  reboot|poweroff|shutdown) danger=1 ;;
+esac
+
+if [ "$danger" = 1 ]; then
+  exec "$HOME/.local/bin/voice-peligroso" --desc "«$name ${args[*]}»" -- "$real" "${args[@]}"
+fi
+exec "$real" "${args[@]}"
