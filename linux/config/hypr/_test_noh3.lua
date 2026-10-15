@@ -1,0 +1,17 @@
+require("env")
+require("monitors")
+require("input")
+require("looknfeel")
+require("gaps")
+require("layerrules")
+require("animations")
+require("autostart")
+
+require("plugins.hyprexpo")
+require("navigation")
+
+require("windowrules")
+require("windowhelpers")
+require("bindings")
+require("moonlight")
+require("ohm")
