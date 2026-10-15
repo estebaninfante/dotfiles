@@ -12,6 +12,10 @@ mode = "summary"          # summary = resumen de la respuesta; full = texto comp
 # salida: 1.0 = igual que el general; menos = mas bajo en proporcion. NO es un
 # volumen independiente (si bajas el general, baja tambien). Config: `voice volume`.
 volume = 1.0
+# Velocidad de lectura del TTS (factor de tempo; 1.0 = normal, >1 mas rapido).
+# Es el valor por defecto de todas las voces; un perfil puede pisarlo con su
+# propio `speed`. Config: `voice speed`.
+speed = 1.15
 # Si un agente/proceso no tiene perfil propio, asignarle una voz estable y
 # distinta automáticamente (misma siempre, según su nombre).
 auto_profiles = true

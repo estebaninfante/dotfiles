@@ -402,7 +402,7 @@ def resolve_voice(cfg: dict = None, profile: str = "", voice: str = "",
         "voice": voice or base["voice"],
         "lang": base_lang,
         "pitch": _to_float(prof.get("pitch"), 0.0),
-        "speed": _to_float(prof.get("speed"), 1.0),
+        "speed": _to_float(prof.get("speed"), _to_float(t.get("speed"), 1.0)),
     }
 
 

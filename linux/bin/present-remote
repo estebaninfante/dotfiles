@@ -184,41 +184,44 @@ def ptt_active():
 def cancel_voice():
     """Corta la sesión de voz activa y cierra la píldora.
 
-    Omnivoz atiende SIGINT pero puede tardar unos segundos (cargando modelos),
-    así que esperamos a que muera de verdad antes de escalar a SIGTERM/SIGKILL.
+    Cierra la UI PRIMERO (para que desaparezca al instante) y recién despues
+    corta el proceso. Omnivoz atiende SIGINT pero puede tardar unos segundos
+    (cargando modelos), asi que esperamos a que muera de verdad antes de
+    escalar a SIGTERM/SIGKILL.
     """
-    pids = _ptt_pids()
-    if not pids:
-        log("cancel: no había sesión de voz activa")
-    else:
-        log(f"cancel: corto {pids}")
-        for pid in pids:
-            try:
-                os.kill(pid, signal.SIGINT)
-            except OSError:
-                pass
-        if not _wait_dead(pids, 3.0):
-            for pid in pids:
-                if _alive(pid):
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except OSError:
-                        pass
-            if not _wait_dead(pids, 1.0):
-                for pid in pids:
-                    if _alive(pid):
-                        try:
-                            os.kill(pid, signal.SIGKILL)
-                        except OSError:
-                            pass
-                _wait_dead(pids, 0.5)
-
-    # Limpieza común: pidfile y píldora.
+    # 1) Cerrar la pildora YA: la UI no espera al proceso.
+    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
     try:
         os.remove(PTT_PIDFILE)
     except FileNotFoundError:
         pass
-    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
+
+    # 2) Recien ahora, cortar el proceso.
+    pids = _ptt_pids()
+    if not pids:
+        log("cancel: no había sesión de voz activa")
+        return
+    log(f"cancel: corto {pids}")
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGINT)
+        except OSError:
+            pass
+    if not _wait_dead(pids, 3.0):
+        for pid in pids:
+            if _alive(pid):
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+        if not _wait_dead(pids, 1.0):
+            for pid in pids:
+                if _alive(pid):
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except OSError:
+                        pass
+            _wait_dead(pids, 0.5)
 
 
 def toggle_voice():

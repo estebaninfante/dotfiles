@@ -35,6 +35,7 @@
 #   voice stop                           vaciar cola TTS + cortar playback
 #   voice daemon start|stop|restart      control del servicio systemd user
 #   voice volume [0.0-1.0|NN%]           ver/cambiar volumen relativo de la voz TTS
+#   voice speed [factor]                 ver/cambiar velocidad de lectura del TTS (1.0 = normal)
 #   voice history [--json] [N]           historial de la voz (mas reciente primero)
 #   voice history play <N>               reproducir la entrada N del historial
 #   voice play <archivo.wav>             reproducir un WAV del historial
@@ -803,6 +804,15 @@ PYEOF
       echo "volumen TTS: $v (relativo al general)"
     else
       echo "volumen TTS: $(config_val tts volume)"
+    fi
+    ;;
+  speed)
+    # Velocidad de lectura del TTS: factor de tempo (1.0 = normal, >1 rapido).
+    if [ "$#" -ge 2 ]; then
+      get_set tts speed "$2"
+      echo "velocidad TTS: $2x"
+    else
+      echo "velocidad TTS: $(config_val tts speed)x"
     fi
     ;;
   history)
