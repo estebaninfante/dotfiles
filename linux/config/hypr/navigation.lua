@@ -460,7 +460,7 @@ end
 
 for i = 1, 10 do
     if i < 10 then
-        hl.bind(main_mod .. " + " .. ws_keys[i], function() ws_travel(i) end)
+        hl.bind(main_mod .. " + " .. ws_keys[i], function() expo_focus(i) end)
     end
     hl.bind(main_mod .. " + SHIFT + " .. ws_keys[i], hl.dsp.window.move({ workspace = tostring(i) }))
 end
