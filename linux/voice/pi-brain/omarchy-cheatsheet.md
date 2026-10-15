@@ -53,6 +53,8 @@ Si algo no figura acá: `omarchy commands | grep -i PALABRA` o `omarchy <grupo> 
 ## Apps
 - navegador: `omarchy launch browser [url]`
 - terminal: `omarchy launch terminal`
+- terminal con un programa adentro: `omarchy launch terminal <comando>` (ej. `omarchy launch terminal pi`)
+- agente de código por defecto: `omarchy agent`
 - abrir o enfocar app: `omarchy launch or focus <app>`
 - enfocar ventana Hyprland: `omarchy hyprland focus app <nombre>`
 

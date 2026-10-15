@@ -186,12 +186,31 @@ resolve_voice_flags() {  # resolve_voice_flags <profile> <voice> <engine> <lang>
   V_PITCH=${V_PITCH:-0}; V_SPEED=${V_SPEED:-1.0}
 }
 
+# Frases de fallo: se muestran como subtítulo (glow/píldora) pero NO se dicen
+# en voz alta. Así el usuario ve el "no pude" sin que le interrumpa el oído.
+VOICE_FALLBACK_RE='^(No pude resolver eso\.|No entendí qué hacer\.|Me tardé demasiado en resolver eso\.)$'
+
+# subtitle: publica un texto como subtítulo sin reproducir audio.
+subtitle() {  # subtitle <texto>
+  local text="$*"
+  [ -n "$text" ] || return 0
+  mkdir -p "$CACHE_DIR"
+  local words ms f
+  words=$(printf '%s' "$text" | wc -w)
+  ms=$(( words * 420 + 900 )); [ "$ms" -lt 1500 ] && ms=1500
+  f="$CACHE_DIR/speaking.json"
+  printf '{"text":%s,"durationMs":%s,"startedAt":%s,"source":"assistant","engine":"none","voice":"none"}\n' \
+    "$(js_escape "$text")" "$ms" "$(( $(date +%s) * 1000 ))" > "$f.$$" && mv "$f.$$" "$f"
+}
+
 speak() {  # speak [--profile P] [--voice V] [--engine E] [--lang L] [--source S] [--key K] [--pitch N] [--speed N] [--no-record] [--force] <texto>
   local P_PROFILE P_VOICE P_ENGINE P_LANG P_SOURCE P_KEY P_PITCH P_SPEED P_NO_RECORD P_FORCE P_TEXT
   local V_ENGINE V_VOICE V_LANG V_PITCH V_SPEED
   parse_speak_flags "$@" || return $?
   local text="$P_TEXT"
   [ -n "$text" ] || { echo "voice: sin texto" >&2; return 1; }
+  # "No pude…": solo visible, nunca hablado.
+  if [[ "$text" =~ $VOICE_FALLBACK_RE ]]; then subtitle "$text"; return 0; fi
   if [ "$P_FORCE" != 1 ] && [ "$(config_val tts enabled)" = "false" ]; then return 0; fi
   local profile="${P_PROFILE:-$P_SOURCE}"
   resolve_voice_flags "$profile" "$P_VOICE" "$P_ENGINE" "$P_LANG"
@@ -691,6 +710,7 @@ case "${1:-status}" in
   repeat) shift; repeat "$@" ;;
   resolve) shift; "$PY" "$VOICE_DIR/engine.py" resolve "$@" ;;
   synth) shift; synth "$@" ;;
+  subtitle|show) shift; subtitle "$@" ;;
   listen) listen ;;
   test)
     speak "Hola. Esto es una prueba del sistema de voz local."

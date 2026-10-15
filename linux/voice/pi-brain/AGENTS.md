@@ -38,8 +38,14 @@ Tenés `bash` para lo que no cubra `omarchy`:
 - **Hyprland (Lua)**: los `hyprctl dispatch` clásicos NO existen. Usá
   `~/.local/bin/hypr-lua.sh exec "comando"` o `hyprctl eval 'hl.exec_cmd("...")'`,
   y `hyprctl clients -j` / `hyprctl activewindow -j` para leer estado.
-  Para workspaces: `hyprctl eval 'hl.dispatch(hl.dsp.workspace({ index = N }))'`.
+  Para workspaces: `~/.local/bin/hypr-lua.sh workspace N`
+  (o `hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = N }))'`).
 - **Apps**: `omarchy launch browser`, `omarchy launch terminal` o directamente el binario.
+- **Terminal con un programa adentro**: `omarchy launch terminal <comando>`.
+  Ejemplos: «abre una terminal con el agente de pi» → `omarchy launch terminal pi`;
+  «abre una terminal con opencode» → `omarchy launch terminal opencode`.
+  `omarchy launch terminal` SIN argumentos abre una terminal vacía.
+  Agente de código por defecto: `omarchy agent`.
 - **Audio**: `wpctl set-volume @DEFAULT_AUDIO_SINK@ 10%+`, `wpctl set-mute ... toggle`.
 - **Brillo**: `omarchy brightness display +10%` (o `brightnessctl set +10%`).
 - **Multimedia**: `playerctl play-pause|next|previous`.
