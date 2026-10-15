@@ -57,6 +57,8 @@ LOG = open(os.devnull, "w")
 
 ENV = dict(os.environ)
 ENV["PATH"] = os.path.join(HOME, ".local/bin") + ":" + ENV.get("PATH", "/usr/bin:/bin")
+# Los cambios de modo disparados por el botón no deben llenar de notificaciones.
+ENV["OMAR_NOTIFY"] = "0"
 
 DEFAULT_SETTINGS = {
     "hold_ms": 600,
