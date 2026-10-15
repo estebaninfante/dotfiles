@@ -26,8 +26,9 @@
  *   PI_TTS_DRY=1       no habla ni notifica; escribe en PI_TTS_DRY_FILE o /tmp
  */
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { basename } from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -43,6 +44,44 @@ type RunSummary = {
 const MAX_SUMMARY = 240;
 const DEDUP_MS = 20000;
 const HOME = process.env.HOME ?? "";
+
+/** Nombre del agente que habla: así el subtítulo y la notificación dicen QUIÉN
+ *  es (su color sale del nombre), no el harness. Prioridad: PI_VOICE_AGENT >
+ *  nombre del panel tmux (@agent_name) > carpeta del proyecto > "pi". */
+function resolveAgentName(): string {
+  const explicit = process.env.PI_VOICE_AGENT?.trim();
+  if (explicit) return explicit;
+  const pane = process.env.TMUX_PANE?.trim();
+  if (pane) {
+    try {
+      const name = execFileSync(
+        "tmux",
+        ["display-message", "-p", "-t", pane, "#{@agent_name}"],
+        { encoding: "utf8", timeout: 1500, stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+      if (name) return name;
+    } catch {
+      /* sin tmux o panel sin nombre: probamos la carpeta */
+    }
+  }
+  try {
+    const cwd = process.cwd();
+    if (cwd && cwd !== HOME && !cwd.startsWith("/tmp") && !cwd.startsWith(`${HOME}/.`)) {
+      const base = basename(cwd);
+      if (base) return base;
+    }
+  } catch {
+    /* sin cwd: no importa */
+  }
+  return "pi";
+}
+
+let agentNameCache: string | undefined;
+
+/** Lazy: no toca tmux al cargar la extensión, recién cuando hace falta. */
+function agentName(): string {
+  return (agentNameCache ??= resolveAgentName());
+}
 
 /* Voz del jefe: una sola frase, resultados y no métodos. */
 const SYSTEM_PROMPT = [
@@ -121,7 +160,7 @@ function condense(text: string): string {
 function voiceAvisar(line: string): void {
   const bin = process.env.PI_TTS_VOICE_BIN ?? `${HOME}/.local/bin/voice`;
   try {
-    const child = spawn(bin, ["avisar", "--source", "Pi", "--", line], {
+    const child = spawn(bin, ["avisar", "--source", agentName(), "--", line], {
       detached: true,
       stdio: "ignore",
     });

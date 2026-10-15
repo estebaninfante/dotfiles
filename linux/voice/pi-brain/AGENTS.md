@@ -140,7 +140,10 @@ pendiente y lo marca escuchado) y confirmá en una frase corta.
 Si el usuario te pide preguntarle algo a otro agente o responderle, usá el bus
 `~/.local/bin/agente` (o `~/developing/voz-agentes/agente`):
 
-- `agente preguntar <nombre> "<pregunta>"` — habla y queda esperando respuesta.
+- `agente hablar <nombre> "<texto>"` — dice algo (contexto o avance) por voz,
+  sin esperar respuesta.
+- `agente preguntar <nombre> "<pregunta>"` — habla (contexto + pregunta) y queda
+  esperando respuesta.
 - `agente esperar <nombre> --timeout 300` — bloquea hasta que llegue.
 
 ## Paneles de tmux (agentes con nombre)

@@ -4,10 +4,11 @@
  * `tts-summary.ts` ya hace que el agente HABLE (`avisar`). Esta extensión agrega
  * las dos piezas que faltan:
  *
- *  1. Tool `preguntar_al_usuario`: el agente hace una pregunta en voz alta y
- *     ESPERA tu respuesta hablada. Mientras espera no gasta tokens adivinando.
- *     Usa el bus `agente` (preguntar → esperar), que a su vez reutiliza el
- *     daemon de voz (`voice send --agent <nombre>`) y serializa varios agentes.
+ *  1. Tool `hablar`: el agente LE HABLA al usuario (un avance, contexto o una
+ *     explicación) y, si hace falta, ESPERA su respuesta hablada. Primero dice
+ *     el contexto y después la pregunta: no se limita a preguntar. Usa el bus
+ *     `agente` (hablar / preguntar → esperar), que reutiliza el daemon de voz
+ *     (`voice send --agent <nombre>`) y serializa varios agentes.
  *
  *  2. Subtítulos de trabajo: mientras el modelo piensa, un widget de la UI
  *     muestra hace cuánto trabaja, cuál fue el último pedido del usuario y el
@@ -28,33 +29,105 @@
  *     entra el siguiente. Si el modelo piensa mucho más rápido de lo que se
  *     puede leer, se descartan las oraciones más viejas para no quedar atrasado.
  *
- * Config:
+ * Nombre del agente: decide su voz, su color y a quién le hablás. Prioridad:
+ *   PI_VOICE_AGENT > nombre del panel tmux (@agent_name) > carpeta del
+ *   proyecto > "pi". Así el usuario ve QUIÉN habla, no el harness.
+ *
+ * Config (archivo ~/.config/pi/latido.json o variables de entorno; la variable
+ * gana):
  *   PI_AGENTE_BIN        ruta al bus (default ~/developing/voz-agentes/agente)
- *   PI_VOICE_AGENT       nombre del agente / perfil de voz (default "pi")
+ *   PI_VOICE_AGENT       fuerza el nombre/voz del agente
  *   PI_LATIDO=0          apaga el latido
+ *   PI_LATIDO_LINES      oraciones visibles a la vez (default 3)
  *   PI_LATIDO_PARAGRAPH_WORDS  palabras tope por oración (default 24)
- *   PI_LATIDO_WORD_MS    ritmo de lectura, ms por palabra (default 300)
- *   PI_LATIDO_BACKLOG    máximo de palabras en espera antes de descartar (default 120)
+ *   PI_LATIDO_WORD_MS    ritmo de lectura, ms por palabra (default 220)
+ *   PI_LATIDO_BACKLOG    máximo de palabras en espera antes de descartar (default 200)
  *   PI_LATIDO_PROMPT_CHARS  largo máximo del pedido mostrado (default 96)
  */
 
-import { spawn } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { appendFileSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 const HOME = process.env.HOME ?? "";
 const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/agente`;
-const AGENT_NAME = process.env.PI_VOICE_AGENT ?? "pi";
+
+/** Nombre del agente: identifica su voz, su color y su panel. Prioridad:
+ *  PI_VOICE_AGENT > nombre del panel tmux (@agent_name) > carpeta del
+ *  proyecto > "pi". Así el usuario sabe QUIÉN habla, no el harness. */
+function resolveAgentName(): string {
+  const explicit = process.env.PI_VOICE_AGENT?.trim();
+  if (explicit) return explicit;
+  const pane = process.env.TMUX_PANE?.trim();
+  if (pane) {
+    try {
+      const name = execFileSync(
+        "tmux",
+        ["display-message", "-p", "-t", pane, "#{@agent_name}"],
+        { encoding: "utf8", timeout: 1500, stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+      if (name) return name;
+    } catch {
+      /* sin tmux o panel sin nombre: probamos la carpeta */
+    }
+  }
+  try {
+    const cwd = process.cwd();
+    if (cwd && cwd !== HOME && !cwd.startsWith("/tmp") && !cwd.startsWith(`${HOME}/.`)) {
+      const base = basename(cwd);
+      if (base) return base;
+    }
+  } catch {
+    /* sin cwd: no importa */
+  }
+  return "pi";
+}
+
+let agentNameCache: string | undefined;
+
+/** Lazy: no toca tmux al cargar la extensión, recién cuando hace falta. */
+function agentName(): string {
+  return (agentNameCache ??= resolveAgentName());
+}
 
 const LATIDO_ENABLED = process.env.PI_LATIDO !== "0";
 
-// Subtítulos del pensamiento: una oración fija que se ilumina palabra por
-// palabra al ritmo de lectura; no es una ventana que se desplaza.
-const PARAGRAPH_WORDS = Math.max(6, Number(process.env.PI_LATIDO_PARAGRAPH_WORDS ?? "24") || 24);
-const WORD_MS = Math.max(120, Number(process.env.PI_LATIDO_WORD_MS ?? "300") || 300);
-const MAX_BACKLOG = Math.max(PARAGRAPH_WORDS, Number(process.env.PI_LATIDO_BACKLOG ?? "120") || 120);
-const PROMPT_MAX = Math.max(20, Number(process.env.PI_LATIDO_PROMPT_CHARS ?? "96") || 96);
+interface LatidoConfig {
+  lines: number;
+  paragraphWords: number;
+  wordMs: number;
+  backlog: number;
+  promptChars: number;
+}
+
+function num(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** Config del latido: ~/.config/pi/latido.json y luego variables de entorno (la
+ *  variable gana). Permite ajustar oraciones, velocidad y foco sin tocar el
+ *  código. */
+function readLatidoConfig(): LatidoConfig {
+  let file: Record<string, unknown> = {};
+  try {
+    file = JSON.parse(readFileSync(`${HOME}/.config/pi/latido.json`, "utf8"));
+  } catch {
+    /* sin archivo: quedan los valores por defecto */
+  }
+  const env = process.env;
+  return {
+    lines: Math.min(8, Math.max(1, num(env.PI_LATIDO_LINES ?? file.lines, 3))),
+    paragraphWords: Math.max(6, num(env.PI_LATIDO_PARAGRAPH_WORDS ?? file.paragraphWords, 24)),
+    wordMs: Math.max(80, num(env.PI_LATIDO_WORD_MS ?? file.wordMs, 220)),
+    backlog: Math.max(24, num(env.PI_LATIDO_BACKLOG ?? file.backlog, 200)),
+    promptChars: Math.max(20, num(env.PI_LATIDO_PROMPT_CHARS ?? file.promptChars, 96)),
+  };
+}
+
+const CFG = readLatidoConfig();
 const PACER_TICK_MS = 120;
 
 /** Registro para poder verificar el latido sin adivinar (PI_LATIDO_DEBUG=1). */
@@ -116,18 +189,25 @@ function execCapture(
   });
 }
 
-const PREGUNTAR_PARAMS = Type.Object({
-  pregunta: Type.String({
+const HABLAR_PARAMS = Type.Object({
+  mensaje: Type.String({
     description:
-      "La pregunta para el usuario, en español natural y sencillo, una sola " +
-      "frase, sin tecnicismos. Se leerá en voz alta.",
+      "Lo que le decís al usuario en voz alta: el contexto, un avance o la " +
+      "pregunta. Una o dos frases llanas en español, sin tecnicismos ni rutas. " +
+      "Si vas a preguntar algo, PRIMERO contá el contexto y después la pregunta.",
   }),
-  espera_segundos: Type.Optional(
+  esperar: Type.Optional(
+    Type.Boolean({
+      description:
+        "true si necesitás que el usuario te responda por voz y querés " +
+        "esperar. false o ausente para solo decir algo y seguir.",
+    }),
+  ),
+  segundos: Type.Optional(
     Type.Number({
       description:
-        "Cuánto esperar la respuesta hablada antes de seguir por tu cuenta " +
-        "(default 300). Si no responde, seguí con tu mejor criterio y decile " +
-        "después qué asumiste.",
+        "Cuánto esperar la respuesta hablada (solo si esperar=true). " +
+        "Default 300.",
     }),
   ),
 });
@@ -216,13 +296,35 @@ export default function (pi: ExtensionAPI) {
     return cleanText(text).split(/\s+/).filter(Boolean);
   }
 
+  /** Quita código (bloques ``` e inline `) para que los subtítulos muestren la
+   *  secuencia de pensamiento entendible, no el código. */
+  function stripCode(text: string): string {
+    let t = text.replace(/```[\s\S]*?```/g, " ");
+    const open = t.indexOf("```");
+    if (open >= 0) t = t.slice(0, open);
+    return t.replace(/`[^`]*`/g, " ");
+  }
+
+  /** Heurística: ¿la oración es más código que prosa? */
+  function isCodeLike(sentence: string): boolean {
+    const s = sentence.trim();
+    if (!s) return true;
+    const codeChars = (s.match(/[{}<>[\]()=;:+*/\\|_$#@~^]/g) ?? []).length;
+    if (codeChars / s.length > 0.16) return true;
+    return /(=>|::|\(\)|\{\}|\b(const|import|export|function|return|class|def|npm|pnpm|sudo|curl)\b|<\/?[a-z]+>|\.(ts|tsx|js|jsx|py|json|sh|rs|go)\b|\/[\w.-]+\/)/i.test(
+      s,
+    );
+  }
+
   /** Encola una oración; si el atraso crece, descarta las más viejas. */
   function pushParagraph(text: string): void {
-    const w = words(text);
+    const clean = cleanText(stripCode(text));
+    if (isCodeLike(clean)) return;
+    const w = words(clean);
     if (!w.length) return;
     paragraphs.push(w);
     let total = paragraphs.reduce((n, p) => n + p.length, 0);
-    while (paragraphs.length > 1 && total > MAX_BACKLOG) {
+    while (paragraphs.length > 1 && total > CFG.backlog) {
       total -= paragraphs[0].length;
       paragraphs.shift();
       dropped = true;
@@ -232,7 +334,7 @@ export default function (pi: ExtensionAPI) {
   /** Acumula el pensamiento y cierra oraciones al ritmo en que aparecen. */
   function feedThinking(chunk: string): void {
     if (!chunk) return;
-    sentenceBuf += chunk;
+    sentenceBuf = stripCode(sentenceBuf + chunk);
     for (;;) {
       const m = /^(.*?[.!?…\n])(\s+|$)/s.exec(sentenceBuf);
       if (!m) break;
@@ -242,9 +344,9 @@ export default function (pi: ExtensionAPI) {
     }
     // sin puntuación durante demasiado tiempo: cortamos por cantidad de palabras
     const pending = words(sentenceBuf);
-    if (pending.length >= PARAGRAPH_WORDS) {
-      pushParagraph(pending.slice(0, PARAGRAPH_WORDS).join(" "));
-      sentenceBuf = pending.slice(PARAGRAPH_WORDS).join(" ");
+    if (pending.length >= CFG.paragraphWords) {
+      pushParagraph(pending.slice(0, CFG.paragraphWords).join(" "));
+      sentenceBuf = pending.slice(CFG.paragraphWords).join(" ");
     }
   }
 
@@ -295,6 +397,19 @@ export default function (pi: ExtensionAPI) {
     return `${dropped ? "… " : ""}${parts.join(" ")}`;
   }
 
+  /** Las oraciones del pensamiento visibles: la actual iluminada y las que
+   *  vienen, tenues, para poder seguir la secuencia completa. */
+  function thoughtLines(): string[] {
+    const out: string[] = [];
+    if (current) out.push(snippet());
+    for (const p of paragraphs) {
+      if (out.length >= CFG.lines) break;
+      const t = truncateWords(p.join(" "), 140);
+      if (t) out.push(muted(t));
+    }
+    return out;
+  }
+
   /** Duración en horas, minutos y segundos según corresponda. */
   function formatDuration(ms: number): string {
     const total = Math.max(0, Math.floor(ms / 1000));
@@ -313,16 +428,17 @@ export default function (pi: ExtensionAPI) {
     const now = Date.now();
     const turnMs = working ? now - workStart : lastTurnMs;
     const sessionMs = sessionThinkingMs + (working ? now - workStart : 0);
-    const goal = lastPrompt ? `🎯 ${truncateWords(lastPrompt, PROMPT_MAX)}` : "🎯 (sin pedido aún)";
+    const goal = lastPrompt ? `🎯 ${truncateWords(lastPrompt, CFG.promptChars)}` : "🎯 (sin pedido aún)";
     const head = working
       ? `⏱ Pensando hace ${formatDuration(turnMs)} · Sesión ${formatDuration(sessionMs)}`
       : `✓ ${formatDuration(lastTurnMs)} · Sesión ${formatDuration(sessionThinkingMs)}`;
-    const key = `${head}|${goal}|${currentIndex}|${current ? current.join(" ") : ""}|${dropped}`;
+    const upcoming = paragraphs.slice(0, CFG.lines).map((p) => p.join(" ")).join("|");
+    const key = `${head}|${goal}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
     if (!force && key === lastRenderedKey) return;
     lastRenderedKey = key;
     lastRender = now;
     const lines = [head, goal];
-    if (working && current) lines.push(snippet());
+    if (working && current) lines.push(...thoughtLines());
     try {
       ui.setStatus?.("voz-latido", `⏱ ${formatDuration(turnMs)}`);
       ui.setWidget?.("voz-latido", lines);
@@ -336,8 +452,8 @@ export default function (pi: ExtensionAPI) {
     if (!working) return;
     const now = Date.now();
     if (!current) startNextParagraph();
-    while (current && now - lastRelease >= WORD_MS) {
-      lastRelease += WORD_MS;
+    while (current && now - lastRelease >= CFG.wordMs) {
+      lastRelease += CFG.wordMs;
       currentIndex++;
       if (currentIndex >= current.length) {
         current = null;
@@ -375,33 +491,44 @@ export default function (pi: ExtensionAPI) {
   }
 
   pi.registerTool({
-    name: "preguntar_al_usuario",
-    label: "Preguntar al usuario (voz, espera respuesta)",
+    name: "hablar",
+    label: "Hablar al usuario (voz; con esperar, espera respuesta)",
     description:
-      "Hace una pregunta al usuario en voz alta y ESPERA su respuesta hablada. " +
-      "Devolvé como resultado lo que el usuario respondió y continuá con eso. " +
-      "Usala en vez de asumir cuando el pedido es ambiguo o cuando vas a gastar " +
-      "pasos probando algo que el usuario puede responder en una frase.",
+      "Le habla al usuario por voz. Por defecto solo dice algo: un avance, " +
+      "contexto o una explicación. Si `esperar` es true, además ESPERA su " +
+      "respuesta hablada y la devuelve como resultado. Es la vía general para " +
+      "comunicarte con el usuario por voz. Si el usuario se perdió o pide " +
+      "contexto, contale el contexto en `mensaje`; no te limites a preguntar.",
     promptSnippet:
-      "Preguntar al usuario por voz y esperar su respuesta (en vez de asumir)",
+      "Hablar al usuario por voz; con `esperar` espera su respuesta en vez de asumir",
     promptGuidelines: [
-      "Si el pedido es ambiguo, o si estás por asumir algo que el usuario puede " +
-        "responder en una frase, usá `preguntar_al_usuario` ANTES de gastar pasos " +
-        "adivinando o probando. El usuario es tu mejor fuente de verdad.",
-      "No uses `preguntar_al_usuario` para cosas que ya podés resolver leyendo el " +
-        "repositorio o la documentación.",
+      "Para hablarle al usuario por voz usá `hablar`. Sirve para contar un " +
+        "avance, dar contexto o preguntar; es la vía general.",
+      "Si necesitás una respuesta del usuario, llamá `hablar` con `esperar: true` " +
+        "y una pregunta concreta. Si no, dejala sin `esperar`.",
+      "Nunca mandes solo una pregunta si tenés contexto para dar: primero el " +
+        "contexto en `mensaje`, después la pregunta. Así el usuario no se pierde.",
+      "No uses `hablar` para cosas que ya podés resolver leyendo el repositorio " +
+        "o la documentación.",
     ],
-    parameters: PREGUNTAR_PARAMS,
+    parameters: HABLAR_PARAMS,
     async execute(_toolCallId, params, signal) {
-      const pregunta = String(params.pregunta ?? "").trim();
-      if (!pregunta) {
-        return { content: [{ type: "text", text: "Falta la pregunta." }], details: undefined };
+      const mensaje = String(params.mensaje ?? "").trim();
+      if (!mensaje) {
+        return { content: [{ type: "text", text: "Falta el mensaje." }], details: undefined };
       }
-      const espera = Math.max(10, Number(params.espera_segundos ?? 300) || 300);
-      await execCapture(["preguntar", AGENT_NAME, pregunta], 15000, signal);
+      if (params.esperar !== true) {
+        await execCapture(["hablar", agentName(), mensaje], 15000, signal);
+        return {
+          content: [{ type: "text", text: "Dicho al usuario por voz." }],
+          details: undefined,
+        };
+      }
+      const segundos = Math.max(10, Number(params.segundos ?? 300) || 300);
+      await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
       const answer = await execCapture(
-        ["esperar", AGENT_NAME, "--timeout", String(espera)],
-        espera * 1000 + 5000,
+        ["esperar", agentName(), "--timeout", String(segundos)],
+        segundos * 1000 + 5000,
         signal,
       );
       const text = answer.stdout.trim();
@@ -424,8 +551,8 @@ export default function (pi: ExtensionAPI) {
           {
             type: "text",
             text:
-              `El usuario no respondió en ${espera}s. Seguí con tu mejor criterio ` +
-              "y, cuando puedas, decile con `avisar` qué asumiste.",
+              `El usuario no respondió en ${segundos}s. Seguí con tu mejor criterio ` +
+              "y, cuando puedas, contale con `hablar` qué asumiste.",
           },
         ],
         details: undefined,
