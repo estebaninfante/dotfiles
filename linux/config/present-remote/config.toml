@@ -26,6 +26,7 @@
 #
 # Doble toque en las flechas:
 #   flecha izq x2 -> Enter (enviar mensaje)
+#   flecha izq (mantener) -> voice repeat (repetir el último mensaje)
 #   flecha der x2 -> nueva terminal (kitty) con pi cargado y enfocado
 
 [settings]
@@ -54,9 +55,11 @@ suppress = ["f14", "f17"]
 
 # ── Flechas ──────────────────────────────────────────────────────────────
 # Flecha izquierda (diapositiva anterior). Doble toque -> Enter.
+# Mantener -> repetir por voz el último mensaje que te llegó (como Súper+Alt+V).
 [buttons.f15]
 tap = "@arrow prev"
 double = "@enter"
+hold = "voice repeat"
 
 # Flecha derecha (diapositiva siguiente). Doble toque -> nueva terminal con pi.
 [buttons.f16]
