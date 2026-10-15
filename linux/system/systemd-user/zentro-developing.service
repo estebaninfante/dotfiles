@@ -3,14 +3,14 @@ Description=Zentro (rama dev) servida en 127.0.0.1:3050
 Documentation=https://github.com/eztvn/dotfiles
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/zentro-serve developing
 Restart=always
 RestartSec=3
-StartLimitIntervalSec=300
-StartLimitBurst=20
 TimeoutStopSec=10
 
 [Install]

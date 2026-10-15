@@ -38,5 +38,7 @@ if [ ! -d node_modules ]; then
     fi
 fi
 
-# Next limpia .next de forma segura; 'dev' sirve la rama activa en el checkout.
-exec pnpm exec next dev -p "$port" -H 127.0.0.1
+# Binding por defecto (0.0.0.0). Next 16 falla su proxy interno si se fuerza
+# -H 127.0.0.1 (intenta 'localhost' por IPv6 y no está bindeado). tailscale
+# serve llega igual por 127.0.0.1.
+exec pnpm exec next dev -p "$port"
