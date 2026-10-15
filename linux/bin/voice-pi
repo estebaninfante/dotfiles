@@ -13,6 +13,9 @@
 
 set -uo pipefail
 
+# Asegura las rutas propias aunque el servicio arranque con un PATH mínimo.
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+
 BRAIN_DIR="${VOICE_PI_BRAIN_DIR:-$HOME/.local/share/voice/pi-brain}"
 MODEL="${VOICE_PI_MODEL:-opencode-go/qwen3.8-flash}"
 TOOLS="${VOICE_PI_TOOLS:-bash,read}"
@@ -24,6 +27,13 @@ if [ -z "$prompt" ] && [ ! -t 0 ]; then
 fi
 [ -n "$prompt" ] || { echo "voice-pi: falta el texto" >&2; exit 2; }
 [ -d "$BRAIN_DIR" ] || { echo "voice-pi: no existe $BRAIN_DIR" >&2; exit 1; }
+
+# Modo evaluación: decidir y responder sin ejecutar nada (lo usa el scorer).
+if [ "${VOICE_PI_DRY:-0}" = "1" ]; then
+  prompt="MODO EVALUACIÓN (no cambies nada): podés LEER estado (archivos, hyprctl, voice, omarchy), pero no ejecutes acciones que modifiquen el sistema ni crees/modifiques datos. Decidí qué harías y respondé en 1 o 2 frases lo que dirías, como si lo hubieras hecho. Sin markdown.
+
+$prompt"
+fi
 
 args=(--print --no-session --no-extensions --no-skills --thinking off --tools "$TOOLS")
 [ -n "$MODEL" ] && args+=(--model "$MODEL")
