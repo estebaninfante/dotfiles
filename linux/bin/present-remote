@@ -49,6 +49,8 @@ CONFIG_PATH = os.environ.get(
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 PTT_PIDFILE = os.path.join(RUNTIME, "omnivoz-ptt.pid")
 PILL = os.path.join(HOME, "developing/omnivoz/packaging/quickshell/omar-pill.qml")
+OMAR_MODE = os.path.join(HOME, ".local/bin/omar-mode")
+MODE_FILE = os.path.join(RUNTIME, "omar", "mode")
 LOG = open(os.devnull, "w")
 
 ENV = dict(os.environ)
@@ -199,13 +201,55 @@ def ptt_active():
     return bool(_ptt_pids())
 
 
-def cancel_voice():
-    """Corta la sesión de voz activa y cierra la píldora.
+def omar_mode():
+    """Modo actual de Omar (comando/dictado/dormido), por defecto comando."""
+    try:
+        with open(MODE_FILE, encoding="utf-8") as f:
+            return f.read().strip() or "comando"
+    except OSError:
+        return "comando"
 
-    Cierra la UI PRIMERO (para que desaparezca al instante) y recién despues
-    corta el proceso. Omnivoz atiende SIGINT pero puede tardar unos segundos
-    (cargando modelos), asi que esperamos a que muera de verdad antes de
-    escalar a SIGTERM/SIGKILL.
+
+def pill_is_open():
+    """¿La píldora está abierta? Se lo pregunta a Quickshell por IPC.
+
+    Es el estado que de verdad ve el usuario: el proceso de push-to-talk es de
+    un solo disparo (`--once`) y ya murió, pero la píldora puede seguir visible.
+    """
+    try:
+        out = subprocess.check_output(
+            ["qs", "ipc", "-p", PILL, "call", "omar-pill", "isOpen"],
+            text=True, stderr=subprocess.DEVNULL, timeout=1,
+        ).strip().lower()
+        return out == "true"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def omar_active():
+    """Omar está encendido si escucha (comando), o hay píldora/PTT vivos."""
+    return omar_mode() == "comando" or pill_is_open() or ptt_active()
+
+
+def start_voice():
+    """Prende Omar: vuelve al modo comando y abre la píldora.
+
+    No levantamos un push-to-talk aparte: el listener del modo comando ya es el
+    dueño del micrófono. Tener los dos a la vez era lo que duplicaba frases.
+    """
+    log("voice: prendo Omar (modo comando)")
+    _run_cmd(f"{OMAR_MODE} comando")
+    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
+
+
+def cancel_voice():
+    """Apaga Omar del todo: cierra la píldora, deja de escuchar y corta el PTT.
+
+    Cierra la UI PRIMERO (para que desaparezca al instante), después apaga el
+    listener de fondo (modo dormido) y recién al final corta cualquier proceso
+    de push-to-talk suelto. Omnivoz atiende SIGINT pero puede tardar unos
+    segundos (cargando modelos), asi que esperamos a que muera de verdad antes
+    de escalar a SIGTERM/SIGKILL.
     """
     # 1) Cerrar la pildora YA: la UI no espera al proceso.
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
@@ -214,10 +258,13 @@ def cancel_voice():
     except FileNotFoundError:
         pass
 
-    # 2) Recien ahora, cortar el proceso.
+    # 2) Apagar el listener de fondo: nadie mas usa el microfono.
+    _run_cmd(f"{OMAR_MODE} dormido")
+
+    # 3) Recien ahora, cortar cualquier proceso de voz que haya quedado suelto.
     pids = _ptt_pids()
     if not pids:
-        log("cancel: no había sesión de voz activa")
+        log("cancel: escucha apagada (sin PTT suelto)")
         return
     log(f"cancel: corto {pids}")
     for pid in pids:
@@ -243,12 +290,11 @@ def cancel_voice():
 
 
 def toggle_voice():
-    """Toggle real de Omar: si hay sesión activa la corta; si no, la abre."""
-    if ptt_active():
+    """Toggle real de Omar: si está encendido lo apaga; si no, lo prende."""
+    if omar_active():
         cancel_voice()
     else:
-        log("voice: arranco Omar")
-        _run_cmd(os.path.join(HOME, ".local/bin/omar-open"))
+        start_voice()
 
 
 def builtin(cmd):
@@ -355,7 +401,7 @@ def handle_event(out, buttons, settings, states):
         log(f"evt {key} {state}")
 
     if settings.get("cancel_key") and key == settings["cancel_key"] and state == "down":
-        if ptt_active():
+        if omar_active():
             cancel_voice()
         return True
 
