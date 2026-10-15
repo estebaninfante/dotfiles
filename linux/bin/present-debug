@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""present-debug — mira en vivo lo que manda el control de presentaciones.
+
+Uso:
+    present-debug          # lo que sale por keyd (ya remapeado), sin root
+    sudo present-debug     # ademas, los reportes USB crudos del control
+
+Apretá los botones y mirá la salida con tiempos. Ctrl-C para salir.
+
+Sirve para depurar: muestra con precisión si un toque manda una sola tecla o
+varias, y si un botón esconde un Enter, Tab, etc. que se cuela a las apps.
+"""
+import os
+import select
+import subprocess
+import sys
+import time
+
+# ── decodificación de usos HID (page 0x07, teclado) ──────────────────────
+USOS = {
+    0x00: "(release)",
+    0x28: "Enter",
+    0x29: "Esc",
+    0x2B: "Tab",
+    0x2C: "Space",
+    0x39: "CapsLock",
+    0x3A: "F1", 0x3B: "F2", 0x3C: "F3", 0x3D: "F4", 0x3E: "F5", 0x3F: "F6",
+    0x40: "F7", 0x41: "F8", 0x42: "F9", 0x43: "F10", 0x44: "F11", 0x45: "F12",
+    0x49: "Insert", 0x4A: "Home", 0x4B: "PageUp", 0x4C: "Delete",
+    0x4D: "End", 0x4E: "PageDown",
+    0x4F: "Right", 0x50: "Left", 0x51: "Down", 0x52: "Up",
+    0xE0: "LeftCtrl", 0xE1: "LeftShift", 0xE2: "LeftAlt", 0xE3: "LeftMeta",
+    0xE4: "RightCtrl", 0xE5: "RightShift", 0xE6: "RightAlt", 0xE7: "RightMeta",
+}
+for i, ch in enumerate("abcdefghijklmnopqrstuvwxyz"):
+    USOS[0x04 + i] = ch
+for i, ch in enumerate("1234567890"):
+    USOS[0x1E + i] = ch
+
+
+def nombre_uso(u):
+    return USOS.get(u, f"0x{u:02x}")
+
+
+def ts():
+    t = time.time()
+    h = time.strftime("%H:%M:%S", time.localtime(t))
+    return f"{h}.{int((t % 1) * 1000):03d}"
+
+
+def log(origen, texto):
+    print(f"[{ts()}] {origen:<22} {texto}", flush=True)
+
+
+# ── interfaces hidraw del control ────────────────────────────────────────
+def hidraws_del_control():
+    out = []
+    base = "/sys/class/hidraw"
+    try:
+        nombres = sorted(os.listdir(base))
+    except FileNotFoundError:
+        return out
+    for h in nombres:
+        uevent = os.path.join(base, h, "device", "uevent")
+        try:
+            with open(uevent) as f:
+                txt = f.read()
+        except OSError:
+            continue
+        if "Wireless Present" in txt or "SHARKOON" in txt:
+            out.append(os.path.join("/dev", h))
+    return out
+
+
+def open_hidraw(path):
+    try:
+        return os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        return None
+
+
+# ── decodificación de reportes ───────────────────────────────────────────
+def decodificar_keyboard(data):
+    """Reporte estilo boot de 8 bytes: mods + 6 usos."""
+    usos = [u for u in data[2:8] if u]
+    mods = [nombre_uso(0xE0 + i) for i in range(8) if data[0] & (1 << i)]
+    if not usos and not mods:
+        return "(suelta)"
+    partes = []
+    if mods:
+        partes.append("+" + "+".join(mods))
+    partes += [nombre_uso(u) for u in usos]
+    return " ".join(partes)
+
+
+def decodificar_compuesto(data):
+    if not data:
+        return "(vacío)"
+    rid = data[0]
+    if rid == 1:
+        u = (data[2] << 8 | data[1]) if len(data) >= 3 else 0
+        return f"consumer 0x{u:03x}"
+    if rid == 2:
+        btns = data[1] if len(data) > 1 else 0
+        return f"mouse botones=0x{btns:02x} {data.hex(' ')}"
+    if rid == 3:
+        return f"system {data[1:].hex(' ')}"
+    return data.hex(" ")
+
+
+# ── principal ────────────────────────────────────────────────────────────
+def main():
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:  # noqa: BLE001
+        pass
+    print("── present-debug ────────────────────────────────────────────")
+    print("Apretá los botones del control. Ctrl-C para salir.")
+    print(f"   keyd monitor: activo")
+    hids = hidraws_del_control()
+    abiertos = {}
+    for h in hids:
+        fd = open_hidraw(h)
+        if fd is None:
+            print(f"   {h}: sin permiso (corré `sudo present-debug` para verlo)")
+        else:
+            abiertos[fd] = h
+            print(f"   {h}: leyendo USB crudo")
+    print("─────────────────────────────────────────────────────────────")
+
+    # stream de keyd
+    km = subprocess.Popen(["keyd", "monitor"], stdout=subprocess.PIPE, text=True, bufsize=1)
+    km_out = km.stdout
+    assert km_out is not None
+
+    fds = list(abiertos) + [km_out.fileno()]
+    try:
+        while True:
+            r, _, _ = select.select(fds, [], [], 0.5)
+            for fd in r:
+                if fd == km_out.fileno():
+                    line = km_out.readline()
+                    if not line:
+                        log("keyd", "(el monitor terminó)")
+                        return
+                    if "device added" in line:
+                        continue
+                    parts = line.rstrip("\r\n").split("\t")
+                    if len(parts) >= 3:
+                        log("keyd", parts[2])
+                else:
+                    try:
+                        data = os.read(fd, 64)
+                    except OSError:
+                        continue
+                    if not data:
+                        continue
+                    if len(data) >= 8:
+                        detalle = decodificar_keyboard(data)
+                    else:
+                        detalle = decodificar_compuesto(data)
+                    log(os.path.basename(abiertos[fd]), detalle)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for fd in abiertos:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        km.terminate()
+
+
+if __name__ == "__main__":
+    main()
