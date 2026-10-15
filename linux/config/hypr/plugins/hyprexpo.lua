@@ -25,9 +25,15 @@ local style = {
     border_focus = "rgba(ffe9a9e6)",
     border_hover = "rgba(ffffff35)",
     border_default = "rgba(ffffff26)",
-    background_image = os.getenv("HOME") .. "/.config/omarchy/backgrounds/black/amoled-black.png",
+    -- Un solo wallpaper: con background_transparent = 1 el plugin NO pinta backdrop
+    -- propio; muestra la capa BACKGROUND real del compositor detras de la grilla
+    -- (hyprpaper estatico o linux-wallpaperengine/video de Steam EN VIVO). Asi el
+    -- overview siempre usa el mismo fondo que el escritorio, sin sincronizar nada.
+    -- El fallback (si esto vuelve a 0) apunta al symlink canonico de Omarchy:
+    -- el mismo archivo que usa el escritorio (~/.local/state/omarchy/current/background).
+    background_image = os.getenv("HOME") .. "/.local/state/omarchy/current/background",
     background_dim = 0,
-    background_transparent = 0,
+    background_transparent = 1,
     threed_enable = 1,
     threed_tilt = 15,
     threed_yaw = 0,
