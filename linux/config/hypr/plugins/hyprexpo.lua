@@ -15,10 +15,10 @@ local style = {
     tile_rounding = 12,
     bg_col = theme.color("darker_background", "#0e160e"),
     border_current = "rgba(ffffff60)",
-    border_focus = "rgba(ffe9a960)",
+    border_focus = "rgba(ffe9a9e6)",
     border_hover = "rgba(ffffff35)",
     border_default = "rgba(ffffff26)",
-    background_image = theme.background(os.getenv("HOME") .. "/.config/hypr/wallpapers/space_real_1440p.jpg"),
+    background_image = os.getenv("HOME") .. "/.config/omarchy/backgrounds/black/amoled-black.png",
     background_dim = 0,
     background_transparent = 0,
     threed_enable = 1,
@@ -81,13 +81,26 @@ if hl.plugin.hyprexpo ~= nil then
         config.edge_passthrough = style.edge_passthrough
         config.slide_enable = style.slide_enable
         config.slide_amount = style.slide_amount
-        config.animation = "zoomFactor"
+        config.animation = "specialWorkspace"
     end
     if hl.get_config("plugin:hyprexpo:block_pointer_lock") ~= nil then
         config.block_pointer_lock = 1
     end
     hl.config({ plugin = { hyprexpo = config } })
 end
+
+-- Curva de apertura/cierre de la grilla (traída del desktop): ease-out más
+-- plano al principio, así se ven los pasos intermedios del zoom.
+hl.curve("expoOpen", {
+    type = "bezier",
+    points = { { 0.22, 0.61 }, { 0.36, 1.0 } }
+})
+hl.animation({
+    leaf = "specialWorkspace",
+    enabled = true,
+    speed = 4,
+    bezier = "expoOpen"
+})
 
 return {
     threed = EXPO_3D,

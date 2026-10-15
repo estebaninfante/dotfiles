@@ -26,6 +26,7 @@ local function apply()
             path = MAP,
             flat = true,
             collision = true,
+            emissive_scale = 1.0,
             transform = {
                 position = { x = 0, y = 0, z = 0 },
                 rotation = { x = 0, y = 0, z = 0 },
@@ -33,9 +34,10 @@ local function apply()
             },
         },
         player = {
+            flying = true,
             spawn = { x = 0, y = 2, z = 12 },
         },
-        windows = {},
+        windows = { focus_on_aim = false },
     })
 
     hl.bind("SUPER + F12", hl.plugin.hypr3d.toggle)

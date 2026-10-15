@@ -115,6 +115,35 @@ export default function (pi: ExtensionAPI) {
   let lastBeat = 0;
   let outstanding = false;
   let working = false;
+  let workStart = 0;
+  let uiCtx: { ui?: { setStatus?: (k: string, v?: string) => void; setWidget?: (k: string, v?: string[]) => void } } | undefined;
+
+  /** Muestra/actualiza el widget de progreso en la UI (sin mensajes). */
+  function updateLatido(): void {
+    if (!working) return;
+    const ui = uiCtx?.ui;
+    if (!ui) return;
+    const secs = Math.round((Date.now() - workStart) / 1000);
+    try {
+      ui.setStatus?.("voz-latido", `⏱ ${secs}s`);
+      ui.setWidget?.("voz-latido", [
+        "Punto de control",
+        `Trabajando hace ${secs}s.`,
+        "¿Tenés una duda? Usá `preguntar_al_usuario` o `avisar`.",
+      ]);
+    } catch {
+      /* sin UI (modo rpc/print): no importa */
+    }
+  }
+
+  function clearLatido(): void {
+    try {
+      uiCtx?.ui?.setStatus?.("voz-latido", undefined);
+      uiCtx?.ui?.setWidget?.("voz-latido", undefined);
+    } catch {
+      /* noop */
+    }
+  }
 
   pi.registerTool({
     name: "preguntar_al_usuario",
@@ -175,47 +204,38 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.on("before_agent_start", () => {
+  pi.on("before_agent_start", (_event, ctx) => {
     working = true;
-    lastBeat = Date.now();
+    workStart = Date.now();
     outstanding = false;
+    uiCtx = ctx;
+    updateLatido();
   });
 
-  pi.on("turn_end", async () => {
-    // El checkpoint pedido por el latido ya se consumió en este turno.
+  pi.on("turn_end", async (_event, ctx) => {
+    uiCtx = ctx;
     outstanding = false;
+    updateLatido();
   });
 
-  pi.on("agent_settled", async () => {
+  pi.on("agent_settled", async (_event, ctx) => {
     working = false;
     outstanding = false;
+    uiCtx = ctx;
+    clearLatido();
   });
 
+  // El "punto de control" ya NO es un mensaje al modelo (se perdía y lo
+  // interrumpía). Ahora es un widget de la UI que muestra hace cuánto trabaja
+  // y recuerda cómo preguntar, sin tocar la conversación.
   let timer: ReturnType<typeof setInterval> | undefined;
   if (LATIDO_ENABLED) {
-    timer = setInterval(() => {
-      try {
-        if (outstanding || !working) return;
-        const now = Date.now();
-        if (now - lastBeat < LATIDO_MS) return;
-        lastBeat = now;
-        outstanding = true;
-        beatLog(`latido: enviando punto de control (agente=${AGENT_NAME})`);
-        pi.sendUserMessage(
-          "Punto de control (~1 min): en UNA frase, decime qué estás haciendo " +
-            "ahora y si tenés alguna duda o suposición que deba resolver yo. " +
-            "Si tenés una duda real, preguntámela con `preguntar_al_usuario` " +
-            "(o avisá con `avisar`). Si no, continuá sin más.",
-          { deliverAs: "steer" },
-        );
-      } catch {
-        outstanding = false;
-      }
-    }, Math.min(5000, LATIDO_MS));
+    timer = setInterval(updateLatido, 5000);
     if (typeof timer.unref === "function") timer.unref();
   }
 
   pi.on("session_shutdown", async () => {
     if (timer) clearInterval(timer);
+    clearLatido();
   });
 }
