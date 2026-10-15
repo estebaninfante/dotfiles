@@ -199,19 +199,22 @@ export default function (pi: ExtensionAPI) {
     description:
       "Avisa al usuario lo que debe saber (el sistema de voz lo habla o lo deja en su buzón). Llámala SIEMPRE al " +
       "terminar tu respuesta, y también en cualquier momento del trabajo si " +
-      "surge algo que valga la pena avisar o preguntar, con una sola frase " +
-      "breve en español natural y respetuoso, como quien le reporta un avance a " +
-      "otra persona: qué hiciste y si quedó listo, o la pregunta que necesites " +
-      "hacerle. Sin tecnicismos, sin rutas, sin nombres de herramientas o " +
-      "funciones. No uses apelativos ni lo llames 'jefe'. Sirve para llamar su " +
-      "atención: puede estar distraído y no mirar la pantalla.",
+      "surge algo que valga la pena avisar, con una sola frase breve en español " +
+      "natural y respetuoso, como quien le reporta un avance a otra persona: " +
+      "qué hiciste y si quedó listo. Sin tecnicismos, sin rutas, sin nombres de " +
+      "herramientas o funciones. No uses apelativos ni lo llames 'jefe'. Sirve " +
+      "para llamar su atención: puede estar distraído y no mirar la pantalla. " +
+      "Si necesitás una respuesta, usá `hablar` con `esperar: true`.",
     promptSnippet: "Avisar al usuario (voz o buzón; obligatoria al terminar; disponible en cualquier momento)",
     promptGuidelines: [
       "SIEMPRE, al terminar cada respuesta, llama a `avisar` con una sola frase " +
         "breve, en español natural y respetuoso (como quien le reporta un avance " +
-        "a otra persona): qué pasó o qué necesitas preguntarle. Nunca incluyas " +
+        "a otra persona): qué pasó y si quedó listo. Nunca incluyas " +
         "tecnicismos, rutas ni nombres de herramientas; se dirá en voz alta o se " +
         "dejará en su buzón.",
+      "Si necesitás que el usuario te responda, no te quedes en `avisar`: usá " +
+        "`hablar` con `esperar: true` y una pregunta concreta. `avisar` es para " +
+        "reportar, no para preguntar.",
       "También puedes usar `avisar` en cualquier momento, no sólo al final, si " +
         "aparece algo que convenga que el usuario sepa o tenga que decidir.",
       "No uses apelativos ni la palabra 'jefe': habla directo.",
