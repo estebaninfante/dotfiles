@@ -1,0 +1,13 @@
+[Unit]
+Description=Control remoto de presentaciones (keyd F14/F15/F16 -> acciones)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/eztvn/.local/bin/present-remote
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

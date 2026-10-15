@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+# present-remote — bindings del control remoto de presentaciones.
+#
+# Lee la salida de `keyd monitor` y actúa según el botón del control, que
+# `present.conf` mapea a teclas dedicadas:
+#
+#   f14  botón extra (Tab)   mantener (>= HOLD_MS) → Handy (dictado) on/off
+#                            tocar                  → Omar push-to-talk (sin keyword)
+#   f15  flecha izquierda    terminal → ventana tmux anterior
+#                            otro     → scroll arriba
+#   f16  flecha derecha      terminal → ventana tmux siguiente
+#                            otro     → scroll abajo
+#
+# Sintetiza teclas/rueda con ydotool (ydotoold ya corre como servicio) y usa
+# `hyprctl activewindow` para saber qué app tiene el foco. Corre como servicio
+# de usuario (present-remote.service). Los eventos y decisiones van al journal.
+#
+# Variables:
+#   PRESENT_HOLD_MS      umbral tap/hold en ms (default 450)
+#   PRESENT_HANDY_TOGGLE comando para Handy (default: handy --toggle-post-process)
+#   PRESENT_OMAR         comando de push-to-talk (default: omnivoz-ptt)
+#   PRESENT_DISABLE=1    desactiva sin desinstalar
+import json
+import os
+import select
+import shlex
+import subprocess
+import sys
+import time
+
+HOLD_MS = int(os.environ.get("PRESENT_HOLD_MS", "450"))
+HANDY_TOGGLE = shlex.split(os.environ.get("PRESENT_HANDY_TOGGLE", "handy --toggle-post-process"))
+OMAR_PTT = os.environ.get("PRESENT_OMAR", os.path.expanduser("~/.local/bin/omnivoz-ptt"))
+
+# Clases de ventana que tratamos como terminal (ahí las flechas cambian de
+# ventana tmux en vez de scrollear).
+TERMINALES = {
+    "kitty", "foot", "footclient", "alacritty", "ghostty", "wezterm",
+    "konsole", "gnome-terminal", "xterm", "st", "urxvt", "terminator",
+    "tilix", "org.wezfurlong.wezterm",
+}
+
+# Keycodes (linux/input-event-codes.h): Ctrl(29), PgUp(104), PgDn(109).
+CTRL, PGUP, PGDN = 29, 104, 109
+
+
+def log(msg):
+    print(f"[present-remote] {msg}", file=sys.stderr, flush=True)
+
+
+def _run(*cmd):
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError as e:
+        log(f"no encontré {cmd[0]}: {e}")
+
+
+def _ctrl(codes):
+    seq = [f"{CTRL}:1"]
+    for k in codes:
+        seq += [f"{k}:1", f"{k}:0"]
+    seq.append(f"{CTRL}:0")
+    _run("ydotool", "key", *seq)
+
+
+def _scroll(direction):
+    # Rueda: botón 4 = arriba, botón 5 = abajo.
+    _run("ydotool", "click", "4" if direction == "up" else "5")
+
+
+def active_class():
+    try:
+        out = subprocess.check_output(
+            ["hyprctl", "activewindow", "-j"],
+            text=True, stderr=subprocess.DEVNULL, timeout=1,
+        )
+        return ((json.loads(out) or {}).get("class") or "").lower()
+    except Exception:
+        return ""
+
+
+def arrow(action):
+    """action: 'prev' (izquierda) | 'next' (derecha)."""
+    cls = active_class()
+    if cls in TERMINALES:
+        log(f"flecha {action}: terminal ({cls}) -> ventana tmux")
+        _ctrl([PGUP] if action == "prev" else [PGDN])
+    else:
+        log(f"flecha {action}: {cls or 'app'} -> scroll")
+        _scroll("up" if action == "prev" else "down")
+
+
+def main():
+    if os.environ.get("PRESENT_DISABLE") == "1":
+        return
+    proc = subprocess.Popen(["keyd", "monitor"], stdout=subprocess.PIPE, text=True)
+    out = proc.stdout
+    assert out is not None
+
+    f14_down_at = None
+    hold_fired = False
+    log(f"listo (hold={HOLD_MS}ms)")
+
+    while True:
+        r, _, _ = select.select([out], [], [], 0.05)
+
+        if r:
+            line = out.readline()
+            if not line:
+                log("keyd monitor terminó; salgo")
+                break
+            partes = line.rstrip("\r\n").split("\t")
+            if len(partes) >= 3:
+                key, _, state = partes[2].partition(" ")
+                state = state.strip()
+                if key == "f14":
+                    if state == "down":
+                        f14_down_at = time.monotonic()
+                        hold_fired = False
+                    elif state == "up":
+                        if f14_down_at is not None and not hold_fired:
+                            log("f14 tap -> Omar")
+                            _run(OMAR_PTT)
+                        f14_down_at = None
+                        hold_fired = False
+                elif key == "f15" and state == "down":
+                    arrow("prev")
+                elif key == "f16" and state == "down":
+                    arrow("next")
+
+        # ¿Se mantuvo f14 más que el umbral? Dispara Handy en el momento,
+        # sin esperar a soltar.
+        if (f14_down_at is not None and not hold_fired
+                and (time.monotonic() - f14_down_at) * 1000 >= HOLD_MS):
+            hold_fired = True
+            log("f14 hold -> Handy")
+            _run(*HANDY_TOGGLE)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
