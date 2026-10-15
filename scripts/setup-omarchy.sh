@@ -274,6 +274,11 @@ header "Fase 7: keyd"
 if command -v keyd &>/dev/null; then
     sudo mkdir -p /etc/keyd
     sudo cp "$DOTFILES_SYSTEM/keyd/default.conf" /etc/keyd/default.conf
+    # Config por-dispositivo (control remoto de presentaciones, etc.)
+    for kconf in "$DOTFILES_SYSTEM"/keyd/*.conf; do
+        [[ "$(basename "$kconf")" == "default.conf" ]] && continue
+        sudo cp "$kconf" "/etc/keyd/$(basename "$kconf")"
+    done
     sudo systemctl enable keyd
     sudo systemctl restart keyd
     ok "keyd configurado y habilitado"
