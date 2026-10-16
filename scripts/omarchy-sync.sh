@@ -38,14 +38,22 @@ copy_tree() { # copy_tree <src> <dst>  (omite *.sample)
 
 export_config() {
     mkdir -p "$SRC"
-    local f d p id url
+    local f d p id url dest
 
     for f in "${FILES[@]}"; do
         [[ -f "$LIVE/$f" ]] || continue
+        dest="$SRC/$f"
         if [[ "$f" = "shell.json" && -f "$SRC/shell.${MACHINE}.json" ]]; then
-            cp -f "$LIVE/$f" "$SRC/shell.${MACHINE}.json"
+            dest="$SRC/shell.${MACHINE}.json"
+        fi
+        # shell.json se canoniza (claves ordenadas) para que las dos maquinas
+        # exporten bytes identicos: el orden de claves no debe generar churn ni
+        # conflictos de rebase. Si jq no esta o el JSON es invalido, copia tal cual.
+        if [[ "$f" = "shell.json" ]] && command -v jq >/dev/null 2>&1 \
+           && jq -e . "$LIVE/$f" >/dev/null 2>&1; then
+            jq -S . "$LIVE/$f" > "$dest.tmp" && mv -f "$dest.tmp" "$dest"
         else
-            cp -f "$LIVE/$f" "$SRC/$f"
+            cp -f "$LIVE/$f" "$dest"
         fi
     done
 
