@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# voice-kokoro — motor TTS Kokoro del sistema de voz.
+#
+# Corre linux/voice/kokoro.py con el venv DEDICADO del sistema de voz
+# (~/.local/share/tts/venv-kokoro). Ojo: NO es el venv del lector de Zotero
+# (~/.local/share/kokoro-venv), que es otro consumidor de Kokoro. El daemon de
+# voz y el CLI `voice` invocan este wrapper por nombre.
+#
+# El venv se crea/actualiza con scripts/setup-tts.sh.
+exec "$HOME/.local/share/tts/venv-kokoro/bin/python" \
+    "$HOME/dotfiles/linux/voice/kokoro.py" "$@"
