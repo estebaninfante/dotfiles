@@ -1,32 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "default_agent": "main",
-  "agent": {
-    "build": {
-      "disable": true
-    }
-  },
-  "mcp": {
-    "supabase": {
-      "type": "remote",
-      "url": "https://mcp.supabase.com/mcp?project_ref=ldxqjrlafnfiraunwbvc&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching",
-      "enabled": true
-    },
-    "agent-browser": {
-      "type": "local",
-      "command": ["agent-browser", "mcp"],
-      "enabled": true
-    },
-    "ai-chats": {
-      "type": "local",
-      "command": ["/home/eztvn/.local/bin/ai-chats-mcp"],
-      "enabled": true
-    }
-  },
-  "permission": {
-    "bash": {
-      "sudo *": "ask"
-    },
-    "external_directory": "allow"
-  }
+  "theme": "system",
+  "autoupdate": false
 }
