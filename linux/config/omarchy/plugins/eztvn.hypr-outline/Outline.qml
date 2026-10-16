@@ -21,8 +21,8 @@ Item {
   property int base: 0
 
   // Todo proporcional al tamaño de la pantalla, para que se lea de lejos.
-  readonly property real base: Math.max(700, Math.min(panel.width, panel.height))
-  readonly property real radio: base * 0.20
+  readonly property real escala: Math.max(700, Math.min(panel.width, panel.height))
+  readonly property real radio: escala * 0.20
   readonly property real radioHijo: radio * 1.38
   readonly property real lado: radio * 0.54
   readonly property real ladoHijo: lado * 0.84
