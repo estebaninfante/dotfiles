@@ -91,6 +91,12 @@ hl.bind("F6", hl.dsp.exec_cmd(
     "omarchy-capture-screenrecording --stop-recording || omarchy-capture-screenrecording --fullscreen --with-desktop-audio"
 ), { description = "Grabar escritorio (toggle)" })
 
+-- Grabar pantalla completa (con audio del escritorio) en un solo atajo: la
+-- primera pulsada arranca y la segunda detiene. Mismo toggle en laptop y desktop.
+hl.bind(main_mod .. " + SHIFT + V", hl.dsp.exec_cmd(
+    "omarchy-capture-screenrecording --stop-recording || omarchy-capture-screenrecording --fullscreen --with-desktop-audio"
+), { description = "Grabar pantalla completa (toggle)" })
+
 if variables.machine == "laptop" then
     hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-lid.sh"))
 else
