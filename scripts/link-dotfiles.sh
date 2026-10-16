@@ -158,17 +158,27 @@ else
     warn "no existe $ICONS_SRC"
 fi
 
-header "Pi extensions (~/.pi/agent/extensions)"
-PI_EXT_SRC="${REPO}/linux/pi/agent/extensions"
-PI_EXT_DST="${HOME}/.pi/agent/extensions"
-if [ -d "$PI_EXT_SRC" ]; then
-    mkdir -p "$PI_EXT_DST"
-    for f in "$PI_EXT_SRC"/*; do
+header "Pi agent (~/.pi/agent)"
+# Toda la config de pi vive en el repo: extensions, skills, themes (cada item
+# es un symlink) y settings.json (archivo suelto). NUNCA auth.json ni
+# models-store.json (secrets / estado local de maquina).
+PI_SRC="${REPO}/linux/pi/agent"
+PI_DST="${HOME}/.pi/agent"
+if [ -d "$PI_SRC" ]; then
+    for sub in extensions skills themes; do
+        [ -d "$PI_SRC/$sub" ] || continue
+        mkdir -p "$PI_DST/$sub"
+        for f in "$PI_SRC/$sub"/*; do
+            [ -e "$f" ] || continue
+            link_path "$f" "${PI_DST}/${sub}/$(basename "$f")" true
+        done
+    done
+    for f in "$PI_SRC"/*.json; do
         [ -e "$f" ] || continue
-        link_path "$f" "${PI_EXT_DST}/$(basename "$f")" true
+        link_path "$f" "${PI_DST}/$(basename "$f")" true
     done
 else
-    warn "no existe $PI_EXT_SRC"
+    warn "no existe $PI_SRC"
 fi
 
 header "Copias (no symlink)"
