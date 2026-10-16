@@ -93,11 +93,14 @@ hl.bind("F6", hl.dsp.exec_cmd(
 
 -- Grabar pantalla completa (con audio del escritorio) en un solo atajo: la
 -- primera pulsada arranca y la segunda detiene. Mismo toggle en laptop y desktop.
--- Se usa K porque g,c,r,h,t,n,m,w,v (y s) estan tomadas por los workspaces
--- (workspace_keys en base/variables.lua). K queda libre en Dvorak.
-hl.bind(main_mod .. " + SHIFT + K", hl.dsp.exec_cmd(
+-- Alternativa sin ambiguedad de layout: F4 (las teclas de funcion no cambian con
+-- Dvorak). La combinacion SUPER+SHIFT+K tambien esta pero solo dispara si se
+-- aprieta la tecla fisica que en Dvorak escribe "k".
+local rec_toggle = hl.dsp.exec_cmd(
     "omarchy-capture-screenrecording --stop-recording || omarchy-capture-screenrecording --fullscreen --with-desktop-audio"
-), { description = "Grabar pantalla completa (toggle)" })
+)
+hl.bind(main_mod .. " + SHIFT + K", rec_toggle, { description = "Grabar pantalla completa (toggle)" })
+hl.bind("F4", rec_toggle, { description = "Grabar pantalla completa (toggle)" })
 
 if variables.machine == "laptop" then
     hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-lid.sh"))
