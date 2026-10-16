@@ -3,19 +3,13 @@
   "theme": {
     "name": "system"
   },
-  "attention": {
-    "enabled": true,
-    "sound": true,
-    "volume": 0.4,
-    "sound_pack": "opencode.default"
-  },
   "diffs": {
     "wrap": "word"
   },
   "session": {
     "sidebar": "auto",
     "scrollbar": false,
-    "thinking": "hide"
+    "thinking": "show"
   },
   "animations": true
 }
