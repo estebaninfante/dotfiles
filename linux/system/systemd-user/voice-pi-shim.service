@@ -5,6 +5,9 @@ After=network-online.target voice-daemon.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 /home/eztvn/dotfiles/linux/voice/pi_shim.py
+# PATH explícito: si el servicio arranca antes de que el entorno del usuario
+# tenga mise/~/.local/bin, `pi` no se encuentra y el cerebro queda mudo.
+Environment=PATH=/home/eztvn/.local/bin:/home/eztvn/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin
 Restart=on-failure
 RestartSec=3
 
