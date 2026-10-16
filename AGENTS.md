@@ -33,7 +33,9 @@ dotfiles/
 │   ├── voice/           # TTS daemon + Chatterbox server
 │   ├── xkb/             # Layout de teclado XKB
 │   ├── patches/         # patches (lan-mouse AltGr, waybar Lua dispatch)
-│   └── system/          # keyd, NetworkManager dispatcher
+│   └── system/          # keyd, NetworkManager (dispatcher + kvm-ensure), systemd, sysctl
+├── windows/
+│   └── lan-mouse/       # config de LAN Mouse + setup-lan-mouse.ps1 (4 escenarios)
 ├── scripts/
 │   ├── setup-omarchy.sh # fresh install en un comando
 │   ├── link-dotfiles.sh # aplica el inventario de symlinks (idempotente)
@@ -230,8 +232,24 @@ con `hyprctl hyprpaper` directo: dejaría el symlink y la grilla desincronizados
 ### IPs LAN estaticas (fuera del pool DHCP)
 
 - Laptop: `192.168.1.240` · Desktop: `192.168.1.241`
-- Configuradas via `nmcli` en los perfiles de red
-- IPs KVM flotante + ruta simetrica para lan-mouse
+- La laptop tiene el WiFi en **DHCP** (`Familia_Infante_PLUS`); la IP KVM
+  flotante (`192.168.1.240`) la administra `kvm-ensure.sh`, no el perfil NM.
+  El desktop tiene `.241` estatica en su ethernet.
+- **KVM (lan-mouse)**: `linux/system/NetworkManager/kvm-ensure.sh` deja la IP
+  KVM en la interfaz **ethernet de casa** si esta conectada, si no en el WiFi
+  de casa, y agrega la ruta simetrica `PEER/32 dev IFACE src KVM_IP`. El
+  `dispatcher.d/90-lan-mouse` lo corre en eventos NM y el timer system
+  `kvm-ensure.timer` (cada 2 min) lo re-aplica como red de seguridad. **El
+  WiFi NO se baja** cuando hay ethernet: quedan las dos interfaces (el cable
+  dedicado al KVM, el WiFi sigue de default route para internet y como
+  respaldo si el dock USB se reenumera).
+- Requiere `rp_filter` **loose** (`linux/system/sysctl/99-lan-mouse.conf`).
+- La deteccion laptop/desktop es por **hardware** (`detect-machine.sh`), no por
+  hostname: tras migrar de NixOS a Omarchy los hostnames son
+  `laptopmarchy` / `astradeux`, y cualquier `case "$(hostname)"` con
+  `laptop`/`desktop` queda muerto.
+- Windows: `windows/lan-mouse/` tiene la config equivalente + `setup-lan-mouse.ps1`
+  (auto-detecta laptop/desktop por bateria). Ver `windows/lan-mouse/README.md`.
 
 ### SSH entre maquinas
 

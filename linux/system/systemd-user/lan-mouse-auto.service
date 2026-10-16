@@ -1,7 +1,0 @@
-[Unit]
-Description=Auto-activa lan-mouse cuando hay ethernet (laptop)
-After=graphical-session.target
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/lan-mouse-auto
