@@ -35,6 +35,8 @@ Este archivo es la memoria del agente entre sesiones. Se lee al inicio de cada s
 - **Bedtime timer**: desktop se apaga a las 21:00 (hora Colombia). `bedtime-skip.sh` crea flag `/run/bedtime-skip` para cancelar una noche.
 - **opencode (V2)**: binario `~/.opencode/bin/opencode` (v2.0.28, instalador oficial); lanzador `~/.local/bin/opencode` (→ `linux/bin/opencode`); metodo de instalacion `~/.local/bin/opencode-install` (→ `linux/bin/opencode-install`); config `~/.config/opencode/` (→ `linux/config/opencode/`: `opencode.json`, `cli.json` del cliente TUI, `plugins/` con los 5 ports V2, `plugins-disabled/` con los no portados: btw, caveman, herdr-agent-state, herdr-pane-state, notify-sound, voice, arize-tracing); servidor de fondo con `opencode service`. `rtk` v1.0.0 en `~/.local/bin/rtk`; el plugin `plugins/rtk.js` reescribe comandos bash via `rtk rewrite` cuando `rtk` esta en PATH.
 - **agentes-platform (dos enlaces tailnet)**: units `agentes-platform-main.service` (`https://laptopmarchy.tail77dc99.ts.net:10000/` → `127.0.0.1:3031`, build+`next start` sobre `~/developing/agentes-platform`) y `agentes-platform-developing.service` (`:10001/` → `127.0.0.1:3040`, `next dev` sobre el worktree persistente `~/developing/.rig-worktrees/agentes-platform/developing`); wrapper `linux/bin/agentes-platform-serve <main|developing>`; `developing/.env.local` se enlaza a `main/.env.local`. Puertos 38000/47000 reservados (preview). Units en `linux/system/systemd-user/`, instaladas por setup-omarchy.
+- **Pi config en dotfiles**: `linux/pi/agent/` versiona `extensions/`, `skills/`, `themes/` y `settings.json`; `link-dotfiles.sh` los symlinkea a `~/.pi/agent/`. NUNCA versionar `auth.json`, `models-store.json` ni `sessions/` (secrets / estado local). Skills propias (diagnose-crash, omarchy) viven ahí, no en `~/.pi` directo.
+- **REGLA PERMANENTE — proyectos de developing siempre sincronizados**: todo proyecto en `~/developing/` debe ser repo git con remote en GitHub (`gh repo create estebaninfante/<nombre> --private --source=. --push` si falta) y mantenerse al día con `git pull --rebase --autostash`. Si un proyecto local no tiene git/remote, inicializarlo y subirlo (revisar .gitignore: node_modules, dist, models, .env). Si el pull tiene conflictos de verdad (lógica de negocio, muchos commits locales), NO resolver a ciegas: abortar y avisar al usuario.
 
 ## Skills creadas
 
@@ -88,4 +90,4 @@ _(agregar aqui pendientes activos)_
 - **Diagnostic**: no confiar en "exit 0" de launchers D-Bus; verificar ventana con `hyprctl clients -j`.
 
 ---
-_Ultima actualización: 2026-10-14 (ticket PLATAFORMA-DOS-ENLACES: dos enlaces tailnet de agentes-platform, main 10000->3031 y developing 10001->3040)_
+_Ultima actualización: 2026-10-15 (pi config completa en dotfiles + omnivoz a GitHub + regla permanente de sync de developing)_
