@@ -203,11 +203,11 @@ Item {
           radius: width / 2
           color: parent.elegida
             ? Util.alpha(Color.accent, 0.95)
-            : Util.alpha(Color.popups.text, 0.11)
+            : Util.alpha(Color.popups.text, 0.24)
           border.width: parent.elegida ? 3 : 2
           border.color: parent.elegida
             ? Color.accent
-            : Util.alpha(Color.popups.text, 0.45)
+            : Util.alpha(Color.popups.text, 0.80)
 
           Column {
             anchors.centerIn: parent
@@ -256,11 +256,11 @@ Item {
           radius: width / 2
           color: parent.elegida
             ? Util.alpha(Color.accent, 0.95)
-            : Util.alpha(Color.popups.text, 0.11)
+            : Util.alpha(Color.popups.text, 0.24)
           border.width: parent.elegida ? 3 : 2
           border.color: parent.elegida
             ? Color.accent
-            : Util.alpha(Color.popups.text, 0.45)
+            : Util.alpha(Color.popups.text, 0.80)
 
           Text {
             anchors.centerIn: parent

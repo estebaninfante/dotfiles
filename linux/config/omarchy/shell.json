@@ -91,10 +91,5 @@
     "lock": 300,
     "screensaver": 150
   },
-  "plugins": [
-    {
-      "id": "eztvn.hypr-outline"
-    }
-  ],
   "version": 1
 }
