@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.hypr-outline",
+  "name": "hypr-outline",
+  "version": "0.1.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Muestra en la pantalla de la compu el menú radial que se elige con el dedo en la tablet: las mismas opciones, en las mismas direcciones, resaltando lo que está seleccionado.",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Outline.qml"
+  }
+}
