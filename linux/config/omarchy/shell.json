@@ -24,12 +24,12 @@
           "target": "2027-01-25T00:00:00"
         },
         {
-          "id": "omarchy.tray"
-        },
-        {
           "id": "io.github.keegan-sucks.flowstate",
           "shortBreakMinutes": 10,
           "workMinutes": 50
+        },
+        {
+          "id": "omarchy.tray"
         }
       ],
       "left": [
