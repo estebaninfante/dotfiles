@@ -87,3 +87,7 @@ alias pacup='sudo pacman -Syu'         # pacman upgrade
 alias yayup='yay -Syu'                 # AUR + repos
 alias pkg='sudo pacman -S'             # instalar
 alias y='yay -S'                       # instalar (AUR)
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/eztvn/.local/bin:$PATH"
