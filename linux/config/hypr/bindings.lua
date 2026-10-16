@@ -87,27 +87,20 @@ hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
 hl.bind("F11", hl.dsp.exec_cmd("~/.local/bin/theme-toggle.sh toggle"))
 
-hl.bind("F6", hl.dsp.exec_cmd(
-    "omarchy-capture-screenrecording --stop-recording || omarchy-capture-screenrecording --fullscreen --with-desktop-audio"
-), { description = "Grabar escritorio (toggle)" })
-
 -- Grabar pantalla completa (con audio del escritorio) en un solo atajo: la
--- primera pulsada arranca y la segunda detiene. Mismo toggle en laptop y desktop.
--- Alternativa sin ambiguedad de layout: F4 (las teclas de funcion no cambian con
--- Dvorak). La combinacion SUPER+SHIFT+K tambien esta pero solo dispara si se
--- aprieta la tecla fisica que en Dvorak escribe "k".
-local rec_toggle = hl.dsp.exec_cmd(
-    "omarchy-capture-screenrecording --stop-recording || omarchy-capture-screenrecording --fullscreen --with-desktop-audio"
-)
-hl.bind(main_mod .. " + SHIFT + K", rec_toggle, { description = "Grabar pantalla completa (toggle)" })
-hl.bind("F4", rec_toggle, { description = "Grabar pantalla completa (toggle)" })
+-- primera pulsada arranca y la segunda detiene. El aviso al arrancar y el
+-- guardado los maneja ~/.local/bin/screenrecord-toggle (ver ese script).
+-- Mismo toggle en laptop y desktop. Teclas: F6, F4 y SUPER+SHIFT+K.
+hl.bind("F6", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar escritorio (toggle)" })
+hl.bind("F4", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar pantalla completa (toggle)" })
+-- K queda libre en Dvorak: g,c,r,h,t,n,m,w,v (y s) son las de workspaces
+-- (workspace_keys en base/variables.lua).
+hl.bind(main_mod .. " + SHIFT + K", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar pantalla completa (toggle)" })
 
 if variables.machine == "laptop" then
     hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/toggle-lid.sh"))
 else
-    hl.bind("F10", hl.dsp.exec_cmd(
-        "omarchy-capture-screenrecording --stop-recording || omarchy-capture-screenrecording --fullscreen --with-desktop-audio"
-    ), { description = "Grabar escritorio (toggle)" })
+    hl.bind("F10", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar escritorio (toggle)" })
 end
 
 hl.bind(main_mod .. " + B", hl.dsp.exec_cmd("omarchy-hyprland-window-pop"))

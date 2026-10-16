@@ -224,6 +224,19 @@ if systemctl --user is-enabled quickshell.service &>/dev/null 2>&1; then
 fi
 rm -f "$HOME/.config/systemd/user/quickshell.service" 2>/dev/null || true
 
+# mako es un demonio de notificaciones viejo que puede ganarle el bus
+# (org.freedesktop.Notifications) al shell de Omarchy. Cuando eso pasa, las
+# notificaciones salen con el estilo viejo de mako (p. ej. el borde rojo de
+# ~/.config/mako/config) en vez de las del shell. Se enmascara para que el
+# shell de Omarchy tome siempre las notificaciones.
+if [[ -f /usr/lib/systemd/user/mako.service ]]; then
+    if [[ "$(systemctl --user is-enabled mako.service 2>/dev/null)" != "masked" ]]; then
+        systemctl --user stop mako.service 2>/dev/null || true
+        systemctl --user mask mako.service 2>/dev/null || true
+        ok "mako.service enmascarado (notificaciones por el shell de Omarchy)"
+    fi
+fi
+
 ok "Omarchy shell activo (via omarchy-launch-shell en autostart de Hyprland)"
 
 # ══════════════════════════════════════════════════════════════

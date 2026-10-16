@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Toggle de grabación de pantalla completa (pantalla completa + audio del escritorio).
+#
+# Primera pulsada: arranca la grabación y muestra un aviso breve para que se
+# note que está grabando. Segunda pulsada: frena y deja que Omarchy muestre la
+# notificación de "grabación guardada" con la miniatura.
+#
+# Se usa desde los atajos Súper+Mayús+K, F4 y F6/F10 (ver hypr/bindings.lua).
+
+set -u
+
+# Ruta del binario de Omarchy (por si cambia de nombre en el futuro).
+REC="omarchy-capture-screenrecording"
+
+if pgrep -f "^gpu-screen-recorder" >/dev/null; then
+    "$REC" --stop-recording
+    exit 0
+fi
+
+# Arrancar en primer plano: la función vuelve cuando el archivo ya existe, así
+# el primer cuadro (la miniatura) no incluye el aviso.
+"$REC" --fullscreen --with-desktop-audio
+
+# Aviso sólo si de verdad quedó grabando.
+if pgrep -f "^gpu-screen-recorder" >/dev/null; then
+    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u normal -t 5000 \
+        "Grabando pantalla" \
+        "Pantalla completa + audio del escritorio.
+Detener: Súper + Mayús + K (o F4)."
+fi
