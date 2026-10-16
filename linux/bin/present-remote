@@ -49,6 +49,7 @@ CONFIG_PATH = os.environ.get(
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 PTT_PIDFILE = os.path.join(RUNTIME, "omnivoz-ptt.pid")
 PILL = os.path.join(HOME, "developing/omnivoz/packaging/quickshell/omar-pill.qml")
+GLOW = os.path.join(os.path.dirname(PILL), "omnivoz-glow.qml")
 OMAR_MODE = os.path.join(HOME, ".local/bin/omar-mode")
 OMNIVOZ_BIN = os.path.join(HOME, ".local/bin/omnivoz")
 LISTEN_LOG = os.path.join(HOME, ".local/state/omnivoz/listen.log")
@@ -344,6 +345,9 @@ def cancel_voice():
     """
     # 1) Cerrar la pildora YA: la UI no espera al proceso.
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
+    # 1b) Apagar el glow ya tambien: si no, la franja negra y el subrayado se
+    #     quedan visibles unos segundos vacios (el "poso" tras el ultimo texto).
+    _spawn("qs", "ipc", "-p", GLOW, "call", "omnivoz-glow", "hide")
     try:
         os.remove(PTT_PIDFILE)
     except FileNotFoundError:
