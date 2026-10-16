@@ -313,6 +313,12 @@ def start_voice():
     spotify" y anda, sin decir "Omar".
     """
     log("voice: prendo Omar (sesión directa)")
+    # La píldora aparece YA: coordinar el micrófono (frenar el listener de fondo)
+    # puede tardar y no queremos que el toque se sienta muerto. Y le avisamos al
+    # glow que la píldora está abierta para que no dibuje su franja ni sus
+    # subtítulos encima del campo de texto.
+    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
+    _spawn("qs", "ipc", "-p", GLOW, "call", "omnivoz-glow", "setPillOpen", "true")
     # Un solo dueño del micrófono. Se frena el listener de fondo ANTES de arrancar
     # la sesión: `omar-mode` también libera Handy. Hay que esperarlo (sincrónico)
     # porque su limpieza no debe tocar la sesión nueva.
@@ -329,7 +335,6 @@ def start_voice():
             )
         except Exception:  # noqa: BLE001
             pass
-    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
     start_session()
 
 
