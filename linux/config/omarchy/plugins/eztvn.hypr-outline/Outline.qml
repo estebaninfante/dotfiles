@@ -4,9 +4,13 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 
-// Menú radial en la pantalla de la compu, espejo del que se usa con el dedo en
-// la tablet. No recibe clics: solo se mira. El estado llega por el flujo de
-// eventos del servidor hypr-outline (una sola conexión, sin sondear).
+// Menú radial en la pantalla de la compu, espejo del que se maneja con el dedo
+// en la tablet: las mismas opciones, en las mismas direcciones, resaltando lo
+// que está elegido.
+//
+// No recibe clics: solo se mira. El shell lo muestra con summon (y le pasa la
+// selección en el payload, así aparece al instante) y lo esconde con hide;
+// mientras está abierto, consulta el estado seguido para seguir el recorrido.
 Item {
   id: root
 
@@ -16,61 +20,86 @@ Item {
   property string hijo: ""
   property int base: 0
 
-  readonly property int radio: 138
-  readonly property int radioHijo: 200
-  readonly property int abanico: 55
-  readonly property int lado: 76
-  readonly property int ladoHijo: 62
+  // Todo proporcional al tamaño de la pantalla, para que se lea de lejos.
+  readonly property real base: Math.max(700, Math.min(panel.width, panel.height))
+  readonly property real radio: base * 0.20
+  readonly property real radioHijo: radio * 1.38
+  readonly property real lado: radio * 0.54
+  readonly property real ladoHijo: lado * 0.84
+  readonly property real fuenteIcono: lado * 0.30
+  readonly property real fuenteTexto: lado * 0.18
+  readonly property real fuenteGlobo: lado * 0.24
 
   readonly property var madreElegida: buscar(sel)
-  readonly property var hijoElegido: madreElegida && madreElegida.hijos ? buscarHijo(madreElegida, hijo) : null
+  readonly property var hijoElegido: madreElegida && madreElegida.hijos
+    ? buscarHijo(madreElegida, hijo) : null
+  readonly property int abanico: 55
+
   readonly property string globo: {
-    if (!madreElegida) return "";
-    var t = madreElegida.icono + "  " + madreElegida.texto;
-    if (hijoElegido) t += "   ›   " + hijoElegido.icono + "  " + hijoElegido.texto;
-    return t;
+    if (!madreElegida) return ""
+    var t = madreElegida.icono + "  " + madreElegida.texto
+    if (hijoElegido) t += "   ›   " + hijoElegido.icono + "  " + hijoElegido.texto
+    return t
+  }
+
+  // El shell llama a estas dos al mostrarlo y esconderlo.
+  function open(payload) {
+    if (payload) {
+      try {
+        var a = JSON.parse(payload)
+        if (a && a.sel !== undefined) sel = a.sel || ""
+        if (a && a.hijo !== undefined) hijo = a.hijo || ""
+        if (a && a.base !== undefined) base = a.base || 0
+      } catch (e) {}
+    }
+    abierto = true
+    leer.running = true
+  }
+
+  function close() {
+    abierto = false
   }
 
   function buscar(id) {
     for (var i = 0; i < root.menu.length; i++) {
-      if (root.menu[i].id === id) return root.menu[i];
+      if (root.menu[i].id === id) return root.menu[i]
     }
-    return null;
+    return null
   }
 
   function buscarHijo(madre, id) {
-    if (!madre || !madre.hijos) return null;
+    if (!madre || !madre.hijos) return null
     for (var i = 0; i < madre.hijos.length; i++) {
-      if (madre.hijos[i].id === id) return madre.hijos[i];
+      if (madre.hijos[i].id === id) return madre.hijos[i]
     }
-    return null;
+    return null
   }
 
   function aRadianes(grados) {
-    return (grados - 90) * Math.PI / 180;
+    return (grados - 90) * Math.PI / 180
   }
 
   function posX(grados, r) {
-    return root.width / 2 + Math.cos(aRadianes(grados)) * r;
+    return panel.width / 2 + Math.cos(aRadianes(grados)) * r
   }
 
   function posY(grados, r) {
-    return root.height / 2 + Math.sin(aRadianes(grados)) * r;
+    return panel.height / 2 + Math.sin(aRadianes(grados)) * r
   }
 
   function anguloDe(item) {
-    return ((item.ang + root.base) % 360 + 360) % 360;
+    return ((item.ang + root.base) % 360 + 360) % 360
   }
 
   function angulosHijos(madre) {
-    var n = madre.hijos.length;
-    var salida = [];
-    var centro = (n - 1) / 2;
-    var paso = n > 1 ? (root.abanico * 2) / (n - 1) : 0;
+    var n = madre.hijos.length
+    var salida = []
+    var centro = (n - 1) / 2
+    var paso = n > 1 ? (root.abanico * 2) / (n - 1) : 0
     for (var i = 0; i < n; i++) {
-      salida.push(((root.anguloDe(madre) + (i - centro) * paso) % 360 + 360) % 360);
+      salida.push(((root.anguloDe(madre) + (i - centro) * paso) % 360 + 360) % 360)
     }
-    return salida;
+    return salida
   }
 
   // El menú se pide una sola vez.
@@ -81,48 +110,44 @@ Item {
     stdout: StdioCollector {
       onStreamFinished: {
         try {
-          var datos = JSON.parse(text);
-          if (Array.isArray(datos)) root.menu = datos;
+          var datos = JSON.parse(text)
+          if (Array.isArray(datos)) root.menu = datos
         } catch (e) {
-          console.log("hypr-outline: no pude leer el menú:", e);
+          console.log("hypr-outline: no pude leer el menú:", e)
         }
       }
     }
   }
 
-  // Y el estado en vivo: una sola conexión abierta al flujo de eventos.
+  // Mientras está abierto, se sigue la selección.
   Process {
-    id: escuchar
-    running: true
-    command: ["curl", "-N", "-s", "http://127.0.0.1:1781/api/eventos"]
-    stdout: SplitParser {
-      onRead: line => {
-        console.log("hypr-outline leyo: [" + line.substring(0, 70) + "]");
-        if (line.indexOf("data: ") !== 0) return;
+    id: leer
+    running: false
+    command: ["curl", "-s", "--max-time", "1", "http://127.0.0.1:1781/api/radial"]
+    stdout: StdioCollector {
+      onStreamFinished: {
         try {
-          var d = JSON.parse(line.substring(6));
-          if (d.radial) {
-            root.abierto = d.radial.abierto === true;
-            root.sel = d.radial.sel || "";
-            root.hijo = d.radial.hijo || "";
-            root.base = d.radial.base || 0;
-          }
+          var d = JSON.parse(text)
+          root.sel = d.sel || ""
+          root.hijo = d.hijo || ""
+          root.base = d.base || 0
+          if (d.abierto !== true) root.abierto = false
         } catch (e) {}
       }
     }
-    onExited: reintentar.restart()
   }
 
   Timer {
-    id: reintentar
-    interval: 1500
-    onTriggered: escuchar.running = true
+    running: root.abierto
+    repeat: true
+    interval: 110
+    onTriggered: if (!leer.running) leer.running = true
   }
 
   PanelWindow {
     id: panel
 
-    visible: true
+    visible: root.abierto
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     WlrLayershell.namespace: "hypr-outline-menu"
@@ -133,10 +158,9 @@ Item {
 
     Rectangle {
       anchors.fill: parent
-      color: Util.alpha(Color.background, 0.42)
+      color: Util.alpha(Color.background, 0.55)
     }
 
-    // Aro guía del anillo principal.
     Rectangle {
       width: root.radio * 2
       height: root.radio * 2
@@ -145,10 +169,9 @@ Item {
       y: parent.height / 2 - root.radio
       color: "transparent"
       border.width: 1
-      border.color: Util.alpha(Color.popups.text, 0.15)
+      border.color: Util.alpha(Color.popups.text, 0.18)
     }
 
-    // Aro del submenú, solo cuando hay uno abierto.
     Rectangle {
       visible: root.madreElegida !== null && root.madreElegida.hijos !== undefined
       width: root.radioHijo * 2
@@ -158,10 +181,9 @@ Item {
       y: parent.height / 2 - root.radioHijo
       color: "transparent"
       border.width: 1
-      border.color: Util.alpha(Color.accent, 0.22)
+      border.color: Util.alpha(Color.accent, 0.25)
     }
 
-    // Las opciones del anillo principal.
     Repeater {
       model: root.menu
 
@@ -180,12 +202,12 @@ Item {
           anchors.fill: parent
           radius: width / 2
           color: parent.elegida
-            ? Util.alpha(Color.accent, 0.92)
-            : Util.alpha(Color.popups.background, 0.80)
-          border.width: parent.elegida ? 2 : 1
+            ? Util.alpha(Color.accent, 0.95)
+            : Util.alpha(Color.popups.text, 0.11)
+          border.width: parent.elegida ? 3 : 2
           border.color: parent.elegida
             ? Color.accent
-            : Util.alpha(Color.popups.text, 0.25)
+            : Util.alpha(Color.popups.text, 0.45)
 
           Column {
             anchors.centerIn: parent
@@ -194,24 +216,23 @@ Item {
             Text {
               anchors.horizontalCenter: parent.horizontalCenter
               text: modelData.icono
-              color: parent.parent.elegida ? Color.background : Color.popups.text
-              font.pixelSize: Style.font.display
+              color: circulo.parent.elegida ? Color.background : Color.popups.text
+              font.pixelSize: root.fuenteIcono
             }
 
             Text {
               anchors.horizontalCenter: parent.horizontalCenter
               text: modelData.texto
-              color: parent.parent.elegida
+              color: circulo.parent.elegida
                 ? Util.alpha(Color.background, 0.85)
-                : Util.alpha(Color.popups.text, 0.75)
-              font.pixelSize: Style.font.caption
+                : Util.alpha(Color.popups.text, 0.80)
+              font.pixelSize: root.fuenteTexto
             }
           }
         }
       }
     }
 
-    // Las opciones del submenú elegido.
     Repeater {
       model: root.madreElegida !== null && root.madreElegida.hijos !== undefined
         ? root.madreElegida.hijos
@@ -230,44 +251,44 @@ Item {
         y: root.posY(angulos[index], root.radioHijo) - root.ladoHijo / 2
 
         Rectangle {
+          id: circuloHijo
           anchors.fill: parent
           radius: width / 2
           color: parent.elegida
-            ? Util.alpha(Color.accent, 0.92)
-            : Util.alpha(Color.popups.background, 0.80)
-          border.width: parent.elegida ? 2 : 1
+            ? Util.alpha(Color.accent, 0.95)
+            : Util.alpha(Color.popups.text, 0.11)
+          border.width: parent.elegida ? 3 : 2
           border.color: parent.elegida
             ? Color.accent
-            : Util.alpha(Color.popups.text, 0.25)
+            : Util.alpha(Color.popups.text, 0.45)
 
           Text {
             anchors.centerIn: parent
             text: modelData.icono
-            color: parent.elegida ? Color.background : Color.popups.text
-            font.pixelSize: Style.font.display
+            color: circuloHijo.parent.elegida ? Color.background : Color.popups.text
+            font.pixelSize: root.fuenteIcono * 0.9
           }
         }
       }
     }
 
-    // Lo que está elegido, escrito bien claro.
     Rectangle {
       visible: root.globo !== ""
       anchors.horizontalCenter: parent.horizontalCenter
-      y: parent.height / 2 + root.radioHijo + Style.space(24)
-      width: textoGlobo.implicitWidth + Style.space(36)
+      y: parent.height / 2 + root.radioHijo + Style.space(26)
+      width: textoGlobo.implicitWidth + Style.space(40)
       height: textoGlobo.implicitHeight + Style.space(20)
       radius: height / 2
-      color: Util.alpha(Color.background, 0.92)
-      border.width: 1
-      border.color: Util.alpha(Color.accent, 0.65)
+      color: Util.alpha(Color.background, 0.94)
+      border.width: 2
+      border.color: Util.alpha(Color.accent, 0.7)
 
       Text {
         id: textoGlobo
         anchors.centerIn: parent
         text: root.globo
         color: Color.popups.text
-        font.pixelSize: Style.font.title
+        font.pixelSize: root.fuenteGlobo
       }
     }
 
@@ -276,7 +297,7 @@ Item {
       anchors.horizontalCenter: parent.horizontalCenter
       y: parent.height / 2 + Style.space(40)
       text: "elegí recorriendo con el dedo"
-      color: Util.alpha(Color.popups.text, 0.55)
+      color: Util.alpha(Color.popups.text, 0.6)
       font.pixelSize: Style.font.caption
     }
   }
