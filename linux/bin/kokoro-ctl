@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# kokoro-ctl — controla la lectura standalone de kokoro-read.
+# Uso: kokoro-ctl {pausa|siguiente|anterior|salir}
+case "${1:-}" in
+    pausa|pause)     sig=USR1 ;;
+    siguiente|next)  sig=USR2 ;;
+    anterior|back)   sig=URG  ;;
+    salir|quit|stop) sig=TERM ;;
+    *)
+        echo "uso: kokoro-ctl {pausa|siguiente|anterior|salir}" >&2
+        exit 1
+        ;;
+esac
+
+# El guion entre corchetes evita que pkill se matchee a sí mismo.
+if pkill -"$sig" -f 'voice/reader/kokoro_rea[d]\.py'; then
+    echo "kokoro-read: $1"
+else
+    echo "kokoro-read no está corriendo" >&2
+    exit 1
+fi

@@ -40,6 +40,8 @@ dotfiles/
 │   ├── detect-machine.sh# detecta laptop/desktop por hardware
 │   ├── omarchy-sync.sh  # export/import config del shell Omarchy (barra/plugins)
 │   ├── setup-tts.sh     # TTS
+│   ├── setup-kokoro-reader.sh # Read Aloud de Zotero (Kokoro local)
+│   ├── reconcile-machine.sh   # aplica a la maquina lo que pide el repo (autosync)
 │   ├── setup-secrets.sh # Configura/verifica claves y secrets
 │   └── publish.sh       # Commit + push con confirmacion
 ├── AGENTS.md
@@ -172,6 +174,9 @@ Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por
 | `linux/bin/omnivoz-ptt` | Push-to-talk directo: una frase sin palabra clave |
 | `linux/bin/voice-key-listener` | Dispara el PTT desde keyd (tecla física de Windows → F13) |
 | `scripts/setup-wake.sh` | Prepara el wake-word: venv + vosk + modelo + servicio `talk-command.service` |
+| `linux/voice/reader/kokoro_server.py` | Daemon Kokoro (modelo en memoria) para Read Aloud + lector standalone |
+| `linux/voice/reader/kokoro_speechd.py` | Cliente de speech-dispatcher: sintetiza y reproduce con aplay |
+| `linux/voice/reader/kokoro_read.py` | Lector standalone de PDF/texto (kokoro-read/kokoro-ctl) |
 
 ## Flujo de trabajo
 
@@ -343,6 +348,36 @@ agentes-platform) es la primera skill del cerebro; el resto entra en
 - `linux/voice/chatterbox_server.py` — server persistente
 - `linux/voice/engine.py` — config/estado
 - `linux/home/.bashrc` — funcion `tts()`
+
+## Zotero Read Aloud (Kokoro local)
+
+Zotero (Firefox) toma las voces "Local" del "Read Aloud" de
+**speech-dispatcher**. Un módulo genérico expone 4 voces en-US sintetizadas por
+**Kokoro local** (sin cuenta ni internet): Kokoro Liam, Puck, Fable y Heart.
+
+- `linux/voice/reader/kokoro_server.py` — daemon (modelo Kokoro en memoria).
+- `linux/voice/reader/kokoro_speechd.py` — cliente que invoca speech-dispatcher:
+  lee el texto de stdin, pide la síntesis y reproduce el PCM con aplay.
+- `linux/bin/kokoro-server` / `kokoro-speechd` — wrappers (venv + script del repo).
+- `linux/bin/kokoro-read` + `kokoro-ctl` — lector standalone de PDF/texto
+  (`kokoro-read archivo.pdf`; `kokoro-ctl pausa|siguiente|anterior|salir`).
+- `linux/system/speech-dispatcher/kokoro.conf` — template del módulo; el setup
+  reemplaza `@HOME@` y lo instala en `/etc/speech-dispatcher/modules/kokoro.conf`.
+- `linux/system/systemd-user/kokoro-tts.service` — mantiene el server vivo.
+- `scripts/setup-kokoro-reader.sh` — instala todo (paquetes, venv en
+  `~/.local/share/kokoro-venv`, módulo, unit) y verifica. Idempotente;
+  `SKIP_KOKORO=1` lo omite en `setup-omarchy.sh`.
+- `scripts/reconcile-machine.sh` — link-dotfiles + setup-kokoro-reader.
+  `dotfiles-sync.sh` lo corre solo cuando cambian las entradas del reader
+  (hash en `~/.local/state/dotfiles-reconcile.hash`, cooldown 30 min si falla).
+
+**Verificación:** `spd-say -L | grep 'Kokoro Liam'`; en Zotero: Read Aloud →
+Local → English (United States) → Kokoro Liam (previsualiza con ▶). Con voces
+locales el resaltado es por oración (Firefox no emite eventos de palabra para
+speech-dispatcher); clic en un párrafo para arrancar ahí.
+
+**Datos de Zotero:** la biblioteca/PDFs viven en `~/Zotero` (fuera del repo);
+se replican con una cuenta de Zotero (sync) o copiando el directorio.
 
 ## Handy (Speech-to-Text)
 

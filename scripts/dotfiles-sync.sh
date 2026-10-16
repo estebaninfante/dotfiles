@@ -189,6 +189,48 @@ if [[ "$pull_changed_omarchy" == 1 && -x "$REPO/scripts/omarchy-sync.sh" ]]; the
     fi
 fi
 
+# 4.5) Aplicar a la maquina los cambios que requieren setup (paquetes, venv,
+#      units). Se corre solo cuando cambian las entradas del lector Kokoro;
+#      los scripts son idempotentes. Si falla, reintenta tras un cooldown
+#      (~30 min) para no martillar en cada timer.
+RECONCILE_INPUTS=(
+    linux/voice/reader
+    linux/bin/kokoro-read linux/bin/kokoro-server linux/bin/kokoro-speechd linux/bin/kokoro-ctl
+    linux/system/speech-dispatcher
+    linux/system/systemd-user/kokoro-tts.service
+    scripts/setup-kokoro-reader.sh scripts/reconcile-machine.sh
+)
+RECONCILE_STATE="$HOME/.local/state/dotfiles-reconcile.hash"
+RECONCILE_FAIL="$HOME/.local/state/dotfiles-reconcile.fail"
+RECONCILE_LOG="$HOME/.local/state/dotfiles-reconcile.log"
+RECONCILE_COOLDOWN=1800
+
+reconcile_hash() {
+    ( cd "$REPO" && for p in "${RECONCILE_INPUTS[@]}"; do
+          [[ -e "$p" ]] && find "$p" -type f -print
+      done | sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1 )
+}
+
+RECONCILE_CURRENT="$(reconcile_hash)"
+if [[ -n "$RECONCILE_CURRENT" && "$(cat "$RECONCILE_STATE" 2>/dev/null)" != "$RECONCILE_CURRENT" ]]; then
+    now=$(date +%s)
+    last_fail=0
+    [[ -f "$RECONCILE_FAIL" ]] && last_fail=$(cat "$RECONCILE_FAIL" 2>/dev/null || echo 0)
+    if (( now - last_fail >= RECONCILE_COOLDOWN )); then
+        log "reconcile: cambios detectados, aplicando setup de maquina"
+        if "$REPO/scripts/reconcile-machine.sh" >/dev/null 2>&1; then
+            echo "$RECONCILE_CURRENT" > "$RECONCILE_STATE"
+            rm -f "$RECONCILE_FAIL"
+            log "reconcile: OK"
+        else
+            echo "$now" > "$RECONCILE_FAIL"
+            log "reconcile: FALLO (ver $RECONCILE_LOG) — reintento en ~$((RECONCILE_COOLDOWN/60)) min"
+            notify-send -u critical "Dotfiles: setup automatico fallo" \
+                "Ver $RECONCILE_LOG" 2>/dev/null
+        fi
+    fi
+fi
+
 # 5) Subir.
 if [[ "$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo 0)" -gt 0 ]]; then
     if git push --quiet origin "$BRANCH" >>"$LOG" 2>&1; then

@@ -590,6 +590,24 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════
+# FASE 10.7: Read Aloud de Zotero (Kokoro local)
+# ══════════════════════════════════════════════════════════════
+header "Fase 10.7: Read Aloud (Kokoro local)"
+
+# Kokoro como voz local de Zotero (vía speech-dispatcher): paquetes, venv,
+# módulo /etc, unit kokoro-tts.service y verificación. Idempotente.
+# SKIP_KOKORO=1 lo omite (p.ej. instalación rápida sin descargar el modelo).
+if [[ -x "$REPO/scripts/setup-kokoro-reader.sh" ]]; then
+    if SKIP_KOKORO="${SKIP_KOKORO:-0}" bash "$REPO/scripts/setup-kokoro-reader.sh"; then
+        ok "Read Aloud: Kokoro local listo (Zotero → Local)"
+    else
+        warn "setup-kokoro-reader falló — reintentá con scripts/setup-kokoro-reader.sh"
+    fi
+else
+    warn "Falta scripts/setup-kokoro-reader.sh"
+fi
+
+# ══════════════════════════════════════════════════════════════
 # FASE 11: PATH
 # ══════════════════════════════════════════════════════════════
 header "Fase 11: PATH"

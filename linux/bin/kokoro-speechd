@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# kokoro-speechd — cliente que speech-dispatcher invoca (módulo kokoro.conf):
+# lee el texto de stdin, pide la síntesis al daemon y reproduce con aplay.
+set -euo pipefail
+
+PY="${HOME}/.local/share/kokoro-venv/bin/python"
+SRC="${HOME}/dotfiles/linux/voice/reader/kokoro_speechd.py"
+
+if [[ ! -x "$PY" ]]; then
+    echo "kokoro-speechd: falta el entorno (~/.local/share/kokoro-venv)" >&2
+    echo "                corré: ~/dotfiles/scripts/setup-kokoro-reader.sh" >&2
+    exit 1
+fi
+
+exec "$PY" "$SRC" "$@"

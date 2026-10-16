@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# kokoro-server — daemon de síntesis Kokoro (modelo en memoria) para
+# speech-dispatcher y el lector standalone. Lo mantiene kokoro-tts.service.
+set -euo pipefail
+
+PY="${HOME}/.local/share/kokoro-venv/bin/python"
+SRC="${HOME}/dotfiles/linux/voice/reader/kokoro_server.py"
+
+if [[ ! -x "$PY" ]]; then
+    echo "kokoro-server: falta el entorno (~/.local/share/kokoro-venv)" >&2
+    echo "               corré: ~/dotfiles/scripts/setup-kokoro-reader.sh" >&2
+    exit 1
+fi
+
+exec "$PY" "$SRC" "$@"

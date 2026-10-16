@@ -37,6 +37,8 @@ dotfiles/
 │   ├── omarchy-sync.sh  # export/import config del shell Omarchy (barra/plugins)
 │   ├── setup-secrets.sh # configura/verifica claves y secrets
 │   ├── setup-tts.sh     # TTS
+│   ├── setup-kokoro-reader.sh # Read Aloud de Zotero (Kokoro local)
+│   ├── reconcile-machine.sh   # aplica al sistema lo que pide el repo (autosync)
 │   └── publish.sh       # commit + push con confirmación
 ├── .opencode/           # agentes + skills del proyecto
 ├── AGENTS.md
@@ -55,8 +57,8 @@ MACHINE=desktop bash ~/dotfiles/scripts/setup-omarchy.sh
 
 El script instala paquetes (pacman + yay/AUR), aplica los symlinks, configura
 keyd, servicios systemd de usuario, compila e instala el parche local de
-hyprexpo (grilla 3D) e instala el hook `theme-set` (sync del wallpaper), y
-verifica el resultado.
+hyprexpo (grilla 3D) e instala el hook `theme-set` (sync del wallpaper), instala
+el lector Kokoro de Zotero (Read Aloud, ver `AGENTS.md`), y verifica el resultado.
 
 ## Uso diario
 
