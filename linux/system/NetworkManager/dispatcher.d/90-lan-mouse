@@ -27,7 +27,7 @@ ENSURE="/etc/NetworkManager/kvm-ensure.sh"
 . "$ENSURE"
 
 NTFY_TOPIC=""
-case "$(hostname)" in
+case "$MACHINE" in
     laptop) NTFY_TOPIC="opencode-laptop" ;;
     desktop) NTFY_TOPIC="opencode-desktop" ;;
     *) exit 0 ;;

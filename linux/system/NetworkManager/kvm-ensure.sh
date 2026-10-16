@@ -15,7 +15,8 @@ export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
 #   hacia el peer salen con la IP KVM aunque esta sea secondary. Sin esto,
 #   con dos IPs en el mismo subnet (DHCP + KVM estatica), las respuestas
 #   salen con la source DHCP → "Connection timed out" (routing asimetrico
-#   + rp_filter estricto). El firewall debe tener checkReversePath = "loose".
+#   + rp_filter estricto). El firewall debe tener checkReversePath = "loose"
+#   (lo aplica linux/system/sysctl/99-lan-mouse.conf).
 #
 # IPs estaticas (fuera del pool DHCP): laptop 192.168.1.240, desktop 192.168.1.241
 
@@ -23,10 +24,31 @@ WIFI_IF="wlo1"
 HOME_SSIDS=("Familia_Infante_PLUS" "Familia Villamil" "Familia Villamil 1")
 USER="eztvn"
 
-case "$(hostname)" in
-    laptop) LAN_IP="192.168.1.240" ; KVM_IP="192.168.1.240" ; PEER_IP="192.168.1.241" ;;
-    desktop) LAN_IP="192.168.1.241" ; KVM_IP="192.168.1.241" ; PEER_IP="192.168.1.240" ;;
-    *) exit 0 ;;
+# Deteccion por HARDWARE, no por hostname: tras migrar de NixOS a Omarchy los
+# hostnames pasaron a ser laptopmarchy / astradeux (antes laptop / desktop),
+# y el `case "$(hostname)"` dejaba esta logica muerta. Misma logica que
+# scripts/detect-machine.sh (DMI chassis_type -> bateria -> backlight).
+detect_machine() {
+    local chassis
+    chassis=$(cat /sys/class/dmi/id/chassis_type 2>/dev/null | tr -d '[:space:]')
+    case "$chassis" in
+        8|9|10|14|31|32) echo laptop; return 0 ;;
+        3|4|5|6|7|15|16|17|18) echo desktop; return 0 ;;
+    esac
+    if ls /sys/class/power_supply/BAT* >/dev/null 2>&1; then
+        echo laptop; return 0
+    fi
+    if [ -n "$(ls -A /sys/class/backlight 2>/dev/null)" ]; then
+        echo laptop; return 0
+    fi
+    echo desktop
+}
+
+MACHINE="$(detect_machine)"
+LAN_IP=""; KVM_IP=""; PEER_IP=""
+case "$MACHINE" in
+    laptop)  LAN_IP="192.168.1.240"; KVM_IP="192.168.1.240"; PEER_IP="192.168.1.241" ;;
+    desktop) LAN_IP="192.168.1.241"; KVM_IP="192.168.1.241"; PEER_IP="192.168.1.240" ;;
 esac
 
 # ¿la IP a.b.c.d está dentro de 192.168.1.0/24?
@@ -78,6 +100,7 @@ restart_lan_mouse() {
 # Idempotente. Return 0 = sin cambios; 1 = hubo cambios (conviene restart).
 ensure_kvm() {
     local iface changed=0
+    [ -n "$KVM_IP" ] || return 0
     iface=$(home_ethernet_iface)
     [ -z "$iface" ] && home_wifi_up && iface="$WIFI_IF"
     [ -z "$iface" ] && return 0
