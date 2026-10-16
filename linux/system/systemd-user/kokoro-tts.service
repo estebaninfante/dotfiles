@@ -1,0 +1,12 @@
+[Unit]
+Description=Kokoro TTS local para Read Aloud (Zotero)
+After=pipewire.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/kokoro-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
