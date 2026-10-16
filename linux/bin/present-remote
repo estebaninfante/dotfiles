@@ -318,7 +318,6 @@ def start_voice():
     # glow que la píldora está abierta para que no dibuje su franja ni sus
     # subtítulos encima del campo de texto.
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
-    _spawn("qs", "ipc", "-p", GLOW, "call", "omnivoz-glow", "setPillOpen", "true")
     # Un solo dueño del micrófono. Se frena el listener de fondo ANTES de arrancar
     # la sesión: `omar-mode` también libera Handy. Hay que esperarlo (sincrónico)
     # porque su limpieza no debe tocar la sesión nueva.
