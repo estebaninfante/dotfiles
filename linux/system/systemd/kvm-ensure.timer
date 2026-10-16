@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically ensure KVM floating IP + symmetric route (safety net)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

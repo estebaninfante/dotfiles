@@ -1,19 +1,26 @@
 #!/bin/sh
 # NetworkManager dispatcher para LAN-Mouse KVM.
-# - Handoff cable <-> WiFi: al conectar ethernet de casa baja el WiFi;
-#   al caer, lo re-conecta (la IP flotante KVM sigue al medio).
-# - Delega la IP flotante + ruta simetrica en kvm-ensure.sh (source único).
+# - Mantiene la IP KVM flotante (laptop .240 / desktop .241) SOLO en la
+#   interfaz preferida: el ethernet de casa si esta conectado, si no el WiFi
+#   de casa. Asi lan-mouse va por el cable cuando hay cable, sin depender del
+#   nombre del device (el dock USB ethernet se re-enumera como
+#   enp5s0f3u1 / enp5s0f3u2).
+# - Instala la ruta simetrica `PEER_IP/32 dev IFACE src KVM_IP`: las respuestas
+#   al peer salen con la IP KVM (aunque sea secundaria) y por la misma
+#   interfaz, evitando el routing asimetrico que rompe el handshake DTLS.
+# - Delega esa logica en kvm-ensure.sh (fuente unica; la comparte el timer
+#   systemd kvm-ensure.timer como red de seguridad).
+# - NO baja el WiFi cuando hay ethernet: se dejan las dos interfaces arriba
+#   (redundancia si el dock se reenumera; el cable queda dedicado al KVM).
 # - Detecta conflicto de la IP estatica LAN y avisa por ntfy.
 #
 # IPs estaticas (fuera del pool DHCP): laptop 192.168.1.240, desktop 192.168.1.241.
-# La logica de deteccion de red no depende del nombre del device (el dock
-# USB ethernet se re-enumera como enp5s0f3u1 / enp5s0f3u2).
 
 IFACE="$1"
 ACTION="$2"
 
-# kvm-ensure.sh instalado en /etc/NetworkManager por environment.etc;
-# fallback a la copia del repo (tests manuales).
+# kvm-ensure.sh instalado en /etc/NetworkManager; fallback a la copia del repo
+# (tests manuales).
 ENSURE="/etc/NetworkManager/kvm-ensure.sh"
 [ -r "$ENSURE" ] || ENSURE="$(cd "$(dirname "$0")/.." && pwd)/kvm-ensure.sh"
 # shellcheck source=/dev/null
@@ -72,40 +79,22 @@ check_ip_conflict() {
     fi
 }
 
-# Handoff cable <-> WiFi: la IP estática KVM debe vivir en una sola interfaz.
-# Estado-based: si el ethernet de casa está activo, el WiFi sobra, SIN importar
-# qué interfaz disparó el evento. (Tras suspend/resume el ethernet no re-firea
-# "up", solo wlo1 — detectar por estado evita la doble interfaz.)
-medium_handoff() {
-    if is_ethernet; then
-        if [ "$ACTION" = "down" ]; then
-            # Cable caído: el WiFi toma el relevo (reaplica la IP de casa)
-            if ! ip -4 addr show dev "$WIFI_IF" 2>/dev/null | grep -q inet; then
-                nmcli device connect "$WIFI_IF" >/dev/null 2>&1
-            fi
-        fi
-        return 0
-    fi
-
-    # Evento de WiFi (o cualquiera): si el ethernet de casa responde, al WiFi
-    # sobra. Desconectarlo elimina el conflicto de IP estática en 2 interfaces.
-    if [ "$ACTION" = "up" ] && [ -n "$(home_ethernet_iface)" ]; then
-        nmcli device disconnect "$WIFI_IF" >/dev/null 2>&1
-    fi
-    return 1
+# ¿El evento toca una red/interfaz de casa (ethernet o WiFi de casa)?
+# Sirve para reiniciar lan-mouse en transiciones que no movieron la IP KVM
+# (p.ej. reconexion del WiFi) y para ignorar eventos ajenos (tethering, tun).
+is_home_context() {
+    is_ethernet || is_home_network || [ "$IFACE" = "$WIFI_IF" ]
 }
 
 case "$ACTION" in
-    up|down)
-        if medium_handoff || is_home_network; then
-            ensure_kvm && restart_lan_mouse
-            check_ip_conflict &
+    up|down|dhcp4-change)
+        ensure_kvm
+        # ensure_kvm: 0 = sin cambios, 1 = movio IP/ruta (conviene reconectar).
+        if [ "$?" -eq 1 ] || is_home_context; then
+            restart_lan_mouse
         fi
-        ;;
-    dhcp4-change)
-        # Tras renovar DHCP se puede perder la IP KVM manual → re-aplicar.
-        if is_ethernet || [ "$IFACE" = "$WIFI_IF" ]; then
-            ensure_kvm && restart_lan_mouse
+        if [ "$ACTION" = "up" ]; then
+            check_ip_conflict &
         fi
         ;;
 esac

@@ -1,0 +1,8 @@
+[Unit]
+Description=Ensure KVM floating IP and symmetric route (lan-mouse)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/NetworkManager/kvm-ensure.sh

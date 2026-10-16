@@ -1,0 +1,9 @@
+screencopy {
+    allow_token_by_default = true
+    # Seleccion automatica de pantalla (ya no pregunta).
+    # Para volver al selector con pestanas Windows/Outputs/Region, reemplazar la
+    # linea de abajo por:
+    #     custom_picker_binary = hyprland-preview-share-picker
+    # Tambien se puede fijar la pantalla en ~/.config/xdph-auto-picker/output
+    custom_picker_binary = /tmp/xdph-picker-debug
+}

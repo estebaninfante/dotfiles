@@ -445,6 +445,45 @@ if command -v tailscale &>/dev/null; then
     ok "Tailscale habilitado"
 fi
 
+# LAN-Mouse KVM: IP flotante (laptop .240 / desktop .241) en la interfaz de
+# casa preferida + ruta simetrica al peer, para que el KVM vaya por el cable
+# cuando hay cable. Fuentes en linux/system/NetworkManager/ (dispatcher +
+# kvm-ensure.sh) y linux/system/systemd/ (timer de safety net).
+if [[ -f "$DOTFILES_SYSTEM/NetworkManager/kvm-ensure.sh" ]] && \
+   [[ -f "$DOTFILES_SYSTEM/NetworkManager/dispatcher.d/90-lan-mouse" ]]; then
+    sudo install -o root -g root -m 0755 \
+        "$DOTFILES_SYSTEM/NetworkManager/kvm-ensure.sh" \
+        /etc/NetworkManager/kvm-ensure.sh
+    sudo install -o root -g root -m 0755 \
+        "$DOTFILES_SYSTEM/NetworkManager/dispatcher.d/90-lan-mouse" \
+        /etc/NetworkManager/dispatcher.d/90-lan-mouse
+    if [[ -f "$DOTFILES_SYSTEM/systemd/kvm-ensure.service" ]] && \
+       [[ -f "$DOTFILES_SYSTEM/systemd/kvm-ensure.timer" ]]; then
+        sudo install -o root -g root -m 0644 \
+            "$DOTFILES_SYSTEM/systemd/kvm-ensure.service" \
+            /etc/systemd/system/kvm-ensure.service
+        sudo install -o root -g root -m 0644 \
+            "$DOTFILES_SYSTEM/systemd/kvm-ensure.timer" \
+            /etc/systemd/system/kvm-ensure.timer
+        sudo systemctl daemon-reload 2>/dev/null || true
+        sudo systemctl enable --now kvm-ensure.timer 2>/dev/null || true
+        ok "kvm-ensure (dispatcher NM + timer systemd) instalado"
+    else
+        warn "Falta $DOTFILES_SYSTEM/systemd/kvm-ensure.service/.timer"
+    fi
+    if [[ -f "$DOTFILES_SYSTEM/sysctl/99-lan-mouse.conf" ]]; then
+        sudo install -o root -g root -m 0644 \
+            "$DOTFILES_SYSTEM/sysctl/99-lan-mouse.conf" \
+            /etc/sysctl.d/99-lan-mouse.conf
+        sudo sysctl --system >/dev/null 2>&1 || true
+        ok "rp_filter loose (linux/system/sysctl/99-lan-mouse.conf)"
+    else
+        warn "Falta $DOTFILES_SYSTEM/sysctl/99-lan-mouse.conf"
+    fi
+else
+    warn "Falta linux/system/NetworkManager/{kvm-ensure.sh,dispatcher.d/90-lan-mouse}"
+fi
+
 # Power guard: aplica ahorro (bateria) vs rendimiento (AC) al cambiar de fuente.
 # Sin esto, hyprland.lua/monitors.lua quedan en modo AC (120Hz, blur, anims) y
 # no hay `hyprctl reload` que re-evalue el estado -> consumo alto en bateria.
