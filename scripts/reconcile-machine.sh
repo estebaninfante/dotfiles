@@ -27,4 +27,5 @@ fi
 log "kokoro-reader OK"
 
 log "=== fin OK ==="
+notify-send -a dotfiles "Dotfiles" "Setup de maquina aplicado (Kokoro/Zotero)" 2>/dev/null || true
 exit 0
