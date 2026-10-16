@@ -241,15 +241,40 @@ def pill_is_open():
 
     Es el estado que de verdad ve el usuario: el proceso de push-to-talk es de
     un solo disparo (`--once`) y ya murió, pero la píldora puede seguir visible.
+    Reintenta: con el sistema cargado, un solo IPC con timeout corto devolvía
+    un falso negativo y el toggle reabría en vez de cerrar.
     """
-    try:
-        out = subprocess.check_output(
-            ["qs", "ipc", "-p", PILL, "call", "omar-pill", "isOpen"],
-            text=True, stderr=subprocess.DEVNULL, timeout=1,
-        ).strip().lower()
-        return out == "true"
-    except Exception:  # noqa: BLE001
-        return False
+    for _ in range(2):
+        try:
+            out = subprocess.check_output(
+                ["qs", "ipc", "-p", PILL, "call", "omar-pill", "isOpen"],
+                text=True, stderr=subprocess.DEVNULL, timeout=2.5,
+            ).strip().lower()
+            return out == "true"
+        except Exception:  # noqa: BLE001
+            time.sleep(0.15)
+    return False
+
+
+def pill_toggle():
+    """Pide a la píldora que se dé vuelta y devuelve el estado NUEVO.
+
+    Es la primitiva del toggle: consultar `isOpen` por separado y decidir afuera
+    era frágil —si el IPC demoraba, la píldora se reabría justo cuando el usuario
+    quería cerrarla—. Devuelve None si Quickshell no contestó, para caer al
+    criterio viejo.
+    """
+    for _ in range(2):
+        try:
+            out = subprocess.check_output(
+                ["qs", "ipc", "-p", PILL, "call", "omar-pill", "toggle"],
+                text=True, stderr=subprocess.DEVNULL, timeout=2.5,
+            ).strip().lower()
+            if out in ("true", "false"):
+                return out == "true"
+        except Exception:  # noqa: BLE001
+            time.sleep(0.15)
+    return None
 
 
 def omar_active():
@@ -362,11 +387,22 @@ def cancel_voice():
 
 
 def toggle_voice():
-    """Toggle real de Omar: si está encendido lo apaga; si no, lo prende."""
-    if omar_active():
-        cancel_voice()
-    else:
+    """Toggle real de Omar: si está encendido lo apaga; si no, lo prende.
+
+    La dirección la decide la propia píldora (nos devuelve el estado nuevo), así
+    el toggle nunca reabre cuando querés cerrar. Si el IPC no contesta, caemos al
+    criterio de antes (¿hay píldora abierta o sesión de voz viva?).
+    """
+    now_open = pill_toggle()
+    if now_open is None:
+        log("toggle: la píldora no contestó; uso el criterio viejo")
+        now_open = not omar_active()
+        if now_open:
+            _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
+    if now_open:
         start_voice()
+    else:
+        cancel_voice()
 
 
 def builtin(cmd):
