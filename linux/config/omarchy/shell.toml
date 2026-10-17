@@ -1,3 +1,7 @@
+[bar]
+background       = "#000000"
+background-alpha = 1.0
+
 [font]
 base-size = 11
 
