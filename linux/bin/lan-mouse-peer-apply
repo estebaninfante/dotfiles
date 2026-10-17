@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# lan-mouse-peer-apply — corre EN EL PEER (vía ssh). Ajusta la posición que
+# este equipo ocupa respecto del peer y reinicia el daemon para aplicarla ya.
+#
+# La disposición es un espejo: si en el desktop el laptop está a la izquierda,
+# en el laptop el desktop está a la derecha. lan-mouse NO propaga la posición
+# al config.toml del peer (solo la mantiene en memoria), por eso hace falta
+# este script: sin él, al reiniciar el peer vuelve a su posición vieja y el
+# puntero rebota en el borde.
+#
+# Uso: lan-mouse-peer-apply <left|right|top|bottom>
+set -euo pipefail
+
+pos="${1:-}"
+case "$pos" in
+    left|right|top|bottom) ;;
+    *) echo "uso: $(basename "$0") <left|right|top|bottom>" >&2; exit 2 ;;
+esac
+
+CFG="${LAN_MOUSE_CONFIG:-$HOME/.config/lan-mouse/config.toml}"
+[ -f "$CFG" ] || { echo "no existe $CFG" >&2; exit 1; }
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
+mkdir -p "$STATE_DIR"
+STAMP="$STATE_DIR/lan-mouse-sync.applied"
+
+cur="$(sed -n 's/^position[[:space:]]*=[[:space:]]*"\([a-z]*\)".*/\1/p' "$CFG" | head -1)"
+
+if [ "$cur" != "$pos" ]; then
+    # Reemplaza solo la primera clave position (hay un único [[clients]]).
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    sed -E '0,/^position[[:space:]]*=[[:space:]]*"[a-z]+"/s//position = "'"$pos"'"/' "$CFG" >"$tmp"
+    cat "$tmp" >"$CFG"
+    changed=1
+else
+    changed=0
+fi
+
+# Rastro para que el watcher local no reenvíe el cambio que acabamos de recibir.
+date +%s >"$STAMP"
+
+# Mantiene el repo alineado con la config viva (reconcile no debe revertirla).
+machine="$(tr -d '[:space:]' <"$HOME/.config/machine-type" 2>/dev/null || true)"
+repo="${LAN_MOUSE_REPO:-$HOME/dotfiles}/linux/config/lan-mouse"
+if [ -n "$machine" ] && [ -d "$repo" ] && [ -f "$repo/config.$machine.toml" ]; then
+    cmp -s "$CFG" "$repo/config.$machine.toml" || cp "$CFG" "$repo/config.$machine.toml"
+fi
+
+if [ "$changed" = 0 ] && systemctl --user is-active --quiet lan-mouse; then
+    echo "position=$pos (sin cambios)"
+    exit 0
+fi
+
+systemctl --user restart lan-mouse
+
+for _ in $(seq 1 40); do
+    systemctl --user is-active --quiet lan-mouse && break
+    sleep 0.25
+done
+
+echo "position=$pos"

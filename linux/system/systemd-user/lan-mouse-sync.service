@@ -1,0 +1,11 @@
+[Unit]
+Description=Propaga la disposición de LAN-Mouse al peer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Deja que lan-mouse termine de escribir el config.toml antes de leerlo.
+ExecStartPre=/bin/sleep 1
+ExecStart=%h/.local/bin/lan-mouse-sync
+TimeoutStartSec=60

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# kvm-peer — imprime la IP (o hostname) del peer de LAN-Mouse según el
+# config.toml vivo. La usan lan-mouse-sync y wifi-sync para no hardcodear
+# .240/.241 (esas IPs son flotantes: las pone kvm-ensure en ethernet o WiFi).
+#
+# Uso: kvm-peer [config.toml]
+set -euo pipefail
+
+CFG="${1:-${LAN_MOUSE_CONFIG:-$HOME/.config/lan-mouse/config.toml}}"
+[ -f "$CFG" ] || exit 1
+
+exec python3 - "$CFG" <<'PY'
+import json, subprocess, sys, tomllib
+
+cfg = sys.argv[1]
+with open(cfg, "rb") as fh:
+    data = tomllib.load(fh)
+
+candidates = []
+for client in data.get("clients", []):
+    for ip in client.get("ips", []):
+        candidates.append(str(ip))
+    if not client.get("ips") and client.get("hostname"):
+        candidates.append(str(client["hostname"]))
+
+if not candidates:
+    sys.exit(1)
+
+local = set()
+try:
+    out = subprocess.run(["/usr/bin/ip", "-j", "addr"],
+                         capture_output=True, text=True, timeout=5).stdout
+    for iface in json.loads(out):
+        for addr in iface.get("addr_info", []):
+            if addr.get("family") == "inet":
+                local.add(addr.get("local"))
+except Exception:
+    pass
+
+for cand in candidates:
+    if cand not in local:
+        print(cand)
+        sys.exit(0)
+
+print(candidates[0])
+PY

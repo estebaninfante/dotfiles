@@ -1,0 +1,9 @@
+[Unit]
+Description=Observa cambios de disposición de LAN-Mouse
+
+[Path]
+PathModified=%h/.config/lan-mouse/config.toml
+Unit=lan-mouse-sync.service
+
+[Install]
+WantedBy=default.target

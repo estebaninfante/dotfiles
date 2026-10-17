@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# lan-mouse-sync — una sola disposición para las dos máquinas.
+#
+# La UI de lan-mouse ya guarda la posición en el config.toml local cuando
+# arrastrás el equipo. Este script toma esa posición como fuente de verdad y la
+# propaga por SSH al peer con la posición espejada (izquierda <-> derecha,
+# arriba <-> abajo), reiniciando el daemon del peer para que aplique al toque.
+#
+# Corre solo (systemd lan-mouse-sync.path observa el config.toml) y también a
+# mano:
+#   lan-mouse-sync           # empuja la disposición actual
+#   lan-mouse-sync --dry     # muestra qué haría, sin tocar el peer
+#
+# Requiere: ssh sin password al peer + lan-mouse-peer-apply en el PATH del peer.
+set -uo pipefail
+
+CFG="${LAN_MOUSE_CONFIG:-$HOME/.config/lan-mouse/config.toml}"
+[ -f "$CFG" ] || exit 0
+
+DRY=0
+[ "${1:-}" = "--dry" ] && DRY=1
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
+LOG="$STATE_DIR/lan-mouse-sync.log"
+STAMP="$STATE_DIR/lan-mouse-sync.applied"
+mkdir -p "$STATE_DIR"
+
+log() { echo "$(date '+%F %T') $*" >>"$LOG"; }
+
+# Anti-eco: el peer acaba de aplicar un cambio suyo. Evita que su escritura
+# dispare un reenvío inmediato de vuelta.
+if [ -f "$STAMP" ] && [ $(( $(date +%s) - $(stat -c %Y "$STAMP") )) -lt 8 ]; then
+    exit 0
+fi
+
+# Un solo sync a la vez (path unit + disparo manual pueden coincidir).
+exec 9>"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lan-mouse-sync.lock"
+flock -n 9 || exit 0
+
+read -r pos <<<"$(sed -n 's/^position[[:space:]]*=[[:space:]]*"\([a-z]*\)".*/\1/p' "$CFG" | head -1)"
+case "$pos" in
+    left)   peer_pos=right ;;
+    right)  peer_pos=left ;;
+    top)    peer_pos=bottom ;;
+    bottom) peer_pos=top ;;
+    *) log "config sin posición válida; nada que hacer"; exit 0 ;;
+esac
+
+peer="$(kvm-peer "$CFG" 2>/dev/null || true)"
+if [ -z "$peer" ]; then
+    log "no pude resolver el peer desde $CFG"
+    exit 0
+fi
+
+# El repo es la fuente de verdad y reconcile-machine reaplica config.<maquina>;
+# mantenerlo igual a la config viva evita que el próximo sync la revierta.
+machine="$(tr -d '[:space:]' <"$HOME/.config/machine-type" 2>/dev/null || true)"
+repo="${LAN_MOUSE_REPO:-$HOME/dotfiles}/linux/config/lan-mouse"
+if [ -n "$machine" ] && [ -f "$repo/config.$machine.toml" ]; then
+    if ! cmp -s "$CFG" "$repo/config.$machine.toml"; then
+        if [ "$DRY" = 1 ]; then
+            log "(dry) actualizaría $repo/config.$machine.toml"
+        else
+            cp "$CFG" "$repo/config.$machine.toml"
+        fi
+    fi
+fi
+
+if [ "$DRY" = 1 ]; then
+    log "(dry) $machine: $pos -> peer $peer: $peer_pos"
+    exit 0
+fi
+
+if out="$(timeout 25 ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5 \
+        "$peer" "~/.local/bin/lan-mouse-peer-apply $peer_pos" 2>&1)"; then
+    log "ok $machine=$pos -> $peer=$peer_pos (${out//$'\n'/ })"
+else
+    log "error $machine=$pos -> $peer=$peer_pos: ${out//$'\n'/ }"
+fi
+
+exit 0

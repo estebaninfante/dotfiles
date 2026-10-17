@@ -1,0 +1,25 @@
+#!/bin/sh
+# NetworkManager dispatcher: al conectar una red WiFi, replica los perfiles
+# WiFi a la otra máquina (wifi-sync, aditivo: agrega/actualiza, nunca borra).
+# No fuerza reconexión del peer (ver `wifi-sync --connect` a mano).
+#
+# Va en /etc/NetworkManager/dispatcher.d/91-wifi-sync.
+
+IFACE="$1"
+ACTION="$2"
+
+[ "$ACTION" = "up" ] || exit 0
+
+USER_NAME="eztvn"
+USER_HOME="/home/$USER_NAME"
+SYNC="$USER_HOME/.local/bin/wifi-sync"
+[ -x "$SYNC" ] || exit 0
+
+# Solo WiFi, y solo si el usuario tiene sesión systemd (necesita $HOME).
+[ "$(nmcli -g GENERAL.TYPE device show "$IFACE" 2>/dev/null)" = "wifi" ] || exit 0
+
+sudo -u "$USER_NAME" env HOME="$USER_HOME" \
+    XDG_RUNTIME_DIR="/run/user/$(id -u "$USER_NAME")" \
+    nohup timeout 40 "$SYNC" --auto >/dev/null 2>&1 &
+
+exit 0

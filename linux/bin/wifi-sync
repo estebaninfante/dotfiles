@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# wifi-sync — mantiene los perfiles WiFi de NetworkManager iguales en las dos
+# máquinas (aditivo: nunca borra perfiles).
+#
+# - push: perfiles locales que faltan o cambiaron respecto del peer.
+# - pull: perfiles del peer que faltan acá.
+# - Si ambos tienen el mismo perfil con contenido distinto, decide con el hash
+#   del último sync: gana el lado que cambió; sin estado previo gana el local.
+#   Así el dispatcher (auto) no entra en ping-pong.
+# - Al terminar: `nmcli connection reload` inmediato en el lado que cambió.
+# - --connect: si el perfil activo del peer cambió, lo reconecta (diferido 2 s
+#   para no cortar el ssh en curso).
+#
+# Uso: wifi-sync [--auto|--connect] [--dry]
+set -uo pipefail
+
+DIR="/etc/NetworkManager/system-connections"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
+STATE="$STATE_DIR/wifi-sync.state"
+LOG="$STATE_DIR/wifi-sync.log"
+mkdir -p "$STATE_DIR"
+
+AUTO=0; CONNECT=0; DRY=0
+for arg in "$@"; do
+    case "$arg" in
+        --auto)    AUTO=1 ;;
+        --connect) CONNECT=1 ;;
+        --dry)     DRY=1 ;;
+        *) echo "uso: $(basename "$0") [--auto|--connect] [--dry]" >&2; exit 2 ;;
+    esac
+done
+
+log() { echo "$(date '+%F %T') $*" >>"$LOG"; }
+say() { [ "$AUTO" = 1 ] || echo "$*"; log "$*"; }
+
+PY="python3"
+peer="$(kvm-peer 2>/dev/null || true)"
+[ -n "$peer" ] || { say "sin peer de LAN-Mouse configurado"; exit 0; }
+
+ssht() {
+    timeout 25 ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5 "$peer" "$@"
+}
+
+ssht true >/dev/null 2>&1 || { say "peer $peer no responde"; exit 0; }
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+# ── inventarios: nombre<TAB>sha256 ─────────────────────────────
+# Solo perfiles WiFi (type=wifi), que son los que tiene sentido compartir.
+local_manifest="$tmpdir/local.tsv"
+remote_manifest="$tmpdir/remote.tsv"
+: >"$local_manifest"
+
+for f in "$DIR"/*.nmconnection; do
+    [ -e "$f" ] || continue
+    sudo -n grep -q '^type=wifi' "$f" 2>/dev/null || continue
+    printf '%s\t%s\n' "$(basename "$f")" \
+        "$(sudo -n sha256sum "$f" 2>/dev/null | cut -d' ' -f1)" >>"$local_manifest"
+done
+
+ssht 'for f in /etc/NetworkManager/system-connections/*.nmconnection; do
+        [ -e "$f" ] || continue
+        sudo -n grep -q "^type=wifi" "$f" 2>/dev/null || continue
+        printf "%s\t%s\n" "$(basename "$f")" "$(sudo -n sha256sum "$f" | cut -d" " -f1)"
+    done' >"$remote_manifest" 2>/dev/null || : >"$remote_manifest"
+
+# ── decide acciones ────────────────────────────────────────────
+# Salida: push<TAB>nombre  |  pull<TAB>nombre
+actions="$tmpdir/actions.tsv"
+"$PY" - "$local_manifest" "$remote_manifest" "$STATE" >"$actions" <<'PY'
+import sys
+
+def load(path):
+    out = {}
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                name, _, digest = line.rstrip("\n").partition("\t")
+                if name and digest:
+                    out[name] = digest
+    except FileNotFoundError:
+        pass
+    return out
+
+def load_state(path):
+    return load(path)
+
+local, remote, state = (load(p) for p in sys.argv[1:4])
+for name in sorted(set(local) | set(remote)):
+    lh, rh = local.get(name), remote.get(name)
+    if lh and not rh:
+        print(f"push\t{name}")
+    elif rh and not lh:
+        print(f"pull\t{name}")
+    elif lh == rh:
+        continue
+    else:
+        last = state.get(name)
+        local_changed = lh != last
+        remote_changed = rh != last
+        if remote_changed and not local_changed:
+            print(f"pull\t{name}")
+        else:
+            print(f"push\t{name}")
+PY
+
+# ── estado: hash sincronizado por perfil ──────────────────────
+set_state() {
+    local name="$1" hash="$2"
+    touch "$STATE"
+    local tmp
+    tmp="$(mktemp)"
+    "$PY" - "$STATE" "$name" "$hash" >"$tmp" <<'PY'
+import sys
+path, name, digest = sys.argv[1], sys.argv[2], sys.argv[3]
+rows = {}
+try:
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            k, _, v = line.rstrip("\n").partition("\t")
+            if k:
+                rows[k] = v
+except FileNotFoundError:
+    pass
+rows[name] = digest
+for k in sorted(rows):
+    print(f"{k}\t{rows[k]}")
+PY
+    cat "$tmp" >"$STATE"
+    rm -f "$tmp"
+}
+
+hash_of() { sed -n "s/^$(printf '%s' "$1" | sed 's/[][\\.*^$/]/\\&/g')\t//p" "$2" | head -1; }
+
+pushed=0
+pulled=0
+while IFS=$'\t' read -r action name; do
+    [ -n "$name" ] || continue
+    if [ "$action" = push ]; then
+        src="$DIR/$name"
+        dst="/etc/NetworkManager/system-connections/$name"
+        hash="$(hash_of "$name" "$local_manifest")"
+        say "push $name"
+        [ "$DRY" = 1 ] && continue
+        sudo -n cat "$src" >"$tmpdir/profile"
+        if ssht "sudo -n tee $(printf '%q' "$dst") >/dev/null &&
+                 sudo -n chmod 600 $(printf '%q' "$dst") &&
+                 sudo -n chown root:root $(printf '%q' "$dst")" <"$tmpdir/profile"; then
+            set_state "$name" "$hash"
+            pushed=1
+        else
+            log "error al escribir $name en $peer"
+        fi
+    else
+        src="/etc/NetworkManager/system-connections/$name"
+        dst="$DIR/$name"
+        hash="$(hash_of "$name" "$remote_manifest")"
+        say "pull $name"
+        [ "$DRY" = 1 ] && continue
+        if ssht "sudo -n cat $(printf '%q' "$src")" >"$tmpdir/profile" 2>/dev/null; then
+            sudo -n install -m 600 -o root -g root "$tmpdir/profile" "$dst" &&
+                set_state "$name" "$hash" && pulled=1
+        else
+            log "error al leer $name desde $peer"
+        fi
+    fi
+done <"$actions"
+
+# ── aplica sin cortar conexiones ───────────────────────────────
+[ "$DRY" = 1 ] && exit 0
+
+if [ "$pulled" = 1 ]; then
+    sudo -n nmcli connection reload >/dev/null 2>&1 || true
+    say "NM local recargado"
+fi
+if [ "$pushed" = 1 ]; then
+    ssht 'sudo -n nmcli connection reload' >/dev/null 2>&1 || true
+    say "NM del peer recargado"
+fi
+
+# ── reconexión diferida del perfil activo del peer ─────────────
+if [ "$CONNECT" = 1 ] && [ "$pushed" = 1 ]; then
+    active_peer="$(ssht "nmcli -t -f NAME,TYPE connection show --active" 2>/dev/null \
+        | awk -F: '$2 == "802-11-wireless" {print $1; exit}')"
+    if [ -n "$active_peer" ] && grep -Fqx "$active_peer.nmconnection" <(cut -f2 "$actions" | sed 's/$/.nmconnection/'); then
+        say "reconectando '$active_peer' en $peer (diferido)"
+        ssht "sudo -n systemd-run --on-active=2 --collect --unit=nm-wifi-sync-$$ \
+              nmcli connection up id $(printf '%q' "$active_peer")" >/dev/null 2>&1 || true
+    fi
+fi
+
+exit 0
