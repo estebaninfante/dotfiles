@@ -29,12 +29,26 @@ def _pipeline(lang: str):
     return _pipelines[code]
 
 
+def _synth_chunks(pipeline, text: str, name: str) -> list:
+    return [audio for _, _, audio in pipeline(text, voice=name, speed=1.0)]
+
+
 def synth_to_wav(text: str, output_path: str, lang: str = "es", voice: str = None) -> dict:
     code = LANG_CODES.get(lang, "a")
     pipeline = _pipeline(lang)
     name = voice or DEFAULT_VOICES[code]
     started = time.time()
-    chunks = [audio for _, _, audio in pipeline(text, voice=name, speed=1.0)]
+    try:
+        chunks = _synth_chunks(pipeline, text, name)
+    except Exception as exc:
+        # Voz inexistente (p.ej. un nombre de piper llegó a kokoro): caer a la
+        # voz por defecto del idioma en vez de fallar con 404 de HuggingFace.
+        fallback = DEFAULT_VOICES[code]
+        if name == fallback:
+            raise
+        print(f"[kokoro-server] voz '{name}' no disponible ({exc}); uso '{fallback}'", file=sys.stderr)
+        name = fallback
+        chunks = _synth_chunks(pipeline, text, name)
     synth_time = time.time() - started
     samples = np.concatenate(chunks)
     pcm = (samples * 32767).astype(np.int16)

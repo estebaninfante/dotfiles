@@ -39,10 +39,13 @@ hybrid_pause = 1.5
 duck = true
 
 # Router por-idioma: cada idioma tiene su motor + voz.
-# es → piper (es_MX-claude-high suena mejor que el es de kokoro, que es thin)
+# es → kokoro (ef_dora). Antes era piper/es_MX-claude-high; al conmutar el
+#     motor a kokoro en caliente quedó la voz de piper y kokoro tiraba 404
+#     (esa voz no existe en HuggingFace) → la voz principal callaba o caía a
+#     piper. En caliente: voice engine kokoro es && voice voice ef_dora
 # en → kokoro (af_heart, calidad A, en estupendo)
-engine_es = "piper"       # piper | kokoro | espeak  (motor para es)
-voice_es = "es_MX-claude-high"
+engine_es = "kokoro"      # piper | kokoro | espeak  (motor para es)
+voice_es = "ef_dora"
 engine_en = "kokoro"      # piper | kokoro | espeak  (motor para en)
 voice_en = "af_heart"
 

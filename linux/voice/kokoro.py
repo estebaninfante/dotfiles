@@ -42,7 +42,17 @@ def main() -> None:
     code = code_map.get(a.lang, "a")
     voice = a.voice or voice_map[code]
     pipeline = KPipeline(lang_code=code, repo_id="hexgrad/Kokoro-82M")
-    chunks = [audio for _, _, audio in pipeline(a.text, voice=voice, speed=1.0)]
+    try:
+        chunks = [audio for _, _, audio in pipeline(a.text, voice=voice, speed=1.0)]
+    except Exception as exc:
+        # Voz inexistente (p.ej. nombre de piper): caer a la voz por defecto
+        # del idioma en vez de fallar con 404 de HuggingFace.
+        fallback = voice_map[code]
+        if voice == fallback:
+            raise
+        print(f"[kokoro] voz '{voice}' no disponible ({exc}); uso '{fallback}'", file=sys.stderr)
+        voice = fallback
+        chunks = [audio for _, _, audio in pipeline(a.text, voice=voice, speed=1.0)]
     full = np.concatenate(chunks)
     s16 = (full * 32767).astype(np.int16)
     with wave.open(a.out, "wb") as w:
