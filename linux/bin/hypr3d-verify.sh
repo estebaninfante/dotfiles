@@ -92,10 +92,23 @@ SIG_HOST="$(hyprctl instances 2>/dev/null | sed -n 's/^instance \(.*\):$/\1/p' |
 cleanup() {
     [ -n "${nested_pid:-}" ] && kill "$nested_pid" >/dev/null 2>&1 || true
     pkill -f 'hypr3d-verify/nested.lua' >/dev/null 2>&1 || true
+    pkill -f "quickshell -n -p $OUT/hud.qml" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 cleanup
 sleep 0.3
+
+# A previous verifier may still be shutting down. Never adopt its instance:
+# wait until every non-host Hyprland socket stops answering.
+for _ in $(seq 1 80); do
+    alive=0
+    for d in $(ls "$HYPR_DIR" 2>/dev/null); do
+        [ "$d" = "$SIG_HOST" ] && continue
+        HYPRLAND_INSTANCE_SIGNATURE="$d" hyprctl -j version >/dev/null 2>&1 && alive=1
+    done
+    [ "$alive" = 0 ] && break
+    sleep 0.25
+done
 
 setsid env HYPRLAND_NO_LOGO=1 HYPR3D_SO="$SO" Hyprland -c "$CONF" >"$LOG" 2>&1 </dev/null &
 nested_pid=$!
@@ -260,12 +273,18 @@ WORKSPACES="${HYPR3D_VERIFY_WORKSPACES:-0}"
 if [ "$WORKSPACES" = "1" ]; then
     nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "2" }))' >/dev/null 2>&1
     sleep 0.4
-    nested eval "hl.dispatch(hl.dsp.exec_cmd(\"$TERMINAL --class $WS2_CLASS --title HYPR3D-W2A\"))" >/dev/null 2>&1
-    nested eval "hl.dispatch(hl.dsp.exec_cmd(\"$TERMINAL --class $WS2_CLASS --title HYPR3D-W2B\"))" >/dev/null 2>&1
-    for _ in $(seq 1 80); do
+    # Terminals can fail to map under load; retry until two exist.
+    for attempt in 1 2 3 4; do
         n2="$(nested -j clients 2>/dev/null | jq --arg c "$WS2_CLASS" '[.[]|select((.class//"")==$c)]|length' 2>/dev/null)"
         [ "${n2:-0}" -ge 2 ] && break
-        sleep 0.25
+        for i in $(seq 1 $((2 - ${n2:-0}))); do
+            nested eval "hl.dispatch(hl.dsp.exec_cmd(\"$TERMINAL --class $WS2_CLASS --title HYPR3D-W2$attempt-$i\"))" >/dev/null 2>&1
+        done
+        for _ in $(seq 1 40); do
+            n2="$(nested -j clients 2>/dev/null | jq --arg c "$WS2_CLASS" '[.[]|select((.class//"")==$c)]|length' 2>/dev/null)"
+            [ "${n2:-0}" -ge 2 ] && break
+            sleep 0.25
+        done
     done
     sleep 0.5
     nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "1" }))' >/dev/null 2>&1
