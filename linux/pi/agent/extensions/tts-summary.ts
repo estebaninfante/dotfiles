@@ -194,6 +194,42 @@ function deliver(text: string, limit = MAX_SUMMARY): void {
   voiceAvisar(line);
 }
 
+/* Compara lo que se va a decir con lo que el agente ya dijo con `hablar`.
+   Evita el doble mensaje cuando ambos cuentan lo mismo con otras palabras. */
+function normSpeech(s: string): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function speechTokens(s: string): Set<string> {
+  return new Set(normSpeech(s).split(" ").filter((w) => w.length > 2));
+}
+
+/** ¿`line` repite algo que el agente ya dijo con `hablar`? Igualdad normalizada,
+ *  contención o mayoría de palabras en común. */
+function yaDicho(line: string, dichos: string[]): boolean {
+  const n = normSpeech(line);
+  if (!n) return true;
+  for (const said of dichos) {
+    const m = normSpeech(said);
+    if (!m) continue;
+    if (n === m) return true;
+    if (Math.min(n.length, m.length) >= 12 && (n.includes(m) || m.includes(n))) return true;
+    const a = speechTokens(n);
+    const b = speechTokens(m);
+    if (!a.size || !b.size) continue;
+    let common = 0;
+    for (const w of a) if (b.has(w)) common += 1;
+    if (common / Math.min(a.size, b.size) >= 0.75) return true;
+  }
+  return false;
+}
+
 export default function (pi: ExtensionAPI) {
   let run: RunSummary = { texts: [], errors: 0 };
   let announced = false;
@@ -201,6 +237,18 @@ export default function (pi: ExtensionAPI) {
   // sino que se dice al cerrar (gana el último). Así el agente puede reportar
   // avances sin que te suene tres veces lo mismo.
   let pendingAviso = "";
+  /* Lo que el agente ya dijo con `hablar` en esta corrida. Llega por el bus de
+     extensiones (`conversar.ts` lo emite) para no repetir el mismo mensaje al
+     cerrar con `avisar` ni con el resumen de respaldo. */
+  let spokenByHablar: string[] = [];
+  try {
+    pi.events.on("voz:hablado", (data) => {
+      const texto = String((data as { texto?: string })?.texto ?? "").trim();
+      if (texto) spokenByHablar.push(texto);
+    });
+  } catch {
+    /* sin bus de eventos: solo queda el dedup interno de `deliver` */
+  }
 
   pi.registerTool({
     name: "avisar",
@@ -278,17 +326,25 @@ export default function (pi: ExtensionAPI) {
     const deferred = pendingAviso;
     announced = false;
     pendingAviso = "";
+    /* Consumimos lo que ya se dijo con `hablar` en esta corrida: si el cierre
+       lo repite, no se dice de nuevo; si ya habló, tampoco corre el resumen de
+       respaldo (el usuario ya escuchó algo). */
+    const hablados = spokenByHablar;
+    spokenByHablar = [];
     /* Corrida interrumpida: el usuario ya sabe que cortó; no lo llamamos por
        voz ni le resumimos trabajo a medias. La voz automática queda reservada
        para las corridas que terminan sin interrupción. */
     if ((event as { aborted?: boolean }).aborted) return;
     /* El agente ya reportó: se dice SOLO el último aviso de la corrida (los
-       anteriores se descartaron) y no se corre el resumen de respaldo. */
+       anteriores se descartaron) y no se corre el resumen de respaldo. Si el
+       aviso repite lo ya dicho con `hablar`, se omite. */
     if (hadAviso) {
       const line = deferred.trim();
-      if (line) deliver(line, 0);
+      if (line && !yaDicho(line, hablados)) deliver(line, 0);
       return;
     }
+    /* El agente ya habló con `hablar`: no le repetimos el cierre por voz. */
+    if (hablados.length > 0) return;
 
     const raw = (snapshot.texts[snapshot.texts.length - 1] ?? "").trim();
     if (!raw && snapshot.errors === 0) return;

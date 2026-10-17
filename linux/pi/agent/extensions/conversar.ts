@@ -61,6 +61,11 @@ const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/
 
 const TMUX_PANE = process.env.TMUX_PANE?.trim() ?? "";
 
+/** Tipo de entrada de sesión donde vive la identidad del agente: así el nombre,
+ *  el rol, el color y la voz quedan atados a la conversación y vuelven al
+ *  reanudarla, aunque cambie el panel, la carpeta o el proceso. */
+const IDENTITY_ENTRY_TYPE = "agent-identity";
+
 /** Corre tmux sin romper si no hay servidor; devuelve stdout o "". */
 function tmux(args: string[]): string {
   try {
@@ -188,6 +193,50 @@ function agentIdentity(): AgentIdentity {
   return (identityCache ??= resolveIdentity(agentName(), projectRole()));
 }
 
+/** Identidad guardada en la conversación (entry custom), si la hay. Se busca en
+ *  la rama activa para que un fork herede la identidad de su historia. */
+function readStoredIdentity(ctx: unknown): AgentIdentity | undefined {
+  try {
+    const sm = (ctx as {
+      sessionManager?: { getBranch?: () => unknown[]; getEntries?: () => unknown[] };
+    })?.sessionManager;
+    const entries = (sm?.getBranch?.() ?? sm?.getEntries?.() ?? []) as Array<{
+      type?: string;
+      customType?: string;
+      data?: Partial<AgentIdentity>;
+    }>;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i];
+      if (e?.type !== "custom" || e.customType !== IDENTITY_ENTRY_TYPE) continue;
+      const d = e.data ?? {};
+      const name = String(d.name ?? "").trim();
+      if (!name) continue;
+      return {
+        name,
+        role: String(d.role ?? "").trim() || "general",
+        color: normHex(d.color) || "#7dcfff",
+        voice: String(d.voice ?? ""),
+      };
+    }
+  } catch {
+    /* sin sesión: no importa */
+  }
+  return undefined;
+}
+
+function sameIdentity(a: AgentIdentity, b: AgentIdentity): boolean {
+  return a.name === b.name && a.role === b.role && a.color === b.color && a.voice === b.voice;
+}
+
+/** Deja el panel de tmux con la identidad dada (nombre, rol, color y fondo). */
+function applyIdentityToPane(ident: AgentIdentity): void {
+  if (!TMUX_PANE) return;
+  tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_name", ident.name]);
+  tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_role", ident.role]);
+  tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_color", ident.color]);
+  tmux(["select-pane", "-t", TMUX_PANE, "-P", `bg=${tint(ident.color, 0.18)}`]);
+}
+
 /** Pinta el panel de tmux con el color del agente: fondo y borde llevan SU
  *  color, así la terminal entera se reconoce de un vistazo. Es lo más cerca del
  *  "fondo del agente" que permite tmux cuando varios agentes comparten ventana.
@@ -195,11 +244,7 @@ function agentIdentity(): AgentIdentity {
 function applyPaneLook(name: string): AgentIdentity {
   const ident = resolveIdentity(name, projectRole());
   identityCache = ident;
-  if (TMUX_PANE) {
-    tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_role", ident.role]);
-    tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_color", ident.color]);
-    tmux(["select-pane", "-t", TMUX_PANE, "-P", `bg=${tint(ident.color, 0.18)}`]);
-  }
+  applyIdentityToPane(ident);
   return ident;
 }
 
@@ -686,6 +731,18 @@ export default function (pi: ExtensionAPI) {
     updateLatido(true);
   }
 
+  /** Avisa al resto del harness qué se dijo en voz alta, para que `avisar` (u
+   *  otra extensión de cierre) no repita lo mismo al terminar la corrida. */
+  function announceSpoken(texto: string): void {
+    const t = cleanText(texto);
+    if (!t) return;
+    try {
+      pi.events.emit("voz:hablado", { agente: agentName(), texto: t, at: Date.now() });
+    } catch {
+      /* sin bus de eventos: el dedup por texto propio de `avisar` sigue igual */
+    }
+  }
+
   pi.registerTool({
     name: "hablar",
     label: "Hablar al usuario (voz; con esperar, espera respuesta)",
@@ -714,14 +771,16 @@ export default function (pi: ExtensionAPI) {
         return { content: [{ type: "text", text: "Falta el mensaje." }], details: undefined };
       }
       if (params.esperar !== true) {
-        await execCapture(["hablar", agentName(), mensaje], 15000, signal);
+        const dicho = await execCapture(["hablar", agentName(), mensaje], 15000, signal);
+        if (dicho.code === 0) announceSpoken(mensaje);
         return {
           content: [{ type: "text", text: "Dicho al usuario por voz." }],
           details: undefined,
         };
       }
       const segundos = Math.max(10, Number(params.segundos ?? 300) || 300);
-      await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
+      const preguntado = await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
+      if (preguntado.code === 0) announceSpoken(mensaje);
       const answer = await execCapture(
         ["esperar", agentName(), "--timeout", String(segundos)],
         segundos * 1000 + 5000,
@@ -770,7 +829,35 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     uiCtx = ctx;
-    agentName(); // registra el nombre en el panel (o lo lee)
+    // La identidad vive con la conversación: al reanudar vuelven el mismo
+    // nombre, rol, color y voz. Reseteamos la memoria por si cambió la sesión
+    // (nueva, reanudada o bifurcada dentro del mismo proceso).
+    agentNameCache = undefined;
+    identityCache = undefined;
+
+    const forced = Boolean(
+      process.env.PI_VOICE_AGENT?.trim() || process.env.PI_AGENT_ROLE?.trim(),
+    );
+    const stored = readStoredIdentity(ctx);
+    if (stored && !forced) {
+      // La conversación ya tiene agente: se respeta aunque el panel o la
+      // carpeta ahora digan otra cosa.
+      identityCache = stored;
+      agentNameCache = stored.name;
+      applyIdentityToPane(stored);
+    } else {
+      agentName(); // resuelve y registra el nombre en el panel (o lo lee)
+      const ident = agentIdentity();
+      if (!stored || !sameIdentity(stored, ident)) {
+        // Primera vez (o identidad forzada distinta): queda guardada acá.
+        try {
+          pi.appendEntry(IDENTITY_ENTRY_TYPE, ident);
+        } catch {
+          /* sesión efímera: se resuelve de nuevo la próxima vez */
+        }
+      }
+    }
+
     const restored = lastUserPrompt(ctx as never);
     if (restored) {
       lastPrompt = restored;
