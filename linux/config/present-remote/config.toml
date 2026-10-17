@@ -41,7 +41,7 @@ tap = "@voice"
 
 # 2 toques (Enter -> f17): Handy. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
 [buttons.f17]
-tap = "handy --toggle-post-process"
+tap = "~/.local/bin/handy-dictado pro"
 combo_with = "f14"
 combo = "omarchy-menu toggle"
 

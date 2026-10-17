@@ -77,11 +77,13 @@ hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl -M shift v -m shift -m ctrl"
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh down"))
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { release = true })
 
-hl.bind("F7", hl.dsp.exec_cmd("handy --toggle-post-process"))
+-- Handy: pasa por handy-dictado para poder parar desde CUALQUIER disparador
+-- (Handy ignora la parada si viene de un binding distinto al que arrancó).
+hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/handy-dictado pro"))
 
 hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 
-hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("handy --toggle-post-process"))
+hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("~/.local/bin/handy-dictado pro"))
 
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode opencode --agent dotfiles"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
