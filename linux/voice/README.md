@@ -31,7 +31,7 @@ AUDIO (PipeWire / pw-play)
 | STT | `linux/voice/stt.py` | wrapper de `handy --transcribe-file` |
 | CLI | `linux/bin/voice` | comandos (status, speak, listen, benchmark...) |
 | OpenCode | `~/.config/opencode/plugins/voice/plugin.js` | resumen al terminar, permiso, error, inyección de voz |
-| Puente notificaciones | `linux/config/swaync/config.json` (script `voice ingest-notify`) | registra cada notificación para poder repetirla |
+| Puente notificaciones | `linux/config/swaync/config.json` (script `voice ingest-notify`) | legado: swaync ya no corre; ver «Captura de notificaciones» |
 | Widget barra | `omarchy/plugins/eztvn.pi-tts` | interruptor TTS, volumen, registro de mensajes y repetir |
 
 Toda configuración vive en el repo (`~/dotfiles`). Los destinos
@@ -231,10 +231,16 @@ opencode.
 La latencia típica del cerebro es ~3–4 s (modelo + arranque). Para bajarla: una
 sesión RPC persistente de Pi o un modelo más chico.
 
-## Captura de notificaciones (swaync)
+## Captura de notificaciones (legado swaync)
+
+> **Ojo:** Omarchy 4 ya no usa swaync (el shell de quickshell es el dueno de
+> `org.freedesktop.Notifications`), asi que este enganche **no corre** hoy. Lo
+> que si queda en el registro es lo que emite `voice notify` / `voice avisar`,
+> y los avisos de escritorio de los scripts via `notify`. Capturar las
+> notificaciones de otras apps pide un plugin del shell: pendiente.
 
 Para que «repetir» incluya lo que el sistema notifica (no solo lo que habla un
-agente), `linux/config/swaync/config.json` engancha cada notificación:
+agente), `linux/config/swaync/config.json` enganchaba cada notificacion:
 
 ```json
 "scripts": {

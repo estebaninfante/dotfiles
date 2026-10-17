@@ -54,10 +54,10 @@ case "${1:-status}" in
   toggle)
     if systemctl --user is-active --quiet "$UNIT" 2>/dev/null; then
       systemctl --user stop "$UNIT"
-      notify-send -a talk-command -i audio-input-microphone "talk-command" "Escucha pausada" 2>/dev/null || true
+      notify --app-name talk-command -i audio-input-microphone -g "󰍬" "Escucha pausada" 2>/dev/null || true
     else
       systemctl --user start "$UNIT"
-      notify-send -a talk-command -i audio-input-microphone "talk-command" "Escuchando wake words" 2>/dev/null || true
+      notify --app-name talk-command -i audio-input-microphone -g "󰍬" "Escuchando wake words" 2>/dev/null || true
     fi
     ;;
   *) echo "uso: status.sh [status|start|stop|toggle]" >&2; exit 2 ;;

@@ -619,8 +619,9 @@ listen() {
     rm -f "$LISTEN_PID"
   fi
 
-  # señuelo visual en swayosd/notify
-  swayosd-client --custom-symbol "mic" --custom-message "Grabando… (vuelve a Super+V para cortar o espera silencio)" >/dev/null 2>&1 &
+  # Señuelo visual: aviso de escritorio mientras dura la grabación.
+  notify --app-name voice -g "󰍬" -t 4000 "Grabando…" \
+    "Vuelve a Super+V para cortar o espera silencio" >/dev/null 2>&1 &
   echo "voice: grabando (silence auto-stop, max 15s)…" >&2
 
   rec -q "$wav" rate 16k channels 1 silence 1 0.3 0.8% 1 0.9 0.8% timeout 15 &
@@ -628,7 +629,6 @@ listen() {
   echo "$rpid" > "$LISTEN_PID"
   wait "$rpid" 2>/dev/null
   rm -f "$LISTEN_PID"
-  pkill -f "swayosd-client.*Grabando" 2>/dev/null
 
   [ -s "$wav" ] || { echo "voice: sin audio capturado" >&2; return 1; }
   local text; text=$(transcribe "$wav")

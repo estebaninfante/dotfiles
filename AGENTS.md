@@ -331,9 +331,10 @@ La voz es configurable por proceso (personalidad): `--source X` usa el perfil
 `[tts.profiles.X]` de `config.toml`; si no existe, `auto_profiles = true` le
 asigna una voz estable y distinta. Un perfil admite `--voice/--engine/--lang`,
 `--pitch` (semitonos) y `--speed` (tempo). Se gestiona con `voice profiles`,
-`voice profile show|set|remove|test|auto`. Las notificaciones se capturan con
-el script `voice ingest-notify` enganchado en
-`linux/config/swaync/config.json` (`scripts.exec`).
+`voice profile show|set|remove|test|auto`. La captura automatica de notificaciones de otras apps vivia
+en un hook de swaync (`linux/config/swaync/config.json` → `voice ingest-notify`);
+con el shell de Omarchy ese hook ya no corre y queda pendiente. Lo que si se
+registra es `voice notify` / `voice avisar`.
 
 **Wake-word ("dime"):** `talk-command` escucha continua y dispara por palabra
 clave; `dime` → `voice play-inbox`, `cuántos mensajes` → dice el conteo. El ASR
