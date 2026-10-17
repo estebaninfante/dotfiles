@@ -31,6 +31,12 @@ Panel {
 
   property bool ttsEnabled: true
   property string source: ""
+  // Agente que habla AHORA (lo publica el daemon): el icono de la barra toma
+  // SU nombre y SU color, para reconocer quién habla de un vistazo.
+  property bool speaking: false
+  property string speakSource: ""
+  property string speakRole: ""
+  property string speakColor: ""
   property bool busy: false
   // Volumen relativo (0-1) de la voz TTS sobre el volumen general de salida.
   property real volume: 1.0
@@ -47,10 +53,15 @@ Panel {
   readonly property string glyph: root.pending > 0 ? "󰂚" : (root.ttsEnabled ? "󰕾" : "󰖁")
   readonly property string stateLabel: root.ttsEnabled ? "Activado" : "Desactivado"
   readonly property color stateColor: root.ttsEnabled ? root.accent : Qt.darker(root.foreground, 1.6)
+  readonly property color speakerColor: {
+    if (root.speaking && /^#[0-9a-fA-F]{6}$/.test(root.speakColor)) return root.speakColor
+    return root.stateColor
+  }
   readonly property int historyCount: root.history ? root.history.length : 0
   readonly property string tooltipText: "Voz TTS · " + root.stateLabel + " · " +
     Math.round(root.volume * 100) + "%" +
     (root.pending > 0 ? " · " + root.pending + " pendientes" : "") +
+    (root.speaking && root.speakSource ? " · habla " + root.speakSource : "") +
     " · clic derecho: activar/desactivar"
 
   function cfg(key, fallback) {
@@ -119,6 +130,10 @@ Panel {
     if (typeof parsed.volume === "number") root.volume = parsed.volume
     if (typeof parsed.speed === "number") root.speed = parsed.speed
     if (typeof parsed.pending === "number") root.pending = parsed.pending
+    root.speaking = parsed.speaking === true
+    if (parsed.source) root.speakSource = String(parsed.source)
+    if (parsed.role) root.speakRole = String(parsed.role)
+    if (parsed.color) root.speakColor = String(parsed.color)
   }
 
   function playInbox() {
@@ -245,7 +260,7 @@ Panel {
     tooltipText: root.tooltipText
     active: root.ttsEnabled || root.pending > 0
     useActiveColor: true
-    activeColor: root.pending > 0 ? root.accent : root.stateColor
+    activeColor: root.pending > 0 ? root.accent : root.speakerColor
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) {
         root.toggleEnabled()

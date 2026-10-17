@@ -42,6 +42,14 @@ from engine import (
     tts_volume,
 )
 
+# Identidad del agente (nombre/rol/color) para publicarla junto a lo que se
+# dice: los subtítulos y la barra pintan con el color del que habla. Es
+# opcional: si el módulo no está, el sistema sigue funcionando igual.
+try:
+    from identity import identity as _agent_identity
+except Exception:  # pragma: no cover
+    _agent_identity = None
+
 FIFO = os.environ.get("VOICE_TTS_FIFO", os.path.join(CACHE_DIR, "tts.fifo"))
 PID_FILE = os.path.join(CACHE_DIR, "daemon.pid")
 LOG_FILE = os.environ.get("VOICE_LOG", os.path.join(CACHE_DIR, "daemon.log"))
@@ -640,6 +648,15 @@ def _publish_speaking(text: str, wav: str, source: str, engine: str, voice: str)
             "engine": engine or "",
             "voice": voice or "",
         }
+        # Identidad del que habla: nombre, rol y color. El glow y la barra lo
+        # usan para pintar subtítulos y acentos con SU color, no con el del tema.
+        if _agent_identity is not None and source:
+            try:
+                ident = _agent_identity(source)
+                payload["role"] = ident.get("role", "")
+                payload["color"] = ident.get("color", "")
+            except Exception:
+                pass
         tmp = f"{SPEAKING_FILE}.{os.getpid()}"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False)

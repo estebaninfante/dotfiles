@@ -132,7 +132,7 @@ def color_for(name: str, role: str = "") -> str:
     explicit = _norm_hex(entry.get("color", ""))
     if explicit:
         return explicit
-    r = (role or entry.get("role") or "").strip().lower()
+    r = role_for(name, role).lower()
     if r in ROLE_COLORS:
         return ROLE_COLORS[r]
     return PALETTE[hash_index(name, len(PALETTE))]
@@ -141,6 +141,10 @@ def color_for(name: str, role: str = "") -> str:
 def role_for(name: str, fallback: str = "") -> str:
     entry = _entry(name)
     role = str(entry.get("role") or fallback or "").strip()
+    # El nombre puede ser el rol (main, audio, dotfiles): si no hay uno fijado
+    # y el nombre coincide con un rol conocido, ese es su rol.
+    if not role and str(name or "").strip().lower() in ROLE_COLORS:
+        role = str(name).strip().lower()
     return role or DEFAULT_ROLE
 
 

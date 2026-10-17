@@ -61,14 +61,39 @@ speed_factor() {
   awk "BEGIN{printf \"%.2f\", $raw}"
 }
 
+# Agente que esta hablando AHORA (lo publica el daemon en speaking.json):
+# nombre, color y rol. Vacio si nadie habla. Salida: source<TAB>color<TAB>role
+speaking_agent() {
+  local f="${XDG_CACHE_HOME:-$HOME/.cache}/voice/speaking.json"
+  [ -f "$f" ] || return 0
+  python3 - "$f" <<'PY' 2>/dev/null || true
+import json, sys, time
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    raise SystemExit
+src = str(d.get("source") or "")
+col = str(d.get("color") or "")
+role = str(d.get("role") or "")
+started = int(d.get("startedAt") or 0)
+dur = int(d.get("durationMs") or 0)
+now = int(time.time() * 1000)
+if dur > 0 and 0 <= now - started <= dur + 1500 and src:
+    print("%s\t%s\t%s" % (src, col, role))
+PY
+}
+
 print_status() {
-  local s v p sp
+  local s v p sp spk src col role
   s="$(state)"
   v="$(volume_fraction)"
   sp="$(speed_factor)"
   p="$("$VOICE_BIN" inbox count 2>/dev/null | tr -dc '0-9')"; p="${p:-0}"
-  printf '{"state":"%s","enabled":%s,"volume":%s,"speed":%s,"pending":%s,"source":"voice"}\n' \
-    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v" "$sp" "$p"
+  spk="$(speaking_agent)"
+  IFS=$'\t' read -r src col role <<<"$spk"
+  printf '{"state":"%s","enabled":%s,"volume":%s,"speed":%s,"pending":%s,"speaking":%s,"source":"%s","color":"%s","role":"%s"}\n' \
+    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v" "$sp" "$p" \
+    "$([[ -n "$src" ]] && echo true || echo false)" "${src:-voice}" "${col:-}" "${role:-}"
 }
 
 case "${1:-status}" in

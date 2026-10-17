@@ -102,16 +102,32 @@ Item {
     return salida
   }
 
-  // El menú se pide una sola vez.
+  // El menú se pide del hub de hypr-remote (su socket de control) y, si no
+  // está, del servidor hypr-outline de siempre. Así el espejo funciona con
+  // cualquiera de los dos, sin depender de quién lo dispare.
+  readonly property string fuenteEstado: "out=$(curl -s --max-time 3 --unix-socket \"${XDG_RUNTIME_DIR}/hypr-remote/control.sock\" http://localhost/radial 2>/dev/null); if [ -z \"$out\" ]; then curl -s --max-time 3 http://127.0.0.1:1781/api/radial; else printf '%s' \"$out\"; fi"
+  readonly property string fuenteMenu: "out=$(curl -s --max-time 3 --unix-socket \"${XDG_RUNTIME_DIR}/hypr-remote/control.sock\" http://localhost/radial 2>/dev/null); if [ -z \"$out\" ]; then curl -s --max-time 3 http://127.0.0.1:1781/api/menu; else printf '%s' \"$out\"; fi"
+
+  // Acepta las dos formas: solo el menú (array) o menú + selección (objeto).
+  function aplicarRadial(d) {
+    if (!d) return
+    if (Array.isArray(d)) { root.menu = d; return }
+    if (Array.isArray(d.menu)) root.menu = d.menu
+    root.sel = d.sel || ""
+    root.hijo = d.hijo || ""
+    root.base = d.base || 0
+    if (d.abierto === true) root.abierto = true
+    else if (d.abierto === false) root.abierto = false
+  }
+
   Process {
     id: pedirMenu
     running: true
-    command: ["curl", "-s", "--max-time", "3", "http://127.0.0.1:1781/api/menu"]
+    command: ["bash", "-lc", root.fuenteMenu]
     stdout: StdioCollector {
       onStreamFinished: {
         try {
-          var datos = JSON.parse(text)
-          if (Array.isArray(datos)) root.menu = datos
+          root.aplicarRadial(JSON.parse(text))
         } catch (e) {
           console.log("hypr-outline: no pude leer el menú:", e)
         }
@@ -123,24 +139,22 @@ Item {
   Process {
     id: leer
     running: false
-    command: ["curl", "-s", "--max-time", "1", "http://127.0.0.1:1781/api/radial"]
+    command: ["bash", "-lc", root.fuenteEstado]
     stdout: StdioCollector {
       onStreamFinished: {
         try {
-          var d = JSON.parse(text)
-          root.sel = d.sel || ""
-          root.hijo = d.hijo || ""
-          root.base = d.base || 0
-          if (d.abierto !== true) root.abierto = false
+          root.aplicarRadial(JSON.parse(text))
         } catch (e) {}
       }
     }
   }
 
+  // Se sondea siempre: cuando está cerrado, espaciado; abierto, seguido. Así el
+  // espejo aparece solo, sin que ningún servidor tenga que avisarle.
   Timer {
-    running: root.abierto
+    running: true
     repeat: true
-    interval: 110
+    interval: root.abierto ? 110 : 350
     onTriggered: if (!leer.running) leer.running = true
   }
 

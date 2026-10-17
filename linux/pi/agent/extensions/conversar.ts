@@ -29,11 +29,14 @@
  *     entra el siguiente. Si el modelo piensa mucho más rápido de lo que se
  *     puede leer, se descartan las oraciones más viejas para no quedar atrasado.
  *
- * Nombre del agente: decide su voz, su color y a quién le hablás. Se resuelve
- * solo y se registra en el panel de tmux, así cada agente que abrís ya tiene
- * nombre. Prioridad: PI_VOICE_AGENT > nombre del panel > carpeta del proyecto
- * > nombre al azar (lista propia). Además publica @agent_status y @agent_goal
- * para que `agente-pane list/info` muestre quién es, en qué anda y dónde está.
+ * Nombre del agente: decide su voz, su rol, su color y a quién le hablás. Se
+ * resuelve solo y se registra en el panel de tmux, así cada agente que abrís ya
+ * tiene nombre. Prioridad del nombre: PI_VOICE_AGENT > nombre del panel >
+ * carpeta del proyecto > nombre al azar (lista propia). El rol sale de
+ * PI_AGENT_ROLE o del propio nombre (main, audio, dotfiles…). Además publica
+ * @agent_status, @agent_goal, @agent_role y @agent_color, y pinta el fondo del
+ * panel con el color del agente, para que `agente-pane list/info` muestre quién
+ * es, en qué anda y dónde está, y para reconocer la terminal de un vistazo.
  *
  * Config (archivo ~/.config/pi/latido.json o variables de entorno; la variable
  * gana):
@@ -93,6 +96,91 @@ const NAME_POOL = [
 
 let agentNameCache: string | undefined;
 
+/** Identidad estable del agente (nombre, rol y color). Sale del sistema de voz
+ *  (`voice identity --json`), la misma fuente que usan los subtítulos del glow
+ *  y la barra: así el color del agente es el mismo en todos lados. */
+interface AgentIdentity {
+  name: string;
+  role: string;
+  color: string;
+  voice: string;
+}
+
+function voiceBin(): string {
+  return process.env.PI_TTS_VOICE_BIN ?? `${HOME}/.local/bin/voice`;
+}
+
+function normHex(value: unknown): string {
+  const v = String(value ?? "").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : "";
+}
+
+/** Oscurece un color mezclándolo con negro (para fondos de panel). */
+function tint(hex: string, amount = 0.18): string {
+  const m = /^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(hex);
+  if (!m) return hex;
+  const mix = (h: string) => Math.max(0, Math.min(255, Math.round(parseInt(h, 16) * amount)));
+  const to = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${to(mix(m[1]!))}${to(mix(m[2]!))}${to(mix(m[3]!))}`;
+}
+
+/** Secuencia ANSI truecolor (respaldo si el tema no acepta un color concreto). */
+function truecolorFg(hex: string): string {
+  const c = normHex(hex);
+  if (!c) return "";
+  const r = parseInt(c.slice(1, 3), 16);
+  const g = parseInt(c.slice(3, 5), 16);
+  const b = parseInt(c.slice(5, 7), 16);
+  return `\x1b[38;2;${r};${g};${b}m`;
+}
+
+function resolveIdentity(name: string): AgentIdentity {
+  const fallback: AgentIdentity = {
+    name,
+    role: process.env.PI_AGENT_ROLE?.trim() || "general",
+    color: "#7dcfff",
+    voice: "",
+  };
+  try {
+    const out = execFileSync(voiceBin(), ["identity", name, "--json"], {
+      encoding: "utf8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const j = JSON.parse(out) as Partial<AgentIdentity>;
+    return {
+      name: String(j.name ?? name) || name,
+      role: String(j.role ?? "") || fallback.role,
+      color: normHex(j.color) || fallback.color,
+      voice: String(j.voice ?? ""),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+let identityCache: AgentIdentity | undefined;
+
+/** Identidad del agente actual (cacheada). */
+function agentIdentity(): AgentIdentity {
+  return (identityCache ??= resolveIdentity(agentName()));
+}
+
+/** Pinta el panel de tmux con el color del agente: fondo y borde llevan SU
+ *  color, así la terminal entera se reconoce de un vistazo. Es lo más cerca del
+ *  "fondo del agente" que permite tmux cuando varios agentes comparten ventana.
+ *  El fondo se oscurece para que el texto siga legible. */
+function applyPaneLook(name: string): AgentIdentity {
+  const ident = resolveIdentity(name);
+  identityCache = ident;
+  if (TMUX_PANE) {
+    tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_role", ident.role]);
+    tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_color", ident.color]);
+    tmux(["select-pane", "-t", TMUX_PANE, "-P", `bg=${tint(ident.color, 0.18)}`]);
+  }
+  return ident;
+}
+
 /** Nombre automático del agente. Prioridad: PI_VOICE_AGENT > nombre del panel
  *  > carpeta del proyecto > nombre al azar. Se registra en el panel de tmux
  *  para que `agente-pane list/focus <nombre>` funcione solo, sin nombrar nada
@@ -103,11 +191,15 @@ function ensureAgentName(): string {
   const explicit = process.env.PI_VOICE_AGENT?.trim();
   if (explicit) {
     if (TMUX_PANE) tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_name", explicit]);
+    applyPaneLook(explicit);
     return (agentNameCache = explicit);
   }
   if (TMUX_PANE) {
     const existing = tmux(["display-message", "-p", "-t", TMUX_PANE, "#{@agent_name}"]);
-    if (existing) return (agentNameCache = existing);
+    if (existing) {
+      applyPaneLook(existing);
+      return (agentNameCache = existing);
+    }
   }
 
   const used = new Set(
@@ -133,6 +225,7 @@ function ensureAgentName(): string {
   while (used.has(name)) name = `${candidate}-${i++}`;
 
   if (TMUX_PANE) tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_name", name]);
+  applyPaneLook(name);
   return (agentNameCache = name);
 }
 
@@ -416,31 +509,33 @@ export default function (pi: ExtensionAPI) {
     lastRelease = Date.now();
   }
 
-  /** Resalta una palabra con el tema activo (inverso como respaldo). */
+  /** Resalta una palabra con el color del agente. */
   function highlight(word: string): string {
+    const color = agentIdentity().color;
     try {
       const styled = uiCtx?.ui?.theme?.style?.(word, {
-        fg: "accent",
+        fg: color,
         bg: "selectedBg",
         bold: true,
         underline: true,
       });
       if (styled) return styled;
     } catch {
-      /* tema sin ese color: cae al respaldo */
+      /* tema sin ese color: usa ANSI truecolor */
     }
-    return `\x1b[4;7m${word}\x1b[0m`;
+    return `${truecolorFg(color)}\x1b[4;7m${word}\x1b[0m`;
   }
 
-  /** Apaga una palabra que aún no se leyó (queda visible pero tenue). */
+  /** Apaga una palabra que aún no se leyó (visible pero tenue, en su color). */
   function muted(word: string): string {
+    const color = agentIdentity().color;
     try {
-      const styled = uiCtx?.ui?.theme?.fg?.("muted", word);
+      const styled = uiCtx?.ui?.theme?.fg?.(color as never, word);
       if (styled) return styled;
     } catch {
-      /* tema sin "muted": cae al respaldo */
+      /* tema sin ese color: usa ANSI truecolor apagado */
     }
-    return `\x1b[2m${word}\x1b[0m`;
+    return `\x1b[2m${truecolorFg(color)}${word}\x1b[0m`;
   }
 
   /** La oración fija: lo ya leído, la palabra actual iluminada y lo que falta. */
@@ -486,18 +581,20 @@ export default function (pi: ExtensionAPI) {
     const turnMs = working ? now - workStart : lastTurnMs;
     const sessionMs = sessionThinkingMs + (working ? now - workStart : 0);
     const goal = lastPrompt ? `🎯 ${truncateWords(lastPrompt, CFG.promptChars)}` : "🎯 (sin pedido aún)";
+    const ident = agentIdentity();
     const head = working
       ? `⏱ Pensando hace ${formatDuration(turnMs)} · Sesión ${formatDuration(sessionMs)}`
       : `✓ ${formatDuration(lastTurnMs)} · Sesión ${formatDuration(sessionThinkingMs)}`;
     const upcoming = paragraphs.slice(0, CFG.lines).map((p) => p.join(" ")).join("|");
-    const key = `${head}|${goal}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
+    const label = `${ident.name}${ident.role && ident.role !== "general" ? ` · ${ident.role}` : ""}`;
+    const key = `${label}|${head}|${goal}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
     if (!force && key === lastRenderedKey) return;
     lastRenderedKey = key;
     lastRender = now;
-    const lines = [head, goal];
+    const lines = [`${truecolorFg(ident.color)}${label}\x1b[0m`, head, goal];
     if (working && current) lines.push(...thoughtLines());
     try {
-      ui.setStatus?.("voz-latido", `⏱ ${formatDuration(turnMs)}`);
+      ui.setStatus?.("voz-latido", `${truecolorFg(ident.color)}⏱ ${formatDuration(turnMs)}\x1b[0m`);
       ui.setWidget?.("voz-latido", lines);
     } catch {
       /* sin UI (modo rpc/print): no importa */

@@ -18,6 +18,11 @@
 #   voice profiles [--all] [--json]      listar voces por agente/proceso
 #   voice profile show|set|remove|test   ver/cambiar/probar la voz de un agente
 #   voice profile auto [on|off]          reparto automatico de voces
+#   voice identity [nombre] [--json]     nombre, rol y color estable del agente
+#   voice color [nombre] [--tint]        color (hex) del agente (o version oscura)
+#   voice color <nombre> --set #hex      fijar el color de un agente
+#   voice role <nombre> [rol]            ver/fijar el rol (main, audio, ...)
+#   voice agents                         tabla de identidades fijadas
 #   voice send --agent <nombre> --text "..."   API por-agente (Hermes, opencode, ...)
 #   voice test                           test TTS + STT
 #   voice accelerator [auto|gpu|cpu]     ver/cambiar dispositivo STT Handy
@@ -193,16 +198,27 @@ resolve_voice_flags() {  # resolve_voice_flags <profile> <voice> <engine> <lang>
 VOICE_FALLBACK_RE='^(No pude resolver eso\.|No entendí qué hacer\.|Me tardé demasiado en resolver eso\.)$'
 
 # subtitle: publica un texto como subtítulo sin reproducir audio.
-subtitle() {  # subtitle <texto>
+subtitle() {  # subtitle [--source S] <texto>
+  local source="assistant"
+  while [ "$#" -ge 1 ]; do
+    case "$1" in
+      --source) source="${2:?}"; shift 2 ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+  done
   local text="$*"
   [ -n "$text" ] || return 0
   mkdir -p "$CACHE_DIR"
-  local words ms f
+  local words ms f color role
   words=$(printf '%s' "$text" | wc -w)
   ms=$(( words * 420 + 900 )); [ "$ms" -lt 1500 ] && ms=1500
   f="$CACHE_DIR/speaking.json"
-  printf '{"text":%s,"durationMs":%s,"startedAt":%s,"source":"assistant","engine":"none","voice":"none"}\n' \
-    "$(js_escape "$text")" "$ms" "$(( $(date +%s) * 1000 ))" > "$f.$$" && mv "$f.$$" "$f"
+  color=$("$PY" "$VOICE_DIR/identity.py" color "$source" 2>/dev/null || echo "")
+  role=$("$PY" "$VOICE_DIR/identity.py" role "$source" 2>/dev/null || echo "")
+  printf '{"text":%s,"durationMs":%s,"startedAt":%s,"source":%s,"engine":"none","voice":"none","color":%s,"role":%s}\n' \
+    "$(js_escape "$text")" "$ms" "$(( $(date +%s) * 1000 ))" \
+    "$(js_escape "$source")" "$(js_escape "$color")" "$(js_escape "$role")" > "$f.$$" && mv "$f.$$" "$f"
 }
 
 speak() {  # speak [--profile P] [--voice V] [--engine E] [--lang L] [--source S] [--key K] [--pitch N] [--speed N] [--no-record] [--force] <texto>
@@ -212,7 +228,7 @@ speak() {  # speak [--profile P] [--voice V] [--engine E] [--lang L] [--source S
   local text="$P_TEXT"
   [ -n "$text" ] || { echo "voice: sin texto" >&2; return 1; }
   # "No pude…": solo visible, nunca hablado.
-  if [[ "$text" =~ $VOICE_FALLBACK_RE ]]; then subtitle "$text"; return 0; fi
+  if [[ "$text" =~ $VOICE_FALLBACK_RE ]]; then subtitle --source "$P_SOURCE" "$text"; return 0; fi
   if [ "$P_FORCE" != 1 ] && [ "$(config_val tts enabled)" = "false" ]; then return 0; fi
   local profile="${P_PROFILE:-$P_SOURCE}"
   resolve_voice_flags "$profile" "$P_VOICE" "$P_ENGINE" "$P_LANG"
@@ -378,6 +394,10 @@ messages_cmd() { "$PY" "$VOICE_DIR/engine.py" messages "$@"; }
 
 # profiles: lista los perfiles de voz (agentes/procesos) y su reparto.
 profiles_cmd() { "$PY" "$VOICE_DIR/engine.py" profiles "$@"; }
+
+# identity: nombre, rol y color del agente. Fuente única que usan los subtítulos,
+# el fondo del panel y la barra. Delega en linux/voice/identity.py.
+identity_cmd() { "$PY" "$VOICE_DIR/identity.py" "$@"; }
 
 # profile: gestiona la voz de cada agente/proceso.
 profile_cmd() {  # profile list|show|set|remove|test|auto
@@ -741,6 +761,10 @@ case "${1:-status}" in
   ptt) shift; ptt "$@" ;;
   play-inbox) shift; play_inbox "$@" ;;
   profiles) shift; profiles_cmd "$@" ;;
+  identity|id) shift; identity_cmd identity "$@" ;;
+  color) shift; identity_cmd color "$@" ;;
+  role) shift; identity_cmd role "$@" ;;
+  agents) shift; identity_cmd agents "$@" ;;
   profile) shift; profile_cmd "$@" ;;
   repeat) shift; repeat "$@" ;;
   resolve) shift; "$PY" "$VOICE_DIR/engine.py" resolve "$@" ;;
