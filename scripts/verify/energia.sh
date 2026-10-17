@@ -90,7 +90,7 @@ if [ -e "$gpu" ]; then
   else
     pct="$(awk -v a="${act:-0}" -v u="${up:-1}" 'BEGIN{printf "%d", (u>0)?100*a/(u*1000):0}')"
     if [ "${pct:-0}" -ge 90 ]; then
-      warn "dGPU: activa ${pct}% del uptime (~4-9 W) — ver §4.1 del doc"
+      warn "dGPU: activa ${pct}% del uptime (≈8-10 W) — ver §4.1 del doc"
     else
       info "dGPU: activa (${pct}% del uptime)"
     fi
@@ -102,7 +102,7 @@ for u in 3-1 1-2; do
   d="/sys/bus/usb/devices/$u"
   [ -e "$d" ] || continue
   c="$(cat "$d/power/control" 2>/dev/null)"
-  [ "$c" = "auto" ] && ok "USB $u: auto" || warn "USB $u ($(cat "$d/product" 2>/dev/null)): $c — ~0.2-1 W (riesgoso en el teclado)"
+  [ "$c" = "auto" ] && ok "USB $u: auto" || warn "USB $u ($(cat "$d/product" 2>/dev/null)): $c — no suspende (0.2-1 W; en el teclado es riesgoso)"
 done
 
 # --- NMI watchdog ---------------------------------------------------------
