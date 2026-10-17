@@ -10,9 +10,10 @@
  * Mecanismo principal: la tool `avisar`. El propio agente (que tiene todo el
  * contexto) escribe una sola frase en español llano —como quien le reporta un
  * avance a otra persona, o la pregunta que necesite— y la tool la entrega en
- * voz alta más una notificación de escritorio. La instrucción `promptGuidelines`
- * la hace obligatoria al terminar cada respuesta, y disponible en cualquier
- * momento.
+ * voz alta más una notificación de escritorio. `avisar` es el CIERRE: si el
+ * agente la llama varias veces en una corrida, se dice únicamente el último
+ * aviso (así no te suena tres veces lo mismo). Para avisar algo en medio del
+ * trabajo está `hablar`, que sí es inmediato.
  *
  * Red de seguridad: si el agente no llamó la tool en la corrida, al asentarse
  * Pi (`agent_settled`) un modelo reescribe su última respuesta en una frase
@@ -196,41 +197,48 @@ function deliver(text: string, limit = MAX_SUMMARY): void {
 export default function (pi: ExtensionAPI) {
   let run: RunSummary = { texts: [], errors: 0 };
   let announced = false;
+  // Último aviso de la corrida: `avisar` ya no habla cada vez que lo llaman,
+  // sino que se dice al cerrar (gana el último). Así el agente puede reportar
+  // avances sin que te suene tres veces lo mismo.
+  let pendingAviso = "";
 
   pi.registerTool({
     name: "avisar",
     label: "Avisar por voz",
     description:
-      "Avisa al usuario lo que debe saber (el sistema de voz lo habla o lo deja en su buzón). Llámala SIEMPRE al " +
-      "terminar tu respuesta, y también en cualquier momento del trabajo si " +
-      "surge algo que valga la pena avisar, con una sola frase breve en español " +
-      "natural y respetuoso, como quien le reporta un avance a otra persona: " +
-      "qué hiciste y si quedó listo. Sin tecnicismos, sin rutas, sin nombres de " +
-      "herramientas o funciones. No uses apelativos ni lo llames 'jefe'. Sirve " +
-      "para llamar su atención: puede estar distraído y no mirar la pantalla. " +
+      "Avisa al usuario al cerrar la corrida (el sistema de voz lo habla o lo " +
+      "deja en su buzón). Llamala UNA sola vez, cuando ya no vas a hacer más " +
+      "trabajo, con una sola frase breve en español natural y respetuoso, como " +
+      "quien le reporta un avance a otra persona: qué hiciste y si quedó listo. " +
+      "Si la llamás varias veces, solo se dice la última. Para avisar algo en " +
+      "medio del trabajo, que el usuario necesite en el momento, usá `hablar`; " +
+      "`avisar` es el cierre. Sin tecnicismos, sin rutas, sin nombres de " +
+      "herramientas o funciones. No uses apelativos ni lo llames 'jefe'. " +
       "Si necesitás una respuesta, usá `hablar` con `esperar: true`.",
-    promptSnippet: "Avisar al usuario (voz o buzón; obligatoria al terminar; disponible en cualquier momento)",
+    promptSnippet: "Avisar al usuario al cerrar (voz o buzón; solo se dice el último aviso)",
     promptGuidelines: [
-      "SIEMPRE, al terminar cada respuesta, llama a `avisar` con una sola frase " +
-        "breve, en español natural y respetuoso (como quien le reporta un avance " +
-        "a otra persona): qué pasó y si quedó listo. Nunca incluyas " +
-        "tecnicismos, rutas ni nombres de herramientas; se dirá en voz alta o se " +
-        "dejará en su buzón.",
+      "Llama a `avisar` UNA vez, al terminar la corrida (cuando ya no vas a " +
+        "seguir trabajando), con una sola frase breve en español natural y " +
+        "respetuoso (como quien le reporta un avance a otra persona): qué pasó y " +
+        "si quedó listo. Si ya le contaste lo mismo con `hablar` en esta " +
+        "corrida, no lo repitas con `avisar`. Nunca incluyas tecnicismos, rutas " +
+        "ni nombres de herramientas; se dirá en voz alta o se dejará en su buzón.",
       "Si necesitás que el usuario te responda, no te quedes en `avisar`: usá " +
         "`hablar` con `esperar: true` y una pregunta concreta. `avisar` es para " +
         "reportar, no para preguntar.",
-      "También puedes usar `avisar` en cualquier momento, no sólo al final, si " +
-        "aparece algo que convenga que el usuario sepa o tenga que decidir.",
+      "Para avisar algo en medio del trabajo, que el usuario necesite AHORA, usá " +
+        "`hablar` (inmediato). `avisar` es solo el cierre: si lo llamás varias " +
+        "veces en la misma corrida, solo se dice el último para no repetirte.",
       "No uses apelativos ni la palabra 'jefe': habla directo.",
     ],
     parameters: AVISAR_PARAMS,
     async execute(_toolCallId, params) {
       announced = true;
-      // Sin tope: el aviso lo escribe el agente y ya viene en una frase breve;
-      // recortarlo partia la oración a mitad.
-      deliver(String(params.mensaje ?? ""), 0);
+      // No habla acá: guarda el aviso y se dice al asentarse la corrida (gana
+      // el último). Sin tope de largo: ya viene en una frase breve.
+      pendingAviso = String(params.mensaje ?? "");
       return {
-        content: [{ type: "text", text: "Avisado al usuario." }],
+        content: [{ type: "text", text: "Anotado: se avisa al cerrar la corrida." }],
         details: undefined,
       };
     },
@@ -238,6 +246,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("before_agent_start", () => {
     announced = false;
+    pendingAviso = "";
   });
 
   pi.on("turn_end", async (event, ctx) => {
@@ -265,13 +274,21 @@ export default function (pi: ExtensionAPI) {
   pi.on("agent_settled", async (event, ctx) => {
     const snapshot = run;
     run = { texts: [], errors: 0 };
-    const agentAlreadySpoke = announced;
+    const hadAviso = announced;
+    const deferred = pendingAviso;
     announced = false;
+    pendingAviso = "";
     /* Corrida interrumpida: el usuario ya sabe que cortó; no lo llamamos por
        voz ni le resumimos trabajo a medias. La voz automática queda reservada
        para las corridas que terminan sin interrupción. */
     if ((event as { aborted?: boolean }).aborted) return;
-    if (agentAlreadySpoke) return;
+    /* El agente ya reportó: se dice SOLO el último aviso de la corrida (los
+       anteriores se descartaron) y no se corre el resumen de respaldo. */
+    if (hadAviso) {
+      const line = deferred.trim();
+      if (line) deliver(line, 0);
+      return;
+    }
 
     const raw = (snapshot.texts[snapshot.texts.length - 1] ?? "").trim();
     if (!raw && snapshot.errors === 0) return;
