@@ -24,7 +24,7 @@ Item {
 
   // La placa crece con la etiqueta: los nombres largos no se cortan ni se
   // salen del fondo.
-  readonly property real ancho: Math.max(lado, etiqueta.implicitWidth + lado * 0.34)
+  readonly property real ancho: Math.max(lado, etiqueta.implicitWidth + lado * 0.22)
 
   width: ancho
   height: lado
@@ -113,7 +113,7 @@ Item {
       color: nodo.elegida ? nodo.acento : Util.alpha(nodo.tinta, 0.78)
       font.family: nodo.familia
       font.pixelSize: nodo.fuenteTexto
-      font.letterSpacing: nodo.fuenteTexto * 0.07
+      font.letterSpacing: nodo.fuenteTexto * 0.06
       Behavior on color { ColorAnimation { duration: 170 } }
     }
   }

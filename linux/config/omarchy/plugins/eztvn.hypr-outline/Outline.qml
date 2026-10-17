@@ -35,12 +35,12 @@ Item {
 
   // Todo proporcional a la pantalla, para que se lea de lejos.
   readonly property real escala: Math.max(700, Math.min(panel.width, panel.height))
-  readonly property real radio: escala * 0.20
+  readonly property real radio: escala * 0.25
   readonly property real radioHijo: radio * 1.56
-  readonly property real lado: radio * 0.56
+  readonly property real lado: radio * 0.47
   readonly property real ladoHijo: lado * 0.70
   readonly property real fuenteIcono: lado * 0.36
-  readonly property real fuenteTexto: lado * 0.155
+  readonly property real fuenteTexto: lado * 0.150
   readonly property real fuenteGlobo: lado * 0.19
 
   readonly property color acento: Color.accent
@@ -73,6 +73,9 @@ Item {
     animarSeleccion = false
     entradaAnim.restart()
     abierto = true
+    // Refresca el menú en cada apertura: si cambia menu.json no hace falta
+    // reiniciar el shell.
+    if (!pedirMenu.running) pedirMenu.running = true
     leer.running = true
   }
 
@@ -525,9 +528,10 @@ Item {
       readonly property real angulo: root.hijoElegido
         ? root.anguloHijoElegido()
         : (root.madreElegida ? root.anguloDe(root.madreElegida) : 0)
+      // La chispa frena en el borde de la placa, no encima del texto.
       readonly property real destino: root.hijoElegido
-        ? root.radioHijo - root.ladoHijo * 0.34
-        : root.radio - root.lado * 0.34
+        ? root.radioHijo - root.ladoHijo * 0.60
+        : root.radio - root.lado * 0.60
 
       property real avance: 1
 
