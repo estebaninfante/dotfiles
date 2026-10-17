@@ -478,6 +478,14 @@ if [[ -f "$DOTFILES_SYSTEM/NetworkManager/kvm-ensure.sh" ]] && \
     sudo install -o root -g root -m 0755 \
         "$DOTFILES_SYSTEM/NetworkManager/dispatcher.d/90-lan-mouse" \
         /etc/NetworkManager/dispatcher.d/90-lan-mouse
+    # Replica perfiles WiFi entre las dos máquinas al conectar una red.
+    if [[ -f "$DOTFILES_SYSTEM/NetworkManager/dispatcher.d/91-wifi-sync" ]]; then
+        sudo install -o root -g root -m 0755 \
+            "$DOTFILES_SYSTEM/NetworkManager/dispatcher.d/91-wifi-sync" \
+            /etc/NetworkManager/dispatcher.d/91-wifi-sync
+    else
+        warn "Falta linux/system/NetworkManager/dispatcher.d/91-wifi-sync"
+    fi
     if [[ -f "$DOTFILES_SYSTEM/systemd/kvm-ensure.service" ]] && \
        [[ -f "$DOTFILES_SYSTEM/systemd/kvm-ensure.timer" ]]; then
         sudo install -o root -g root -m 0644 \

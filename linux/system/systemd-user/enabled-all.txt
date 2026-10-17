@@ -3,3 +3,6 @@
 # Una línea por unit. Los comentarios con # se ignoran.
 
 audio-jack-guard.service
+
+lan-mouse-sync.path
+lan-mouse-sync.service
