@@ -97,8 +97,8 @@ shopt -u nullglob
 if [ "${#graph_files[@]}" -eq 0 ]; then
   printf 'El grafo "%s" aun no esta registrado en Logseq.\n' "$GRAPH" >&2
   printf 'Abriendo Logseq: usa Add a graph y elige %s (una sola vez).\n' "$VAULT" >&2
-  if command -v notify-send >/dev/null 2>&1; then
-    notify-send -a investigaciones 'Logseq: falta el grafo' "Agrega el grafo \"$GRAPH\" (Add a graph -> $VAULT) una vez." || true
+  if command -v notify >/dev/null 2>&1; then
+    notify --app-name investigaciones -g "󰈙" 'Logseq: falta el grafo' "Agrega el grafo \"$GRAPH\" (Add a graph -> $VAULT) una vez." || true
   fi
   (setsid uwsm-app -- logseq >/dev/null 2>&1 || setsid logseq >/dev/null 2>&1) &
   exit 0

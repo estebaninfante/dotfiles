@@ -5,7 +5,7 @@ import QtQuick
 import "../config"
 
 // Pomodoro + recordatorio de ojos. Estado y notificaciones viven en
-// ~/.local/bin/pomodoro.sh (archivos runtime + notify-send), así el timer
+// ~/.local/bin/pomodoro.sh (archivos runtime + notify), así el timer
 // sigue vivo aunque quickshell se reinicie. Este servicio solo consulta
 // (1 s) y dispara subcomandos.
 Item {

@@ -48,7 +48,8 @@ case "$MODE" in
     active)
         GEOMETRY=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
         if [ -z "$GEOMETRY" ] || [[ "$GEOMETRY" == null* ]]; then
-            notify-send -u critical "shot" "No se pudo obtener ventana activa"
+            notify -u critical -g "󰅚" --app-name shot \
+                "Captura fallida" "No se pudo obtener la ventana activa."
             exit 1
         fi
         CAPTURE="grim -g '$GEOMETRY' - > $OUT"
@@ -75,7 +76,8 @@ fi
 case "$ACTION" in
     copy)
         wl-copy --type image/png < "$OUT"
-        notify-send "shot" "Captura copiada al portapapeles"
+        notify -g "󰹑" -t 3000 --app-name shot \
+            "Captura copiada" "Al portapapeles"
         ;;
     save)
         TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
@@ -83,7 +85,8 @@ case "$ACTION" in
         FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
         cp "$OUT" "$FILE"
         wl-copy --type image/png < "$FILE"
-        notify-send "shot" "Guardada: $FILE"
+        notify -g "󰉉" -t 4000 --app-name shot \
+            "Captura guardada" "$FILE"
         ;;
     edit)
         swappy -f "$OUT"

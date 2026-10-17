@@ -9,7 +9,7 @@ IFACE="${1:-wlo1}"
 # Check if WiFi is enabled
 if nmcli radio wifi | grep -q "desactivado\|disabled\|off"; then
     nmcli radio wifi on
-    notify-send -t 3000 "WiFi" "Encendido — reconectando..."
+    notify --app-name WiFi -g "󰖩" -t 3000 "Encendido" "Reconectando..."
     exit 0
 fi
 
@@ -17,4 +17,4 @@ fi
 nmcli radio wifi off
 sleep 0.5
 nmcli radio wifi on
-notify-send -t 3000 "WiFi" "Reconectando..."
+notify --app-name WiFi -g "󰖩" -t 3000 "Reconectando..."

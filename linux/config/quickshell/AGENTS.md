@@ -82,7 +82,7 @@ quickshell/
   `Mental/Plantillas/nota-dia.md`). Se refresca al abrir el menú y tras cada op.
 - **Pomodoro** (`components/PomodoroTab.qml` + `services/PomodoroService.qml`):
   estado y notificaciones viven en `~/.local/bin/pomodoro.sh` (archivos en
-  `$XDG_RUNTIME_DIR/pomodoro/`, notify-send) → sobrevive reinicios de
+  `$XDG_RUNTIME_DIR/pomodoro/`, notify) → sobrevive reinicios de
   quickshell. El servicio solo hace poll (1 s) y dispara subcomandos
   (`start|pause|resume|stop|skip|config`). Config persistente en
   `~/.local/state/quickshell/pomodoro.conf` (`work_min`, `break_min`,

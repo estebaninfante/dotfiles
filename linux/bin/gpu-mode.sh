@@ -135,7 +135,8 @@ case "${1:-status}" in
     # Automático: batería → battery (guarda); AC → no tocar (el gaming lo pide el usuario manualmente)
     if [ "$(ac_status)" = "bateria" ]; then
       set_mode auto 0
-      notify-send -u low "GPU NVIDIA" "Batería: GPU suspendida (ahorro energía)" 2>/dev/null || true
+      notify -u low -g "󰢮" --app-name "GPU NVIDIA" \
+        "Batería: GPU suspendida (ahorro de energía)" 2>/dev/null || true
     fi
     ;;
   toggle)

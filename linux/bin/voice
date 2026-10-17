@@ -361,7 +361,7 @@ avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile
   esac
   # direct
   if [ "$(config_val tts enabled)" = "false" ]; then return 0; fi
-  notify-send -a "$source" -i dialog-information "$source" "$P_TEXT" >/dev/null 2>&1 || true
+  notify --app-name "$source" -i dialog-information -g "󰍬" "$source" "$P_TEXT" >/dev/null 2>&1 || true
   speak "${args[@]}"
 }
 
@@ -380,8 +380,8 @@ notify_cmd() {  # notify [--app A] [--title T] [--body B] [--source S] <texto>
   done
   [ -n "$body" ] || { echo "voice notify: falta el texto" >&2; return 2; }
   [ -n "$title" ] || title="$app"
-  notify-send -a "$app" -i dialog-information "$title" "$body" >/dev/null 2>&1 || true
-  # Respaldo del registro por si swaync no esta capturando notificaciones.
+  notify --app-name "$app" -i dialog-information -g "󰍬" "$title" "$body" >/dev/null 2>&1 || true
+  # Respaldo del registro por si el escritorio no esta capturando notificaciones.
   "$PY" "$VOICE_DIR/engine.py" record-notify --app "$app" --title "$title" --body "$body" >/dev/null 2>&1 || true
 }
 

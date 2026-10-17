@@ -65,8 +65,8 @@ apply_wallpaper() {
 apply_wallpaper
 
 # ── 4. Notificar ──────────────────────────────────────────
-if command -v notify-send >/dev/null 2>&1; then
-    notify-send -a "theme-toggle" "Tema $target" "Kitty · GTK · wallpaper cambiados" 2>/dev/null || true
+if command -v notify >/dev/null 2>&1; then
+    notify --app-name theme-toggle -g "󰏘" "Tema $target" "Kitty · GTK · wallpaper cambiados" 2>/dev/null || true
 fi
 
 echo "theme global: $target"

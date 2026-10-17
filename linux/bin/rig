@@ -1148,7 +1148,7 @@ notify_state_change() {
   [ "${RIG_STATE_NOTIFY:-1}" = "0" ] && return 0
   local bin="${RIG_NOTIFY_BIN:-}"
   if [ -z "$bin" ]; then
-    bin=$(command -v notify-send 2>/dev/null) || return 0
+    bin=$(command -v notify 2>/dev/null) || return 0
   fi
   [ -n "$bin" ] || return 0
   local urgency title body
@@ -3728,7 +3728,7 @@ FAKE
   shtmp=$(mktemp -d)
   sstore="$shtmp/tickets.json"
   printf '{"version":1,"tickets":[]}\n' >"$sstore"
-  nbin="$shtmp/notify-send"
+  nbin="$shtmp/notify"
   nlog="$shtmp/notify.log"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >>"%s"\n' "$nlog" >"$nbin"
   chmod +x "$nbin"

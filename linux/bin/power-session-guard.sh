@@ -78,12 +78,14 @@ else
   if [ "$desired" = save ]; then
     log "ahorro (bateria o power-saver): recargando config de ahorro"
     hyprctl reload >/dev/null 2>&1 || true
-    notify-send -u low -a "Energia" "Modo ahorro: 60Hz, sin blur, Sunshine off" 2>/dev/null || true
+    notify -u low -g "󰂄" --app-name Energia \
+      "Modo ahorro" "60Hz, sin blur, Sunshine off" 2>/dev/null || true
   else
     log "AC/rendimiento: recargando config completa"
     hyprctl reload >/dev/null 2>&1 || true
     sleep 4
-    notify-send -u low -a "Energia" "Rendimiento completo: 120Hz, Sunshine on" 2>/dev/null || true
+    notify -u low -g "󰂄" --app-name Energia \
+      "Rendimiento completo" "120Hz, Sunshine on" 2>/dev/null || true
   fi
   printf '%s\n' "$desired" >"$state_file" 2>/dev/null || true
 fi

@@ -73,9 +73,9 @@ Al final, resume en una linea que hiciste."
     local rc=$?
     log "resolver: termino rc=$rc"
     if (( rc == 0 )); then
-        notify-send -a dotfiles "Dotfiles" "Un agente resolvio el error de sync" 2>/dev/null
+        notify --app-name dotfiles -g "󰚩" "Dotfiles" "Un agente resolvio el error de sync" 2>/dev/null
     else
-        notify-send -u critical -a dotfiles "Dotfiles: sync sin resolver" "Revisa $RESOLVER_LOG" 2>/dev/null
+        notify -u critical --app-name dotfiles -g "󰅚" "Dotfiles: sync sin resolver" "Revisa $RESOLVER_LOG" 2>/dev/null
     fi
 }
 
@@ -87,10 +87,10 @@ mkdir -p "$(dirname "$LOG")" "$(dirname "$FLAG")"
 if [[ "${1:-}" == "--toggle" ]]; then
     if [[ -f "$FLAG" ]]; then
         rm -f "$FLAG"
-        notify-send -a dotfiles "Dotfiles" "Auto-sync ACTIVADO" 2>/dev/null
+        notify --app-name dotfiles -g "󰊢" "Dotfiles" "Auto-sync ACTIVADO" 2>/dev/null
     else
         touch "$FLAG"
-        notify-send -a dotfiles "Dotfiles" "Auto-sync PAUSADO" 2>/dev/null
+        notify --app-name dotfiles -g "󰏤" "Dotfiles" "Auto-sync PAUSADO" 2>/dev/null
     fi
     exit 0
 fi
@@ -163,7 +163,7 @@ if [[ "$LOCAL" != "$REMOTE" ]]; then
         git rebase --abort >/dev/null 2>&1 || true
         resume_hypr_autoreload
         log "ERROR conflicto de rebase — llamado al resolutor"
-        notify-send -u critical "Dotfiles: conflicto de sync" \
+        notify -u critical --app-name dotfiles -g "󰅚" "Dotfiles: conflicto de sync" \
             "Un agente headless va a intentar resolverlo" 2>/dev/null
         spawn_resolver "conflicto de rebase al integrar origin/$BRANCH"
         exit 1
@@ -228,7 +228,7 @@ if [[ -n "$RECONCILE_CURRENT" && "$(cat "$RECONCILE_STATE" 2>/dev/null)" != "$RE
         else
             echo "$now" > "$RECONCILE_FAIL"
             log "reconcile: FALLO (ver $RECONCILE_LOG) — reintento en ~$((RECONCILE_COOLDOWN/60)) min"
-            notify-send -u critical "Dotfiles: setup automatico fallo" \
+            notify -u critical --app-name dotfiles -g "󰅚" "Dotfiles: setup automatico fallo" \
                 "Ver $RECONCILE_LOG" 2>/dev/null
         fi
     fi

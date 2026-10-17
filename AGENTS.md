@@ -158,6 +158,11 @@ Cambios en una extension se aplican con `/reload` (o reiniciando Pi).
 
 Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por paquetes).
 
+**Avisos de escritorio:** usar `notify` (envuelve `omarchy-notification-send` y
+cae a `notify-send` si la maquina no lo tiene). Forma:
+`notify -g <glifo> -u normal -t <ms> --app-name <app> "Titulo" "Cuerpo"`.
+Cada script pone su glifo; el título es el hecho, no el nombre del script.
+
 ### Voice (`linux/voice/`)
 
 | Archivo | Descripcion |
@@ -585,7 +590,7 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
   `rig-escalate "<pregunta>" --ticket X --seat S --priority alta|normal` (o `rig ask`, subcomando
   que integra `work-rig-reconcile` como wrapper delgado del script; este ticket NO edita `rig`).
   El script: (1) emite `kind=ask` (`data.awaiting`) en el registro; (2) marca el ticket `blocked`
-  con motivo; (3) avisa por escritorio (`notify-send`) y por voz (TTS `voice`); (4) el bot de
+  con motivo; (3) avisa por escritorio (`notify`) y por voz (TTS `voice`); (4) el bot de
   Discord publica la pregunta con **mencion** `<@user_id>` (dispara push del telefono). El retorno
   es el punto clave: la respuesta del usuario (texto o nota de voz) viaja de vuelta a la silla
   que pregunto (`rig send <seat> "[dc] [respuesta] ..."`), la **desbloquea** (`rig ticket set

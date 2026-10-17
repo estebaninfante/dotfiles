@@ -19,7 +19,7 @@ end_get() { cat "$RUN_DIR/end" 2>/dev/null || echo 0; }
 eyes_get() { cat "$RUN_DIR/eyes_end" 2>/dev/null || echo 0; }
 cycle_get() { cat "$RUN_DIR/cycle" 2>/dev/null || echo 0; }
 
-notify() { notify-send -a Pomodoro -t 5000 "Pomodoro" "$1" 2>/dev/null || true; }
+aviso() { notify --app-name Pomodoro -g "󰔛" -t 5000 "Pomodoro" "$1" 2>/dev/null || true; }
 
 log_activity() {
     local text="${1:-}"
@@ -78,7 +78,7 @@ start() {
         printf '0' > "$RUN_DIR/eyes_end"
     fi
     rm -f "$RUN_DIR/remain" "$RUN_DIR/eyes_remain"
-    notify "Pomodoro iniciado — $(cfg work_min 25) min de trabajo"
+    aviso "Pomodoro iniciado — $(cfg work_min 25) min de trabajo"
 }
 
 pause() {
@@ -121,7 +121,7 @@ skip() {
             printf 'break' > "$RUN_DIR/state"
             printf '%s' $(( $(date +%s) + $(cfg break_min 5) * 60 )) > "$RUN_DIR/end"
             rm -f "$RUN_DIR/remain"
-            notify "Saltado — descansa $(cfg break_min 5) min"
+            aviso "Saltado — descansa $(cfg break_min 5) min"
             ;;
         break|paused_break)
             log_activity ""
@@ -129,7 +129,7 @@ skip() {
             printf 'break_done' > "$RUN_DIR/state"
             printf '0' > "$RUN_DIR/end"
             printf '0' > "$RUN_DIR/eyes_end"
-            notify "Descanso terminado — $c ciclo(s). ¿Continuar?"
+            aviso "Descanso terminado — $c ciclo(s). ¿Continuar?"
             ;;
     esac
 }
@@ -146,7 +146,7 @@ continue_next() {
             if [ "$(cfg eyes_on 1)" = "1" ]; then
                 printf '%s' $(( $(date +%s) + $(cfg eyes_min 20) * 60 )) > "$RUN_DIR/eyes_end"
             fi
-            notify "Iniciando ciclo $(( c + 1 )) — $(cfg work_min 25) min"
+            aviso "Iniciando ciclo $(( c + 1 )) — $(cfg work_min 25) min"
             ;;
         idle)
             start
@@ -171,7 +171,7 @@ status() {
                     printf 'break' > "$RUN_DIR/state"
                     printf '%s' $(( now + $(cfg break_min 5) * 60 )) > "$RUN_DIR/end"
                     s="break"; remain=$(( $(cfg break_min 5) * 60 ))
-                    notify "Ciclo $c listo — descansa $(cfg break_min 5) min"
+                    aviso "Ciclo $c listo — descansa $(cfg break_min 5) min"
                 else
                     log_activity ""
                     local c; c="$(cycle_get)"
@@ -179,7 +179,7 @@ status() {
                     printf '0' > "$RUN_DIR/end"
                     printf '0' > "$RUN_DIR/eyes_end"
                     s="break_done"; remain=0
-                    notify "Descanso terminado — $c ciclo(s). ¿Continuar?"
+                    aviso "Descanso terminado — $c ciclo(s). ¿Continuar?"
                 fi
             fi
             ;;
@@ -194,7 +194,7 @@ status() {
         else
             eyes_in=$(( eyes - now ))
             if [ "$eyes_in" -le 0 ]; then
-                notify "Mira lejos — descansa la vista unos segundos"
+                aviso "Mira lejos — descansa la vista unos segundos"
                 eyes_in=$(( $(cfg eyes_min 20) * 60 ))
                 printf '%s' $(( now + eyes_in )) > "$RUN_DIR/eyes_end"
             fi

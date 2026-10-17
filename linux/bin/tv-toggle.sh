@@ -55,11 +55,12 @@ if [[ "$MODE" == "toggle" ]] && is_tv_mode; then
 
     switch_audio "$LAPTOP_SINK"
 
-    notify-send \
-        -a "Hyprland" \
+    notify \
+        --app-name Hyprland \
         -i video-display \
+        -g "󰟀" \
         -t 2500 \
-        "💻 Modo portátil" \
+        "Modo portátil" \
         "Pantalla y audio restaurados."
 
     exit 0
@@ -83,17 +84,19 @@ hyprctl keyword monitor "$LAPTOP,disable"
 switch_audio "$HDMI_SINK"
 
 if [[ "$MODE" == "auto" ]]; then
-    notify-send \
-        -a "Hyprland" \
+    notify \
+        --app-name Hyprland \
         -i video-display \
+        -g "󰹉" \
         -t 3500 \
-        "📺 Modo TV" \
+        "Modo TV" \
         "Televisor detectado.\nPantalla y audio activados automáticamente."
 else
-    notify-send \
-        -a "Hyprland" \
+    notify \
+        --app-name Hyprland \
         -i video-display \
+        -g "󰹉" \
         -t 2500 \
-        "📺 Modo TV" \
+        "Modo TV" \
         "Pantalla y audio cambiados al televisor."
 fi

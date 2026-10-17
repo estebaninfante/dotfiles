@@ -22,7 +22,7 @@ action = { type = "key", key = "shift+h" }
 # [[bindings]]
 # signal = "set_volume"
 # action = { type = "exec", cmd = ["playerctl", "set-volume", "{value}"] }
-# onEnd = { type = "exec", cmd = ["notify-send", "Volume control ended"] }
+# onEnd = { type = "exec", cmd = ["notify", "Volume control ended"] }
 
 # ── Workspaces Hyprland (swipe) ──────────────────────────────────────────────
 [[bindings]]

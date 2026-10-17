@@ -68,7 +68,7 @@ Tenés `bash` para lo que no cubra `omarchy`:
 - **Audio**: `wpctl set-volume @DEFAULT_AUDIO_SINK@ 10%+`, `wpctl set-mute ... toggle`.
 - **Brillo**: `omarchy brightness display +10%` (o `brightnessctl set +10%`).
 - **Multimedia**: `playerctl play-pause|next|previous`.
-- **Notificaciones**: `notify-send`.
+- **Notificaciones**: `notify "Título" "Cuerpo"` (acepta `-g` glifo, `-u` urgencia, `-t` ms, `--app-name`).
 - **Sistema**: `systemctl --user`, `wpctl`, `nmcli`.
 - **La voz/el buzón**: `~/.local/bin/voice inbox`, `voice play-inbox`,
   `voice say`, `voice messages`, `voice profiles`.

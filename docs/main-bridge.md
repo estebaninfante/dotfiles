@@ -176,7 +176,7 @@ Efecto del escalado, en capas:
    `data={message, priority, awaiting:true}`, `actor` y `seat` de quien pregunta.
 2. **Ticket**: si hay `--ticket`, lo marca `blocked` con evidencia `ask: <pregunta>` via
    `rig ticket set --status blocked`.
-3. **Aviso de escritorio**: `notify-send` (urgencia `critical` si `--priority alta`).
+3. **Aviso de escritorio**: `notify` (urgencia `critical` si `--priority alta`).
 4. **Voz**: lee la pregunta en voz alta con el TTS del escritorio (`voice speak`).
 5. **Discord**: el bot ve el `kind=ask` en el registro y publica en el canal dedicado un
    mensaje con la pregunta, el `ticket`, la `silla` que pregunto y una **mencion** al usuario

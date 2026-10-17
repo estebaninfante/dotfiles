@@ -2,7 +2,7 @@
 
 # Verifica que el HDMI esté conectado
 if ! hyprctl monitors | grep -q "^Monitor HDMI-A-1"; then
-    notify-send "Modo TV" "No hay un monitor HDMI conectado."
+    notify --app-name "Modo TV" -g "󰹉" "No hay un monitor HDMI conectado."
     exit 1
 fi
 
@@ -17,4 +17,4 @@ for i in {1..10}; do
     hyprctl dispatch moveworkspacetomonitor "$i HDMI-A-1"
 done
 
-notify-send "Modo TV" "Activado"
+notify --app-name "Modo TV" -g "󰹉" "Activado"
