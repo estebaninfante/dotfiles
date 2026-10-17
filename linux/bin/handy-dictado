@@ -43,6 +43,28 @@ if [ "$accion" = cancel ]; then
     exec "$handy_bin" --cancel
 fi
 
+# Asegura que la app de Handy esté VIVA antes de mandar el toggle. Si no hay
+# instancia, `handy --toggle-*` arranca la GUI (ventana principal/ajustes) y la
+# orden se pierde: nunca empieza el dictado. Con la app ya corriendo, la orden
+# llega a la instancia única y sí alterna la grabación.
+handy_corriendo() {
+    if [ -n "${HANDY_RUNNING_OVERRIDE:-}" ]; then
+        [ "$HANDY_RUNNING_OVERRIDE" = "1" ]
+        return
+    fi
+    pgrep -x handy >/dev/null 2>&1
+}
+
+if ! handy_corriendo; then
+    # Arrancarla oculta (sin GUI) y esperar a que registre la instancia única.
+    setsid "$handy_bin" --start-hidden >/dev/null 2>&1 &
+    for _ in $(seq 1 50); do
+        handy_corriendo && break
+        sleep 0.2
+    done
+    sleep 1
+fi
+
 # ¿Handy está grabando o transcribiendo? Su ventana "Recording" sólo existe en
 # esos estados: no está cuando está quieto, ni cuando sólo tenés abierta la
 # ventana principal de Handy (esa tiene clase handy pero título "Handy").
