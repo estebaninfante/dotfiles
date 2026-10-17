@@ -134,15 +134,19 @@ function truecolorFg(hex: string): string {
   return `\x1b[38;2;${r};${g};${b}m`;
 }
 
-function resolveIdentity(name: string): AgentIdentity {
+function resolveIdentity(name: string, roleHint = ""): AgentIdentity {
+  const fallbackRole = process.env.PI_AGENT_ROLE?.trim() || roleHint || "general";
   const fallback: AgentIdentity = {
     name,
-    role: process.env.PI_AGENT_ROLE?.trim() || "general",
+    role: fallbackRole,
     color: "#7dcfff",
     voice: "",
   };
   try {
-    const out = execFileSync(voiceBin(), ["identity", name, "--json"], {
+    const args = ["identity", name];
+    if (fallbackRole) args.push("--role", fallbackRole);
+    args.push("--json");
+    const out = execFileSync(voiceBin(), args, {
       encoding: "utf8",
       timeout: 2000,
       stdio: ["ignore", "pipe", "ignore"],
@@ -150,7 +154,7 @@ function resolveIdentity(name: string): AgentIdentity {
     const j = JSON.parse(out) as Partial<AgentIdentity>;
     return {
       name: String(j.name ?? name) || name,
-      role: String(j.role ?? "") || fallback.role,
+      role: String(j.role ?? "") || fallbackRole,
       color: normHex(j.color) || fallback.color,
       voice: String(j.voice ?? ""),
     };
@@ -159,11 +163,29 @@ function resolveIdentity(name: string): AgentIdentity {
   }
 }
 
+/** Rol sugerido por la carpeta del proyecto (mismo criterio que el nombre):
+ *  dos agentes del mismo proyecto comparten rol aunque tengan nombres
+ *  distintos. Se puede forzar con PI_AGENT_ROLE. */
+function projectRole(): string {
+  const explicit = process.env.PI_AGENT_ROLE?.trim();
+  if (explicit) return explicit;
+  try {
+    const cwd = process.cwd();
+    if (cwd && cwd !== HOME && !cwd.startsWith("/tmp") && !cwd.startsWith(`${HOME}/.`)) {
+      const role = sanitizeName(basename(cwd));
+      if (role) return role;
+    }
+  } catch {
+    /* sin cwd */
+  }
+  return "general";
+}
+
 let identityCache: AgentIdentity | undefined;
 
 /** Identidad del agente actual (cacheada). */
 function agentIdentity(): AgentIdentity {
-  return (identityCache ??= resolveIdentity(agentName()));
+  return (identityCache ??= resolveIdentity(agentName(), projectRole()));
 }
 
 /** Pinta el panel de tmux con el color del agente: fondo y borde llevan SU
@@ -171,7 +193,7 @@ function agentIdentity(): AgentIdentity {
  *  "fondo del agente" que permite tmux cuando varios agentes comparten ventana.
  *  El fondo se oscurece para que el texto siga legible. */
 function applyPaneLook(name: string): AgentIdentity {
-  const ident = resolveIdentity(name);
+  const ident = resolveIdentity(name, projectRole());
   identityCache = ident;
   if (TMUX_PANE) {
     tmux(["set-option", "-p", "-t", TMUX_PANE, "@agent_role", ident.role]);
@@ -538,6 +560,18 @@ export default function (pi: ExtensionAPI) {
     return `\x1b[2m${truecolorFg(color)}${word}\x1b[0m`;
   }
 
+  /** Pinta un texto con el color del agente (para el nombre/rol y el reloj). */
+  function colored(text: string, bold = false): string {
+    const color = agentIdentity().color;
+    try {
+      const styled = uiCtx?.ui?.theme?.style?.(text, { fg: color, bold });
+      if (styled) return styled;
+    } catch {
+      /* tema sin ese color: usa ANSI truecolor */
+    }
+    return `${bold ? "\x1b[1m" : ""}${truecolorFg(color)}${text}\x1b[0m`;
+  }
+
   /** La oración fija: lo ya leído, la palabra actual iluminada y lo que falta. */
   function snippet(): string {
     if (!current) return "…";
@@ -586,15 +620,15 @@ export default function (pi: ExtensionAPI) {
       ? `⏱ Pensando hace ${formatDuration(turnMs)} · Sesión ${formatDuration(sessionMs)}`
       : `✓ ${formatDuration(lastTurnMs)} · Sesión ${formatDuration(sessionThinkingMs)}`;
     const upcoming = paragraphs.slice(0, CFG.lines).map((p) => p.join(" ")).join("|");
-    const label = `${ident.name}${ident.role && ident.role !== "general" ? ` · ${ident.role}` : ""}`;
+    const label = `${ident.name}${ident.role && ident.role !== "general" && ident.role !== ident.name ? ` · ${ident.role}` : ""}`;
     const key = `${label}|${head}|${goal}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
     if (!force && key === lastRenderedKey) return;
     lastRenderedKey = key;
     lastRender = now;
-    const lines = [`${truecolorFg(ident.color)}${label}\x1b[0m`, head, goal];
+    const lines = [colored(label, true), head, goal];
     if (working && current) lines.push(...thoughtLines());
     try {
-      ui.setStatus?.("voz-latido", `${truecolorFg(ident.color)}⏱ ${formatDuration(turnMs)}\x1b[0m`);
+      ui.setStatus?.("voz-latido", colored(`⏱ ${formatDuration(turnMs)}`));
       ui.setWidget?.("voz-latido", lines);
     } catch {
       /* sin UI (modo rpc/print): no importa */

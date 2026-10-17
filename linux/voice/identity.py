@@ -127,14 +127,23 @@ def _norm_hex(value: str) -> str:
 
 
 def color_for(name: str, role: str = "") -> str:
-    """Color estable del agente: fijado por nombre > por rol > hash del nombre."""
+    """Color estable del agente: fijado a mano > nombre con rol conocido >
+    rol fijado a mano > hash del nombre.
+
+    El rol *sugerido* (p. ej. la carpeta del proyecto) no cambia el color: así
+    dos agentes del mismo proyecto se distinguen por su nombre. Solo un color
+    fijado a mano o un rol guardado en el registro lo pisan.
+    """
     entry = _entry(name)
     explicit = _norm_hex(entry.get("color", ""))
     if explicit:
         return explicit
-    r = role_for(name, role).lower()
-    if r in ROLE_COLORS:
-        return ROLE_COLORS[r]
+    n = str(name or "").strip().lower()
+    if n in ROLE_COLORS:
+        return ROLE_COLORS[n]
+    stored_role = str(entry.get("role") or "").strip().lower()
+    if stored_role in ROLE_COLORS:
+        return ROLE_COLORS[stored_role]
     return PALETTE[hash_index(name, len(PALETTE))]
 
 

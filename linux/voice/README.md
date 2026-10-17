@@ -121,6 +121,36 @@ voice history play 1         # reproduce el WAV de la entrada 1
 voice history clear          # vacía índice y WAVs
 ```
 
+## Identidad de cada agente (nombre, rol y color)
+
+Cada agente tiene **nombre**, **rol** y **color**, y ese color es el mismo en
+*todas* las superficies: los subtítulos del glow, el fondo del panel de tmux, el
+icono de la barra y las notificaciones. Así se reconoce quién habla de un
+vistazo. La fuente única es `linux/voice/identity.py`:
+
+- El color se deriva del **nombre** (hash estable) si no hay uno fijado, con la
+  misma idea que el reparto automático de voces: un agente nuevo ya nace con su
+  color y nunca cambia.
+- El **rol** es la función (`main`, `audio`, `dotfiles`, `general`, …). Si el
+  nombre coincide con un rol conocido, ese es su rol; si no, sale de
+  `PI_AGENT_ROLE`. El rol da color por defecto a los agentes de esa función.
+- El daemon publica `name`, `role` y `color` en `speaking.json` junto al texto
+  que habla; el glow y la barra lo leen y pintan con ese color.
+
+```bash
+voice identity main --json     # {name, role, color, voice}
+voice color audio              # hex del agente
+voice color audio --tint       # versión oscura (fondo de panel)
+voice color puma --set '#ff8800'   # fijar a mano
+voice role lucas backend       # ver/fijar el rol
+voice agents                   # tabla de identidades fijadas
+```
+
+El registro vive en `~/.local/state/voice/agents.json` (por-máquina, no se
+versiona). En Pi, el nombre automático registra el color en el panel de tmux
+(`@agent_color`, `@agent_role`) y pinta su fondo, así la terminal entera del
+agente lleva su color. Ver `conversar.ts`.
+
 ## Entrega de mensajes
 
 `[tts] delivery` decide cómo entrega `avisar` el mensaje de un agente:

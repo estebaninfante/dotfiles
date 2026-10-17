@@ -9,8 +9,8 @@
 #   recording" y el dictado queda prendido: sólo lo para el mismo botón que lo
 #   arrancó.
 #
-#   Este wrapper mira qué binding está grabando ahora (según el log de Handy) y
-#   manda el toggle que corresponde. Si Handy no está grabando, arranca en el
+#   Este wrapper recuerda con qué modo arrancó (un archivo de estado) y, cuando
+#   toca parar, manda ese mismo modo. Si Handy no está grabando, arranca en el
 #   modo pedido. Así cualquier disparador (teclado, celular/tablet, control de
 #   presentaciones, gestos) sirve tanto para arrancar como para parar.
 #
@@ -20,12 +20,12 @@
 #   handy-dictado pro        arranca con post-procesado
 #   handy-dictado cancel     cancela y descarta la grabación en curso
 #
-# Variables (para tests): HANDY_BIN, HANDY_DATA_HOME.
+# Variables (para tests): HANDY_BIN, HANDY_BUSY_OVERRIDE, HANDY_DATA_HOME.
 set -uo pipefail
 
 handy_bin="${HANDY_BIN:-handy}"
-data_home="${HANDY_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}}"
-log="$data_home/com.pais.handy/logs/handy.log"
+runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+archivo_modo="$runtime/handy-dictado.mode"
 
 accion="${1:-pro}"
 case "$accion" in
@@ -39,31 +39,64 @@ case "$accion" in
 esac
 
 if [ "$accion" = cancel ]; then
+    rm -f "$archivo_modo" 2>/dev/null || true
     exec "$handy_bin" --cancel
 fi
 
-# ¿Qué binding está grabando? Se deduce del log de Handy: la última llamada a
-# start/stop (o una cancelación) dice el estado.
-grabando=""
-if [ -r "$log" ]; then
-    ultimo="$(grep -aE \
-        'TranscribeAction::start called for binding: |TranscribeAction::stop called for binding: |Operation cancellation completed' \
-        "$log" 2>/dev/null | tail -n 1 || true)"
-    if [[ "$ultimo" =~ start\ called\ for\ binding:\ (transcribe_with_post_process|transcribe) ]]; then
-        grabando="${BASH_REMATCH[1]}"
+# ¿Handy está grabando o transcribiendo? Su ventana "Recording" sólo existe en
+# esos estados: no está cuando está quieto, ni cuando sólo tenés abierta la
+# ventana principal de Handy (esa tiene clase handy pero título "Handy").
+handy_ocupado() {
+    if [ -n "${HANDY_BUSY_OVERRIDE:-}" ]; then
+        [ "$HANDY_BUSY_OVERRIDE" = "1" ]
+        return
     fi
-fi
+    timeout 2 hyprctl clients 2>/dev/null | tr -d '\t' \
+        | grep -A1 -x 'class: handy' | grep -qx 'title: Recording'
+}
 
-if [ -n "$grabando" ]; then
-    # Está grabando: parar con el binding que realmente empezó la grabación.
-    case "$grabando" in
-        transcribe_with_post_process) exec "$handy_bin" --toggle-post-process ;;
-        *) exec "$handy_bin" --toggle-transcription ;;
+if handy_ocupado; then
+    # Está ocupado: parar con el mismo modo con el que arrancó.
+    modo="$(cat "$archivo_modo" 2>/dev/null || true)"
+    case "$modo" in
+        plain)
+            rm -f "$archivo_modo" 2>/dev/null || true
+            exec "$handy_bin" --toggle-transcription
+            ;;
+        pro)
+            rm -f "$archivo_modo" 2>/dev/null || true
+            exec "$handy_bin" --toggle-post-process
+            ;;
+    esac
+
+    # No sabemos con qué arrancó (p. ej. con el atajo interno de Handy).
+    # Última red de seguridad: mirar el log.
+    log="${HANDY_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}}/com.pais.handy/logs/handy.log"
+    if [ -r "$log" ]; then
+        ultimo="$(grep -aE 'TranscribeAction::start called for binding: |TranscribeAction::stop called for binding: ' "$log" 2>/dev/null | tail -n1 || true)"
+        if [[ "$ultimo" == *"start called for binding: transcribe_with_post_process"* ]]; then
+            exec "$handy_bin" --toggle-post-process
+        elif [[ "$ultimo" == *"start called for binding: transcribe"* ]]; then
+            exec "$handy_bin" --toggle-transcription
+        fi
+    fi
+
+    # No pudimos deducirlo: probamos con el modo pedido.
+    case "$accion" in
+        plain) exec "$handy_bin" --toggle-transcription ;;
+        *) exec "$handy_bin" --toggle-post-process ;;
     esac
 fi
 
-# No está grabando: arrancar en el modo pedido.
+# No está grabando: arrancar en el modo pedido y recordarlo para poder pararlo.
+rm -f "$archivo_modo" 2>/dev/null || true
 case "$accion" in
-    plain) exec "$handy_bin" --toggle-transcription ;;
-    *) exec "$handy_bin" --toggle-post-process ;;
+    plain)
+        printf 'plain' > "$archivo_modo"
+        exec "$handy_bin" --toggle-transcription
+        ;;
+    *)
+        printf 'pro' > "$archivo_modo"
+        exec "$handy_bin" --toggle-post-process
+        ;;
 esac
