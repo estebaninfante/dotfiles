@@ -308,6 +308,27 @@ else
     warn "Falta $DOTFILES_SYSTEM/system-sleep/keyd-resume.sh"
 fi
 
+# `keyd monitor` (voice-key-listener, present-remote) abre los dispositivos
+# virtuales de keyd directo; sin permiso falla en silencio y la tecla física de
+# Windows nunca llega. Grupo `input` (vía estándar, requiere re-login) + regla
+# udev que fija la ACL al crear el dispositivo (al instante y tras reiniciar keyd).
+if id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx input; then
+    ok "usuario ya en grupo input"
+else
+    sudo usermod -aG input "$USER" \
+        && ok "usuario agregado al grupo input (re-login para que tome efecto)" \
+        || warn "no pude agregar $USER al grupo input"
+fi
+if [[ -f "$DOTFILES_SYSTEM/udev/80-keyd-input.rules" ]]; then
+    sed "s|@USER@|$USER|g" "$DOTFILES_SYSTEM/udev/80-keyd-input.rules" \
+        | sudo tee /etc/udev/rules.d/80-keyd-input.rules >/dev/null
+    sudo udevadm control --reload-rules 2>/dev/null || true
+    sudo udevadm trigger --subsystem-match=input 2>/dev/null || true
+    ok "udev 80-keyd-input instalado (keyd monitor accesible)"
+else
+    warn "Falta $DOTFILES_SYSTEM/udev/80-keyd-input.rules"
+fi
+
 # Layout XKB custom (dvk_prog): hyprland.lua lo usa como layout principal
 # (kb_layout = "dvk_prog,es,us"). Sin el archivo de simbolos instalado,
 # Hyprland cae a "us" (teclado roto tras fresh install).

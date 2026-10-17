@@ -6,7 +6,7 @@ PartOf=graphical-session.target
 [Service]
 Type=simple
 ExecStart=/home/eztvn/.local/bin/present-remote
-Restart=on-failure
+Restart=always
 RestartSec=2
 
 [Install]

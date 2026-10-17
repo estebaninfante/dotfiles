@@ -16,14 +16,20 @@ set -u
 read -r -a TOGGLE_CMD <<< "${VOICE_KEY_BIN:-$HOME/.local/bin/present-remote toggle}"
 last=0
 
-keyd monitor 2>/dev/null | while IFS= read -r line; do
-  case "$line" in
-    *"f13 down"*)
-      now=$(date +%s%3N)
-      if (( now - last > 800 )); then
-        last=$now
-        "${TOGGLE_CMD[@]}"
-      fi
-      ;;
-  esac
+# `keyd monitor` muere si keyd se reinicia (reload/restart) y con él el
+# listener. Se reconecta solo para que la tecla siga viva tras un reinicio de
+# keyd, sin quedar el servicio muerto en silencio.
+while true; do
+  keyd monitor 2>/dev/null | while IFS= read -r line; do
+    case "$line" in
+      *"f13 down"*)
+        now=$(date +%s%3N)
+        if (( now - last > 800 )); then
+          last=$now
+          "${TOGGLE_CMD[@]}"
+        fi
+        ;;
+    esac
+  done
+  sleep 1
 done

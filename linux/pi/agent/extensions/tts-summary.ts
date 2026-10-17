@@ -18,6 +18,10 @@
  * Pi (`agent_settled`) un modelo reescribe su última respuesta en una frase
  * llana y la habla. Nunca deja mudo al usuario; nunca dice tecnicismos.
  *
+ * Interrupción: si el usuario corta la corrida (Escape), `agent_settled` llega
+ * con `aborted: true` y NO se habla. La voz automática es sólo para corridas
+ * que terminan solas; si el usuario interrumpió, ya sabe por qué.
+ *
  * Interruptor: el `tts.enabled` del sistema de voz (config.toml [tts] + override
  * en state.json). El widget de barra eztvn.pi-tts lo togglea con `voice tts`.
  *
@@ -258,11 +262,15 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  pi.on("agent_settled", async (_event, ctx) => {
+  pi.on("agent_settled", async (event, ctx) => {
     const snapshot = run;
     run = { texts: [], errors: 0 };
     const agentAlreadySpoke = announced;
     announced = false;
+    /* Corrida interrumpida: el usuario ya sabe que cortó; no lo llamamos por
+       voz ni le resumimos trabajo a medias. La voz automática queda reservada
+       para las corridas que terminan sin interrupción. */
+    if ((event as { aborted?: boolean }).aborted) return;
     if (agentAlreadySpoke) return;
 
     const raw = (snapshot.texts[snapshot.texts.length - 1] ?? "").trim();

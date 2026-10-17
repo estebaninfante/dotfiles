@@ -1,0 +1,10 @@
+# Permite al usuario de la sesión leer los dispositivos virtuales de keyd.
+#
+# `keyd monitor` los abre directo (no usa la API de logind), así que sin
+# permiso falla en silencio: `voice-key-listener` (tecla física de Windows ->
+# F13 -> Omar) y `present-remote` (control de presentaciones) quedan mudos.
+#
+# El grupo `input` es la vía estándar (requiere re-login tras `usermod`); esta
+# regla además fija la ACL al crear el dispositivo, así funciona al instante y
+# sobrevive a reinicios de keyd sin esperar una sesión nueva.
+SUBSYSTEM=="input", ATTRS{id/vendor}=="0fac", GROUP="input", MODE="0660", RUN+="/usr/bin/setfacl -m u:@USER@:rw /dev/input/%k"
