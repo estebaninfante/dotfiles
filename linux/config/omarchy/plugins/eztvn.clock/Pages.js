@@ -25,6 +25,12 @@ var PAGES = [
     description: "Reproducción actual con carátula y controles"
   },
   {
+    id: "sound",
+    title: "Sonido",
+    glyph: "󰓃",
+    description: "Salidas y entradas, con aviso si el micrófono no anda"
+  },
+  {
     id: "notifications",
     title: "Notificaciones",
     glyph: "󰂚",
@@ -116,6 +122,7 @@ var FILE_BY_ID = {
   calendar: "CalendarPage.qml",
   system: "SystemPage.qml",
   media: "MediaPage.qml",
+  sound: "SoundPage.qml",
   notifications: "NotificationsPage.qml",
   toggles: "TogglesPage.qml",
   menu: "MenuPage.qml"
