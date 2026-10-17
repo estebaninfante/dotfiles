@@ -158,7 +158,7 @@ Item {
 
     Rectangle {
       anchors.fill: parent
-      color: Util.alpha(Color.background, 0.55)
+      color: "transparent"
     }
 
     Rectangle {
@@ -197,37 +197,26 @@ Item {
         x: root.posX(root.anguloDe(modelData), root.radio) - root.lado / 2
         y: root.posY(root.anguloDe(modelData), root.radio) - root.lado / 2
 
-        Rectangle {
-          id: circulo
-          anchors.fill: parent
-          radius: width / 2
-          color: parent.elegida
-            ? Util.alpha(Color.accent, 0.95)
-            : Util.alpha(Color.popups.text, 0.24)
-          border.width: parent.elegida ? 3 : 2
-          border.color: parent.elegida
-            ? Color.accent
-            : Util.alpha(Color.popups.text, 0.80)
+        Column {
+          anchors.centerIn: parent
+          spacing: 2
 
-          Column {
-            anchors.centerIn: parent
-            spacing: 1
+          Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: modelData.icono
+            color: parent.parent.elegida ? Color.accent : "white"
+            font.pixelSize: root.fuenteIcono
+            style: Text.Outline
+            styleColor: "#000000d9"
+          }
 
-            Text {
-              anchors.horizontalCenter: parent.horizontalCenter
-              text: modelData.icono
-              color: circulo.parent.elegida ? Color.background : Color.popups.text
-              font.pixelSize: root.fuenteIcono
-            }
-
-            Text {
-              anchors.horizontalCenter: parent.horizontalCenter
-              text: modelData.texto
-              color: circulo.parent.elegida
-                ? Util.alpha(Color.background, 0.85)
-                : Util.alpha(Color.popups.text, 0.80)
-              font.pixelSize: root.fuenteTexto
-            }
+          Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: modelData.texto
+            color: parent.parent.elegida ? Color.accent : Util.alpha("white", 0.92)
+            font.pixelSize: root.fuenteTexto
+            style: Text.Outline
+            styleColor: "#000000d9"
           }
         }
       }
@@ -250,23 +239,26 @@ Item {
         x: root.posX(angulos[index], root.radioHijo) - root.ladoHijo / 2
         y: root.posY(angulos[index], root.radioHijo) - root.ladoHijo / 2
 
-        Rectangle {
-          id: circuloHijo
-          anchors.fill: parent
-          radius: width / 2
-          color: parent.elegida
-            ? Util.alpha(Color.accent, 0.95)
-            : Util.alpha(Color.popups.text, 0.24)
-          border.width: parent.elegida ? 3 : 2
-          border.color: parent.elegida
-            ? Color.accent
-            : Util.alpha(Color.popups.text, 0.80)
+        Column {
+          anchors.centerIn: parent
+          spacing: 1
 
           Text {
-            anchors.centerIn: parent
+            anchors.horizontalCenter: parent.horizontalCenter
             text: modelData.icono
-            color: circuloHijo.parent.elegida ? Color.background : Color.popups.text
+            color: parent.parent.elegida ? Color.accent : "white"
             font.pixelSize: root.fuenteIcono * 0.9
+            style: Text.Outline
+            styleColor: "#000000d9"
+          }
+
+          Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: modelData.texto || ""
+            color: parent.parent.elegida ? Color.accent : Util.alpha("white", 0.86)
+            font.pixelSize: root.fuenteTexto * 0.9
+            style: Text.Outline
+            styleColor: "#000000d9"
           }
         }
       }

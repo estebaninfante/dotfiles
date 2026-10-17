@@ -28,4 +28,10 @@ hl.layer_rule({
     animation = "none"
 })
 
+hl.layer_rule({
+    match = { namespace = "hypr-outline-menu" },
+    no_anim = true,
+    animation = "none"
+})
+
 return true
