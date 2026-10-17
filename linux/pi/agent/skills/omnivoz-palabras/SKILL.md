@@ -40,18 +40,20 @@ de objetos. **Se relee en cada coincidencia: no hay que reiniciar nada.**
 ```json
 [
   {
-    "id": "guardar-nvim",
+    "id": "guardar",
     "phrases": ["guarda el archivo", "guarda esto"],
     "apps": ["nvim", "kitty"],
     "actions": [{ "kind": "press_keys", "keys": "ctrl+s" }],
     "say": "",
-    "note": "opcional, para humanos"
+    "note": "mismo id que la de fabrica: la reemplaza y queda acotada a kitty/nvim"
   }
 ]
 ```
 
 - `id` (string, requerido): una entrada de usuario con el mismo `id` que una de
-  fábrica **la reemplaza**.
+  fábrica **la reemplaza**. Con un `id` nuevo se **suma**: la de fábrica sigue
+  existiendo y puede ganar fuera del `apps` de la tuya. Si querés cambiar el
+  alcance de algo que ya existe, repetí el `id`.
 - `phrases` (string[], requerido): se normalizan al comparar (minúsculas, sin
   acentos ni puntuación). Escribilas como las diría una persona.
 - `actions` (Action[], requerido): vocabulario cerrado, abajo.
@@ -146,6 +148,9 @@ Si cambiás el código (no sólo el JSON), además: documentá la feature en
 
 ## Errores comunes
 
+- **Creer que tu regla reemplaza a la de fábrica sin repetir el `id`.** Si la de
+  fábrica se llama `guardar` y la tuya `guardar-nvim`, en la app que no está en
+  tu `apps` sigue ganando la de fábrica. Para pisarla, mismo `id`.
 - **Frase demasiado común** ("sí", "ok", "listo"): se dispara con cualquier cosa
   que diga la tele. Las frases tienen que ser explícitas.
 - **Olvidar el prefijo**: `"corta"` también matchea `"corta esto"`. Es cómodo, pero
