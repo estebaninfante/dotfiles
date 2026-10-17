@@ -18,7 +18,7 @@ down)
         send "keyup rightctrl"
         send "keydown rightctrl"
     else
-        exec handy --toggle-post-process
+        exec omnivoz dictate
     fi
     ;;
 up)

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.cpu-heatmap",
+  "name": "CPU Heatmap",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Heatmap de uso por núcleo de CPU en la barra: grilla de 4 filas con brillo verde/amarillo/rojo",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "CPU Heatmap",
+    "description": "Grilla de cuadrados, uno por núcleo lógico, coloreado por carga (verde → amarillo → rojo) con glow",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {
+      "refreshSeconds": 1,
+      "rows": 4,
+      "cellSize": 4
+    },
+    "schema": [
+      { "key": "refreshSeconds", "type": "integer", "label": "Intervalo de refresco (segundos)", "min": 1, "max": 10, "step": 1, "defaultValue": 1 },
+      { "key": "rows", "type": "integer", "label": "Filas de la grilla", "min": 1, "max": 16, "step": 1, "defaultValue": 4 },
+      { "key": "cellSize", "type": "integer", "label": "Tamaño del cuadro (px)", "min": 3, "max": 10, "step": 1, "defaultValue": 4 }
+    ]
+  }
+}
