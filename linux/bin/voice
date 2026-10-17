@@ -230,6 +230,16 @@ speak() {  # speak [--profile P] [--voice V] [--engine E] [--lang L] [--source S
   # "No pude…": solo visible, nunca hablado.
   if [[ "$text" =~ $VOICE_FALLBACK_RE ]]; then subtitle --source "$P_SOURCE" "$text"; return 0; fi
   if [ "$P_FORCE" != 1 ] && [ "$(config_val tts enabled)" = "false" ]; then return 0; fi
+  # Lo que suena por los parlantes queda anotado: cualquier proceso (Omar, Pi,
+  # notificaciones) escribe acá y el oído de Omar usa esta lista para NO despertarse
+  # con su propio eco. Sin esto, un mensaje hablado que dice "Omar" lo despierta.
+  local _spoken="${XDG_RUNTIME_DIR:-/tmp}/omnivoz/spoken.log"
+  mkdir -p "${_spoken%/*}" 2>/dev/null || true
+  printf '%s\t%s\n' "$(date +%s%3N)" "$(printf '%s' "$text" | tr '\n\t' '  ')" \
+    >> "$_spoken" 2>/dev/null || true
+  if [ "$(wc -l < "$_spoken" 2>/dev/null || echo 0)" -gt 200 ]; then
+    tail -n 100 "$_spoken" > "$_spoken.tmp" 2>/dev/null && mv "$_spoken.tmp" "$_spoken" 2>/dev/null || true
+  fi
   local profile="${P_PROFILE:-$P_SOURCE}"
   resolve_voice_flags "$profile" "$P_VOICE" "$P_ENGINE" "$P_LANG"
   [ -n "$P_PITCH" ] && V_PITCH="$P_PITCH"
