@@ -79,7 +79,9 @@ hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { relea
 
 -- Handy: pasa por handy-dictado para poder parar desde CUALQUIER disparador
 -- (Handy ignora la parada si viene de un binding distinto al que arrancó).
-hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/handy-dictado pro"))
+-- F7: dictado nativo de OmniVoz (graba, transcribe con Whisper y escribe en la ventana).
+-- Antes: ~/.local/bin/handy-dictado pro (dictado de Handy).
+hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/omnivoz dictate"))
 
 hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 
