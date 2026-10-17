@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# px0-pi — abre px0 usando pi como harness de edición.
+#
+# px0 detecta harnesses (claude, opencode, codex, ...) pero no a pi. Acepta un
+# template de comando con {prompt}, así que este wrapper le enchufa pi en modo
+# print: el agente edita el repo y px0 muestra el diff para revisar.
+#
+# Uso:
+#   px0-pi                 # px0 en la carpeta actual, edits con pi
+#   px0-pi /ruta/proyecto
+#   px0-pi -port 7778 .
+set -euo pipefail
+exec px0 -agent 'pi -p {prompt}' "$@"
