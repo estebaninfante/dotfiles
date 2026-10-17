@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# notify — aviso de escritorio con el estilo de Omarchy (glifo, app, imagen,
+# urgencia y click). Envuelve omarchy-notification-send, el emisor que usa el
+# escritorio; si la máquina no lo tiene (omarchy viejo), cae a notify-send
+# traduciendo los flags, así los scripts del repo no quedan mudos.
+#
+# Uso:
+#   notify [-g <glifo>] [-u low|normal|critical] [-t <ms>] [--app-name <app>]
+#          [-i <icono>] [-r <id>] [--image <ruta>] [--exec <cmd> [args...]]
+#          <título> [cuerpo]
+#
+# `-a` se acepta como alias de --app-name para que también sirva en el fallback.
+# Ejemplo: notify -g "󰹑" -t 3000 --app-name shot "Captura copiada" "Al portapapeles"
+
+set -u
+
+if command -v omarchy-notification-send >/dev/null 2>&1; then
+  args=(); pos=0
+  while (($# > 0)); do
+    # Título y cuerpo ya tomados: el resto es del emisor (--exec, etc.).
+    if ((pos >= 2)); then args+=("$@"); break; fi
+    # n = cuántos argumentos consume el flag (2 si trae valor, 1 si no).
+    n=2
+    case $1 in
+      --app-name|-a)    args+=(--app-name "${2-}") ;;
+      --glyph|-g)       args+=(-g "${2-}") ;;
+      --urgency|-u)     args+=(-u "${2-}") ;;
+      --expire-time|-t) args+=(-t "${2-}") ;;
+      --icon|-i)        args+=(-i "${2-}") ;;
+      --replace-id|-r)  args+=(-r "${2-}") ;;
+      --)               shift; args+=("$@"); break ;;
+      *)                args+=("$1"); pos=$((pos + 1)); n=1 ;;
+    esac
+    (($# >= n)) || n=$#
+    shift "$n"
+  done
+  exec omarchy-notification-send "${args[@]}"
+fi
+
+command -v notify-send >/dev/null 2>&1 || exit 0
+args=(); pos=0
+while (($# > 0)); do
+  if ((pos >= 2)); then args+=("$@"); break; fi
+  n=2
+  case $1 in
+    --app-name|-a)    args+=(-a "${2-}") ;;
+    --glyph|-g)       ;;               # sin equivalente en notify-send
+    --image|--exec)   break ;;         # no soportado: nada que mostrar
+    --print-id|-p)    n=1 ;;
+    --urgency|-u)     args+=(-u "${2-}") ;;
+    --expire-time|-t) args+=(-t "${2-}") ;;
+    --icon|-i)        args+=(-i "${2-}") ;;
+    --replace-id|-r)  args+=(-r "${2-}") ;;
+    --)               shift; args+=("$@"); break ;;
+    *)                args+=("$1"); pos=$((pos + 1)); n=1 ;;
+  esac
+  (($# >= n)) || n=$#
+  shift "$n"
+done
+exec notify-send "${args[@]}"
