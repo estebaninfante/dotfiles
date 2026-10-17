@@ -38,9 +38,12 @@ Item {
   readonly property int maxMessageWidth: Style.space(280)
 
   readonly property int messageWidth: Math.min(Math.ceil(messageMetrics.advanceWidth), root.maxMessageWidth)
+  // A plain message ("Wi-Fi conectado") has no icon of its own: drop the glyph
+  // instead of borrowing the default muted speaker.
+  readonly property bool showIcon: root.icon !== ""
   readonly property int contentWidth: root.hasProgress
-    ? root.iconWidth + root.gap + root.barWidth + root.gap + root.valueWidth
-    : (root.message === "" ? root.iconWidth : root.iconWidth + root.gap + root.messageWidth)
+    ? (root.showIcon ? root.iconWidth + root.gap : 0) + root.barWidth + root.gap + root.valueWidth
+    : (root.message === "" ? root.iconWidth : (root.showIcon ? root.iconWidth + root.gap : 0) + root.messageWidth)
   readonly property int fullWidth: root.pad * 2 + root.contentWidth
 
   // 0 = hidden, 1 = shown. The spring overshoots slightly, which is what gives
@@ -80,7 +83,7 @@ Item {
     hasProgress = next.hasProgress
     value = next.value
     message = next.message
-    icon = next.icon
+    icon = (iconName === "" && rawValue === "") ? "" : next.icon
     duration = next.duration
     opened = true
     reveal = 1
@@ -168,7 +171,8 @@ Item {
         opacity: root.contentOpacity
 
         Text {
-          width: root.iconWidth
+          visible: root.showIcon
+          width: root.showIcon ? root.iconWidth : 0
           horizontalAlignment: Text.AlignHCenter
           anchors.verticalCenter: parent.verticalCenter
           textFormat: Text.PlainText

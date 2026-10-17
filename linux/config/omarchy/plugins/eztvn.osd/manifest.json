@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "eztvn.osd",
-  "name": "My On-screen display",
+  "name": "Notch OSD",
   "version": "1.0.0",
-  "description": "Quickshell volume, brightness, and status overlays.",
+  "description": "OSD tipo notch: píldora negra arriba al centro con barra de volumen, brillo, micrófono y mensajes.",
   "kinds": [
     "panel"
   ],
