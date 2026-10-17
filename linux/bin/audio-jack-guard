@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# audio-jack-guard — mantiene la salida analógica coherente con el jack.
+#
+# En esta laptop (ALC257 + WirePlumber) el amplificador del puerto activo queda
+# en mute al cambiar de puerto: con auriculares enchufados el amplificador de
+# auriculares queda en 0 y no suena nada; si alguien lo enciende a mano, suenan
+# los parlantes y los auriculares a la vez. Este guardián lee el jack y deja el
+# puerto y su amplificador como corresponde, sin tocar el volumen general (así
+# el ducking de la voz y los sliders siguen mandando).
+#
+# Variables (para probar/otra máquina):
+#   AUDIO_JACK_CARD      placa ALSA (default 2)
+#   AUDIO_JACK_SINK      sink de PipeWire
+#   AUDIO_JACK_INTERVAL  segundos entre chequeos (default 1.5)
+set -u
+
+CARD="${AUDIO_JACK_CARD:-2}"
+SINK="${AUDIO_JACK_SINK:-alsa_output.pci-0000_05_00.6.analog-stereo}"
+INTERVAL="${AUDIO_JACK_INTERVAL:-1.5}"
+
+# ¿Hay algo enchufado en el jack de auriculares? on|off (vacío si no existe).
+jack_state() {
+  amixer -c "$CARD" cget "iface=CARD,name=Headphone Jack" 2>/dev/null \
+    | sed -n 's/.*values=\(on\|off\).*/\1/p' | tail -1
+}
+
+# Deja el puerto pedido y enciende solo su amplificador (mutea el otro).
+apply() {  # apply <puerto> <amplificador-activo> <amplificador-muteado>
+  pactl set-sink-port "$SINK" "$1" >/dev/null 2>&1 || true
+  amixer -c "$CARD" sset "$2" 87 on >/dev/null 2>&1 || true
+  amixer -c "$CARD" sset "$3" off >/dev/null 2>&1 || true
+}
+
+# Base sana una sola vez: el chip no arranca en 0 por el guardián.
+amixer -c "$CARD" sset 'Master' 87 on >/dev/null 2>&1 || true
+amixer -c "$CARD" sset 'PCM' 255 >/dev/null 2>&1 || true
+
+last=""
+while true; do
+  state="$(jack_state)"
+  if [ "$state" != "$last" ]; then
+    case "$state" in
+      on)  apply analog-output-headphones Headphone Speaker ;;
+      off) apply analog-output-speaker   Speaker   Headphone ;;
+    esac
+    last="$state"
+  fi
+  sleep "$INTERVAL"
+done
