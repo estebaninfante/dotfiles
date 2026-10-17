@@ -15,6 +15,7 @@ Item {
   property string fontFamily: Style.font.family
 
   readonly property color barForeground: foreground
+  readonly property var monitor: remoteMonitor
   readonly property var status: remoteMonitor.status
   readonly property bool busy: remoteMonitor.busy
   readonly property var deviceRows: status && status.devices
