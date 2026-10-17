@@ -1,0 +1,19 @@
+[Unit]
+Description=Benchmark de consumo en reposo al arrancar (solo bateria)
+Documentation=file:///home/eztvn/dotfiles/docs/energia-laptop-82y5.md
+After=multi-user.target battery-power-guard.service
+ConditionPathExists=/sys/class/power_supply/BAT0
+ConditionACPower=false
+
+[Service]
+Type=oneshot
+# Sin retraso: arranca junto con graphical.target, asi la ventana incluye los
+# primeros segundos (todavia sin sesión de usuario). El valor útil del log es el
+# mínimo; el promedio queda contaminado por el arranque de la sesión.
+ExecStart=/home/eztvn/dotfiles/linux/bin/power-idle-bench.sh 60
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

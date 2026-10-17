@@ -526,6 +526,20 @@ else
     warn "Falta $DOTFILES_SYSTEM/systemd/battery-power-guard.service"
 fi
 
+# Bench de reposo: mide el consumo al arrancar (solo en bateria) y lo guarda en
+# /var/log/power-idle.tsv para comparar entre boots/cambios. Ver
+# docs/energia-laptop-82y5.md y scripts/verify/energia.sh.
+if [[ -f "$DOTFILES_SYSTEM/systemd/power-idle-bench.service" ]]; then
+    sudo install -o root -g root -m 644 \
+        "$DOTFILES_SYSTEM/systemd/power-idle-bench.service" \
+        /etc/systemd/system/power-idle-bench.service
+    sudo systemctl daemon-reload 2>/dev/null || true
+    sudo systemctl enable power-idle-bench.service 2>/dev/null || true
+    ok "power-idle-bench (systemd) instalado y habilitado"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd/power-idle-bench.service"
+fi
+
 if [[ -f "$DOTFILES_SYSTEM/systemd-user/power-session-guard.service" ]]; then
     systemctl --user enable --now power-session-guard.service 2>/dev/null || true
     ok "power-session-guard (user) habilitado"

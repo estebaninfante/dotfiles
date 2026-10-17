@@ -6,10 +6,14 @@
 #     (regla /etc/udev/rules.d/99-power-source.rules)
 #   - systemd: WantedBy=multi-user.target (aplica el estado tambien en cada boot)
 #
-# BATERIA: power-saver + dGPU runtime-PM + syncthing off + brillo <=50%.
-# AC:      performance + syncthing on + brillo restaurado.
+# BATERIA: power-saver + dGPU runtime-PM + syncthing off + brillo <=50%
+#          + ASPM=powersave + lector SD suspendido + NMI watchdog off.
+# AC:      performance + syncthing on + brillo restaurado + ASPM=default
+#          + NMI watchdog on.
 # Despues dispara la guard de sesion de usuario (refresco/blur/anims/sunshine),
 # que vive en power-session-guard.sh porque necesita hyprctl.
+#
+# Ver docs/energia-laptop-82y5.md y scripts/verify/energia.sh.
 #
 # NO usa gpu-mode.sh battery: su ac_off() apaga la dGPU por ACPI una sola vez
 # (sin metodo _ON) y dejaria la GPU inutil hasta reiniciar.
@@ -17,6 +21,7 @@ set -uo pipefail
 
 BIN_DIR="/home/eztvn/dotfiles/linux/bin"
 BRIGHT_SAVE="/var/lib/power-guard/brightness-ac"
+GUARD_DIR="/var/lib/power-guard"
 USER_NAME="eztvn"
 USER_RT="/run/user/1000"
 
@@ -96,6 +101,44 @@ bright_restore() {
   echo "$val" >"$b/brightness" 2>/dev/null || true
 }
 
+# --- tunables de kernel gestionados en caliente ---------------------------
+# No hay servicio aparte: se aplican aca en cada boot y en cada cambio de
+# fuente de alimentacion. Cualquier valor que falle se ignora (set -u).
+
+# ASPM: los links de la iGPU y la dGPU quedan sin ASPM con la politica
+# 'default'. En bateria conviene 'powersave' (L1/L1.2); en AC se vuelve a
+# 'default' por si algun dispositivo se queja del L1 a maxima carga.
+aspm_policy() {
+  local f=/sys/module/pcie_aspm/parameters/policy
+  [ -w "$f" ] || return 0
+  echo "$1" >"$f" 2>/dev/null || true
+}
+
+# El lector de SD (clase PCI 0x0805) NO se puede suspender por runtime-PM:
+# sdhci-pci no expone autosuspend_delay_ms y runtime_suspended_time queda en 0.
+# Si algun dia importa (~0.3 W) la unica via es unbind/remove del controlador;
+# no se hace automatico porque rompe el lector de SD.
+# NMI watchdog: una NMI periodica por CPU que impide C-states profundos.
+nmi_watchdog() {
+  case "$1" in
+    off) echo 0 >/proc/sys/kernel/nmi_watchdog 2>/dev/null || true ;;
+    on)  echo 1 >/proc/sys/kernel/nmi_watchdog 2>/dev/null || true ;;
+  esac
+}
+
+# Wi-Fi power save (ahorra ~0.3-1 W): OPT-IN, porque agrega picos de latencia
+# de 20-300 ms en links ociosos y eso molesta a lan-mouse/voz. Habilitar con:
+#   sudo touch /var/lib/power-guard/wifi-powersave
+wifi_powersave() {
+  [ -f "$GUARD_DIR/wifi-powersave" ] || return 0
+  command -v iw >/dev/null 2>&1 || return 0
+  local i
+  for i in /sys/class/net/wl*; do
+    [ -d "$i" ] || continue
+    iw dev "$(basename "$i")" set power_save "$1" >/dev/null 2>&1 || true
+  done
+}
+
 session_trigger() {
   [ -S "$USER_RT/bus" ] || return 0
   runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$USER_RT" \
@@ -106,17 +149,23 @@ session_trigger() {
 
 if low_power; then
   if on_battery; then
-    log "bateria: power-saver + dGPU auto + syncthing off + brillo<=50%"
+    log "bateria: power-saver + dGPU auto + syncthing off + brillo<=50% + ASPM powersave"
     "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 || true
   else
-    log "power-saver (AC): dGPU auto + syncthing off + brillo<=50%"
+    log "power-saver (AC): dGPU auto + syncthing off + brillo<=50% + ASPM powersave"
   fi
   gpu_powersave
+  aspm_policy powersave
+  nmi_watchdog off
+  wifi_powersave on
   systemctl stop syncthing.service >/dev/null 2>&1 || true
   bright_cap_half
 else
-  log "AC/rendimiento: syncthing on + brillo restaurado"
+  log "AC/rendimiento: syncthing on + brillo restaurado + ASPM default"
   gpu_powersave
+  aspm_policy default
+  nmi_watchdog on
+  wifi_powersave off
   [ -f /tmp/syncthing-manual-off ] || systemctl start syncthing.service >/dev/null 2>&1 || true
   bright_record
   bright_restore
