@@ -18,6 +18,8 @@ Panel {
   readonly property string configPathText: cfg("configPath", "~/.config/omnivoz/config.json")
   readonly property int refreshMs: Math.max(500, Number(cfg("refreshIntervalMs", 2000)))
   readonly property string statusPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omnivoz/status.json"
+  // Si el agente no publicó estado en este tiempo, se considera apagado: así el
+  // ícono dice la verdad cuando el proceso se cae o queda trabado.
   readonly property int staleMs: 45000
 
   readonly property color foreground: bar ? bar.barForeground : Color.foreground
@@ -26,7 +28,7 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   property string state: "off"
-  property string stateLabel: "Sin agente"
+  property string stateLabel: "Apagado"
   property string glyph: "󰍬"
   property color stateColor: Qt.darker(foreground, 1.5)
   property var infoRows: []
@@ -53,6 +55,7 @@ Panel {
   }
 
   function glyphFor(s) {
+    if (s === "off") return "󰍭"   // se ve distinto de "escuchando": sabés si está o no
     if (s === "listening") return "󰍬"
     if (s === "thinking") return "󰔟"
     if (s === "acting") return "󰌌"
@@ -78,7 +81,7 @@ Panel {
     var fresh = parsed && parsed.updatedAt && (Date.now() - Number(parsed.updatedAt) <= root.staleMs)
     if (!fresh) {
       root.state = "off"
-      root.stateLabel = "Sin agente"
+      root.stateLabel = "Apagado"
       root.glyph = glyphFor("off")
       root.stateColor = colorFor("off")
       root.infoRows = []

@@ -78,6 +78,9 @@
         },
         {
           "id": "eztvn.power"
+        },
+        {
+          "id": "omnivoz.status"
         }
       ]
     },
