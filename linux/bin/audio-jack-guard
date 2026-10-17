@@ -63,13 +63,14 @@ detect_ports() {
   SPK_PORT="${SPK_PORT:-analog-output-speaker}"
 }
 
+HAVE_JACK=1
 if [ -z "$CARD" ]; then
   CARD="$(detect_card || true)"
-  [ -n "$CARD" ] || { echo "audio-jack-guard: no encuentro placa con jack" >&2; exit 1; }
+  [ -n "$CARD" ] || HAVE_JACK=0
 fi
 if [ -z "$SINK" ]; then
   SINK="$(detect_sink)"
-  [ -n "$SINK" ] || { echo "audio-jack-guard: no encuentro sink analógico" >&2; exit 1; }
+  [ -n "$SINK" ] || { echo "audio-jack-guard: no encuentro sink analógico" >&2; exit 0; }
 fi
 detect_ports
 
@@ -115,23 +116,27 @@ ensure_default_sink() {
   esac
 }
 
-# Base sana una sola vez.
-amixer -c "$CARD" sset 'Master' 87 on >/dev/null 2>&1 || true
-amixer -c "$CARD" sset 'PCM' 255 >/dev/null 2>&1 || true
+# Base sana una sola vez (solo si hay jack/placa).
+if [ "$HAVE_JACK" = 1 ]; then
+  amixer -c "$CARD" sset 'Master' 87 on >/dev/null 2>&1 || true
+  amixer -c "$CARD" sset 'PCM' 255 >/dev/null 2>&1 || true
+fi
 
 while true; do
   ensure_default_sink
-  case "$(jack_state)" in
-    on)
-      switch_port "$HP_PORT"
-      amp Headphone on
-      amp Speaker off
-      ;;
-    off)
-      switch_port "$SPK_PORT"
-      amp Speaker on
-      amp Headphone off
-      ;;
-  esac
+  if [ "$HAVE_JACK" = 1 ]; then
+    case "$(jack_state)" in
+      on)
+        switch_port "$HP_PORT"
+        amp Headphone on
+        amp Speaker off
+        ;;
+      off)
+        switch_port "$SPK_PORT"
+        amp Speaker on
+        amp Headphone off
+        ;;
+    esac
+  fi
   sleep "$INTERVAL"
 done

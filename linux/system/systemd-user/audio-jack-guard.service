@@ -6,7 +6,7 @@ PartOf=graphical-session.target
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/audio-jack-guard
-Restart=always
+Restart=on-failure
 RestartSec=3
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=PULSE_SERVER=unix:/run/user/%U/pulse/native
