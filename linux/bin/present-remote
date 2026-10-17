@@ -280,27 +280,6 @@ def pill_is_open():
     return False
 
 
-def pill_toggle():
-    """Pide a la píldora que se dé vuelta y devuelve el estado NUEVO.
-
-    Es la primitiva del toggle: consultar `isOpen` por separado y decidir afuera
-    era frágil —si el IPC demoraba, la píldora se reabría justo cuando el usuario
-    quería cerrarla—. Devuelve None si Quickshell no contestó, para caer al
-    criterio viejo.
-    """
-    for _ in range(2):
-        try:
-            out = subprocess.check_output(
-                ["qs", "ipc", "-p", PILL, "call", "omar-pill", "toggle"],
-                text=True, stderr=subprocess.DEVNULL, timeout=2.5,
-            ).strip().lower()
-            if out in ("true", "false"):
-                return out == "true"
-        except Exception:  # noqa: BLE001
-            time.sleep(0.15)
-    return None
-
-
 def omar_active():
     """Omar está encendido si hay conversación, píldora abierta o voz viva."""
     return pill_is_open() or service_awake() or ptt_active()
@@ -395,22 +374,17 @@ def cancel_voice():
 
 
 def toggle_voice():
-    """Toggle real de Omar: si está encendido lo apaga; si no, lo prende.
+    """Prende o apaga LA MISMA Omar, sin importar cómo se abrió.
 
-    La dirección la decide la propia píldora (nos devuelve el estado nuevo), así
-    el toggle nunca reabre cuando querés cerrar. Si el IPC no contesta, caemos al
-    criterio de antes (¿hay píldora abierta o sesión de voz viva?).
+    La dirección la decide el estado real de la conversación (el único loop),
+    no la píldora: si la abrió la palabra clave, la píldora puede no estar
+    abierta y aun así hay que cerrarla. La píldora es sólo la superficie; ahora
+    la abre igual la tecla que la palabra clave.
     """
-    now_open = pill_toggle()
-    if now_open is None:
-        log("toggle: la píldora no contestó; uso el criterio viejo")
-        now_open = not omar_active()
-        if now_open:
-            _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
-    if now_open:
-        start_voice()
-    else:
+    if omar_active():
         cancel_voice()
+    else:
+        start_voice()
 
 
 def builtin(cmd):

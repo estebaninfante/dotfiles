@@ -15,6 +15,7 @@ HYPR_DIR="$RT/hypr"
 PANORAMA="$ASSETS/space.png"
 MAP="$ASSETS/space.glb"
 SETTLE="${HYPR3D_VERIFY_SETTLE:-2.0}"
+WITH_HUD="${HYPR3D_VERIFY_HUD:-0}"
 CYCLES="${HYPR3D_VERIFY_CYCLES:-1}"
 WITH_FLOAT="${HYPR3D_VERIFY_FLOAT:-0}"
 WITH_CHURN="${HYPR3D_VERIFY_CHURN:-0}"
@@ -33,6 +34,25 @@ done
 [ -f "$MAP" ] || { echo "SUMMARY: FAIL no-map $MAP"; exit 1; }
 
 mkdir -p "$OUT"
+
+# Minimal top-layer panel for the fixed-HUD check (quickshell). Red, 24 px,
+# anchored to the top: if the bar is world-space it cannot sit there.
+cat > "$OUT/hud.qml" <<'QML'
+import Quickshell
+import QtQuick
+
+ShellRoot {
+    PanelWindow {
+        anchors {
+            top: true
+            left: true
+            right: true
+        }
+        implicitHeight: 24
+        color: "#ff0000"
+    }
+}
+QML
 SIG_HOST="$(hyprctl instances 2>/dev/null | sed -n 's/^instance \(.*\):$/\1/p' | head -1)"
 [ -n "$SIG_HOST" ] || SIG_HOST="${HYPRLAND_INSTANCE_SIGNATURE:-}"
 
@@ -60,6 +80,9 @@ SIG_HOST="$(hyprctl instances 2>/dev/null | sed -n 's/^instance \(.*\):$/\1/p' |
     echo "  hl.exec_cmd(\"$TERMINAL --class $CLASS --title HYPR3D-C\")"
     if [ "$WITH_FLOAT" = "1" ]; then
         echo "  hl.exec_cmd(\"$TERMINAL --class $FCLASS --title HYPR3D-F\")"
+    fi
+    if [ "$WITH_HUD" = "1" ]; then
+        echo "  hl.exec_cmd(\"quickshell -n -p $OUT/hud.qml\")"
     fi
     echo "end)"
 } > "$CONF"
@@ -133,6 +156,25 @@ stable_all() {
     echo "$cur"
 }
 
+# Active room's window poses (id x y z yaw), one per line, sorted. Used for
+# both the ring geometry checks and the cross-workspace persistence check.
+room_pose_of() {
+    awk '
+        /^active / { act = $2; next }
+        /^room / { inroom = ($2 == act); next }
+        inroom && $1 == "win" { printf "%s %.4f %.4f %.4f %.4f\n", $2, $3, $4, $5, $6 }
+    ' "$1" | sort
+}
+
+room_count() {
+    awk '
+        /^active / { act = $2; next }
+        /^room / { inroom = ($2 == act); next }
+        inroom && $1 == "win" { n++ }
+        END { print n + 0 }
+    ' "$1"
+}
+
 WANT_N=3
 [ "$WITH_FLOAT" = "1" ] && WANT_N=4
 for _ in $(seq 1 160); do
@@ -149,6 +191,26 @@ if [ -n "$HOSTWAY" ] && [ "$HOSTWAY" != "null" ]; then
     HYPRLAND_INSTANCE_SIGNATURE="$SIG_HOST" hyprctl eval "hl.dispatch(hl.dsp.window.resize({ window = \"address:$HOSTWAY\", x = 1000, y = 640, relative = false }))" >/dev/null 2>&1 || true
     sleep 0.5
     GEOM="$(HYPRLAND_INSTANCE_SIGNATURE="$SIG_HOST" hyprctl -j clients 2>/dev/null | jq -r --arg a "$HOSTWAY" '[.[] | select(.address==$a)][0] | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')"
+fi
+
+# --- workspace separation fixtures -----------------------------------------
+# Two windows on workspace 2, created BEFORE 3D opens, so they are "existing"
+# tiling clients when the room switch adopts them.
+WS2_CLASS="hypr3d-fixture2"
+WORKSPACES="${HYPR3D_VERIFY_WORKSPACES:-0}"
+if [ "$WORKSPACES" = "1" ]; then
+    nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "2" }))' >/dev/null 2>&1
+    sleep 0.4
+    nested eval "hl.dispatch(hl.dsp.exec_cmd(\"$TERMINAL --class $WS2_CLASS --title HYPR3D-W2A\"))" >/dev/null 2>&1
+    nested eval "hl.dispatch(hl.dsp.exec_cmd(\"$TERMINAL --class $WS2_CLASS --title HYPR3D-W2B\"))" >/dev/null 2>&1
+    for _ in $(seq 1 80); do
+        n2="$(nested -j clients 2>/dev/null | jq --arg c "$WS2_CLASS" '[.[]|select((.class//"")==$c)]|length' 2>/dev/null)"
+        [ "${n2:-0}" -ge 2 ] && break
+        sleep 0.25
+    done
+    sleep 0.5
+    nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "1" }))' >/dev/null 2>&1
+    sleep 0.5
 fi
 
 PRE_ALL="$(stable_all)"
@@ -182,6 +244,56 @@ for cycle in $(seq 1 "$CYCLES"); do
 done
 
 POST_ALL="$(stable_all)"
+
+# --- workspace separation check --------------------------------------------
+# Room state is per workspace: ws1 keeps its ring, ws2 has its own room with a
+# different window count, and coming back to ws1 lands on the exact same poses.
+WS_OK=skip
+WS_INFO="null"
+
+if [ "$WORKSPACES" = "1" ]; then
+    nested eval 'hl.plugin.hypr3d.toggle()' >/dev/null 2>&1
+    sleep "$SETTLE"
+    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
+    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws1.txt" 2>/dev/null || true
+
+    nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "2" }))' >/dev/null 2>&1
+    sleep "$SETTLE"
+    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
+    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws2.txt" 2>/dev/null || true
+
+    nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "1" }))' >/dev/null 2>&1
+    sleep "$SETTLE"
+    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
+    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws1-back.txt" 2>/dev/null || true
+
+    nested eval 'hl.plugin.hypr3d.toggle()' >/dev/null 2>&1
+    sleep "$SETTLE"
+
+    WS1N="$(room_count "$OUT/rooms-ws1.txt" 2>/dev/null)"
+    WS2N="$(room_count "$OUT/rooms-ws2.txt" 2>/dev/null)"
+    room_pose_of "$OUT/rooms-ws1.txt" > "$OUT/ws1-pose.txt" 2>/dev/null || true
+    room_pose_of "$OUT/rooms-ws1-back.txt" > "$OUT/ws1-back-pose.txt" 2>/dev/null || true
+    W2_FLOAT="$(nested -j clients 2>/dev/null | jq --arg c "$WS2_CLASS" '[.[]|select((.class//"")==$c)|select(.floating)]|length' 2>/dev/null)"
+
+    WS_PERSIST=0
+    cmp -s "$OUT/ws1-pose.txt" "$OUT/ws1-back-pose.txt" && WS_PERSIST=1
+
+    WS_OK=yes
+    [ "${WS1N:-0}" -ge 3 ] || WS_OK=no
+    [ "${WS2N:-0}" -ge 2 ] || WS_OK=no
+    [ "$WS_PERSIST" = "1" ] || WS_OK=no
+    [ "${W2_FLOAT:-1}" = "0" ] || WS_OK=no
+
+    WS_INFO="$(jq -n -c \
+        --argjson ws1n "${WS1N:-0}" \
+        --argjson ws2n "${WS2N:-0}" \
+        --argjson persist "$WS_PERSIST" \
+        --argjson w2float "${W2_FLOAT:-1}" \
+        '{ws1_windows: $ws1n, ws2_windows: $ws2n, ws1_poses_stable: ($persist==1), ws2_floating_after_exit: $w2float}')"
+fi
+
+
 POSTS_JSON="$(printf '%s' "$POSTS" | jq -s -c '.')"
 MID_JSON="$(printf '%s' "$MID_LAST" | jq -c '.')"
 PRE_JSON="$(printf '%s' "$PRE_ALL" | jq -c '.')"
@@ -246,6 +358,11 @@ jq -e '
 ' <<<"$VERDICT" >/dev/null 2>&1 || ok=no
 [ "$plugin_loaded" -ge 1 ] || ok=no
 
+[ "$WS_OK" = "no" ] && ok=no
+if [ "$WS_OK" = "skip" ] && [ "${HYPR3D_VERIFY_REQUIRE_WORKSPACES:-0}" = "1" ]; then
+    ok=no
+fi
+
 # --- ring room checks -------------------------------------------------------
 # The plugin dumps its rooms to /tmp/hypr3d-rooms.txt on demand
 # (hl.plugin.hypr3d.rooms()). Both the geometry and the persistence across an
@@ -302,17 +419,9 @@ if [ -f "$OUT/rooms-1.txt" ]; then
         --arg problems "${RING_PROBLEMS:-no-data}" \
         '{n: $n, radius: $radius, ok: $ok, problems: $problems}')"
 
-    pose_of() {
-        awk '
-            /^active / { act = $2; next }
-            /^room / { inroom = ($2 == act); next }
-            inroom && $1 == "win" { printf "%s %.4f %.4f %.4f %.4f\n", $2, $3, $4, $5, $6 }
-        ' "$1" | sort
-    }
-
     if [ "$CYCLES" -ge 2 ] && [ -f "$OUT/rooms-2.txt" ]; then
-        pose_of "$OUT/rooms-1.txt" > "$OUT/pose-1.txt"
-        pose_of "$OUT/rooms-2.txt" > "$OUT/pose-2.txt"
+        room_pose_of "$OUT/rooms-1.txt" > "$OUT/pose-1.txt"
+        room_pose_of "$OUT/rooms-2.txt" > "$OUT/pose-2.txt"
         if cmp -s "$OUT/pose-1.txt" "$OUT/pose-2.txt"; then
             RING_PERSIST=1
         else
@@ -320,6 +429,48 @@ if [ -f "$OUT/rooms-1.txt" ]; then
             RING_OK=no
         fi
     fi
+fi
+
+# --- fixed bar / HUD check --------------------------------------------------
+# With a real top-layer panel running (quickshell), 3D must keep it pinned to
+# the screen: the rooms dump must count at least one HUD surface, and the top
+# band of the 3D screenshot must be the panel's red, not the 3D scene.
+HUD_OK=skip
+HUD_INFO="null"
+
+if [ "$WITH_HUD" = "1" ] && [ -f "$OUT/rooms-1.txt" ] && [ -f "$PNG_ON" ]; then
+    HUD_N="$(awk '$1 == "hud" { print $2 }' "$OUT/rooms-1.txt" | head -1)"
+    HUD_RED="$(python3 - "$PNG_ON" <<'PYHUD'
+import sys
+from PIL import Image
+
+im = Image.open(sys.argv[1]).convert("RGB")
+w, h = im.size
+band_h = max(4, int(h * 0.06))
+
+def red_ratio(box):
+    band = im.crop(box)
+    px = list(band.getdata())
+    red = sum(1 for r, g, b in px if r > 150 and g < 100 and b < 100)
+    return red / max(1, len(px))
+
+# The panel can be anchored top or bottom depending on its own QML. What
+# matters is that it sits flat on a screen edge in the 3D screenshot.
+print(round(max(red_ratio((0, 0, w, band_h)),
+                red_ratio((0, h - band_h, w, h))), 3))
+PYHUD
+)"
+    HUD_OK=yes
+    [ "${HUD_N:-0}" -ge 1 ] || HUD_OK=no
+    awk -v v="${HUD_RED:-0}" 'BEGIN { exit !(v >= 0.30) }' || HUD_OK=no
+
+    HUD_INFO="$(jq -n -c --argjson n "${HUD_N:-0}" --argjson red "${HUD_RED:-0}" \
+        '{hud_surfaces: $n, top_band_red: $red}')"
+fi
+
+[ "$HUD_OK" = "no" ] && ok=no
+if [ "$HUD_OK" = "skip" ] && [ "${HYPR3D_VERIFY_REQUIRE_HUD:-0}" = "1" ]; then
+    ok=no
 fi
 
 [ "$RING_OK" = no ] && ok=no
@@ -343,12 +494,18 @@ fi
     echo "\"ring\": $RING_JSON,"
     echo "\"ring_ok\": \"$RING_OK\","
     echo "\"ring_persist\": $RING_PERSIST,"
+    echo "\"workspaces_ok\": \"$WS_OK\","
+    echo "\"hud_ok\": \"$HUD_OK\","
+    echo "\"hud\": $HUD_INFO,"
+    echo "\"workspaces\": $WS_INFO,"
     echo "\"verdict\": $VERDICT"
     echo "}"
 } > "$REPORT"
 
-echo "SUMMARY: verdict=$ok plugin_loaded=$plugin_loaded version=$plugin_version cycles=$CYCLES float=$WITH_FLOAT churn=$WITH_CHURN ring=$RING_OK persist=$RING_PERSIST"
+echo "SUMMARY: verdict=$ok plugin_loaded=$plugin_loaded version=$plugin_version cycles=$CYCLES float=$WITH_FLOAT churn=$WITH_CHURN ring=$RING_OK persist=$RING_PERSIST workspaces=$WS_OK hud=$HUD_OK"
 echo "RING: $RING_JSON"
+echo "WORKSPACES: $WS_INFO"
+echo "HUD: $HUD_INFO"
 echo "VERDICT: $(echo "$VERDICT" | tr -d "\n ")"
 echo "PNG_ON=$PNG_ON PNG_OFF=$PNG_OFF"
 echo "LOG: $LOG REPORT: $REPORT"
