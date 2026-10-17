@@ -198,6 +198,9 @@ RECONCILE_INPUTS=(
     linux/bin/kokoro-read linux/bin/kokoro-server linux/bin/kokoro-speechd linux/bin/kokoro-ctl
     linux/system/speech-dispatcher
     linux/system/systemd-user/kokoro-tts.service
+    linux/system/systemd-user
+    linux/bin/audio-jack-guard
+    scripts/install-user-units.sh
     scripts/setup-kokoro-reader.sh scripts/reconcile-machine.sh
 )
 RECONCILE_STATE="$HOME/.local/state/dotfiles-reconcile.hash"

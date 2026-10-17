@@ -1,0 +1,7 @@
+# Units de usuario solo para la LAPTOP (machine-type = laptop).
+# install-user-units.sh los enlaza y habilita además de enabled-all.txt.
+# Una línea por unit. Los comentarios con # se ignoran.
+
+# Ejemplos de lo que podría ir acá (hoy se manejan aparte):
+#   omar-pill.service
+#   rig-main-seat.service

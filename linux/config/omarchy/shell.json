@@ -85,11 +85,13 @@
     "transparent": false
   },
   "cloneSourceRestores": [
-    "eztvn.menu"
+    "eztvn.menu",
+    "eztvn.osd"
   ],
   "disabledPlugins": [
     "omarchy.menu",
-    "tomv.battery-usage"
+    "tomv.battery-usage",
+    "omarchy.osd"
   ],
   "idle": {
     "lock": 300,
@@ -98,6 +100,9 @@
   "plugins": [
     {
       "id": "eztvn.hypr-outline"
+    },
+    {
+      "id": "eztvn.osd"
     }
   ],
   "version": 1

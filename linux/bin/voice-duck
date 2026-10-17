@@ -4,23 +4,58 @@
 # Mira el estado del loop de voz; mientras está "listening", baja el volumen del
 # sink por defecto (OMAR_DUCK_LEVEL, default 25%) y lo restaura al terminar. Así
 # la música/video no te tapa la voz. Corre como servicio de usuario.
+#
+# Detalles que evitan que el volumen quede bajo:
+#   - usa `pactl` (cambio instantáneo, sin rampa): leer el volumen a mitad de
+#     rampa guardaba valores cada vez más bajos y lo dejaba en casi cero;
+#   - no guarda un volumen ya duckeado (si el estado flapea, no baja en escalera);
+#   - debounce: el estado tiene que sostenerse un instante para actuar;
+#   - si status.json quedó viejo (el loop murió), trata el estado como idle.
 set -u
 STATUS="${XDG_RUNTIME_DIR:-/tmp}/omnivoz/status.json"
-SINK="${OMAR_DUCK_SINK:-@DEFAULT_AUDIO_SINK@}"
+SINK="${OMAR_DUCK_SINK:-@DEFAULT_SINK@}"
 DUCK="${OMAR_DUCK_LEVEL:-0.25}"
+DUCK_PCT="$(awk -v d="$DUCK" 'BEGIN{printf "%d", d*100}')"
+STATUS_MAX_AGE_MS=4000
+DEBOUNCE_DUCK_MS=450
+DEBOUNCE_RESTORE_MS=900
 
 saved=""; ducked=0
-restore() { [ -n "$saved" ] && wpctl set-volume "$SINK" "$saved" 2>/dev/null; saved=""; ducked=0; }
+restore() { [ -n "$saved" ] && pactl set-sink-volume "$SINK" "$saved" 2>/dev/null; saved=""; ducked=0; }
 trap 'restore; exit 0' TERM INT
 
+get_state() {
+  local now upd st
+  now="$(date +%s%3N)"
+  upd="$(sed -n 's/.*"updatedAt"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' "$STATUS" 2>/dev/null | head -1)"
+  st="$(sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$STATUS" 2>/dev/null | head -1)"
+  if [ -z "$upd" ] || [ $((now - upd)) -gt "$STATUS_MAX_AGE_MS" ]; then
+    echo idle
+  else
+    echo "${st:-idle}"
+  fi
+}
+
+get_volume_pct() {
+  pactl get-sink-volume "$SINK" 2>/dev/null | grep -oE '[0-9]+%' | head -1 | tr -d '%'
+}
+
+pending=""; pending_since=0
 while true; do
-  state="$(sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$STATUS" 2>/dev/null | head -1)"
-  if [ "$state" = "listening" ] && [ "$ducked" = 0 ]; then
-    cur="$(wpctl get-volume "$SINK" 2>/dev/null | awk '{print $2}')"
-    if [ -n "$cur" ]; then
-      saved="$cur"; wpctl set-volume "$SINK" "$DUCK" 2>/dev/null; ducked=1
+  state="$(get_state)"
+  now="$(date +%s%3N)"
+  if [ "$state" != "$pending" ]; then
+    pending="$state"; pending_since="$now"
+  fi
+  settled=$(( now - pending_since ))
+  if [ "$state" = "listening" ] && [ "$ducked" = 0 ] && [ "$settled" -ge "$DEBOUNCE_DUCK_MS" ]; then
+    cur="$(get_volume_pct)"
+    if [ -n "$cur" ] && [ "$cur" -gt $((DUCK_PCT + 5)) ]; then
+      saved="${cur}%"
     fi
-  elif [ "$state" != "listening" ] && [ "$ducked" = 1 ]; then
+    pactl set-sink-volume "$SINK" "${DUCK_PCT}%" 2>/dev/null
+    ducked=1
+  elif [ "$state" != "listening" ] && [ "$ducked" = 1 ] && [ "$settled" -ge "$DEBOUNCE_RESTORE_MS" ]; then
     restore
   fi
   sleep 0.15

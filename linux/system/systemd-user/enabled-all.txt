@@ -1,0 +1,5 @@
+# Units de usuario que dotfiles gestiona en TODAS las máquinas.
+# install-user-units.sh los enlaza (symlink al repo) y los habilita.
+# Una línea por unit. Los comentarios con # se ignoran.
+
+audio-jack-guard.service

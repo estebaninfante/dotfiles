@@ -20,6 +20,12 @@ if ! bash "$REPO/scripts/link-dotfiles.sh" >>"$LOG" 2>&1; then
 fi
 log "symlinks OK"
 
+if ! bash "$REPO/scripts/install-user-units.sh" >>"$LOG" 2>&1; then
+    log "install-user-units falló"
+    exit 1
+fi
+log "units OK"
+
 if ! bash "$REPO/scripts/setup-kokoro-reader.sh" >>"$LOG" 2>&1; then
     log "setup-kokoro-reader falló"
     exit 1

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # audio-jack-guard — mantiene la salida analógica sana y coherente con el jack.
 #
-# En esta laptop (ALC257 + WirePlumber) pasan tres cosas al cambiar de puerto o
-# al arrancar:
+# En las máquinas con este codec (ALC257 + WirePlumber) pasan tres cosas al
+# cambiar de puerto o al arrancar:
 #   1. el amplificador del puerto activo queda en mute (switch off), o
 #   2. queda con el switch on pero volumen 0 (silencio igual), y
 #   3. el sink nulo del micrófono del teléfono (phone_mic_sink) queda como
@@ -10,20 +10,68 @@
 #      ningún lado.
 # Este guardián deja, cada 1.5 s, el puerto correcto con su amplificador
 # encendido AL 100% y el otro apagado y en 0, y devuelve el default a la placa
-# real si quedó en el sink nulo. No maneja el volumen del sink (PipeWire lo
+# real si quedó en un sink virtual. No maneja el volumen del sink (PipeWire lo
 # aplica por software): el slider y el ducking de la voz siguen mandando. Solo
 # repone ese volumen si WirePlumber lo salta al cambiar de puerto.
 #
-# Variables (para probar/otra máquina):
-#   AUDIO_JACK_CARD      placa ALSA (default 2)
-#   AUDIO_JACK_SINK      sink de PipeWire
+# Detecta sola la placa, el sink y los nombres de puerto, así el mismo script
+# sirve en la laptop y en el desktop sin config por equipo. Se puede forzar
+# todo con variables:
+#   AUDIO_JACK_CARD      placa ALSA (default: la que tenga "Headphone Jack")
+#   AUDIO_JACK_SINK      sink de PipeWire (default: el *analog-stereo*)
 #   AUDIO_JACK_INTERVAL  segundos entre chequeos (default 1.5)
+#   AUDIO_JACK_DEFAULT   sink default de PipeWire (default @DEFAULT_AUDIO_SINK@)
 set -u
 
-CARD="${AUDIO_JACK_CARD:-2}"
-SINK="${AUDIO_JACK_SINK:-alsa_output.pci-0000_05_00.6.analog-stereo}"
+CARD="${AUDIO_JACK_CARD:-}"
+SINK="${AUDIO_JACK_SINK:-}"
 INTERVAL="${AUDIO_JACK_INTERVAL:-1.5}"
 DEFAULT_SINK="${AUDIO_JACK_DEFAULT:-@DEFAULT_AUDIO_SINK@}"
+HP_PORT="${AUDIO_JACK_HP_PORT:-}"
+SPK_PORT="${AUDIO_JACK_SPK_PORT:-}"
+
+# Placa ALSA con jack de auriculares (0..5).
+detect_card() {
+  local c
+  for c in 0 1 2 3 4 5; do
+    if amixer -c "$c" cget "iface=CARD,name=Headphone Jack" >/dev/null 2>&1; then
+      printf '%s' "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Sink analógico real (no el nulo del teléfono, que también es Audio/Sink).
+detect_sink() {
+  local s
+  s="$(pactl list sinks short 2>/dev/null | awk '{print $2}' | grep -m1 'analog-stereo' || true)"
+  if [ -n "$s" ]; then
+    printf '%s' "$s"
+  else
+    pactl get-default-sink 2>/dev/null || true
+  fi
+}
+
+# Nombres de puerto del sink: el de auriculares y el de parlantes.
+detect_ports() {
+  local ports
+  ports="$(pactl list sinks 2>/dev/null | grep -oE 'analog-output-[a-z]+' | sort -u || true)"
+  [ -n "$HP_PORT" ] || HP_PORT="$(printf '%s\n' "$ports" | grep -i headphone | head -1)"
+  [ -n "$SPK_PORT" ] || SPK_PORT="$(printf '%s\n' "$ports" | grep -i speaker | head -1)"
+  HP_PORT="${HP_PORT:-analog-output-headphones}"
+  SPK_PORT="${SPK_PORT:-analog-output-speaker}"
+}
+
+if [ -z "$CARD" ]; then
+  CARD="$(detect_card || true)"
+  [ -n "$CARD" ] || { echo "audio-jack-guard: no encuentro placa con jack" >&2; exit 1; }
+fi
+if [ -z "$SINK" ]; then
+  SINK="$(detect_sink)"
+  [ -n "$SINK" ] || { echo "audio-jack-guard: no encuentro sink analógico" >&2; exit 1; }
+fi
+detect_ports
 
 # ¿Hay algo enchufado en el jack de auriculares? on|off (vacío si no existe).
 jack_state() {
@@ -57,9 +105,8 @@ amp() {  # amp <control> on|off
   fi
 }
 
-# El sink nulo del micrófono del teléfono no es una salida real: si quedó como
-# default, devolvemos el default a la placa. No tocamos HDMI/Bluetooth elegidos
-# a propósito.
+# Un sink virtual/nulo no es una salida real: si quedó como default, devolvemos
+# el default a la placa. No tocamos HDMI/Bluetooth elegidos a propósito.
 ensure_default_sink() {
   case "$(pactl get-default-sink 2>/dev/null)" in
     ""|"phone_mic_sink"|"phone-mic")
@@ -76,12 +123,12 @@ while true; do
   ensure_default_sink
   case "$(jack_state)" in
     on)
-      switch_port analog-output-headphones
+      switch_port "$HP_PORT"
       amp Headphone on
       amp Speaker off
       ;;
     off)
-      switch_port analog-output-speaker
+      switch_port "$SPK_PORT"
       amp Speaker on
       amp Headphone off
       ;;

@@ -1,0 +1,7 @@
+# Units de usuario solo para el DESKTOP (machine-type = desktop).
+# install-user-units.sh los enlaza y habilita además de enabled-all.txt.
+# Una línea por unit. Los comentarios con # se ignoran.
+
+# Ejemplos de lo que podría ir acá (hoy se manejan aparte):
+#   rig-discord-bot.service
+#   rig-telegram-bot.service

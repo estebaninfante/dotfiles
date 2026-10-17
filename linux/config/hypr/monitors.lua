@@ -1,14 +1,12 @@
 local variables = require("base.variables")
 local power = require("base.power")
 
+-- ¿Hay un monitor HDMI realmente conectado? Preguntamos a Hyprland en vez de
+-- leer /sys/class/drm: al arrancar el sysfs puede decir "connected" un instante
+-- (sin monitor real) y eso dejaba la laptop a escala 1 (todo chiquito).
 local function hdmi_connected()
-    for _, card in ipairs({ "card0", "card1", "card2", "card3" }) do
-        local handle = io.open("/sys/class/drm/" .. card .. "-HDMI-A-1/status", "r")
-        if handle then
-            local status = handle:read("*l")
-            handle:close()
-            if status == "connected" then return true end
-        end
+    for _, m in ipairs(hl.get_monitors()) do
+        if m.name == "HDMI-A-1" then return true end
     end
     return false
 end
