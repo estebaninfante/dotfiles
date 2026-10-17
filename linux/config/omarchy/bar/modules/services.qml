@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -210,6 +211,15 @@ Item {
   ServicesProbe {
     id: statusProbe
     unitIds: root.unitIds
+  }
+
+  // TEMP-DEBUG: se retira tras verificar el render del menú.
+  IpcHandler {
+    target: "eztvn.services.debug"
+    function toggle(): void { root.toggle() }
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function detail(svc: string): void { root.openDetail(svc) }
   }
 
   Timer {
