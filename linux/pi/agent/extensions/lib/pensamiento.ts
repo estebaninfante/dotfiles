@@ -64,6 +64,12 @@ export function limpiarPensamiento(texto: string): string {
   t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");
   t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
   t = t.replace(/https?:\/\/\S+/g, " ");
+  // Markdown suave: negritas, títulos, citas y viñetas se leen mejor sin marcas.
+  t = t.replace(/\*\*([^*\n]+)\*\*/g, "$1");
+  t = t.replace(/__([^_\n]+)__/g, "$1");
+  t = t.replace(/^\s{0,3}#{1,6}\s+/gm, "");
+  t = t.replace(/^\s{0,3}>\s?/gm, "");
+  t = t.replace(/^\s*[-*+]\s+(?=\S)/gm, "");
   t = t.replace(/[│├└┌┐┘┬┴┼─━╭╮╰╯]{2,}/g, " ");
   return t.replace(/\r/g, "");
 }

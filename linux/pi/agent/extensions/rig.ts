@@ -27,7 +27,15 @@
  * `~/.local/share/pi/tareas.json` (configurable con PI_RIG_DIR).
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Type } from "typebox";
@@ -124,6 +132,54 @@ function guardarTareas(items: Tarea[]): void {
   const tmp = `${TAREAS}.${process.pid}.tmp`;
   writeFileSync(tmp, `${JSON.stringify(items.slice(-MAX_TAREAS), null, 2)}\n`, "utf8");
   renameSync(tmp, TAREAS);
+}
+
+/** Espera sincrónica corta (el lock se tiene por milisegundos). */
+function dormir(ms: number): void {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const fin = Date.now() + ms;
+    while (Date.now() < fin) {
+      /* sin Atomics: espera activa muy corta */
+    }
+  }
+}
+
+/** Varios agentes pueden escribir `tareas.json` a la vez. El lock por carpeta
+ *  evita que uno pise el último paso del otro en el read-modify-write. Los
+ *  lectores no lo necesitan: `rename` es atómico. */
+function conLock<T>(fn: () => T): T {
+  const lock = join(DIR, "tareas.lock");
+  mkdirSync(DIR, { recursive: true });
+  const fin = Date.now() + 800;
+  let tomado = false;
+  while (Date.now() < fin) {
+    try {
+      mkdirSync(lock);
+      tomado = true;
+      break;
+    } catch {
+      try {
+        // Lock huérfano de un proceso que murió: se libera a los 15 s.
+        if (Date.now() - statSync(lock).mtimeMs > 15_000) rmdirSync(lock);
+      } catch {
+        /* otro proceso lo liberó: reintentar */
+      }
+      dormir(12);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    if (tomado) {
+      try {
+        rmdirSync(lock);
+      } catch {
+        /* ya no estaba */
+      }
+    }
+  }
 }
 
 function hora(iso: string): string {
@@ -225,11 +281,16 @@ export default function rig(pi: ExtensionAPI) {
       guardadoTimer = undefined;
     }
     if (!tarea) return;
+    if (tarea.pasos.length > MAX_PASOS) {
+      tarea.pasos.splice(0, tarea.pasos.length - MAX_PASOS);
+    }
     tarea.actualizado = new Date().toISOString();
-    const items = leerTareas().filter((t) => t.id !== tarea!.id);
-    items.push(tarea);
-    items.sort((a, b) => a.creado.localeCompare(b.creado));
-    guardarTareas(items);
+    conLock(() => {
+      const items = leerTareas().filter((t) => t.id !== tarea!.id);
+      items.push(tarea!);
+      items.sort((a, b) => a.creado.localeCompare(b.creado));
+      guardarTareas(items);
+    });
   }
 
   function programarGuardado(): void {
@@ -330,6 +391,7 @@ export default function rig(pi: ExtensionAPI) {
 
   pi.on("tool_call", (event) => {
     if (event.parentToolCallId || !tarea) return;
+    if (tarea.pasos.some((p) => p.id === event.toolCallId)) return;
     const ahora = new Date().toISOString();
     tarea.pasos.push({
       t: ahora,
@@ -368,11 +430,10 @@ export default function rig(pi: ExtensionAPI) {
       .replace(/\s+/g, " ")
       .trim();
     if (!pensado) return;
-    tarea.pasos.push({
-      t: new Date().toISOString(),
-      tipo: "pensamiento",
-      resumen: recortar(pensado, 300),
-    });
+    const resumen = recortar(pensado, 300);
+    const ultimo = tarea.pasos[tarea.pasos.length - 1];
+    if (ultimo?.tipo === "pensamiento" && ultimo.resumen === resumen) return;
+    tarea.pasos.push({ t: new Date().toISOString(), tipo: "pensamiento", resumen });
     programarGuardado();
   });
 
@@ -490,14 +551,16 @@ export default function rig(pi: ExtensionAPI) {
         "y revisar tareas anteriores con `tareas`.",
     ],
     parameters: Type.Object({
-      accion: Type.Union(
-        [
-          Type.Literal("ver"),
-          Type.Literal("renombrar"),
-          Type.Literal("nota"),
-          Type.Literal("cerrar"),
-        ],
-        { description: "ver | renombrar | nota | cerrar (default ver)" },
+      accion: Type.Optional(
+        Type.Union(
+          [
+            Type.Literal("ver"),
+            Type.Literal("renombrar"),
+            Type.Literal("nota"),
+            Type.Literal("cerrar"),
+          ],
+          { description: "ver | renombrar | nota | cerrar (default ver)" },
+        ),
       ),
       titulo: Type.Optional(
         Type.String({ description: "Título nuevo y corto (acción renombrar)." }),
@@ -665,7 +728,7 @@ export default function rig(pi: ExtensionAPI) {
         ctx.ui.notify(`No encontré la tarea ${id}. Probá con /tareas.`, "warning");
         return;
       }
-      const lineas = trazaTarea(encontrada, 40, false)
+      const lineas = trazaTarea(encontrada, 40, true)
         .split("\n")
         .map((l) => recortar(l, 180))
         .slice(0, 36);

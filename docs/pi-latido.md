@@ -41,6 +41,9 @@ Se ajusta en `linux/config/pi/latido.json` o con variables de entorno
 | `titleChars` / `PI_LATIDO_TITLE_CHARS` | 52 | largo del título en el encabezado |
 | `PI_LATIDO=0` | — | apaga el widget |
 
+Si apagás el widget, volvé a poner `hideThinkingBlock` en `false` (o usá
+`Ctrl+T`) para no quedarte sin ver el pensamiento.
+
 ## Tareas
 
 `linux/pi/agent/extensions/rig.ts` captura cada pedido como una tarea, sin que
