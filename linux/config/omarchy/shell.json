@@ -46,7 +46,8 @@
           "id": "eztvn.mic"
         },
         {
-          "id": "eztvn.cpu-heatmap"
+          "id": "eztvn.cpu-heatmap",
+          "rows": 2
         }
       ],
       "right": [

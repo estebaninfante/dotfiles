@@ -18,7 +18,8 @@ BarWidget {
   property var cores: []
 
   readonly property int refreshSeconds: Math.max(1, Math.min(10, Number(setting("refreshSeconds", 1)) || 1))
-  readonly property int rows: Math.max(1, Math.min(16, Number(setting("rows", 4)) || 4))
+  // Tope duro de 2 filas: la grilla crece a lo ancho, nunca a lo alto.
+  readonly property int rows: Math.max(1, Math.min(2, Number(setting("rows", 2)) || 2))
   readonly property int columns: coreCount > 0 ? Math.ceil(coreCount / rows) : 0
 
   readonly property int cellSize: Math.max(3, Math.min(10, Number(setting("cellSize", 4)) || 4))

@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "eztvn",
   "license": "MIT",
-  "description": "Heatmap de uso por núcleo de CPU en la barra: grilla de 4 filas con brillo verde/amarillo/rojo",
+  "description": "Heatmap de uso por núcleo de CPU en la barra: grilla de hasta 2 filas con brillo verde/amarillo/rojo",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "BarWidget.qml"
@@ -18,12 +18,12 @@
     "defaultSection": "left",
     "defaults": {
       "refreshSeconds": 1,
-      "rows": 4,
+      "rows": 2,
       "cellSize": 4
     },
     "schema": [
       { "key": "refreshSeconds", "type": "integer", "label": "Intervalo de refresco (segundos)", "min": 1, "max": 10, "step": 1, "defaultValue": 1 },
-      { "key": "rows", "type": "integer", "label": "Filas de la grilla", "min": 1, "max": 16, "step": 1, "defaultValue": 4 },
+      { "key": "rows", "type": "integer", "label": "Filas de la grilla", "min": 1, "max": 2, "step": 1, "defaultValue": 2 },
       { "key": "cellSize", "type": "integer", "label": "Tamaño del cuadro (px)", "min": 3, "max": 10, "step": 1, "defaultValue": 4 }
     ]
   }
