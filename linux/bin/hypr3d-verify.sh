@@ -168,6 +168,18 @@ room_pose_of() {
     ' "$1" | sort
 }
 
+# Like room_pose_of, but skips ids listed (space separated) in $1.
+room_pose_of_unmoved() {
+    awk -v skip="$1" '
+        BEGIN { n = split(skip, a, " "); for (i = 1; i <= n; i++) S[a[i]] = 1 }
+        /^active / { act = $2; next }
+        /^room / { inroom = ($2 == act); next }
+        inroom && $1 == "win" && !($2 in S) {
+            printf "%s %.4f %.4f %.4f %.4f\n", $2, $3, $4, $5, $6
+        }
+    ' "$2" | sort
+}
+
 room_count() {
     awk '
         /^active / { act = $2; next }
@@ -175,6 +187,28 @@ room_count() {
         inroom && $1 == "win" { n++ }
         END { print n + 0 }
     ' "$1"
+}
+
+# Wait until the active room has at least `min` windows (or timeout).
+wait_room_count() {
+    local min="$1" n
+    for _ in $(seq 1 80); do
+        nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
+        n="$(room_count /tmp/hypr3d-rooms.txt 2>/dev/null)"
+        [ "${n:-0}" -ge "$min" ] && return 0
+        sleep 0.25
+    done
+    return 1
+}
+
+# Ids the player moved/resized (field 10). Those poses are user-owned: the
+# verifier must not require them to stay on the ring or to be idempotent.
+room_moved_ids() {
+    awk '
+        /^active / { act = $2; next }
+        /^room / { inroom = ($2 == act); next }
+        inroom && $1 == "win" && $10 != 0 { print $2 }
+    ' "$1" 2>/dev/null
 }
 
 # Wait until the plugin reports `ws` as the active room with at least `min`
@@ -249,8 +283,9 @@ for cycle in $(seq 1 "$CYCLES"); do
     MID_LAST="$(tiled_fixtures)"
     [ "$cycle" -eq 1 ] && [ -n "$GEOM" ] && grim -g "$GEOM" "$PNG_ON" >/dev/null 2>&1 || true
 
-    # Ring/room snapshot for the deterministic layout checks below.
-    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
+    # Ring/room snapshot for the deterministic layout checks below. Wait for
+    # every fixture to be captured and arranged before reading it.
+    wait_room_count "$WANT_N" || true
     cp /tmp/hypr3d-rooms.txt "$OUT/rooms-$cycle.txt" 2>/dev/null || true
 
     if [ "$WITH_CHURN" = "1" ] && [ "$cycle" -eq 1 ]; then
@@ -297,8 +332,12 @@ if [ "$WORKSPACES" = "1" ]; then
 
     WS1N="$(room_count "$OUT/rooms-ws1.txt" 2>/dev/null)"
     WS2N="$(room_count "$OUT/rooms-ws2.txt" 2>/dev/null)"
-    room_pose_of "$OUT/rooms-ws1.txt" > "$OUT/ws1-pose.txt" 2>/dev/null || true
-    room_pose_of "$OUT/rooms-ws1-back.txt" > "$OUT/ws1-back-pose.txt" 2>/dev/null || true
+    cat <(room_moved_ids "$OUT/rooms-ws1.txt") \
+        <(room_moved_ids "$OUT/rooms-ws1-back.txt") | sort -u | tr '\n' ' ' \
+        > "$OUT/ws-moved-ids.txt"
+    WS_SKIP="$(cat "$OUT/ws-moved-ids.txt")"
+    room_pose_of_unmoved "$WS_SKIP" "$OUT/rooms-ws1.txt" > "$OUT/ws1-pose.txt" 2>/dev/null || true
+    room_pose_of_unmoved "$WS_SKIP" "$OUT/rooms-ws1-back.txt" > "$OUT/ws1-back-pose.txt" 2>/dev/null || true
     W2_FLOAT="$(nested -j clients 2>/dev/null | jq --arg c "$WS2_CLASS" '[.[]|select((.class//"")==$c)|select(.floating)]|length' 2>/dev/null)"
 
     WS_PERSIST=0
@@ -405,13 +444,14 @@ if [ -f "$OUT/rooms-1.txt" ]; then
         /^room / { inroom = ($2 == act); R = $4; cx = $5; cy = $6; cz = $7; next }
         inroom && $1 == "win" {
             n++; id[n] = $2; x[n] = $3; y[n] = $4; z[n] = $5;
-            yaw[n] = $6; w[n] = $7; h[n] = $8; ring[n] = $9;
+            yaw[n] = $6; w[n] = $7; h[n] = $8; ring[n] = $9; mv[n] = $10;
         }
         END {
             bad = "";
             if (n < 2) bad = bad "few-windows;";
             for (i = 1; i <= n; i++) {
                 if (ring[i] != 1) bad = bad "not-ring:" id[i] ";";
+                if (mv[i] != 0) continue; // player owns this pose
                 dx = x[i] - cx; dz = z[i] - cz;
                 r = sqrt(dx * dx + dz * dz);
                 if (i == 1) R0 = r; else if (abs(r - R0) > 0.08) bad = bad "radius:" id[i] ";";
@@ -421,6 +461,7 @@ if [ -f "$OUT/rooms-1.txt" ]; then
             }
             for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) {
                 dx = x[i] - x[j]; dy = y[i] - y[j]; dz = z[i] - z[j];
+                if (mv[i] != 0 || mv[j] != 0) continue;
                 d = sqrt(dx * dx + dy * dy + dz * dz);
                 need = (w[i] + w[j]) / 2;
                 if (d < need) bad = bad "overlap:" i "," j ";";
@@ -445,8 +486,12 @@ if [ -f "$OUT/rooms-1.txt" ]; then
         '{n: $n, radius: $radius, ok: $ok, problems: $problems}')"
 
     if [ "$CYCLES" -ge 2 ] && [ -f "$OUT/rooms-2.txt" ]; then
-        room_pose_of "$OUT/rooms-1.txt" > "$OUT/pose-1.txt"
-        room_pose_of "$OUT/rooms-2.txt" > "$OUT/pose-2.txt"
+        cat <(room_moved_ids "$OUT/rooms-1.txt") \
+            <(room_moved_ids "$OUT/rooms-2.txt") | sort -u | tr '\n' ' ' \
+            > "$OUT/moved-ids.txt"
+        skip="$(cat "$OUT/moved-ids.txt")"
+        room_pose_of_unmoved "$skip" "$OUT/rooms-1.txt" > "$OUT/pose-1.txt"
+        room_pose_of_unmoved "$skip" "$OUT/rooms-2.txt" > "$OUT/pose-2.txt"
         if cmp -s "$OUT/pose-1.txt" "$OUT/pose-2.txt"; then
             RING_PERSIST=1
         else
