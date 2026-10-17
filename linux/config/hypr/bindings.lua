@@ -53,17 +53,20 @@ hl.bind(main_mod .. " + ALT + O", hl.dsp.exec_cmd("~/.local/bin/omar-pill-rescue
 -- Alternativa push-to-talk explicita (deshabilitada: conflictúa con el servicio).
 -- hl.bind(main_mod .. " + ALT + P", hl.dsp.exec_cmd("~/.local/bin/omnivoz listen --no-wake --once"))
 
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 3%+ && swayosd-client --output-volume raise"), { repeating = true })
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 3%- && swayosd-client --output-volume lower"), { repeating = true })
-hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle && swayosd-client --output-volume mute-toggle"))
+-- Volumen y brillo usan el OSD del shell (notch negro arriba al centro), no
+-- swayosd. Los scripts de omarchy son los que hablan con wpctl/brightnessctl y
+-- después disparan el OSD con el ícono correcto.
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("omarchy audio output volume +3"), { repeating = true })
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("omarchy audio output volume -3"), { repeating = true })
+hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("omarchy audio output volume mute-toggle"))
 
 hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl pause"), { locked = true })
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })
 hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
 
-hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("brightnessctl set +3% && swayosd-client --brightness raise"), { repeating = true })
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 3%- && swayosd-client --brightness lower"), { repeating = true })
+hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("omarchy brightness display +3%"), { repeating = true })
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("omarchy brightness display 3%-"), { repeating = true })
 
 hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/shot"))
 hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("~/.local/bin/shot full"))

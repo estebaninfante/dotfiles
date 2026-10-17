@@ -1,12 +1,11 @@
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import "OsdModel.js" as OsdModel
 
-// Notch-style OSD: a pure-black slab hanging from the top edge of the screen,
+// Notch-style OSD: a pure-black pill that drops out of the bar line,
 // centered, that springs out of the bezel when the volume (or brightness, mic,
 // media…) changes and retracts as soon as the timer runs out.
 Item {
@@ -28,8 +27,9 @@ Item {
 
   // Geometry. Everything is derived from `reveal` so the whole notch grows as
   // one piece: height, width and content all come out of the same spring.
-  readonly property int notchHeight: Style.space(44)
-  readonly property int notchRadius: Style.space(20)
+  readonly property int topMargin: Style.space(30)
+  readonly property int notchHeight: Style.space(46)
+  readonly property int notchRadius: Style.space(23)
   readonly property int pad: Style.space(18)
   readonly property int gap: Style.space(12)
   readonly property int iconWidth: Style.space(20)
@@ -54,10 +54,13 @@ Item {
 
   Behavior on reveal {
     SpringAnimation {
-      spring: 340
-      damping: 32
+      // Qt reads `damping` as a 0..1 ratio, not as a friction coefficient:
+      // 0.58 is just shy of critical, so the notch overshoots ~8% and settles
+      // in about a quarter of a second.
+      spring: 20
+      damping: 0.58
       mass: 1
-      epsilon: 0.0008
+      epsilon: 0.0005
     }
   }
 
@@ -139,46 +142,24 @@ Item {
     Item {
       id: notch
       anchors.horizontalCenter: parent.horizontalCenter
-      // Flush with the top edge: the notch comes out of the bezel.
+      // Sits right under the bar, in the slot notifications drop into, so the
+      // clock and workspaces stay readable while the volume changes.
       anchors.top: parent.top
-      width: card.width
-      height: card.height
+      anchors.topMargin: root.topMargin
+      width: root.cardWidth
+      height: root.cardHeight
       clip: true
 
-      Shape {
+      // Notch body: a black pill. Growing its height out of a zero-height box
+      // anchored above makes it look like it slides down from behind the bar.
+      Rectangle {
         id: card
+        x: 0
+        y: 0
         width: root.cardWidth
         height: root.cardHeight
-        preferredRendererType: Shape.CurveRenderer
-
-        readonly property real corner: Math.min(root.notchRadius, height / 2)
-
-        ShapePath {
-          strokeWidth: 0
-          fillColor: root.notchColor
-
-          startX: 0
-          startY: 0
-
-          PathLine { x: card.width; y: 0 }
-          PathLine { x: card.width; y: card.height - card.corner }
-          PathArc {
-            x: card.width - card.corner
-            y: card.height
-            radiusX: card.corner
-            radiusY: card.corner
-            direction: PathArc.Clockwise
-          }
-          PathLine { x: card.corner; y: card.height }
-          PathArc {
-            x: 0
-            y: card.height - card.corner
-            radiusX: card.corner
-            radiusY: card.corner
-            direction: PathArc.Clockwise
-          }
-          PathLine { x: 0; y: 0 }
-        }
+        radius: Math.min(root.notchRadius, root.cardHeight / 2)
+        color: root.notchColor
       }
 
       Row {
@@ -213,10 +194,10 @@ Item {
 
             Behavior on width {
               SpringAnimation {
-                spring: 520
-                damping: 42
+                spring: 26
+                damping: 0.72
                 mass: 1
-                epsilon: 0.4
+                epsilon: 0.3
               }
             }
           }

@@ -1,44 +1,53 @@
 #!/bin/bash
 # Sonda de uso por núcleo para eztvn.cpu-heatmap.
-# Muestrea /proc/stat dos veces (separadas unos 200 ms) y calcula el uso de
-# cada CPU lógica a partir del delta. Imprime exactamente una línea JSON:
-#   {"count":24,"cores":[3,12,45,...]}
-# Cada valor es un porcentaje entero 0..100.
+#
+# Antes muestreaba /proc/stat dos veces con `sleep 0.2` en medio: cada refresco
+# costaba ~207 ms de reloj, o sea ~21 % de un núcleo todo el tiempo, sólo
+# durmiendo (medido 2026-10-17). Ahora no duerme: compara contra el snapshot
+# anterior guardado en $XDG_RUNTIME_DIR y calcula el uso en ese intervalo.
+#
+# Imprime exactamente una línea JSON:
+#   {"count":16,"cores":[3,12,45,...]}
+# Cada valor es un porcentaje entero 0..100. La primera invocación (sin estado
+# previo) devuelve count 0 y el widget muestra "CPU calentando…".
 LC_ALL=C
+
+STATE="${XDG_RUNTIME_DIR:-/tmp}/omarchy-cpu-heatmap.state"
 
 snapshot() {
   awk '/^cpu[0-9]+ / {
-    total = $2+$3+$4+$5+$6+$7+$8+$9+$10+$11
-    idle  = $5+$6
-    print total, idle
+    printf "%d %d\n", $2+$3+$4+$5+$6+$7+$8+$9+$10+$11, $5+$6
   }' /proc/stat
 }
 
-mapfile -t first < <(snapshot)
-sleep 0.2
-mapfile -t second < <(snapshot)
+cur="$(snapshot)"
+prev="$(cat "$STATE" 2>/dev/null || true)"
+printf '%s\n' "$cur" >"$STATE" 2>/dev/null || true
 
-n=${#first[@]}
-if (( n == 0 )); then
+if [ -z "$prev" ] || [ -z "$cur" ]; then
   printf '{"count":0,"cores":[]}\n'
   exit 0
 fi
 
-out=""
-for ((i = 0; i < n; i++)); do
-  read -r ta ia <<<"${first[i]}"
-  read -r tb ib <<<"${second[i]}"
-  dt=$((tb - ta))
-  di=$((ib - ia))
-  if (( dt > 0 )); then
-    p=$(( (dt - di) * 100 / dt ))
-    (( p < 0 )) && p=0
-    (( p > 100 )) && p=100
-  else
-    p=0
-  fi
-  if (( i > 0 )); then out+=","; fi
-  out+="$p"
-done
-
-printf '{"count":%d,"cores":[%s]}\n' "$n" "$out"
+printf '%s\n===\n%s\n' "$prev" "$cur" | awk '
+  /^===$/ { mode = 1; next }
+  {
+    if (mode == 0) { pt[++np] = $1; pi[np] = $2 }
+    else           { ct[++nc] = $1; ci[nc] = $2 }
+  }
+  END {
+    if (nc == 0) { print "{\"count\":0,\"cores\":[]}"; exit }
+    out = ""
+    for (i = 1; i <= nc; i++) {
+      p = 0
+      if (i <= np && ct[i] > pt[i]) {
+        dt = ct[i] - pt[i]
+        di = ci[i] - pi[i]
+        p = int((dt - di) * 100 / dt)
+        if (p < 0) p = 0
+        if (p > 100) p = 100
+      }
+      out = out (i > 1 ? "," : "") p
+    }
+    printf "{\"count\":%d,\"cores\":[%s]}\n", nc, out
+  }'
