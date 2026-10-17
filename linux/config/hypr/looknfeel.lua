@@ -55,7 +55,15 @@ hl.config({
 
 hl.config({
     cursor = {
-        no_hardware_cursors = 0
+        -- El cursor no debe desaparecer al quedar quieto.
+        -- hide_on_touch (default true) lo ocultaba cada vez que el ultimo
+        -- input venia de la tablet (Weylus): quedaba invisible hasta mover el
+        -- mouse. inactive_timeout en 0 = nunca por inactividad.
+        -- no_hardware_cursors = 1 (software): el plano de cursor por hardware
+        -- de NVIDIA se pierde cuando la pantalla queda quieta.
+        no_hardware_cursors = 1,
+        hide_on_touch = 0,
+        inactive_timeout = 0
     }
 })
 
