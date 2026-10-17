@@ -125,9 +125,9 @@ trigger = { type = "swipe", hand = "right", direction = "left", min_displacement
 
 
 
-# ── Handy (dictado ↔ texto) con pulgar arriba (mano izquierda) ────────────────
+# ── Dictado (OmniVoz) con pulgar arriba (mano izquierda) ─────────────────────
 [[bindings]]
-name = "handy_toggle"
+name = "dictate"
 modes = ["pc"]
 trigger = { type = "pose", hand = "left", shape = "THUMBS_UP", dwell_ms = 300 }
 

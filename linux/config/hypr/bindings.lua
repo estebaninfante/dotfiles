@@ -77,10 +77,9 @@ hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl -M shift v -m shift -m ctrl"
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh down"))
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { release = true })
 
--- Handy: pasa por handy-dictado para poder parar desde CUALQUIER disparador
--- (Handy ignora la parada si viene de un binding distinto al que arrancó).
--- F7: dictado nativo de OmniVoz (graba, transcribe con Whisper y escribe en la ventana).
--- Antes: handy-dictado/Handy. Ahora dictado nativo por Whisper (OmniVoz).
+-- Dictado nativo de OmniVoz: graba con VAD, transcribe con Whisper y escribe
+-- en la ventana enfocada. Reemplaza a Handy (ya no se usa). SUPER+I es el
+-- atajo principal; F7 queda como alias cómodo.
 hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/omnivoz dictate"))
 
 hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))

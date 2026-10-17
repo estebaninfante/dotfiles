@@ -24,7 +24,6 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("gsettings set org.gnome.desktop.interface color-scheme 'prefer-" .. (theme.mode() == "light" and "light" or "dark") .. "'")
     hl.exec_cmd("urserver --daemon")
     hl.exec_cmd("swayosd-server --top-margin=0.4")
-    hl.exec_cmd("sleep 5 && handy --start-hidden")
 
     if variables.machine == "laptop" then
         hl.exec_cmd("sleep 5 && libinput-gestures-setup start")
