@@ -5,9 +5,10 @@ import Quickshell.Wayland
 import qs.Commons
 import "OsdModel.js" as OsdModel
 
-// Notch-style OSD: a pure-black pill that drops out of the bar line,
-// centered, that springs out of the bezel when the volume (or brightness, mic,
-// media…) changes and retracts as soon as the timer runs out.
+// Notch-style OSD: a pure-black pill centered under the bar — the slot
+// notifications drop into — that springs open when the volume (or brightness,
+// mic, media…) changes and retracts when the timer runs out. It replaces the
+// stock bordered card, which sat at the bottom of the screen.
 Item {
   id: root
 
@@ -20,9 +21,8 @@ Item {
   property bool hasProgress: true
   property int duration: 1200
 
-  readonly property bool mediaOsd: iconKey.indexOf("media") === 0 || iconKey.indexOf("player") === 0
-  // Muted reads as an empty, dimmed bar rather than a full one: the notch
-  // never lies about loudness.
+  // Muted dims the fill instead of hiding it: the notch keeps showing where
+  // the knob sits, but makes clear that nothing is coming out.
   readonly property bool muted: iconKey.indexOf("mute") >= 0 || (hasProgress && value <= 0)
 
   // Geometry. Everything is derived from `reveal` so the whole notch grows as
@@ -71,10 +71,6 @@ Item {
   // Pure black, not the theme's popup colour: a notch should read as a hole in
   // the screen, not as a floating card.
   readonly property color notchColor: "#000000"
-
-  function iconFor(name, percent) {
-    return OsdModel.iconFor(name, percent)
-  }
 
   function show(iconName, rawMessage, rawValue, rawMax, rawProgressText, rawDuration) {
     var next = OsdModel.stateForShow(iconName, rawMessage, rawValue, rawMax, rawProgressText, rawDuration)
@@ -163,6 +159,10 @@ Item {
         height: root.cardHeight
         radius: Math.min(root.notchRadius, root.cardHeight / 2)
         color: root.notchColor
+        // A 8% hairline keeps the pill legible over black wallpapers and black
+        // notifications without turning into a visible border.
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
       }
 
       Row {
