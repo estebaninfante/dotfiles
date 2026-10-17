@@ -66,15 +66,16 @@ index f8c4571..5dafa5c 100644
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_confirm", luaKbConfirm);
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_selectn", luaKbSelectNumber);
 diff --git c/HyprexpoConfig.hpp w/HyprexpoConfig.hpp
-index c3e70c9..5286bfa 100644
+index c3e70c9..97813a3 100644
 --- c/HyprexpoConfig.hpp
 +++ w/HyprexpoConfig.hpp
-@@ -18,6 +18,23 @@ inline constexpr int         LEGACY_ENABLE_KEYBOARD_NAV_DEFAULT  = 1;
+@@ -18,6 +18,24 @@ inline constexpr int         LEGACY_ENABLE_KEYBOARD_NAV_DEFAULT  = 1;
  inline constexpr int         LEGACY_ENABLE_DRAG_MOVE_DEFAULT     = 0;
  inline constexpr int         LEGACY_ANIMATE_ENTRY_DEFAULT        = 0;
  inline constexpr int         WALLPAPER_BG_DEFAULT                = 0;
 +inline constexpr int         TILE_TRANSPARENT_DEFAULT            = 1;
 +inline constexpr int         BACKGROUND_TRANSPARENT_DEFAULT      = 0;
++inline constexpr int         KEEP_LAYERS_DEFAULT                = 0;
 +inline constexpr float       THREED_FISHEYE_DEFAULT              = 0.0f;
 +inline constexpr float       THREED_FISHEYE_POW_DEFAULT          = 2.0f;
 +inline constexpr int         GLASS_GLOW_ENABLE_DEFAULT          = 0;
@@ -93,7 +94,7 @@ index c3e70c9..5286bfa 100644
  inline constexpr std::size_t DYNAMIC_GRID_MAX_TILES              = 64;
  
  inline constexpr int         COLUMNS_DEFAULT                 = 3;
-@@ -31,6 +48,7 @@ inline constexpr const char* WORKSPACE_METHOD_DEFAULT        = "center current";
+@@ -31,6 +49,7 @@ inline constexpr const char* WORKSPACE_METHOD_DEFAULT        = "center current";
  inline constexpr int         SKIP_EMPTY_DEFAULT              = 0;
  inline constexpr int         MAX_WORKSPACE_DEFAULT           = 0;
  inline constexpr int         SHOW_WORKSPACE_NUMBERS_DEFAULT  = 0;
@@ -101,7 +102,7 @@ index c3e70c9..5286bfa 100644
  inline constexpr unsigned    WORKSPACE_NUMBER_COLOR_DEFAULT  = 0xFFFFFFFF;
  inline constexpr int         GESTURE_DISTANCE_DEFAULT        = 200;
  inline constexpr int         GESTURE_FINGERS_DEFAULT         = 0;
-@@ -50,6 +68,7 @@ inline constexpr int         KEYNAV_WRAP_V_DEFAULT           = 1;
+@@ -50,6 +69,7 @@ inline constexpr int         KEYNAV_WRAP_V_DEFAULT           = 1;
  inline constexpr int         KEYNAV_READING_ORDER_DEFAULT    = 0;
  inline constexpr int         BORDER_WIDTH_DEFAULT            = 2;
  inline constexpr const char* BORDER_COLOR_DEFAULT            = "";
@@ -2077,15 +2078,17 @@ index e73c8f6..935d82a 100644
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
 diff --git c/PluginConfig.cpp w/PluginConfig.cpp
-index af2b27a..90e7c37 100644
+index af2b27a..24e5c84 100644
 --- c/PluginConfig.cpp
 +++ w/PluginConfig.cpp
-@@ -42,6 +42,12 @@ void registerHyprexpoConfigValues() {
+@@ -42,6 +42,14 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:enable_drag_move", "legacy drag-move toggle", HyprexpoConfig::LEGACY_ENABLE_DRAG_MOVE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:animate_entry", "legacy entry animation toggle", HyprexpoConfig::LEGACY_ANIMATE_ENTRY_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:wallpaper_bg", "draw the monitor wallpaper behind overview tiles", HyprexpoConfig::WALLPAPER_BG_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:tile_transparent", "capture tiles without wallpaper/bar so the shared background_image shows through", HyprexpoConfig::TILE_TRANSPARENT_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:background_transparent", "skip the overview backdrop so whatever the compositor already drew (wallpaper, animated video) shows through", HyprexpoConfig::BACKGROUND_TRANSPARENT_DEFAULT,
++                                                         Config::Values::SIntValueOptions{.min = 0, .max = 1}));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:keep_layers", "keep TOP and OVERLAY layer surfaces (bar, voice overlays, TTS) visible above the overview", HyprexpoConfig::KEEP_LAYERS_DEFAULT,
 +                                                         Config::Values::SIntValueOptions{.min = 0, .max = 1}));
 +    addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:background_image", "path to an image drawn behind the overview grid (empty = bg_col)", ""));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:background_dim", "darken the background image by this percent (0-100)", 0,
@@ -2093,7 +2096,7 @@ index af2b27a..90e7c37 100644
  
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
-@@ -52,6 +58,39 @@ void registerHyprexpoConfigValues() {
+@@ -52,6 +60,39 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
  
@@ -2133,7 +2136,7 @@ index af2b27a..90e7c37 100644
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
                                                           Config::Values::SIntValueOptions{.min = 0, .max = 9}));
-@@ -80,6 +119,10 @@ void registerHyprexpoConfigValues() {
+@@ -80,6 +121,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_current", "current border color", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_focus", "focus border color", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_hover", "hover border color", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT));
@@ -2158,7 +2161,7 @@ index 66c4f04..7179ea5 100644
 +// little (subtle zoom-out) before flying into the target. 1.0 = normal open.
 +inline float g_peekScale = 1.0f;
 diff --git c/main.cpp w/main.cpp
-index 302ed07..b476c16 100644
+index 302ed07..abe9e34 100644
 --- c/main.cpp
 +++ w/main.cpp
 @@ -6,12 +6,18 @@
@@ -2180,7 +2183,7 @@ index 302ed07..b476c16 100644
  #include <stdexcept>
  #include <string>
  
-@@ -27,13 +33,93 @@ typedef void (*origRenderWorkspace)(void*, PHLMONITOR, PHLWORKSPACE, const Time:
+@@ -27,13 +33,110 @@ typedef void (*origRenderWorkspace)(void*, PHLMONITOR, PHLWORKSPACE, const Time:
  typedef void (*origAddDamageA)(void*, const CBox&);
  typedef void (*origAddDamageB)(void*, const pixman_region32_t*);
  
@@ -2235,7 +2238,10 @@ index 302ed07..b476c16 100644
 +
 +    OV->render();
 +
-+    const float fade        = OV->topLayerFadeAlpha();
++    // keep_layers: deja barra (TOP) y overlays de voz (OVERLAY) siempre visibles
++    // sobre la grilla, sin el fade de apertura/cierre.
++    const bool  keepLayers  = CompatHyprlandAPI::intValue("plugin:hyprexpo:keep_layers") != 0;
++    const float fade        = keepLayers ? 1.F : OV->topLayerFadeAlpha();
 +    auto* const RENDERER    = static_cast<TLayerRenderAccess*>(g_pHyprRenderer.get());
 +
 +    if (CompatHyprlandAPI::intValue("plugin:hyprexpo:background_transparent") != 0) {
@@ -2274,10 +2280,24 @@ index 302ed07..b476c16 100644
 +        if (fade > 0.001F)
 +            RENDERER->renderLayer(LAYER, pMonitor, now);
 +    }
++
++    // El pass del overview se dibuja por encima de las capas normales, asi que
++    // las OVERLAY (pildora de Omar, glow de OmniVoz, TTS) hay que repintarlas a
++    // mano despues de las TOP para que sigan visibles con la grilla abierta.
++    if (keepLayers) {
++        for (auto& w : pMonitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY]) {
++            const auto LAYER = w.lock();
++            if (!LAYER)
++                continue;
++
++            LAYER->alpha()[Desktop::View::LS_ALPHA_FADE]->setValue(1.F);
++            RENDERER->renderLayer(LAYER, pMonitor, now);
++        }
++    }
  }
  
  static void hkAddDamageA(void* thisptr, const CBox& box) {
-@@ -106,9 +192,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+@@ -106,9 +209,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
  
      g_pAddDamageHookA = HyprlandAPI::createFunctionHook(PHANDLE, FNS[0].address, (void*)hkAddDamageA);
  
@@ -2499,10 +2519,10 @@ index 0000000..0456292
 +echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
 +exit 0
 diff --git c/tests/OverviewSourceTests.cpp w/tests/OverviewSourceTests.cpp
-index d2e7572..3cc8ed0 100644
+index d2e7572..72f1011 100644
 --- c/tests/OverviewSourceTests.cpp
 +++ w/tests/OverviewSourceTests.cpp
-@@ -122,6 +122,62 @@ int main() {
+@@ -122,6 +122,67 @@ int main() {
      expect(source.find("if (**PDRAGDROPENABLE && SOURCE)") != std::string::npos && source.find("SOURCE->finishWindowDrag()") != std::string::npos,
             "drag/drop enable configuration gates drag completion");
  
@@ -2553,6 +2573,11 @@ index d2e7572..3cc8ed0 100644
 +               mainSource.find("ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND") != std::string::npos &&
 +               mainSource.find("ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM") != std::string::npos,
 +           "the render hook repaints the background and bottom layer surfaces under a transparent overview");
++    expect(configSource.find("plugin:hyprexpo:keep_layers") != std::string::npos,
++           "keep-layers configuration is registered");
++    expect(mainSource.find("plugin:hyprexpo:keep_layers") != std::string::npos &&
++               mainSource.find("ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY") != std::string::npos,
++           "the render hook repaints overlay layer surfaces so the bar and voice overlays stay visible above the overview");
 +    const auto edgeHelper = extractFunction(source, "bool cursorAtMonitorEdge(const PHLMONITOR& monitor) {");
 +    expect(!edgeHelper.empty(), "edge passthrough helper exists");
 +    expect(edgeHelper.find("edge_passthrough") != std::string::npos,
@@ -2565,7 +2590,7 @@ index d2e7572..3cc8ed0 100644
      const auto dispatchersSource = readFile("Dispatchers.cpp");
      expect(!dispatchersSource.empty(), "Dispatchers.cpp can be read from repo root");
      const auto gestureHeader = readFile("ExpoGesture.hpp");
-@@ -166,9 +222,6 @@ int main() {
+@@ -166,9 +227,6 @@ int main() {
      expect(mainSource.find("if (shouldSelectWorkspaceFromKey(event))\n            info.cancelled = true;") != std::string::npos,
             "raw key events are cancelled only when the mode-specific handler consumes them");
  

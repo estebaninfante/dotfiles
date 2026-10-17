@@ -59,6 +59,12 @@ if ! grep -q "background_transparent" "$SRC/PluginConfig.cpp" || ! grep -q "back
     exit 1
 fi
 
+if ! grep -q "keep_layers" "$SRC/PluginConfig.cpp" || ! grep -q "keep_layers" "$SRC/main.cpp" || ! grep -q "ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY" "$SRC/main.cpp"; then
+    echo "error: el patch perdio keep_layers (barra y overlays de voz visibles sobre el overview)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
 make -C "$SRC" -j"$(nproc)"
 
 sudo install -Dm755 "$SRC/hyprexpo.so" "$INSTALL_SO"

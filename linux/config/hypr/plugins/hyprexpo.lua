@@ -123,6 +123,9 @@ if hl.plugin.hyprexpo ~= nil then
         config.slide_amount = style.slide_amount
         config.animation = "specialWorkspace"
     end
+    if hl.get_config("plugin:hyprexpo:keep_layers") ~= nil then
+        config.keep_layers = 1
+    end
     if hl.get_config("plugin:hyprexpo:block_pointer_lock") ~= nil then
         config.block_pointer_lock = 1
     end
