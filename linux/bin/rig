@@ -1151,14 +1151,24 @@ notify_state_change() {
     bin=$(command -v notify 2>/dev/null) || bin=$(command -v notify-send 2>/dev/null) || return 0
   fi
   [ -n "$bin" ] || return 0
-  local urgency title body
+  local urgency title glyph ticket_title detail body
   if [ "$status" = "done" ]; then
-    urgency="normal"; title="Ticket $key cerrado"
+    urgency="normal"; title="Ticket $key cerrado"; glyph="󰄬"
   else
-    urgency="critical"; title="Ticket $key bloqueado"
+    urgency="critical"; title="Ticket $key bloqueado"; glyph="󰅚"
   fi
-  body="${summary:-$title}"
-  "$bin" -a opencode -u "$urgency" "$title" "$body" >/dev/null 2>&1 || true
+  # Cuerpo legible: el titulo del ticket y el motivo, no el volcado tecnico
+  # del evento (status=..., ticket X -> ...).
+  ticket_title=$(jq -r --arg id "$key" '.tickets[]|select(.id==$id)|.title // ""' "$TICKETS_FILE" 2>/dev/null | head -n1)
+  detail=""
+  case "$summary" in
+    *"evidence="*) detail="${summary#*evidence=}" ;;
+    *"("*")"*)     detail=$(printf '%s' "${summary#*\\(}" | sed 's/)[^)]*$//') ;;
+  esac
+  detail=$(printf '%s' "$detail" | tr -s ' ')
+  body="${ticket_title:-$summary}"
+  [ -n "$detail" ] && body="$body — $detail"
+  "$bin" -a opencode -g "$glyph" -u "$urgency" "$title" "$body" >/dev/null 2>&1 || true
 }
 
 store_lock() {
