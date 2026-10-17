@@ -27,6 +27,11 @@ handy_bin="${HANDY_BIN:-handy}"
 runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 archivo_modo="$runtime/handy-dictado.mode"
 
+# Omar se pausa mientras Handy graba: bandera compartida que lee el loop de voz.
+mic_busy="$runtime/omnivoz/mic-busy"
+mic_busy_on() { mkdir -p "$runtime/omnivoz" 2>/dev/null || true; printf '%s' "$$" > "$mic_busy" 2>/dev/null || true; }
+mic_busy_off() { rm -f "$mic_busy" 2>/dev/null || true; }
+
 accion="${1:-pro}"
 case "$accion" in
     --plain | plain) accion=plain ;;
@@ -40,8 +45,13 @@ esac
 
 if [ "$accion" = cancel ]; then
     rm -f "$archivo_modo" 2>/dev/null || true
+    mic_busy_off
     exec "$handy_bin" --cancel
 fi
+
+# Por defecto, al entrar acá no hay grabación en curso (si la hubiera, el bloque
+# de abajo la frena). Dejamos la bandera limpia salvo que arranquemos una.
+mic_busy_off
 
 # Asegura que la app de Handy esté VIVA antes de mandar el toggle. Si no hay
 # instancia, `handy --toggle-*` arranca la GUI (ventana principal/ajustes) y la
@@ -112,6 +122,8 @@ fi
 
 # No está grabando: arrancar en el modo pedido y recordarlo para poder pararlo.
 rm -f "$archivo_modo" 2>/dev/null || true
+# Avisarle a Omar que el micrófono queda ocupado mientras dure el dictado.
+mic_busy_on
 case "$accion" in
     plain)
         printf 'plain' > "$archivo_modo"
