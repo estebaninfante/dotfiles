@@ -53,7 +53,7 @@ permanente ver §6.
 | C-states | llega a C2/C3 (CC6) | Ya óptimo |
 | **PSR del panel** | **deshabilitado por `amdgpu.dcdebugmask=0x10`** | ~1 W perdidos |
 | **ASPM PCIe** | política `default`; links de iGPU y dGPU **Disabled** | ~0.3–1 W perdidos |
-| **dGPU** | **`active` el 100 % del uptime** (1 053 857 ms activo / 6 938 suspendido) | 4–9 W |
+| **dGPU** | **`active` el 99 % del uptime** (suspendida 13.5 s al arrancar) | ≈8–10 W |
 | Wi-Fi power save | **off** (Omarchy lo fuerza off) | ~0.3–1 W |
 | USB `3-1` ITE Device(8910) (teclado) | `control=on`, nunca suspende | ~1 W |
 | USB `1-2` Wireless Present (dongle 2.4 G) | `control=on`, nunca suspende | ~0.2 W |
@@ -65,15 +65,37 @@ permanente ver §6.
 
 ## 4. Palancas ordenadas por impacto
 
-### 4.1 dGPU encendida siempre — el mayor consumo (≈4–9 W)
+### 4.1 dGPU encendida siempre — el mayor consumo (≈8–10 W estimados)
 
 Es el hallazgo más grande. `runtime_active_time` es igual al uptime: la RTX 4060
 **nunca se suspende**. Motivos:
 
 1. `omnivoz-whisper` (faster-whisper/CUDA) y `kokoro-tts` mantienen **2.2 GB de
    VRAM** reservados constantemente (`nvidia-smi`).
-2. Hyprland, hyprpaper, `ohm-bin` y spotify tienen `/dev/dri/card1` abierto
-   (clientes DRM de la dGPU), lo que mantiene una referencia de runtime-PM.
+2. Hyprland, hyprpaper, swaync, swayosd, `ohm-bin` y spotify tienen
+   `/dev/dri/card1` abierto (clientes DRM de la dGPU), lo que mantiene
+   referencias de runtime-PM.
+
+Evidencia del driver nvidia (610.57.04) con `sudo cat
+/proc/driver/nvidia/gpus/0000:01:00.0/power`:
+
+```
+Runtime D3 status:          Enabled (fine-grained)
+Video Memory:               Active
+```
+
+y de `/proc/driver/nvidia/params`:
+
+```
+DynamicPowerManagement: 3
+DynamicPowerManagementVideoMemoryThreshold: 200      <- 200 MB
+```
+
+El punto clave: **`DynamicPowerManagementVideoMemoryThreshold=200` MB significa
+que cualquier proceso con más de 200 MB de VRAM asignada impide que la dGPU se
+apague**. Whisper (1086 MB) y Kokoro (1158 MB) están muy por encima, así que son
+*exactamente* lo que bloquea el ahorro. La opción 'de sacar el runtime-PM' no
+alcanza mientras esos dos servicios estén cargados.
 
 El foro de Arch documenta el mismo síntoma en una Legion Slim 5 gen 9
 (8845HS + 4060): **pasa de ~14 W a ~25 W** cuando la dGPU queda encendida, y la
@@ -90,9 +112,11 @@ Opciones, de menos a más agresiva:
 
 | Opción | Ahorro | Costo |
 |---|---|---|
-| Dejar que suspenda sola: que whisper/kokoro usen CPU/iGPU en batería, y no exponer `card1` al compositor (`AQ_DRM_DEVICES=/dev/dri/card2`) | 4–9 W | Hay que tocar los servicios de voz |
-| `acpi_call _OFF` al pasar a batería con la dGPU libre | 4–9 W | **Irreversible hasta reiniciar** (esta BIOS no expone `_ON`); rompe whisper/kokoro |
-| `udev` que hace `remove` del dispositivo NVIDIA | 4–9 W | Igual de irreversible; molesta para jugar |
+| Que whisper/kokoro/ollama corran en **CPU/iGPU cuando hay batería** (los tres son los que abren CUDA) | 8–10 W | Hay que tocar los servicios (mayor latencia en STT/TTS) |
+| Subir `NVreg_DynamicPowerManagementVideoMemoryThreshold` por encima de 2 GB | 8–10 W | El propio driver usa ese umbral porque guardar/restaurar esa VRAM es caro; riesgo de artifacts/cuelgues |
+| No exponer `card1` al compositor (`AQ_DRM_DEVICES=/dev/dri/card2`) | ayuda parcial | No alcanza solo: spotify/ohm/swaync lo abren por su cuenta |
+| `acpi_call _OFF` al pasar a batería | 8–10 W | **Irreversible hasta reiniciar** (esta BIOS no expone `_ON`); rompe whisper/kokoro |
+| `udev` que hace `remove` del dispositivo NVIDIA | 8–10 W | Igual de irreversible; molesta para jugar |
 
 Con `echo '_SB.PCI0.GPP0.PG00._ON'` se puede comprobar si la BIOS expone el
 encendido; si no, `_OFF` es un viaje de ida.
@@ -266,7 +290,58 @@ Estados esperados:
 - dGPU: `auto` (y `suspended` cuando nadie la usa)
 - PSR: sigue bloqueado a propósito
 
-## 7. Fuentes
+## 7. Conclusión: ¿se puede bajar de 20 W?
+
+Estimación del piso en reposo, juntando lo medido y las fuentes.
+
+**Medición del 2026-10-17 04:30** (batería, dGPU despierta, sesión de usuario
+arriba con ~8 servicios y agentes corriendo, 150 s de muestreo):
+
+| Métrica | Valor |
+|---|---|
+| Batería min / max | **29.9 W** / 40.3 W |
+| PPT del APU min / max | **7.3 W** / 23.7 W |
+| %CPU busy | 18–33 % |
+| dGPU | activa el 99 % del uptime (suspendida solo 13.5 s, al arrancar) |
+
+O sea: el paquete del APU baja a ~7 W, pero el sistema sigue en ~30 W. La
+diferencia (~22 W) es dGPU + panel + NVMe + RAM + Wi-Fi + USB + pérdidas. Si la
+dGPU se lleva ~8–10 W (el `nvidia-smi` de 4 W es **solo el die**; hay que sumar
+GDDR, link y VRM), el resto (~12 W) es panel y periféricos.
+
+Desglose estimado del piso:
+
+| Componente | Reposo | Nota |
+|---|---|---|
+| Paquete APU (PPT) | 5–7 W | medido 7.3 W como mínimo |
+| dGPU | **0 W si suspende, 8–10 W si no** | es la variable que decide todo (§4.1) |
+| Panel 2880x1800 @60 Hz, brillo 50 % | 3–5 W | el brillo es carísimo (14.6 W a brillo alto en el foro) |
+| NVMe + Wi-Fi + RAM + USB | 3–4 W | |
+| Pérdidas de VRM/batería | ~10–15 % | |
+| **Total** | **≈ 12–16 W sin la dGPU · ≈ 22–26 W con la dGPU** | |
+
+O sea: **sí, <20 W es alcanzable**, pero el resultado depende casi por completo
+de la dGPU. Lo del kernel (ASPM, watchdog, etc.) ya está aplicado y es la parte
+fácil; lo que falta es dejar que la RTX 4060 se duerma.
+
+En un arranque **antes de la sesión de usuario** la dGPU está ociosa (de hecho
+se suspendió 13.5 s al arrancar y la despertó la sesión), así que el número
+debería salir cerca de 12–16 W. Con la sesión arriba y los servicios de IA
+cargados, la dGPU se queda encendida y el total queda en 22–26 W aunque no se
+haga nada. `power-idle-bench.sh` da el número real en cada arranque.
+
+Los tres caminos concretos, en orden de menor a mayor esfuerzo:
+
+1. **No arrancar los servicios CUDA en batería** (`omnivoz-whisper`,
+   `kokoro-tts`, `ollama`) y dejarlos a demanda. Libera la dGPU → −8 a −10 W.
+   El rango es estimado: lo medido es el sistema *con* la dGPU despierta
+   (~30 W de piso), y el foro mide 11 W de salto en el mismo caso.
+2. **No usar Spotify/ohm en batería**: spotify se midió a >200 % de CPU en
+   reposo y es cliente de la dGPU.
+3. **`gpu-mode.sh`/`acpi_call _OFF`** al pasar a batería si se acepta que la
+   dGPU queda apagada hasta reiniciar.
+
+## 8. Fuentes
 
 - `amdgpu.dcdebugmask=0x10` = `DC_DISABLE_PSR`:
   https://knowledgebase.frame.work/en_us/psr-display-flicker-workaround-for-linux-SJTKb7VMl
