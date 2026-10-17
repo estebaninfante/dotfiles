@@ -249,6 +249,90 @@ ASPM/PSR/curva de ventiladores. Actualizar requiere Windows temporal o
 `fwupd` + `.cab` convertido. **No verificado cuál es la última versión** (el
 sitio de Lenovo devolvió 403 desde acá).
 
+## 4.12 Medición: GPU vs CPU para whisper y kokoro
+
+Medido en esta máquina el 2026-10-17 (audio de prueba: 5 s y 16 s de voz en
+español; whisper `large-v3-turbo` en CUDA `int8_float16` vs CPU `int8`, beam 1
+y los mismos parámetros que usa `whisper-server.py`):
+
+| | GPU (RTX 4060) | CPU (7840HS) | factor |
+|---|---|---|---|
+| **Whisper** 5 s de audio | 0.28–0.40 s | **5.1–5.7 s** | ~14x |
+| **Whisper** 16 s de audio | 0.38–0.40 s | 5.4–5.9 s | ~14x |
+| **Kokoro** frase corta (2 s de audio) | 0.05–0.13 s | 0.35–0.45 s | ~5x |
+| **Kokoro** respuesta media (4 s de audio) | 0.07–0.08 s | 0.68–0.98 s | ~10x |
+
+Dato clave: **whisper tarda lo mismo con 5 s que con 16 s de audio**, porque
+siempre procesa una ventana de 30 s. O sea que en CPU el costo es **~5 s fijos
+por frase**, no proporcional al largo. Para dictado interactivo eso es inviable;
+en GPU es ~0.3 s constante (imperceptible).
+
+Kokoro en CPU, en cambio, es perfectamente usable: ~0.4 s para una frase corta y
+~0.8 s para una respuesta media, siempre por debajo del tiempo de reproducción.
+
+**Consecuencia práctica**: mover kokoro a CPU no ahorra nada mientras whisper
+siga en la dGPU (cualquier contexto CUDA de más de 200 MB la mantiene
+encendida). Para recuperar los ~8-10 W tiene que salir whisper, y eso cuesta
+~5 s por frase. No hay almuerzo gratis.
+
+Aparte: hay **dos servidores Kokoro corriendo a la vez**, uno con torch CPU
+(`kokoro-venv`, el de speech-dispatcher / Read Aloud) y otro con torch CUDA
+(`venv-kokoro`, el del agente de voz). Son el mismo modelo duplicado en RAM más
+un contexto CUDA extra (1.5 GB de VRAM). Unificarlos ahorra RAM (que acá
+escalsea) y una GPU menos ocupada.
+
+## 4.13 Probado y descartado: topear la frecuencia y apagar el boost
+
+Idea típica de "eficiencia tipo ARM": bajar el techo de frecuencia. **En esta
+máquina no funciona**. Medido con `openssl speed -multi 16 sha256`:
+
+| Config | Throughput | Pico de batería |
+|---|---|---|
+| Stock (boost=1, max 3.8 GHz) | 22.7 M ops/s | 61.2 W |
+| Cap 2.4 GHz + boost=0 | **13.5 M ops/s** (−41 %) | 62.0 W (igual) |
+
+El paquete ya está limitado por potencia (`platform_profile=low-power`), así que
+bajar la frecuencia sólo quita rendimiento **sin bajar el consumo**. Revertido a
+stock. (Cap distinto: en carga liviana sí evita picos de 3.8 GHz, pero eso es un
+intercambio de latencia, no un ahorro demostrable acá.)
+
+## 4.14 Probado: sched_ext con `scx_lavd` (el "ARM-like" de verdad)
+
+`sched_ext` está compilado (`CONFIG_SCHED_CLASS_EXT=y`) y el paquete
+`extra/scx-scheds 1.1.3-2` trae `scx_lavd`, el scheduler pensado para
+latencia + potencia: compacta tareas en pocas CPU para que el resto duerma (el
+análogo software del big.LITTLE de ARM). Tiene `--autopower`, que toma el modo
+(powersave/balanced/performance) del perfil de power-profiles-daemon.
+
+Probado con `scx_lavd --autopower` (quedó en powersave modo, como corresponde a
+`power-saver`):
+
+| | busy medio | núcleos <10 % busy | tiempo en C2+C3 | PPT mediana |
+|---|---|---|---|---|
+| scx_lavd powersave | 36.7 % | 0/16 | 48.8 % | 20.2 W |
+| EEVDF (stock) | 29.9 % | 0/16 | 59.1 % | 11.9 W |
+
+La diferencia sigue a la carga (36.7 vs 29.9 % de busy), no al scheduler: con
+todo el stack de agentes arriba **ningún núcleo queda por debajo del 10 %**, así
+que no hay nada que compactar y `scx_lavd` no puede mostrar su ventaja.
+Conclusión: no se gana nada *con esta carga*; queda instalado y **deshabilitado**
+(EEVDF). Vale la pena reevaluarlo en un arranque limpio o con los agentes
+parados.
+
+## 4.15 El medidor de CPU de la barra costaba 207 ms por refresco
+
+El widget `eztvn.cpu-heatmap` corría `bash + 2×awk + sleep 0.2` en cada refresco
+(1/s): **207 ms de reloj por refresco**, o sea 3 procesos vivos el 20 % del
+tiempo. Reescrito `plugins/eztvn.cpu-heatmap/cpu.sh` para comparar contra el
+snapshot anterior guardado en `$XDG_RUNTIME_DIR`, sin sleeps:
+**207 ms → 6 ms** por refresco (34x), mismo JSON.
+
+Ojo con la interpretación: `sleep` no consume CPU, así que el ahorro real medido
+en quickshell es chico (1.7 % → 1.2 % de un núcleo). Lo que se elimina es una
+cadena de 3 forks/segundo y 200 ms de latencia por refresco. Si se quiere ir más
+lejos con el costo gráfico, lo caro son las `ColorAnimation`/`NumberAnimation`
+de 280 ms por celda (16 celdas) y el `MultiEffect` de blur del glow.
+
 ## 5. Qué se aplicó automáticamente
 
 En `linux/bin/battery-power-guard.sh` (corre en cada boot y en cada cambio de
@@ -261,6 +345,13 @@ fuente, como root):
   apagado por defecto por los picos de latencia.
 - (lo que ya hacía) perfil `power-saver`, dGPU `power/control=auto`,
   syncthing off, brillo ≤50 %.
+
+Fuera del guard, también quedó aplicado:
+
+- `plugins/eztvn.cpu-heatmap/cpu.sh` reescrito sin `sleep 0.2` (§4.15): 207 ms →
+  6 ms por refresco.
+- `scx-scheds` instalado (no habilitado): `scx_lavd` disponible para cuando la
+  carga baje (§4.14).
 
 Y en los params de arranque de Limine (requieren **reinicio** y quedan fuera del
 repo, porque Omarchy administra `/etc/default/limine`):
@@ -306,7 +397,7 @@ arriba con ~8 servicios y agentes corriendo, 150 s de muestreo):
 
 O sea: el paquete del APU baja a ~7 W, pero el sistema sigue en ~30 W. La
 diferencia (~22 W) es dGPU + panel + NVMe + RAM + Wi-Fi + USB + pérdidas. Si la
-dGPU se lleva ~8–10 W (el `nvidia-smi` de 4 W es **solo el die**; hay que sumar
+dGPU se lleva ~8–10 W (el `nvidia-smi` de ~5 W es **solo el die**; hay que sumar
 GDDR, link y VRM), el resto (~12 W) es panel y periféricos.
 
 Desglose estimado del piso:
@@ -341,7 +432,27 @@ Los tres caminos concretos, en orden de menor a mayor esfuerzo:
 3. **`gpu-mode.sh`/`acpi_call _OFF`** al pasar a batería si se acepta que la
    dGPU queda apagada hasta reiniciar.
 
-## 8. Fuentes
+## 8. Dónde se va la CPU (medido)
+
+Ranking por proceso, ventana de 10 s, sumando procesos con el mismo nombre:
+
+| Proceso | % de un núcleo | Qué es |
+|---|---|---|
+| `pi` (×4–5) | **124–127 %** | sesiones de agente abiertas a la vez |
+| `brave` | **69–137 %** | navegador (varios procesos sumados) |
+| `rustc` | 99 % | compilación puntual |
+| `tmux: server` | 7–87 % | paneles de agente |
+| `spotify` | 24–54 % | cliente Electron |
+| `quickshell` | 1–20 % | barra / shell de Omarchy |
+| `node-MainThread` | 12–25 % | `omnivoz-listen` (wake word) |
+| `Hyprland`, `kitty`, `bun`, `opencode` | 2–11 % c/u | compositor y terminales |
+| `wireplumber` + `pipewire` + `pipewire-pulse` | ~10 % | audio: el micrófono está abierto 24/7 por el wake word |
+
+Dos fotos concretas: con load 8.9 → **3.1 núcleos** ocupados (76 % idle); con
+load 13.4 → **7.0 núcleos** ocupados (49 % idle). En ninguna sobra CPU: el gasto
+es el stack propio, no el kernel.
+
+## 9. Fuentes
 
 - `amdgpu.dcdebugmask=0x10` = `DC_DISABLE_PSR`:
   https://knowledgebase.frame.work/en_us/psr-display-flicker-workaround-for-linux-SJTKb7VMl
