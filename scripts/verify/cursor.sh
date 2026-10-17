@@ -54,6 +54,23 @@ else
     fi
 fi
 
+# --- Hyprland: nada que lo esconda con la tablet ni por quietud -----------
+if [ -f "$LOOKNFEEL" ]; then
+    if grep -qE '^[[:space:]]*hide_on_touch[[:space:]]*=[[:space:]]*(0|false)' "$LOOKNFEEL"; then
+        ok "looknfeel.lua: hide_on_touch apagado"
+    else
+        fail "looknfeel.lua sin 'hide_on_touch = 0' (Weylus manda touch: el cursor se esconde)"
+    fi
+    if command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1; then
+        v="$(hyprctl getoption cursor:hide_on_touch 2>/dev/null | awk 'NR==1{print $NF}')"
+        [ "$v" = "false" ] && ok "hyprctl cursor:hide_on_touch = false" \
+            || fail "hyprctl cursor:hide_on_touch = $v (falta 'hyprctl reload')"
+        v="$(hyprctl getoption cursor:hide_on_key_press 2>/dev/null | awk 'NR==1{print $NF}')"
+        [ "$v" = "false" ] && ok "hyprctl cursor:hide_on_key_press = false" \
+            || fail "hyprctl cursor:hide_on_key_press = $v"
+    fi
+fi
+
 if [ "$fails" = 0 ]; then
     [ "$QUIET" = 1 ] || echo "PASS cursor"
     exit 0
