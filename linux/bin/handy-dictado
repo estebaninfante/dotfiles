@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# handy-dictado — alterna el dictado de Handy desde CUALQUIER disparador.
+#
+# Por qué existe:
+#   Handy sólo acepta la orden de parada si viene del MISMO binding con el que
+#   arrancó la grabación. Si llega otra (por ejemplo: arrancaste con el botón
+#   "Dictado" del celular = --toggle-transcription y querés parar con Súper+I =
+#   --toggle-post-process), Handy la ignora con el log "another binding is
+#   recording" y el dictado queda prendido: sólo lo para el mismo botón que lo
+#   arrancó.
+#
+#   Este wrapper mira qué binding está grabando ahora (según el log de Handy) y
+#   manda el toggle que corresponde. Si Handy no está grabando, arranca en el
+#   modo pedido. Así cualquier disparador (teclado, celular/tablet, control de
+#   presentaciones, gestos) sirve tanto para arrancar como para parar.
+#
+# Uso:
+#   handy-dictado            arranca con post-procesado (igual que F7 / Súper+I)
+#   handy-dictado plain      arranca sin post-procesado
+#   handy-dictado pro        arranca con post-procesado
+#   handy-dictado cancel     cancela y descarta la grabación en curso
+#
+# Variables (para tests): HANDY_BIN, HANDY_DATA_HOME.
+set -uo pipefail
+
+handy_bin="${HANDY_BIN:-handy}"
+data_home="${HANDY_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}}"
+log="$data_home/com.pais.handy/logs/handy.log"
+
+accion="${1:-pro}"
+case "$accion" in
+    --plain | plain) accion=plain ;;
+    --pro | pro | "") accion=pro ;;
+    --cancel | cancel) accion=cancel ;;
+    *)
+        printf 'handy-dictado: modo desconocido: %s\n' "$accion" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$accion" = cancel ]; then
+    exec "$handy_bin" --cancel
+fi
+
+# ¿Qué binding está grabando? Se deduce del log de Handy: la última llamada a
+# start/stop (o una cancelación) dice el estado.
+grabando=""
+if [ -r "$log" ]; then
+    ultimo="$(grep -aE \
+        'TranscribeAction::start called for binding: |TranscribeAction::stop called for binding: |Operation cancellation completed' \
+        "$log" 2>/dev/null | tail -n 1 || true)"
+    if [[ "$ultimo" =~ start\ called\ for\ binding:\ (transcribe_with_post_process|transcribe) ]]; then
+        grabando="${BASH_REMATCH[1]}"
+    fi
+fi
+
+if [ -n "$grabando" ]; then
+    # Está grabando: parar con el binding que realmente empezó la grabación.
+    case "$grabando" in
+        transcribe_with_post_process) exec "$handy_bin" --toggle-post-process ;;
+        *) exec "$handy_bin" --toggle-transcription ;;
+    esac
+fi
+
+# No está grabando: arrancar en el modo pedido.
+case "$accion" in
+    plain) exec "$handy_bin" --toggle-transcription ;;
+    *) exec "$handy_bin" --toggle-post-process ;;
+esac
