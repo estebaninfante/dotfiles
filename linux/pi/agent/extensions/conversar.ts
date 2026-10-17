@@ -11,9 +11,14 @@
  *     (`voice send --agent <nombre>`) y serializa varios agentes.
  *
  *  2. Subtítulos de trabajo: mientras el modelo piensa, un widget de la UI
- *     muestra hace cuánto trabaja, cuál fue el último pedido del usuario y el
- *     pensamiento en vivo en trozos legibles. Así el usuario puede seguirle el
- *     paso sin depender de la voz.
+ *     muestra, en una sola fila, el agente y la tarea que está haciendo (con
+ *     el id que le puso `rig.ts`), hace cuánto trabaja y el pensamiento en
+ *     vivo en trozos legibles. Así el usuario puede seguirle el paso sin
+ *     depender de la voz.
+ *
+ *     El widget es el ÚNICO visor del pensamiento en vivo: el bloque nativo de
+ *     pi se oculta con `hideThinkingBlock` (Ctrl+T lo muestra cuando haga
+ *     falta), para no leer lo mismo dos veces.
  *
  * El bus vive en ~/developing/voz-agentes/agente (configurable con PI_AGENTE_BIN).
  * El nombre del agente (que decide su voz) sale de PI_VOICE_AGENT (default "pi").
@@ -21,13 +26,16 @@
  * El widget de latido muestra, mientras el modelo trabaja:
  *   - Hace cuánto piensa: por turno y acumulado de la sesión, en horas,
  *     minutos y segundos según corresponda.
- *   - El último pedido del usuario (para no perder de vista el objetivo);
- *     queda a la vista también cuando el modelo termina.
+ *   - El agente y su tarea (título + id) en una sola fila, para ver de un
+ *     vistazo en qué anda cada terminal.
  *   - Los subtítulos del pensamiento: se toma una oración corta y se deja fija
  *     en pantalla; se ilumina palabra por palabra al ritmo de lectura. El
  *     párrafo no se mueve ni cambia: recién cuando se termina de iluminar
  *     entra el siguiente. Si el modelo piensa mucho más rápido de lo que se
- *     puede leer, se descartan las oraciones más viejas para no quedar atrasado.
+ *     puede leer, el ritmo acelera un poco y, si aun así sobra cola, se
+ *     descartan las oraciones más viejas para no quedar atrasado.
+ *   - El código se saca de los subtítulos (bloques e inline), y los fragmentos
+ *     que quedan partidos se descartan en vez de mostrarse rotos.
  *
  * Nombre del agente: decide su voz, su rol, su color y a quién le hablás. Se
  * resuelve solo y se registra en el panel de tmux, así cada agente que abrís ya
@@ -49,10 +57,13 @@
  *   PI_VOICE_AGENT       fuerza el nombre/voz del agente
  *   PI_LATIDO=0          apaga el latido
  *   PI_LATIDO_LINES      oraciones visibles a la vez (default 3)
- *   PI_LATIDO_PARAGRAPH_WORDS  palabras tope por oración (default 24)
- *   PI_LATIDO_WORD_MS    ritmo de lectura, ms por palabra (default 220)
- *   PI_LATIDO_BACKLOG    máximo de palabras en espera antes de descartar (default 200)
- *   PI_LATIDO_PROMPT_CHARS  largo máximo del pedido mostrado (default 96)
+ *   PI_LATIDO_PARAGRAPH_WORDS  palabras tope por oración (default 28)
+ *   PI_LATIDO_WORD_MS    ritmo de lectura, ms por palabra (default 150)
+ *   PI_LATIDO_FAST_WORD_MS  ritmo acelerado cuando hay cola (default 100)
+ *   PI_LATIDO_CATCHUP    palabras de cola que activan el ritmo rápido (default 40)
+ *   PI_LATIDO_BACKLOG    máximo de palabras en espera antes de descartar (default 90)
+ *   PI_LATIDO_TITLE_CHARS  largo máximo del título de tarea (default 52)
+ *   PI_LATIDO_PROMPT_CHARS  largo máximo del pedido de respaldo (default 96)
  */
 
 import { execFileSync, spawn } from "node:child_process";
@@ -60,6 +71,13 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import {
+  esCodigo,
+  formatoDuracion,
+  limpiarPensamiento,
+  oracionUtil,
+  recortar,
+} from "./lib/pensamiento.ts";
 
 const HOME = process.env.HOME ?? "";
 const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/agente`;
@@ -312,7 +330,10 @@ interface LatidoConfig {
   lines: number;
   paragraphWords: number;
   wordMs: number;
+  fastWordMs: number;
+  catchup: number;
   backlog: number;
+  titleChars: number;
   promptChars: number;
 }
 
@@ -332,11 +353,19 @@ function readLatidoConfig(): LatidoConfig {
     /* sin archivo: quedan los valores por defecto */
   }
   const env = process.env;
+  const wordMs = Math.max(60, num(env.PI_LATIDO_WORD_MS ?? file.wordMs, 150));
+  const backlog = Math.max(24, num(env.PI_LATIDO_BACKLOG ?? file.backlog, 90));
   return {
     lines: Math.min(8, Math.max(1, num(env.PI_LATIDO_LINES ?? file.lines, 3))),
-    paragraphWords: Math.max(6, num(env.PI_LATIDO_PARAGRAPH_WORDS ?? file.paragraphWords, 24)),
-    wordMs: Math.max(80, num(env.PI_LATIDO_WORD_MS ?? file.wordMs, 220)),
-    backlog: Math.max(24, num(env.PI_LATIDO_BACKLOG ?? file.backlog, 200)),
+    paragraphWords: Math.max(6, num(env.PI_LATIDO_PARAGRAPH_WORDS ?? file.paragraphWords, 28)),
+    wordMs,
+    fastWordMs: Math.min(
+      wordMs,
+      Math.max(55, num(env.PI_LATIDO_FAST_WORD_MS ?? file.fastWordMs, 100)),
+    ),
+    catchup: Math.max(8, num(env.PI_LATIDO_CATCHUP ?? file.catchup, 40)),
+    backlog,
+    titleChars: Math.max(20, num(env.PI_LATIDO_TITLE_CHARS ?? file.titleChars, 52)),
     promptChars: Math.max(20, num(env.PI_LATIDO_PROMPT_CHARS ?? file.promptChars, 96)),
   };
 }
@@ -436,12 +465,17 @@ export default function (pi: ExtensionAPI) {
     ui?: {
       setStatus?: (k: string, v?: string) => void;
       setWidget?: (k: string, v?: string[]) => void;
+      setTitle?: (title: string) => void;
       theme?: {
         style?: (text: string, options: Record<string, unknown>) => string;
         fg?: (token: string, text: string) => string;
       };
     };
   } | undefined;
+
+  // Tarea actual: la crea `rig.ts` y la anuncia por `rig:tarea`. Acá solo se
+  // muestra (agente × título · id) para saber de un vistazo en qué anda.
+  let tareaActual: { id: string; titulo: string; estado?: string } | undefined;
 
   // Subtítulos del pensamiento: se acumula el texto que llega, se corta por
   // oración y se muestra una oración fija; la iluminación avanza palabra por
@@ -455,7 +489,11 @@ export default function (pi: ExtensionAPI) {
   let lastRender = 0;
   let lastRenderedKey = "";
   let lastBeatLog = 0;
-  let lastPrompt = ""; // último pedido del usuario, para recordar el objetivo
+  let lastTitle = ""; // último título de ventana publicado
+  let lastChunkAt = 0; // último delta de pensamiento recibido
+  let enFence = false; // el stream está dentro de un bloque ``` (se descarta)
+  let saltarLinea = false; // descartar el resto de la línea tras abrir un fence
+  let lastPrompt = ""; // último pedido del usuario, de respaldo si no hay tarea
   let sessionThinkingMs = 0; // acumulado de la sesión
   let lastTurnMs = 0; // duración del último turno
 
@@ -473,11 +511,7 @@ export default function (pi: ExtensionAPI) {
 
   /** Recorta por caracteres respetando el límite de palabra. */
   function truncateWords(text: string, max: number): string {
-    const t = cleanText(text);
-    if (t.length <= max) return t;
-    const cut = t.slice(0, max);
-    const sp = cut.lastIndexOf(" ");
-    return `${(sp > max * 0.5 ? cut.slice(0, sp) : cut).trimEnd()}…`;
+    return recortar(cleanText(text), max);
   }
 
   /** Último pedido del usuario leído de la sesión (para restaurar al reanudar). */
@@ -518,32 +552,17 @@ export default function (pi: ExtensionAPI) {
     return cleanText(text).split(/\s+/).filter(Boolean);
   }
 
-  /** Quita código (bloques ``` e inline `) para que los subtítulos muestren la
-   *  secuencia de pensamiento entendible, no el código. */
-  function stripCode(text: string): string {
-    let t = text.replace(/```[\s\S]*?```/g, " ");
-    const open = t.indexOf("```");
-    if (open >= 0) t = t.slice(0, open);
-    return t.replace(/`[^`]*`/g, " ");
-  }
-
-  /** Heurística: ¿la oración es más código que prosa? */
-  function isCodeLike(sentence: string): boolean {
-    const s = sentence.trim();
-    if (!s) return true;
-    const codeChars = (s.match(/[{}<>[\]()=;:+*/\\|_$#@~^]/g) ?? []).length;
-    if (codeChars / s.length > 0.16) return true;
-    return /(=>|::|\(\)|\{\}|\b(const|import|export|function|return|class|def|npm|pnpm|sudo|curl)\b|<\/?[a-z]+>)/i.test(
-      s,
-    );
-  }
-
-  /** Encola una oración; si el atraso crece, descarta las más viejas. */
+  /** Encola una oración; si el atraso crece, descarta las más viejas. También
+   *  ignora fragmentos de código, oraciones partidas y repeticiones. */
   function pushParagraph(text: string): void {
-    const clean = cleanText(stripCode(text));
-    if (isCodeLike(clean)) return;
+    const clean = cleanText(text);
+    if (!clean || esCodigo(clean) || !oracionUtil(clean)) return;
     const w = words(clean);
     if (!w.length) return;
+    const ya = (p: string[]) => p.join(" ").toLowerCase();
+    const ultima = paragraphs[paragraphs.length - 1];
+    if (ultima && ya(ultima) === ya(w)) return;
+    if (current && ya(current) === ya(w) && currentIndex < current.length) return;
     paragraphs.push(w);
     let total = paragraphs.reduce((n, p) => n + p.length, 0);
     while (paragraphs.length > 1 && total > CFG.backlog) {
@@ -553,23 +572,86 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  /** Acumula el pensamiento y cierra oraciones al ritmo en que aparecen. */
+  /** Posición del final de la palabra número `n` dentro de `text` (para cortar
+   *  sin romper palabras ni sumar caracteres invisibles). */
+  function finDePalabra(text: string, n: number): number {
+    const re = /\S+/g;
+    let m: RegExpExecArray | null;
+    let i = 0;
+    while ((m = re.exec(text))) {
+      if (++i >= n) return m.index + m[0].length;
+    }
+    return text.length;
+  }
+
+  /** Sin puntuación durante demasiado tiempo: corta en una coma o punto y coma
+   *  cercano al tope, para no partir una frase por la mitad de una palabra. */
+  function cortarSinPuntuacion(): string | null {
+    if (words(sentenceBuf).length < CFG.paragraphWords) return null;
+    const fin = finDePalabra(sentenceBuf, CFG.paragraphWords);
+    const ventana = sentenceBuf.slice(0, fin);
+    const cortes = [", ", "; ", ": ", " — ", " – "]
+      .map((sep) => ventana.lastIndexOf(sep))
+      .filter((i) => i > ventana.length * 0.45);
+    const corte = cortes.length ? Math.max(...cortes) + 1 : -1;
+    if (corte > 0) {
+      const trozo = sentenceBuf.slice(0, corte).trim();
+      sentenceBuf = sentenceBuf.slice(corte).trimStart();
+      return trozo;
+    }
+    const trozo = sentenceBuf.slice(0, fin).trim();
+    sentenceBuf = sentenceBuf.slice(fin).trimStart();
+    return trozo;
+  }
+
+  /** Saca los bloques ``` y ~~~ aunque vengan partidos en varios deltas. Si
+   *  solo llegó media cerca, se descarta hasta que cierre. */
+  function quitarFences(chunk: string): string {
+    let out = "";
+    for (let i = 0; i < chunk.length; ) {
+      if (saltarLinea) {
+        const nl = chunk.indexOf("\n", i);
+        if (nl < 0) return out;
+        i = nl + 1;
+        saltarLinea = false;
+        continue;
+      }
+      if (chunk.startsWith("```", i) || chunk.startsWith("~~~", i)) {
+        enFence = !enFence;
+        i += 3;
+        if (enFence) saltarLinea = true; // el lenguaje ("ts") no se muestra
+        continue;
+      }
+      if (enFence) {
+        i++;
+        continue;
+      }
+      out += chunk[i++];
+    }
+    return out;
+  }
+
+  /** Acumula el pensamiento y cierra oraciones al ritmo en que aparecen.
+   *  Los saltos de línea también cierran oración: el pensamiento suele venir
+   *  en párrafos cortos y así no se mezclan dos ideas en una línea. */
   function feedThinking(chunk: string): void {
     if (!chunk) return;
-    sentenceBuf = stripCode(sentenceBuf + chunk);
+    lastChunkAt = Date.now();
+    const visible = quitarFences(chunk);
+    if (!visible) return;
+    sentenceBuf = limpiarPensamiento(sentenceBuf + visible)
+      .replace(/\n+/g, ". ")
+      .replace(/\s+/g, " ");
     for (;;) {
-      const m = /^(.*?[.!?…\n])(\s+|$)/s.exec(sentenceBuf);
+      // Ojo: "…" no cierra oración; también es el reemplazo de código inline.
+      const m = /^(.*?[.!?])(\s+|$)/s.exec(sentenceBuf);
       if (!m) break;
-      const sentence = m[1].replace(/\n/g, " ");
+      const sentence = m[1];
       sentenceBuf = sentenceBuf.slice(m[0].length);
       pushParagraph(sentence);
     }
-    // sin puntuación durante demasiado tiempo: cortamos por cantidad de palabras
-    const pending = words(sentenceBuf);
-    if (pending.length >= CFG.paragraphWords) {
-      pushParagraph(pending.slice(0, CFG.paragraphWords).join(" "));
-      sentenceBuf = pending.slice(CFG.paragraphWords).join(" ");
-    }
+    let trozo: string | null;
+    while ((trozo = cortarSinPuntuacion())) pushParagraph(trozo);
   }
 
   /** Toma la próxima oración de la cola y la deja fija para iluminarla. */
@@ -646,40 +728,81 @@ export default function (pi: ExtensionAPI) {
     return out;
   }
 
-  /** Duración en horas, minutos y segundos según corresponda. */
-  function formatDuration(ms: number): string {
-    const total = Math.max(0, Math.floor(ms / 1000));
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
-    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
-    if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
-    return `${s}s`;
+  /** Texto tenue para datos secundarios (id de tarea), con el tema actual. */
+  function dim(text: string): string {
+    try {
+      const styled = uiCtx?.ui?.theme?.style?.(text, { fg: "muted" });
+      if (styled) return styled;
+    } catch {
+      /* tema sin muted: ANSI apagado */
+    }
+    return `\x1b[2m${text}\x1b[0m`;
   }
 
-  /** Muestra/actualiza el widget con el pedido, los tiempos y el pensamiento. */
+  /** Encabezado de una sola fila: `agente × título · id`. */
+  function headerLine(): string {
+    const ident = agentIdentity();
+    const titulo = recortar(
+      tareaActual?.titulo || lastPrompt || "sin tarea",
+      CFG.titleChars,
+    );
+    const id = tareaActual?.id ? ` ${dim(`· ${tareaActual.id}`)}` : "";
+    return `${colored(ident.name, true)} ${dim("×")} ${colored(titulo, true)}${id}`;
+  }
+
+  /** Palabras pendientes de leer (lo que falta de la oración actual + cola). */
+  function palabrasPendientes(): number {
+    const actual = current ? Math.max(0, current.length - currentIndex) : 0;
+    return actual + paragraphs.reduce((n, p) => n + p.length, 0);
+  }
+
+  /** Ritmo de lectura: cómodo por defecto; si el modelo va muy rápido y la
+   *  cola crece, acelera un poco (hasta `fastWordMs`) para no atrasarse. */
+  function ritmoLectura(): number {
+    const pendientes = palabrasPendientes();
+    const fresco = Date.now() - lastChunkAt < 1500;
+    if (fresco && pendientes > CFG.catchup) return CFG.fastWordMs;
+    if (fresco && pendientes > CFG.catchup / 2) {
+      return Math.round((CFG.wordMs + CFG.fastWordMs) / 2);
+    }
+    return CFG.wordMs;
+  }
+
+  /** Muestra/actualiza el widget: agente × tarea, tiempos y pensamiento. */
   function updateLatido(force = false): void {
     const ui = uiCtx?.ui;
     if (!ui) return;
     const now = Date.now();
     const turnMs = working ? now - workStart : lastTurnMs;
     const sessionMs = sessionThinkingMs + (working ? now - workStart : 0);
-    const goal = lastPrompt ? `🎯 ${truncateWords(lastPrompt, CFG.promptChars)}` : "🎯 (sin pedido aún)";
-    const ident = agentIdentity();
     const head = working
-      ? `⏱ Pensando hace ${formatDuration(turnMs)} · Sesión ${formatDuration(sessionMs)}`
-      : `✓ ${formatDuration(lastTurnMs)} · Sesión ${formatDuration(sessionThinkingMs)}`;
+      ? `⏱ Pensando hace ${formatoDuracion(turnMs)} · Sesión ${formatoDuracion(sessionMs)}`
+      : `✓ ${formatoDuracion(lastTurnMs)} · Sesión ${formatoDuracion(sessionThinkingMs)}`;
     const upcoming = paragraphs.slice(0, CFG.lines).map((p) => p.join(" ")).join("|");
-    const label = `${ident.name}${ident.role && ident.role !== "general" && ident.role !== ident.name ? ` · ${ident.role}` : ""}`;
-    const key = `${label}|${head}|${goal}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
+    const label = headerLine();
+    const key = `${label}|${head}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
     if (!force && key === lastRenderedKey) return;
     lastRenderedKey = key;
     lastRender = now;
-    const lines = [colored(label, true), head, goal];
-    if (working && current) lines.push(...thoughtLines());
+    const lines = [label, head];
+    if (working) lines.push(...thoughtLines());
     try {
-      ui.setStatus?.("voz-latido", colored(`⏱ ${formatDuration(turnMs)}`));
+      ui.setStatus?.(
+        "voz-latido",
+        colored(`${tareaActual?.id ? `${tareaActual.id} ` : ""}⏱ ${formatoDuracion(turnMs)}`),
+      );
       ui.setWidget?.("voz-latido", lines);
+      // El título de la ventana es lo que herdr/la barra muestran arriba:
+      // agente × tarea, sin colores para que no se escape ningún ANSI. Solo se
+      // toca cuando cambia, no en cada palabra iluminada.
+      const title = `${agentIdentity().name} × ${recortar(
+        tareaActual?.titulo || lastPrompt || "sin tarea",
+        CFG.titleChars,
+      )}${tareaActual?.id ? ` · ${tareaActual.id}` : ""}`;
+      if (title !== lastTitle) {
+        lastTitle = title;
+        ui.setTitle?.(title);
+      }
     } catch {
       /* sin UI (modo rpc/print): no importa */
     }
@@ -690,8 +813,11 @@ export default function (pi: ExtensionAPI) {
     if (!working) return;
     const now = Date.now();
     if (!current) startNextParagraph();
-    while (current && now - lastRelease >= CFG.wordMs) {
-      lastRelease += CFG.wordMs;
+    let ritmo = ritmoLectura();
+    // Si el proceso estuvo ocupado, no iluminar diez palabras de golpe.
+    if (now - lastRelease > ritmo * 3) lastRelease = now - ritmo;
+    while (current && now - lastRelease >= ritmo) {
+      lastRelease += ritmo;
       currentIndex++;
       if (currentIndex >= current.length) {
         current = null;
@@ -699,6 +825,7 @@ export default function (pi: ExtensionAPI) {
         if (paragraphs.length) startNextParagraph();
         break;
       }
+      ritmo = ritmoLectura();
     }
     updateLatido();
     // Registro de depuración (PI_LATIDO_DEBUG=1): sirve para verificar el
@@ -706,7 +833,7 @@ export default function (pi: ExtensionAPI) {
     if (now - lastBeatLog >= 2000) {
       lastBeatLog = now;
       beatLog(
-        `working=${working} cola=${paragraphs.length} actual=${current ? current.join(" ") : "-"}`,
+        `working=${working} cola=${paragraphs.length} pendientes=${palabrasPendientes()} actual=${current ? current.join(" ") : "-"}`,
       );
     }
   }
@@ -722,11 +849,14 @@ export default function (pi: ExtensionAPI) {
 
   /** Al terminar dejamos a la vista el pedido y los tiempos del turno. */
   function settleLatido(): void {
+    lastTitle = "";
     current = null;
     currentIndex = 0;
     paragraphs = [];
     sentenceBuf = "";
     dropped = false;
+    enFence = false;
+    saltarLinea = false;
     lastRenderedKey = "";
     try {
       uiCtx?.ui?.setStatus?.("voz-latido", undefined);
@@ -823,20 +953,59 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // Recuerda el último pedido del usuario para mostrarlo mientras trabaja y lo
-  // publica en el panel, para que `agente-pane list` diga en qué anda cada uno.
+  // La tarea la crea `rig.ts` (id, título y trace) y la anuncia por el bus.
+  // Acá solo se muestra en el encabezado y se publica en el panel para que
+  // `agente-pane list` diga en qué anda cada uno.
+  let tareaSesion: string | undefined;
+  pi.events.on("rig:tarea", (datos) => {
+    const t = datos as { id?: string; titulo?: string; estado?: string; session?: string };
+    tareaSesion = t?.session;
+    tareaActual = t?.id
+      ? {
+          id: String(t.id),
+          titulo: String(t.titulo ?? ""),
+          estado: String(t.estado ?? "activa"),
+        }
+      : undefined;
+    if (tareaActual) {
+      tmuxSet("@agent_task", tareaActual.id);
+      tmuxSet("@agent_task_title", tareaActual.titulo);
+      tmuxSet("@agent_goal", truncateWords(tareaActual.titulo, 80));
+    }
+    updateLatido(true);
+  });
+
+  /** Ruta de la sesión actual, para descartar una tarea de otra conversación. */
+  function sessionPathOf(ctx: unknown): string | undefined {
+    try {
+      const file = (ctx as { sessionManager?: { getSessionFile?: () => unknown } })
+        ?.sessionManager?.getSessionFile?.();
+      return typeof file === "string" && file ? file : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Recuerda el último pedido del usuario: es el respaldo cuando `rig.ts` no
+  // está cargado o cuando todavía no llegó el id de la tarea.
   pi.on("input", (event) => {
     const e = event as { source?: string; text?: string };
     if (e?.source === "extension") return;
     const t = cleanText(e?.text);
     if (t) {
       lastPrompt = t;
-      tmuxSet("@agent_goal", truncateWords(t, 80));
+      if (!tareaActual) tmuxSet("@agent_goal", truncateWords(t, 80));
     }
   });
 
   pi.on("session_start", async (_event, ctx) => {
     uiCtx = ctx;
+    // Si la tarea que quedó en memoria es de otra conversación, se descarta.
+    // (La de esta sesión la vuelve a anunciar `rig.ts` al arrancar.)
+    const sesion = sessionPathOf(ctx);
+    if (tareaActual && tareaSesion && sesion && tareaSesion !== sesion) {
+      tareaActual = undefined;
+    }
     // La identidad vive con la conversación: al reanudar vuelven el mismo
     // nombre, rol, color y voz. Reseteamos la memoria por si cambió la sesión
     // (nueva, reanudada o bifurcada dentro del mismo proceso).
@@ -872,6 +1041,7 @@ export default function (pi: ExtensionAPI) {
       tmuxSet("@agent_goal", truncateWords(restored, 80));
     }
     tmuxSet("@agent_status", "idle");
+    updateLatido(true);
   });
 
   pi.on("before_agent_start", (_event, ctx) => {
@@ -888,7 +1058,10 @@ export default function (pi: ExtensionAPI) {
     current = null;
     currentIndex = 0;
     dropped = false;
+    enFence = false;
+    saltarLinea = false;
     lastRelease = Date.now();
+    lastChunkAt = lastRelease;
     lastRenderedKey = "";
     uiCtx = ctx;
     updateLatido(true);

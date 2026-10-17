@@ -5,7 +5,7 @@
  * `rig.ts` (id, título y resumen de pasos de cada tarea). Al ser puro se puede
  * probar solo con Node (≥ 23 ejecuta TypeScript sin compilar):
  *
- *   node linux/pi/agent/extensions/pensamiento.ts
+ *   node linux/pi/agent/extensions/lib/pensamiento.ts
  *
  * Regla de oro: acá no se inventa texto ni se llama a nadie; solo se limpia,
  * se corta y se decide si un fragmento se puede leer.
@@ -52,11 +52,13 @@ export function limpiarPensamiento(texto: string): string {
   t = t.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, " ");
   t = t.replace(/```[\s\S]*?(?:```|$)/g, " ");
   t = t.replace(/~~~[\s\S]*?(?:~~~|$)/g, " ");
+  // El código inline que no se puede leer se cambia por "…": deja claro que
+  // falta algo y no rompe la gramática de la oración ("while …").
   t = t.replace(/``([^`\n]*)``/g, (_m, c: string) =>
-    esCodigoInline(c) ? " " : ` ${String(c).trim()} `,
+    esCodigoInline(c) ? " … " : ` ${String(c).trim()} `,
   );
   t = t.replace(/`([^`\n]*)`/g, (_m, c: string) =>
-    esCodigoInline(c) ? " " : ` ${String(c).trim()} `,
+    esCodigoInline(c) ? " … " : ` ${String(c).trim()} `,
   );
   t = t.replace(/<\/?[a-zA-Z][^>]*>/g, " ");
   t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");
