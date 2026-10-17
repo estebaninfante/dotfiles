@@ -13,6 +13,8 @@ local function apply()
         world = {
             panorama = PANORAMA,
             grid = false,
+            -- Barra y notificaciones quedan fijas en pantalla, fuera del 3D.
+            fixed_layers = true,
         },
         map = {
             path = MAP,
@@ -29,7 +31,12 @@ local function apply()
             flying = true,
             spawn = { x = 0, y = 2, z = 12 },
         },
-        windows = { focus_on_aim = false },
+        windows = {
+            focus_on_aim = false,
+            -- Un polígono de N ventanas alrededor tuyo (decágono con 10).
+            ring = true,
+            ring_gap = 0.75,
+        },
     })
 
     hl.bind("SUPER + F12", hl.plugin.hypr3d.toggle)

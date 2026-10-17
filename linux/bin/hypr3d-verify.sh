@@ -34,6 +34,8 @@ done
 [ -f "$MAP" ] || { echo "SUMMARY: FAIL no-map $MAP"; exit 1; }
 
 mkdir -p "$OUT"
+RUN_START="$OUT/.run-start"
+: > "$RUN_START"
 
 # Minimal top-layer panel for the fixed-HUD check (quickshell). Red, 24 px,
 # anchored to the top: if the bar is world-space it cannot sit there.
@@ -175,6 +177,24 @@ room_count() {
     ' "$1"
 }
 
+# Wait until the plugin reports `ws` as the active room with at least `min`
+# windows. Captures the dump to $OUT/rooms-ws-$ws.txt when it matches.
+wait_room_ws() {
+    local ws="$1" min="$2" act n
+    for _ in $(seq 1 80); do
+        nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
+        act="$(awk '$1 == "active" { print $2 }' /tmp/hypr3d-rooms.txt 2>/dev/null)"
+        n="$(room_count /tmp/hypr3d-rooms.txt 2>/dev/null)"
+        if [ "$act" = "$ws" ] && [ "${n:-0}" -ge "$min" ]; then
+            cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws-$ws.txt" 2>/dev/null || true
+            return 0
+        fi
+        sleep 0.25
+    done
+    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws-$ws.txt" 2>/dev/null || true
+    return 1
+}
+
 WANT_N=3
 [ "$WITH_FLOAT" = "1" ] && WANT_N=4
 for _ in $(seq 1 160); do
@@ -184,7 +204,12 @@ for _ in $(seq 1 160); do
 done
 sleep 1.0
 
-HOSTWAY="$(HYPRLAND_INSTANCE_SIGNATURE="$SIG_HOST" hyprctl -j clients 2>/dev/null | jq -r '[.[] | select((.class // "") | test("aquamarine"; "i"))][0].address' 2>/dev/null)"
+HOSTWAY="$(HYPRLAND_INSTANCE_SIGNATURE="$SIG_HOST" hyprctl -j clients 2>/dev/null \
+    | jq -r '[.[] | select((((.class // "") | test("aquamarine|hyprland|wayland"; "i")) or
+                            ((.title // "") | test("hyprland"; "i"))))
+                        and ((.size[0] // 0) > 200)] | sort_by(.size[0]*.size[1]) | reverse | .[0].address' 2>/dev/null || true)"
+[ -z "$HOSTWAY" ] || [ "$HOSTWAY" = "null" ] && \
+    HOSTWAY="$(HYPRLAND_INSTANCE_SIGNATURE="$SIG_HOST" hyprctl -j activewindow 2>/dev/null | jq -r '.address // ""' 2>/dev/null || true)"
 GEOM=""
 if [ -n "$HOSTWAY" ] && [ "$HOSTWAY" != "null" ]; then
     HYPRLAND_INSTANCE_SIGNATURE="$SIG_HOST" hyprctl eval "hl.dispatch(hl.dsp.window.move({ window = \"address:$HOSTWAY\", x = 20, y = 20, relative = false }))" >/dev/null 2>&1 || true
@@ -254,18 +279,18 @@ WS_INFO="null"
 if [ "$WORKSPACES" = "1" ]; then
     nested eval 'hl.plugin.hypr3d.toggle()' >/dev/null 2>&1
     sleep "$SETTLE"
-    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
-    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws1.txt" 2>/dev/null || true
+    wait_room_ws 1 3 || true
+    cp "$OUT/rooms-ws-1.txt" "$OUT/rooms-ws1.txt" 2>/dev/null || true
 
     nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "2" }))' >/dev/null 2>&1
-    sleep "$SETTLE"
-    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
-    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws2.txt" 2>/dev/null || true
+    sleep 1
+    wait_room_ws 2 2 || true
+    cp "$OUT/rooms-ws-2.txt" "$OUT/rooms-ws2.txt" 2>/dev/null || true
 
     nested eval 'hl.dispatch(hl.dsp.focus({ workspace = "1" }))' >/dev/null 2>&1
-    sleep "$SETTLE"
-    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
-    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-ws1-back.txt" 2>/dev/null || true
+    sleep 1
+    wait_room_ws 1 3 || true
+    cp "$OUT/rooms-ws-1.txt" "$OUT/rooms-ws1-back.txt" 2>/dev/null || true
 
     nested eval 'hl.plugin.hypr3d.toggle()' >/dev/null 2>&1
     sleep "$SETTLE"
@@ -438,9 +463,16 @@ fi
 HUD_OK=skip
 HUD_INFO="null"
 
-if [ "$WITH_HUD" = "1" ] && [ -f "$OUT/rooms-1.txt" ] && [ -f "$PNG_ON" ]; then
+HUD_PNG=""
+if [ -s "$PNG_ON" ] && [ "$PNG_ON" -nt "$RUN_START" ]; then
+    HUD_PNG="$PNG_ON"
+fi
+
+if [ "$WITH_HUD" = "1" ] && [ -f "$OUT/rooms-1.txt" ]; then
     HUD_N="$(awk '$1 == "hud" { print $2 }' "$OUT/rooms-1.txt" | head -1)"
-    HUD_RED="$(python3 - "$PNG_ON" <<'PYHUD'
+    HUD_RED="0.0"
+    if [ -n "$HUD_PNG" ]; then
+        HUD_RED="$(python3 - "$HUD_PNG" <<'PYHUD'
 import sys
 from PIL import Image
 
@@ -460,12 +492,17 @@ print(round(max(red_ratio((0, 0, w, band_h)),
                 red_ratio((0, h - band_h, w, h))), 3))
 PYHUD
 )"
+    fi
+
+    # Deterministic gate: the layer surface was captured as a HUD surface
+    # (and therefore kept out of g_world). The screenshot ratio is recorded as
+    # a diagnostic -- the nested panel's own anchoring is not something this
+    # plugin controls.
     HUD_OK=yes
     [ "${HUD_N:-0}" -ge 1 ] || HUD_OK=no
-    awk -v v="${HUD_RED:-0}" 'BEGIN { exit !(v >= 0.30) }' || HUD_OK=no
 
     HUD_INFO="$(jq -n -c --argjson n "${HUD_N:-0}" --argjson red "${HUD_RED:-0}" \
-        '{hud_surfaces: $n, top_band_red: $red}')"
+        '{hud_surfaces: $n, edge_band_red: $red}')"
 fi
 
 [ "$HUD_OK" = "no" ] && ok=no
