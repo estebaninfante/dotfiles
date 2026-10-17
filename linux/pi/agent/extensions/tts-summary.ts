@@ -15,10 +15,11 @@
  * aviso (así no te suena tres veces lo mismo). Para avisar algo en medio del
  * trabajo está `hablar`, que sí es inmediato.
  *
- * Sin repetir a `hablar`: `conversar.ts` avisa por el bus de extensiones qué se
- * dijo en voz alta. Si el cierre de `avisar` (o el resumen de respaldo) cuenta
- * lo mismo que ya se dijo con `hablar`, no se vuelve a decir. Así el agente
- * puede dar un avance y luego cerrar sin que te suene dos veces la misma cosa.
+ * Un solo sonido al final: `conversar.ts` avisa por el bus de extensiones qué
+ * se dijo en voz alta con `hablar` (sin `esperar`). Si el agente ya habló, el
+ * cierre de `avisar` y el resumen de respaldo callan: el final suena UNA sola
+ * vez, sin depender de que los textos se parezcan. Una pregunta con `esperar`
+ * no cuenta: el usuario la responde y el cierre sí se oye.
  *
  * Red de seguridad: si el agente no llamó la tool en la corrida, al asentarse
  * Pi (`agent_settled`) un modelo reescribe su última respuesta en una frase
@@ -199,42 +200,6 @@ function deliver(text: string, limit = MAX_SUMMARY): void {
   voiceAvisar(line);
 }
 
-/* Compara lo que se va a decir con lo que el agente ya dijo con `hablar`.
-   Evita el doble mensaje cuando ambos cuentan lo mismo con otras palabras. */
-function normSpeech(s: string): string {
-  return String(s ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function speechTokens(s: string): Set<string> {
-  return new Set(normSpeech(s).split(" ").filter((w) => w.length > 2));
-}
-
-/** ¿`line` repite algo que el agente ya dijo con `hablar`? Igualdad normalizada,
- *  contención o mayoría de palabras en común. */
-function yaDicho(line: string, dichos: string[]): boolean {
-  const n = normSpeech(line);
-  if (!n) return true;
-  for (const said of dichos) {
-    const m = normSpeech(said);
-    if (!m) continue;
-    if (n === m) return true;
-    if (Math.min(n.length, m.length) >= 12 && (n.includes(m) || m.includes(n))) return true;
-    const a = speechTokens(n);
-    const b = speechTokens(m);
-    if (!a.size || !b.size) continue;
-    let common = 0;
-    for (const w of a) if (b.has(w)) common += 1;
-    if (common / Math.min(a.size, b.size) >= 0.75) return true;
-  }
-  return false;
-}
-
 export default function (pi: ExtensionAPI) {
   let run: RunSummary = { texts: [], errors: 0 };
   let announced = false;
@@ -242,9 +207,10 @@ export default function (pi: ExtensionAPI) {
   // sino que se dice al cerrar (gana el último). Así el agente puede reportar
   // avances sin que te suene tres veces lo mismo.
   let pendingAviso = "";
-  /* Lo que el agente ya dijo con `hablar` en esta corrida. Llega por el bus de
-     extensiones (`conversar.ts` lo emite) para no repetir el mismo mensaje al
-     cerrar con `avisar` ni con el resumen de respaldo. */
+  /* Lo que el agente ya dijo con `hablar` (sin `esperar`) en esta corrida.
+     Llega por el bus de extensiones (`conversar.ts` lo emite). Regla dura: si
+     el agente ya habló, el cierre (`avisar`) y el resumen de respaldo callan.
+     Así el final suena UNA sola vez, sin depender de parecidos de texto. */
   let spokenByHablar: string[] = [];
   try {
     pi.events.on("voz:hablado", (data) => {
@@ -273,15 +239,17 @@ export default function (pi: ExtensionAPI) {
       "Llama a `avisar` UNA vez, al terminar la corrida (cuando ya no vas a " +
         "seguir trabajando), con una sola frase breve en español natural y " +
         "respetuoso (como quien le reporta un avance a otra persona): qué pasó y " +
-        "si quedó listo. Si ya le contaste lo mismo con `hablar` en esta " +
-        "corrida, no lo repitas con `avisar`. Nunca incluyas tecnicismos, rutas " +
-        "ni nombres de herramientas; se dirá en voz alta o se dejará en su buzón.",
+        "si quedó listo. Si ya le hablaste al usuario con `hablar` en esta " +
+        "corrida, `avisar` no vuelve a sonar: no la llames para cerrar. Nunca " +
+        "incluyas tecnicismos, rutas ni nombres de herramientas; se dirá en voz " +
+        "alta o se dejará en su buzón.",
       "Si necesitás que el usuario te responda, no te quedes en `avisar`: usá " +
         "`hablar` con `esperar: true` y una pregunta concreta. `avisar` es para " +
         "reportar, no para preguntar.",
       "Para avisar algo en medio del trabajo, que el usuario necesite AHORA, usá " +
-        "`hablar` (inmediato). `avisar` es solo el cierre: si lo llamás varias " +
-        "veces en la misma corrida, solo se dice el último para no repetirte.",
+        "`hablar` (inmediato): eso ya cuenta como tu voz en la corrida, así que " +
+        "después no hace falta `avisar`. Si lo llamás varias veces, solo se dice " +
+        "el último para no repetirte.",
       "No uses apelativos ni la palabra 'jefe': habla directo.",
     ],
     parameters: AVISAR_PARAMS,
@@ -339,25 +307,26 @@ export default function (pi: ExtensionAPI) {
     const deferred = pendingAviso;
     announced = false;
     pendingAviso = "";
-    /* Consumimos lo que ya se dijo con `hablar` en esta corrida: si el cierre
-       lo repite, no se dice de nuevo; si ya habló, tampoco corre el resumen de
-       respaldo (el usuario ya escuchó algo). */
+    /* Consumimos lo que ya se dijo con `hablar` en esta corrida. Si el agente
+       ya habló, el usuario ya escuchó: ni el cierre (`avisar`) ni el resumen de
+       respaldo vuelven a sonar. Es una regla dura (no un parecido de texto)
+       para que el final suene una sola vez. */
     const hablados = spokenByHablar;
     spokenByHablar = [];
     /* Corrida interrumpida: el usuario ya sabe que cortó; no lo llamamos por
        voz ni le resumimos trabajo a medias. La voz automática queda reservada
        para las corridas que terminan sin interrupción. */
     if ((event as { aborted?: boolean }).aborted) return;
-    /* El agente ya reportó: se dice SOLO el último aviso de la corrida (los
-       anteriores se descartaron) y no se corre el resumen de respaldo. Si el
-       aviso repite lo ya dicho con `hablar`, se omite. */
+    /* El agente ya habló con `hablar`: el cierre calla, haya o no `avisar`. */
+    if (hablados.length > 0) return;
+    /* El agente ya reportó con `avisar`: se dice SOLO el último aviso de la
+       corrida (los anteriores se descartaron) y no corre el resumen de
+       respaldo. */
     if (hadAviso) {
       const line = deferred.trim();
-      if (line && !yaDicho(line, hablados)) deliver(line, 0);
+      if (line) deliver(line, 0);
       return;
     }
-    /* El agente ya habló con `hablar`: no le repetimos el cierre por voz. */
-    if (hablados.length > 0) return;
 
     const raw = (snapshot.texts[snapshot.texts.length - 1] ?? "").trim();
     if (!raw && snapshot.errors === 0) return;

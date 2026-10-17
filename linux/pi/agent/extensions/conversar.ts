@@ -737,14 +737,16 @@ export default function (pi: ExtensionAPI) {
   }
 
   /** Avisa al resto del harness qué se dijo en voz alta, para que `avisar` (u
-   *  otra extensión de cierre) no repita lo mismo al terminar la corrida. */
+   *  otra extensión de cierre) no repita lo mismo al terminar la corrida. Solo
+   *  se anuncia el `hablar` que no espera respuesta: una pregunta con
+   *  `esperar: true` no reemplaza al cierre, así que no debe silenciarlo. */
   function announceSpoken(texto: string): void {
     const t = cleanText(texto);
     if (!t) return;
     try {
       pi.events.emit("voz:hablado", { agente: agentName(), texto: t, at: Date.now() });
     } catch {
-      /* sin bus de eventos: el dedup por texto propio de `avisar` sigue igual */
+      /* sin bus de eventos: el cierre igual no repite por la regla de `avisar` */
     }
   }
 
@@ -768,6 +770,8 @@ export default function (pi: ExtensionAPI) {
         "contexto en `mensaje`, después la pregunta. Así el usuario no se pierde.",
       "No uses `hablar` para cosas que ya podés resolver leyendo el repositorio " +
         "o la documentación.",
+      "No combines `hablar` y `avisar` para cerrar: si ya le hablaste al usuario " +
+        "con `hablar` en esta corrida, `avisar` no vuelve a sonar.",
     ],
     parameters: HABLAR_PARAMS,
     async execute(_toolCallId, params, signal) {
@@ -784,8 +788,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
       const segundos = Math.max(10, Number(params.segundos ?? 300) || 300);
-      const preguntado = await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
-      if (preguntado.code === 0) announceSpoken(mensaje);
+      await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
       const answer = await execCapture(
         ["esperar", agentName(), "--timeout", String(segundos)],
         segundos * 1000 + 5000,
