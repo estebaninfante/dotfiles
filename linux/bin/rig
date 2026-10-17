@@ -1148,7 +1148,7 @@ notify_state_change() {
   [ "${RIG_STATE_NOTIFY:-1}" = "0" ] && return 0
   local bin="${RIG_NOTIFY_BIN:-}"
   if [ -z "$bin" ]; then
-    bin=$(command -v notify 2>/dev/null) || return 0
+    bin=$(command -v notify 2>/dev/null) || bin=$(command -v notify-send 2>/dev/null) || return 0
   fi
   [ -n "$bin" ] || return 0
   local urgency title body

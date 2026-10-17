@@ -110,10 +110,10 @@ mark_blocked() {
 
 notify_desktop() {
   [ "$DO_NOTIFY" = "1" ] || return 0
-  command -v notify >/dev/null 2>&1 || return 0
-  local urgency="normal"
+  local bin urgency="normal"
+  bin=$(command -v notify 2>/dev/null) || bin=$(command -v notify-send 2>/dev/null) || return 0
   [ "$PRIORITY" = "alta" ] && urgency="critical"
-  timeout 15 notify --app-name opencode -g "󰚩" -u "$urgency" \
+  timeout 15 "$bin" -a opencode -g "󰚩" -u "$urgency" \
     "Pregunta de ${SEAT}" "$QUESTION" >/dev/null 2>&1 || true
 }
 

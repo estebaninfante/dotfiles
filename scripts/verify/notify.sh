@@ -22,9 +22,14 @@ bash -n "$BIN" 2>/dev/null && ok "notify sintaxis" || fail "notify no parsea"
 
 # Ningun script del repo salta el wrapper. El propio wrapper es la excepcion
 # (su rama de fallback si habla notify-send directo).
-offenders=$(grep -rln 'notify-send' \
+offenders=$(grep -rn 'notify-send' \
     "$REPO/linux/bin" "$REPO/linux/config" "$REPO/scripts" "$REPO/linux/voice" \
-    2>/dev/null | grep -v "^$BIN$" | grep -v "^$REPO/scripts/verify/notify.sh$" | grep -v '\.bak')
+    2>/dev/null \
+    | grep -v '^[^:]*:[0-9]*:[[:space:]]*#' \
+    | grep -v 'command -v notify-send' \
+    | grep -v "^$BIN:" \
+    | grep -v "^$REPO/scripts/verify/notify.sh:" \
+    | cut -d: -f1 | sort -u)
 if [ -z "$offenders" ]; then
     ok "nadie llama notify-send por fuera del wrapper"
 else

@@ -1,9 +1,4 @@
 hl.layer_rule({
-    match = { namespace = "swaync" },
-    blur = true
-})
-
-hl.layer_rule({
     match = { namespace = "wayfreeze" },
     no_anim = true,
     animation = "none"
