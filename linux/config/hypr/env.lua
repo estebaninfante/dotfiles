@@ -6,6 +6,12 @@ hl.config({
     }
 })
 
+-- CURSOR: Bibata Modern Ice (blanco con borde negro, se lee en cualquier fondo)
+hl.env("XCURSOR_THEME", "Bibata-Modern-Ice")
+hl.env("XCURSOR_SIZE", "28")
+hl.env("HYPRCURSOR_THEME", "Bibata-Modern-Ice")
+hl.env("HYPRCURSOR_SIZE", "28")
+
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
 if variables.machine == "desktop" then
     hl.env("GDK_SCALE", "1")
