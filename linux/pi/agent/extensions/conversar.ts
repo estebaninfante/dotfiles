@@ -38,6 +38,11 @@
  * panel con el color del agente, para que `agente-pane list/info` muestre quién
  * es, en qué anda y dónde está, y para reconocer la terminal de un vistazo.
  *
+ * La identidad se guarda en la conversación (entrada `agent-identity`), así al
+ * reanudarla vuelven el mismo nombre, rol, color y voz aunque cambie el panel,
+ * la carpeta o el proceso; y la tarea (`@agent_goal`) se restaura del último
+ * pedido de la propia sesión.
+ *
  * Config (archivo ~/.config/pi/latido.json o variables de entorno; la variable
  * gana):
  *   PI_AGENTE_BIN        ruta al bus (default ~/developing/voz-agentes/agente)

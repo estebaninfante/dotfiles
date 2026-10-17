@@ -15,6 +15,11 @@
  * aviso (así no te suena tres veces lo mismo). Para avisar algo en medio del
  * trabajo está `hablar`, que sí es inmediato.
  *
+ * Sin repetir a `hablar`: `conversar.ts` avisa por el bus de extensiones qué se
+ * dijo en voz alta. Si el cierre de `avisar` (o el resumen de respaldo) cuenta
+ * lo mismo que ya se dijo con `hablar`, no se vuelve a decir. Así el agente
+ * puede dar un avance y luego cerrar sin que te suene dos veces la misma cosa.
+ *
  * Red de seguridad: si el agente no llamó la tool en la corrida, al asentarse
  * Pi (`agent_settled`) un modelo reescribe su última respuesta en una frase
  * llana y la habla. Nunca deja mudo al usuario; nunca dice tecnicismos.
@@ -295,6 +300,14 @@ export default function (pi: ExtensionAPI) {
   pi.on("before_agent_start", () => {
     announced = false;
     pendingAviso = "";
+  });
+
+  pi.on("session_start", () => {
+    // La identidad vive con la conversación: al reanudar otra, el nombre (y con
+    // él la voz y el color) puede cambiar. Se resuelve de nuevo desde el panel.
+    agentNameCache = undefined;
+    spokenByHablar = [];
+    lastDelivered = "";
   });
 
   pi.on("turn_end", async (event, ctx) => {
