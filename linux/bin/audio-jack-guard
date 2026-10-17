@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # audio-jack-guard — mantiene la salida analógica coherente con el jack.
 #
-# En esta laptop (ALC257 + WirePlumber) el amplificador del puerto activo queda
-# en mute al cambiar de puerto: con auriculares enchufados el amplificador de
+# En esta laptop (ALC257 + WirePlumber) al cambiar de puerto el amplificador
+# del puerto nuevo queda en mute: con auriculares enchufados el amplificador de
 # auriculares queda en 0 y no suena nada; si alguien lo enciende a mano, suenan
 # los parlantes y los auriculares a la vez. Este guardián lee el jack y deja el
-# puerto y su amplificador como corresponde, sin tocar el volumen general (así
-# el ducking de la voz y los sliders siguen mandando).
+# puerto y su amplificador como corresponde. No maneja el volumen (PipeWire lo
+# aplica por software), así el ducking de la voz y los sliders siguen mandando;
+# solo repone el volumen si WirePlumber lo salta al cambiar de puerto.
 #
 # Variables (para probar/otra máquina):
 #   AUDIO_JACK_CARD      placa ALSA (default 2)
@@ -17,6 +18,7 @@ set -u
 CARD="${AUDIO_JACK_CARD:-2}"
 SINK="${AUDIO_JACK_SINK:-alsa_output.pci-0000_05_00.6.analog-stereo}"
 INTERVAL="${AUDIO_JACK_INTERVAL:-1.5}"
+DEFAULT_SINK="${AUDIO_JACK_DEFAULT:-@DEFAULT_AUDIO_SINK@}"
 
 # ¿Hay algo enchufado en el jack de auriculares? on|off (vacío si no existe).
 jack_state() {
@@ -24,26 +26,53 @@ jack_state() {
     | sed -n 's/.*values=\(on\|off\).*/\1/p' | tail -1
 }
 
-# Deja el puerto pedido y enciende solo su amplificador (mutea el otro).
-apply() {  # apply <puerto> <amplificador-activo> <amplificador-muteado>
-  pactl set-sink-port "$SINK" "$1" >/dev/null 2>&1 || true
-  amixer -c "$CARD" sset "$2" 87 on >/dev/null 2>&1 || true
-  amixer -c "$CARD" sset "$3" off >/dev/null 2>&1 || true
+# Estado de un control de switch (on,on | off,off | vacío).
+switch_state() {
+  amixer -c "$CARD" cget "iface=MIXER,name=$1 Playback Switch" 2>/dev/null \
+    | sed -n 's/.*values=\(.*\)/\1/p' | tail -1
+}
+
+# Deja un amplificador encendido/apagado, sin tocar el resto.
+ensure() {  # ensure <control> on|off
+  local want="off,off"
+  [ "$2" = on ] && want="on,on"
+  [ "$(switch_state "$1")" = "$want" ] && return 0
+  amixer -c "$CARD" sset "$1" "$2" >/dev/null 2>&1 \
+    || amixer -c "$CARD" sset "$1" 87 "$2" >/dev/null 2>&1 || true
+}
+
+current_port() {
+  pactl list sinks 2>/dev/null \
+    | sed -n '/Name: '"$SINK"'$/,/^$/p' \
+    | sed -n 's/^[[:space:]]*Active Port: //p' | head -1
+}
+
+# Puerto + amplificador activo. Solo cambia el puerto si hace falta, y repone el
+# volumen que WirePlumber salta al cambiar (si no, enchufar auriculares puede
+# saltar a 100%).
+apply() {  # apply <puerto> <amp-activo> <amp-muteado>
+  local want_port="$1" on_amp="$2" off_amp="$3"
+  local cur_port vol
+  cur_port="$(current_port)"
+  if [ "$cur_port" != "$want_port" ]; then
+    vol="$(wpctl get-volume "$DEFAULT_SINK" 2>/dev/null | awk '{print $2}')"
+    pactl set-sink-port "$SINK" "$want_port" >/dev/null 2>&1 || true
+    if [ -n "${vol:-}" ]; then
+      wpctl set-volume "$DEFAULT_SINK" "$vol" >/dev/null 2>&1 || true
+    fi
+  fi
+  ensure "$on_amp" on
+  ensure "$off_amp" off
 }
 
 # Base sana una sola vez: el chip no arranca en 0 por el guardián.
 amixer -c "$CARD" sset 'Master' 87 on >/dev/null 2>&1 || true
 amixer -c "$CARD" sset 'PCM' 255 >/dev/null 2>&1 || true
 
-last=""
 while true; do
-  state="$(jack_state)"
-  if [ "$state" != "$last" ]; then
-    case "$state" in
-      on)  apply analog-output-headphones Headphone Speaker ;;
-      off) apply analog-output-speaker   Speaker   Headphone ;;
-    esac
-    last="$state"
-  fi
+  case "$(jack_state)" in
+    on)  apply analog-output-headphones Headphone Speaker ;;
+    off) apply analog-output-speaker   Speaker   Headphone ;;
+  esac
   sleep "$INTERVAL"
 done
