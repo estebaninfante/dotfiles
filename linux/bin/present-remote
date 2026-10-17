@@ -48,12 +48,10 @@ CONFIG_PATH = os.environ.get(
 )
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 PTT_PIDFILE = os.path.join(RUNTIME, "omnivoz-ptt.pid")
+LISTEN_UNIT = "omnivoz-listen.service"
+STATUS_FILE = os.path.join(RUNTIME, "omnivoz", "status.json")
 PILL = os.path.join(HOME, "developing/omnivoz/packaging/quickshell/omar-pill.qml")
 GLOW = os.path.join(os.path.dirname(PILL), "omnivoz-glow.qml")
-OMAR_MODE = os.path.join(HOME, ".local/bin/omar-mode")
-OMNIVOZ_BIN = os.path.join(HOME, ".local/bin/omnivoz")
-LISTEN_LOG = os.path.join(HOME, ".local/state/omnivoz/listen.log")
-MODE_FILE = os.path.join(RUNTIME, "omar", "mode")
 LOG = open(os.devnull, "w")
 
 ENV = dict(os.environ)
@@ -228,13 +226,38 @@ def ptt_active():
     return bool(_ptt_pids())
 
 
-def omar_mode():
-    """Modo actual de Omar (comando/dictado/dormido), por defecto comando."""
+def _main_pid():
+    """PID del proceso node del servicio (el único que atiende señales)."""
     try:
-        with open(MODE_FILE, encoding="utf-8") as f:
-            return f.read().strip() or "comando"
-    except OSError:
-        return "comando"
+        out = subprocess.check_output(
+            ["systemctl", "--user", "show", "-p", "MainPID", "--value", LISTEN_UNIT],
+            text=True, stderr=subprocess.DEVNULL, timeout=3,
+        ).strip()
+        pid = int(out)
+        return pid if pid > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def service_awake():
+    """¿El servicio siempre-vivo tiene una conversación abierta?
+
+    `status.json` lo publican tanto el loop como el dictado, así que sólo vale
+    si su `pid` es el del oído (que se anota en `listen.pid`). `idle` significa
+    que está esperando la palabra clave.
+    """
+    try:
+        with open(os.path.join(RUNTIME, "omnivoz", "listen.pid"), encoding="utf-8") as f:
+            listen_pid = int(f.read().strip())
+        with open(STATUS_FILE, encoding="utf-8") as f:
+            snap = json.load(f)
+        if int(snap.get("pid") or 0) != listen_pid:
+            return False  # lo publicó otro (p. ej. el dictado)
+        if time.time() * 1000 - float(snap.get("updatedAt") or 0) > 45_000:
+            return False
+        return snap.get("state") not in (None, "idle")
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def pill_is_open():
@@ -279,73 +302,55 @@ def pill_toggle():
 
 
 def omar_active():
-    """Omar está encendido si hay píldora abierta o una sesión de voz viva."""
-    return pill_is_open() or ptt_active()
+    """Omar está encendido si hay conversación, píldora abierta o voz viva."""
+    return pill_is_open() or service_awake() or ptt_active()
 
 
-def start_session():
-    """Arranca una sesión de voz directa (`--no-wake`), sin palabra clave.
+def _systemctl(*args, timeout=6):
+    """systemctl --user best-effort: si no está, no rompe el gesto."""
+    try:
+        subprocess.run(
+            ["systemctl", "--user", *args],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout,
+        )
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
-    Queda escuchando lo que digas hasta que la cortes (segundo toque o Escape).
+
+def _signal_service(sig):
+    """Manda una señal de control al único oído, levantándolo si hace falta.
+
+    SIGUSR1 = abrir la conversación sin palabra clave; SIGUSR2 = cerrarla. El
+    servicio siempre corre (Restart=always) y el loop registra las señales antes
+    de cargar modelos, así que no hay que esperar a que esté "listo".
     """
-    try:
-        os.makedirs(os.path.dirname(LISTEN_LOG), exist_ok=True)
-        logf = open(LISTEN_LOG, "a")
-    except OSError:
-        logf = subprocess.DEVNULL  # type: ignore[assignment]
-    proc = subprocess.Popen(
-        [OMNIVOZ_BIN, "listen", "--no-wake"],
-        stdout=logf, stderr=logf, stdin=subprocess.DEVNULL,
-        start_new_session=True, env=ENV,
-    )
-    try:
-        with open(PTT_PIDFILE, "w") as f:
-            f.write(str(proc.pid))
-    except OSError:
-        pass
+    _systemctl("start", LISTEN_UNIT)
+    # --kill-whom=main: `systemctl kill` manda a TODO el cgroup por defecto y
+    # así le llegaba también a `parec` (el micrófono se cortaba y reiniciaba).
+    _systemctl("kill", "--kill-whom=main", "-s", sig, LISTEN_UNIT)
 
 
 def start_voice():
-    """Prende Omar: sesión directa (sin palabra clave) + píldora abierta.
+    """Prende Omar: abre la conversación en el servicio que ya está corriendo.
 
-    Suelta el micrófono del listener de fondo para que haya un solo dueño y abre
-    una sesión `--no-wake` que escucha directo: apretás el botón, decís "abre
-    spotify" y anda, sin decir "Omar".
+    No arranca otro proceso: el servicio omnivoz-listen es el único oído y
+    SIGUSR1 le dice "escuchá directo, sin la palabra clave". La píldora se abre
+    ya para que el toque no se sienta muerto. Y le avisamos al glow que la
+    píldora está abierta para que no dibuje su franja encima del campo de texto.
     """
-    log("voice: prendo Omar (sesión directa)")
-    # La píldora aparece YA: coordinar el micrófono (frenar el listener de fondo)
-    # puede tardar y no queremos que el toque se sienta muerto. Y le avisamos al
-    # glow que la píldora está abierta para que no dibuje su franja ni sus
-    # subtítulos encima del campo de texto.
+    log("voice: prendo Omar (conversación directa)")
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
-    # Un solo dueño del micrófono. Se frena el listener de fondo ANTES de arrancar
-    # la sesión: `omar-mode` también libera Handy. Hay que esperarlo (sincrónico)
-    # porque su limpieza no debe tocar la sesión nueva.
-    try:
-        subprocess.run(
-            [OMAR_MODE, "dormido"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8, env=ENV,
-        )
-    except Exception:  # noqa: BLE001
-        try:
-            subprocess.run(
-                ["systemctl", "--user", "stop", "omnivoz-listen.service"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
-            )
-        except Exception:  # noqa: BLE001
-            pass
-    start_session()
+    _signal_service("SIGUSR1")
 
 
 def cancel_voice():
-    """Apaga Omar: cierra la píldora, corta el PTT y le devuelve el micrófono al
-    listener de fondo (modo comando), para que sigan la palabra clave y la campana.
+    """Apaga Omar: cierra la píldora y cierra la conversación en el servicio.
 
-    Cierra la UI PRIMERO (para que desaparezca al instante), después corta
-    cualquier proceso de push-to-talk suelto y recién al final reactiva el
-    listener de fondo. Omnivoz atiende SIGINT pero puede tardar unos segundos
-    (cargando modelos), asi que esperamos a que muera de verdad antes de escalar
-    a SIGTERM/SIGKILL.
+    El proceso NUNCA se mata: el servicio siempre vivo vuelve solo a esperar la
+    palabra clave (SIGUSR2). Cierra la UI primero para que desaparezca al
+    instante, después corta cualquier proceso viejo de push-to-talk que haya
+    quedado suelto de versiones anteriores, y al final cierra la conversación.
     """
     # 1) Cerrar la pildora YA: la UI no espera al proceso.
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
@@ -384,14 +389,9 @@ def cancel_voice():
     else:
         log("cancel: sin PTT suelto")
 
-    # 3) Devolverle el micrófono al listener de fondo: modo comando. Sin esto,
-    #    Omar quedaba en "dormido" y no volvían la palabra clave ni la campana.
-    try:
-        subprocess.run([OMAR_MODE, "comando"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       timeout=8, env=ENV)
-    except Exception:  # noqa: BLE001
-        pass
+    # 3) Cerrar la conversación en el servicio (no matarlo): vuelve solo a
+    #    esperar la palabra clave. El servicio nunca se detiene.
+    _signal_service("SIGUSR2")
 
 
 def toggle_voice():
