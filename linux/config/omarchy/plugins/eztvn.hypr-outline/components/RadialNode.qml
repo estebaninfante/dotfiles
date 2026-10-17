@@ -10,6 +10,9 @@ Item {
   required property var item
   property bool elegida: false
   property bool atenuada: false
+  // La onda de selección solo corre cuando el menú ya está asentado; así
+  // abrirlo no dispara animaciones de entrada.
+  property bool animarOnda: true
   property bool hijo: false
   property real lado: 120
   property real fuenteIcono: 40
@@ -30,6 +33,13 @@ Item {
 
   Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
   Behavior on scale { SpringAnimation { spring: 5; damping: 0.5; mass: 1 } }
+
+  onElegidaChanged: {
+    if (!elegida || !animarOnda) return
+    onda.scale = 1
+    ondaCrece.restart()
+    ondaFade.restart()
+  }
 
   // Halo: la luz que sale de la placa elegida.
   Rectangle {
@@ -122,11 +132,5 @@ Item {
     NumberAnimation { id: ondaCrece; target: onda; property: "scale"; from: 1; to: 1.42; duration: 340; easing.type: Easing.OutCubic }
     NumberAnimation { id: ondaFade; target: onda; property: "opacity"; from: 0.5; to: 0; duration: 340; easing.type: Easing.OutCubic }
 
-    onVisibleChanged: {
-      if (!nodo.elegida) return
-      onda.scale = 1
-      ondaCrece.restart()
-      ondaFade.restart()
-    }
   }
 }

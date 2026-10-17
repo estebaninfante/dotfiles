@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Shapes
 import qs.Commons
 import "components"
 
@@ -35,9 +36,9 @@ Item {
   // Todo proporcional a la pantalla, para que se lea de lejos.
   readonly property real escala: Math.max(700, Math.min(panel.width, panel.height))
   readonly property real radio: escala * 0.20
-  readonly property real radioHijo: radio * 1.48
+  readonly property real radioHijo: radio * 1.56
   readonly property real lado: radio * 0.56
-  readonly property real ladoHijo: lado * 0.72
+  readonly property real ladoHijo: lado * 0.70
   readonly property real fuenteIcono: lado * 0.36
   readonly property real fuenteTexto: lado * 0.155
   readonly property real fuenteGlobo: lado * 0.19
@@ -232,7 +233,33 @@ Item {
     // Velo: separa el menú del escritorio sin taparlo del todo.
     Rectangle {
       anchors.fill: parent
-      color: Util.alpha(root.fondo, 0.66)
+      color: Util.alpha(root.fondo, 0.55)
+    }
+
+    // Viñeta radial: oscurece el centro (donde vive el menú) y se abre en
+    // los bordes, como el halo de un HUD.
+    Shape {
+      anchors.fill: parent
+
+      ShapePath {
+        fillGradient: RadialGradient {
+          centerX: panel.width / 2
+          centerY: panel.height / 2
+          centerRadius: root.radio * 2.1
+          focalX: panel.width / 2
+          focalY: panel.height / 2
+          focalRadius: 0
+          GradientStop { position: 0.0; color: Util.alpha(root.fondo, 0.62) }
+          GradientStop { position: 0.58; color: Util.alpha(root.fondo, 0.34) }
+          GradientStop { position: 1.0; color: Util.alpha(root.fondo, 0.0) }
+        }
+        startX: 0
+        startY: 0
+        PathLine { x: panel.width; y: 0 }
+        PathLine { x: panel.width; y: panel.height }
+        PathLine { x: 0; y: panel.height }
+        PathLine { x: 0; y: 0 }
+      }
     }
 
     // ── Aros base ─────────────────────────────────────────────────────────
@@ -370,6 +397,7 @@ Item {
         item: modelData
         elegida: root.sel === modelData.id
         atenuada: root.sel !== "" && !elegida
+        animarOnda: root.animarSeleccion
         lado: root.lado
         fuenteIcono: root.fuenteIcono
         fuenteTexto: root.fuenteTexto
@@ -398,6 +426,7 @@ Item {
         item: modelData
         elegida: root.hijo === modelData.id
         atenuada: root.hijo !== "" && !elegida
+        animarOnda: root.animarSeleccion
         hijo: true
         lado: root.ladoHijo
         fuenteIcono: root.fuenteIcono * 0.78
@@ -418,7 +447,7 @@ Item {
     Item {
       id: nucleo
       anchors.centerIn: parent
-      width: root.radio * 0.30
+      width: root.radio * 0.36
       height: width
 
       Rectangle {
@@ -429,7 +458,7 @@ Item {
 
       HudRing {
         anchors.centerIn: parent
-        radio: root.radio * 0.15
+        radio: root.radio * 0.18
         color: Util.alpha(root.acento, 0.55)
         grosor: 1.5
       }
@@ -450,7 +479,7 @@ Item {
 
       Rectangle {
         anchors.centerIn: parent
-        width: root.lado * 0.075
+        width: root.lado * 0.085
         height: width
         radius: width / 2
         color: root.acento
@@ -566,7 +595,7 @@ Item {
     Rectangle {
       visible: root.globo !== ""
       anchors.horizontalCenter: parent.horizontalCenter
-      y: parent.height - Style.space(86)
+      y: parent.height - Style.space(112)
       width: textoGlobo.implicitWidth + Style.space(64)
       height: Style.space(48)
       radius: height / 2
@@ -586,7 +615,7 @@ Item {
       Text {
         id: textoGlobo
         anchors.centerIn: parent
-        text: root.globo
+        text: root.globo.toUpperCase()
         color: root.tinta
         font.family: root.fontFamily
         font.pixelSize: root.fuenteGlobo
@@ -597,7 +626,7 @@ Item {
     Text {
       visible: root.globo === ""
       anchors.horizontalCenter: parent.horizontalCenter
-      y: parent.height - Style.space(86)
+      y: parent.height - Style.space(112)
       text: "RECORRÉ CON EL DEDO"
       color: Util.alpha(root.tinta, 0.42)
       font.family: root.fontFamily
