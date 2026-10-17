@@ -162,6 +162,10 @@ for cycle in $(seq 1 "$CYCLES"); do
     MID_LAST="$(tiled_fixtures)"
     [ "$cycle" -eq 1 ] && [ -n "$GEOM" ] && grim -g "$GEOM" "$PNG_ON" >/dev/null 2>&1 || true
 
+    # Ring/room snapshot for the deterministic layout checks below.
+    nested eval 'hl.plugin.hypr3d.rooms()' >/dev/null 2>&1
+    cp /tmp/hypr3d-rooms.txt "$OUT/rooms-$cycle.txt" 2>/dev/null || true
+
     if [ "$WITH_CHURN" = "1" ] && [ "$cycle" -eq 1 ]; then
         addr="$(nested -j clients 2>/dev/null | jq -r --arg t "$CLOSED_TITLE" '[.[] | select(.title==$t)][0].address // ""')"
         [ -n "$addr" ] && nested eval "hl.dispatch(hl.dsp.window.close({ window = \"address:$addr\" }))" >/dev/null 2>&1
@@ -228,22 +232,6 @@ VERDICT="$(jq -n -c \
     new_window_ok: ([($postT[] | select(.title==$newt) | select(.floating or .size[0] >= 500))]|length) == ($churn|if . then 1 else 0 end)
   }')"
 
-{
-    echo "{"
-    echo "\"plugin_loaded\": $plugin_loaded,"
-    echo "\"plugin_version\": \"$plugin_version\","
-    echo "\"cycles\": $CYCLES,"
-    echo "\"with_float\": $WITH_FLOAT,"
-    echo "\"with_churn\": $WITH_CHURN,"
-    echo "\"pre\": $PRE_ALL,"
-    echo "\"in3d\": $MID_JSON,"
-    echo "\"posts\": $POSTS_JSON,"
-    echo "\"post_all\": $POST_ALL,"
-    echo "\"mons_post\": $MONS_POST,"
-    echo "\"diag_post\": \"$DIAG_POST\","
-    echo "\"verdict\": $VERDICT"
-    echo "}"
-} > "$REPORT"
 
 ok=yes
 jq -e '
@@ -258,7 +246,109 @@ jq -e '
 ' <<<"$VERDICT" >/dev/null 2>&1 || ok=no
 [ "$plugin_loaded" -ge 1 ] || ok=no
 
-echo "SUMMARY: verdict=$ok plugin_loaded=$plugin_loaded version=$plugin_version cycles=$CYCLES float=$WITH_FLOAT churn=$WITH_CHURN"
+# --- ring room checks -------------------------------------------------------
+# The plugin dumps its rooms to /tmp/hypr3d-rooms.txt on demand
+# (hl.plugin.hypr3d.rooms()). Both the geometry and the persistence across an
+# off/on toggle are asserted here, deterministically, without screenshots.
+RING_JSON="null"
+RING_OK=skip
+RING_PERSIST=-1
+
+if [ -f "$OUT/rooms-1.txt" ]; then
+    RING_JSON_RAW="$(awk '
+        BEGIN { PI = 3.141592653589793; TAU = 2 * PI; R0 = 0 }
+        function abs(x) { return x < 0 ? -x : x }
+        function wrap(x) { x = x % TAU; if (x > PI) x -= TAU; if (x < -PI) x += TAU; return x }
+        /^active / { act = $2; next }
+        /^room / { inroom = ($2 == act); R = $4; cx = $5; cy = $6; cz = $7; next }
+        inroom && $1 == "win" {
+            n++; id[n] = $2; x[n] = $3; y[n] = $4; z[n] = $5;
+            yaw[n] = $6; w[n] = $7; h[n] = $8; ring[n] = $9;
+        }
+        END {
+            bad = "";
+            if (n < 2) bad = bad "few-windows;";
+            for (i = 1; i <= n; i++) {
+                if (ring[i] != 1) bad = bad "not-ring:" id[i] ";";
+                dx = x[i] - cx; dz = z[i] - cz;
+                r = sqrt(dx * dx + dz * dz);
+                if (i == 1) R0 = r; else if (abs(r - R0) > 0.08) bad = bad "radius:" id[i] ";";
+                if (abs(y[i] - cy) > 0.02) bad = bad "level:" id[i] ";";
+                a = atan2(dx, -dz);
+                if (abs(wrap(yaw[i] + a)) > 0.08) bad = bad "facing:" id[i] ";";
+            }
+            for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) {
+                dx = x[i] - x[j]; dy = y[i] - y[j]; dz = z[i] - z[j];
+                d = sqrt(dx * dx + dy * dy + dz * dz);
+                need = (w[i] + w[j]) / 2;
+                if (d < need) bad = bad "overlap:" i "," j ";";
+            }
+            printf "%d %.4f %d %s\n", n, R0, (bad == ""), (bad == "" ? "none" : bad);
+        }
+    ' "$OUT/rooms-1.txt" 2>/dev/null)"
+
+    read -r RING_N RING_R RING_GOOD RING_PROBLEMS <<<"${RING_JSON_RAW:-}"
+
+    if [ "${RING_GOOD:-0}" = "1" ]; then
+        RING_OK=yes
+    else
+        RING_OK=no
+    fi
+
+    RING_JSON="$(jq -n -c \
+        --argjson n "${RING_N:-0}" \
+        --argjson radius "${RING_R:-0}" \
+        --argjson ok "$([ "${RING_GOOD:-0}" = "1" ] && echo true || echo false)" \
+        --arg problems "${RING_PROBLEMS:-no-data}" \
+        '{n: $n, radius: $radius, ok: $ok, problems: $problems}')"
+
+    pose_of() {
+        awk '
+            /^active / { act = $2; next }
+            /^room / { inroom = ($2 == act); next }
+            inroom && $1 == "win" { printf "%s %.4f %.4f %.4f %.4f\n", $2, $3, $4, $5, $6 }
+        ' "$1" | sort
+    }
+
+    if [ "$CYCLES" -ge 2 ] && [ -f "$OUT/rooms-2.txt" ]; then
+        pose_of "$OUT/rooms-1.txt" > "$OUT/pose-1.txt"
+        pose_of "$OUT/rooms-2.txt" > "$OUT/pose-2.txt"
+        if cmp -s "$OUT/pose-1.txt" "$OUT/pose-2.txt"; then
+            RING_PERSIST=1
+        else
+            RING_PERSIST=0
+            RING_OK=no
+        fi
+    fi
+fi
+
+[ "$RING_OK" = no ] && ok=no
+if [ "$RING_OK" = skip ] && [ "${HYPR3D_VERIFY_REQUIRE_RING:-0}" = "1" ]; then
+    ok=no
+fi
+
+{
+    echo "{"
+    echo "\"plugin_loaded\": $plugin_loaded,"
+    echo "\"plugin_version\": \"$plugin_version\","
+    echo "\"cycles\": $CYCLES,"
+    echo "\"with_float\": $WITH_FLOAT,"
+    echo "\"with_churn\": $WITH_CHURN,"
+    echo "\"pre\": $PRE_ALL,"
+    echo "\"in3d\": $MID_JSON,"
+    echo "\"posts\": $POSTS_JSON,"
+    echo "\"post_all\": $POST_ALL,"
+    echo "\"mons_post\": $MONS_POST,"
+    echo "\"diag_post\": \"$DIAG_POST\","
+    echo "\"ring\": $RING_JSON,"
+    echo "\"ring_ok\": \"$RING_OK\","
+    echo "\"ring_persist\": $RING_PERSIST,"
+    echo "\"verdict\": $VERDICT"
+    echo "}"
+} > "$REPORT"
+
+echo "SUMMARY: verdict=$ok plugin_loaded=$plugin_loaded version=$plugin_version cycles=$CYCLES float=$WITH_FLOAT churn=$WITH_CHURN ring=$RING_OK persist=$RING_PERSIST"
+echo "RING: $RING_JSON"
 echo "VERDICT: $(echo "$VERDICT" | tr -d "\n ")"
 echo "PNG_ON=$PNG_ON PNG_OFF=$PNG_OFF"
 echo "LOG: $LOG REPORT: $REPORT"
