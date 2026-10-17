@@ -10,6 +10,7 @@ require("autostart")
 require("plugins.hyprexpo")
 require("plugins.hypr3d")
 require("navigation")
+require("visionhub-typing")
 
 require("windowrules")
 require("windowhelpers")
