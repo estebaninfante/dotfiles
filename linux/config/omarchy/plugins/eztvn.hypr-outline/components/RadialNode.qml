@@ -28,7 +28,7 @@ Item {
 
   width: ancho
   height: lado
-  opacity: atenuada ? 0.38 : 1
+  opacity: atenuada ? 0.52 : 1
   scale: elegida ? 1.06 : 1
 
   Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
@@ -63,7 +63,7 @@ Item {
     id: placa
     anchors.fill: parent
     radius: nodo.lado * 0.30
-    color: Util.alpha(Qt.lighter(nodo.fondo, nodo.elegida ? 2.4 : 1.6), 0.93)
+    color: Util.alpha(Qt.lighter(nodo.fondo, nodo.elegida ? 3.2 : 2.4), 0.95)
     border.width: nodo.elegida ? 1.6 : 1
     border.color: nodo.elegida ? nodo.acento : Util.alpha(nodo.tinta, 0.10)
 

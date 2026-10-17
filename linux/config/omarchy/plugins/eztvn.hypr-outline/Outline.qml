@@ -230,16 +230,18 @@ Item {
     exclusionMode: ExclusionMode.Ignore
     mask: Region {}                     // solo se mira: los clics pasan de largo
 
-    // Velo: separa el menú del escritorio sin taparlo del todo.
+    // Fondo opaco: el menú no se tiñe con lo que haya detrás (wallpaper,
+    // ventanas). El escritorio se oculta mientras el radial está abierto.
     Rectangle {
       anchors.fill: parent
-      color: Util.alpha(root.fondo, 0.55)
+      color: root.fondo
     }
 
     // Viñeta radial: oscurece el centro (donde vive el menú) y se abre en
     // los bordes, como el halo de un HUD.
     Shape {
       anchors.fill: parent
+      visible: true
 
       ShapePath {
         fillGradient: RadialGradient {
@@ -249,9 +251,9 @@ Item {
           focalX: panel.width / 2
           focalY: panel.height / 2
           focalRadius: 0
-          GradientStop { position: 0.0; color: Util.alpha(root.fondo, 0.62) }
-          GradientStop { position: 0.58; color: Util.alpha(root.fondo, 0.34) }
-          GradientStop { position: 1.0; color: Util.alpha(root.fondo, 0.0) }
+          GradientStop { position: 0.0; color: Qt.lighter(root.fondo, 2.1) }
+          GradientStop { position: 0.55; color: Qt.lighter(root.fondo, 1.15) }
+          GradientStop { position: 1.0; color: root.fondo }
         }
         startX: 0
         startY: 0
@@ -542,9 +544,12 @@ Item {
         color: root.acento
       }
 
+      // Halo de la chispa. Ojo: nada de anchors.margins derivados del propio
+      // width (binding circular: crecía hasta tapar la pantalla de verde).
       Rectangle {
-        anchors.fill: parent
-        anchors.margins: -width * 1.15
+        anchors.centerIn: parent
+        width: parent.width * 3.4
+        height: width
         radius: width / 2
         color: Util.alpha(root.acento, 0.16)
       }
