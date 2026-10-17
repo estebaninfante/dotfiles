@@ -43,6 +43,24 @@ Item {
   property bool menuOpen: false
   readonly property bool opened: menuOpen
 
+  // Navegación interna del menú: cadena vacía = lista, si no el id de unidad
+  // cuya vista de detalle (submenú específico) se está mostrando.
+  property string detailSvc: ""
+  readonly property var detailService: {
+    for (var i = 0; i < services.length; i++)
+      if (services[i].svc === detailSvc) return services[i]
+    return null
+  }
+  readonly property bool inDetail: detailService !== null
+
+  // Máximo de filas visibles antes de que la lista haga scroll.
+  readonly property int maxVisibleServices: 6
+
+  // Unidades que tienen un submenú específico embebido (más allá de los
+  // controles genéricos).
+  readonly property var extraPanelUnits: ["hypr-remote.service", "lan-mouse.service"]
+  function hasExtraPanel(svc) { return extraPanelUnits.indexOf(svc) >= 0 }
+
   property var manualStopped: ({})
 
   readonly property var serviceDefs: [
@@ -95,8 +113,25 @@ Item {
   implicitHeight: bar ? bar.barSize : 26
 
   function open() { menuOpen = true }
-  function close() { menuOpen = false }
+  function close() {
+    menuOpen = false
+    detailSvc = ""
+  }
   function toggle() { menuOpen = !menuOpen }
+
+  function openDetail(svc) {
+    detailSvc = String(svc || "")
+    statusProbe.refresh()
+  }
+
+  function closeDetail() {
+    detailSvc = ""
+  }
+
+  function openLogs(svc) {
+    if (!bar || !svc) return
+    bar.run("xdg-terminal-exec --hold -- journalctl --user -u " + svc + " -f -n 200")
+  }
 
   function isEnabled(v) { return v === "enabled" || v === "enabled-runtime" }
   function isTransient(s) { return s === "activating" || s === "deactivating" || s === "reloading" }
