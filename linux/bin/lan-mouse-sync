@@ -46,7 +46,8 @@ case "$pos" in
     *) log "config sin posición válida; nada que hacer"; exit 0 ;;
 esac
 
-peer="$(kvm-peer "$CFG" 2>/dev/null || true)"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+peer="$("$SELF_DIR/kvm-peer" "$CFG" 2>/dev/null || true)"
 if [ -z "$peer" ]; then
     log "no pude resolver el peer desde $CFG"
     exit 0

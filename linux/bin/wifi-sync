@@ -34,10 +34,18 @@ log() { echo "$(date '+%F %T') $*" >>"$LOG"; }
 say() { [ "$AUTO" = 1 ] || echo "$*"; log "$*"; }
 
 PY="python3"
-peer="$(kvm-peer 2>/dev/null || true)"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+peer="$("$SELF_DIR/kvm-peer" 2>/dev/null || true)"
 [ -n "$peer" ] || { say "sin peer de LAN-Mouse configurado"; exit 0; }
 
 ssht() {
+    timeout 25 ssh -n -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5 "$peer" "$@"
+}
+
+# Igual que ssht pero deja que el comando remoto lea stdin (push de perfiles,
+# scripts por heredoc). El -n de ssht evita que ssh se coma el archivo de
+# acciones del while que lo invoca.
+ssht_in() {
     timeout 25 ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5 "$peer" "$@"
 }
 
@@ -52,19 +60,20 @@ local_manifest="$tmpdir/local.tsv"
 remote_manifest="$tmpdir/remote.tsv"
 : >"$local_manifest"
 
-for f in "$DIR"/*.nmconnection; do
-    [ -e "$f" ] || continue
+while IFS= read -r -d '' f; do
     sudo -n grep -q '^type=wifi' "$f" 2>/dev/null || continue
     printf '%s\t%s\n' "$(basename "$f")" \
         "$(sudo -n sha256sum "$f" 2>/dev/null | cut -d' ' -f1)" >>"$local_manifest"
+done < <(sudo -n find "$DIR" -maxdepth 1 -type f -name '*.nmconnection' -print0 2>/dev/null)
+
+# El directorio es root-only (0700): hay que listarlo con sudo en ambos lados.
+ssht_in 'sudo -n bash -s' >"$remote_manifest" 2>/dev/null <<'EOS' || : >"$remote_manifest"
+for f in /etc/NetworkManager/system-connections/*.nmconnection; do
+    [ -e "$f" ] || continue
+    grep -q '^type=wifi' "$f" || continue
+    printf '%s\t%s\n' "$(basename "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"
 done
-
-ssht 'for f in /etc/NetworkManager/system-connections/*.nmconnection; do
-        [ -e "$f" ] || continue
-        sudo -n grep -q "^type=wifi" "$f" 2>/dev/null || continue
-        printf "%s\t%s\n" "$(basename "$f")" "$(sudo -n sha256sum "$f" | cut -d" " -f1)"
-    done' >"$remote_manifest" 2>/dev/null || : >"$remote_manifest"
-
+EOS
 # ── decide acciones ────────────────────────────────────────────
 # Salida: push<TAB>nombre  |  pull<TAB>nombre
 actions="$tmpdir/actions.tsv"
@@ -144,7 +153,7 @@ while IFS=$'\t' read -r action name; do
         say "push $name"
         [ "$DRY" = 1 ] && continue
         sudo -n cat "$src" >"$tmpdir/profile"
-        if ssht "sudo -n tee $(printf '%q' "$dst") >/dev/null &&
+        if ssht_in "sudo -n tee $(printf '%q' "$dst") >/dev/null &&
                  sudo -n chmod 600 $(printf '%q' "$dst") &&
                  sudo -n chown root:root $(printf '%q' "$dst")" <"$tmpdir/profile"; then
             set_state "$name" "$hash"
@@ -189,5 +198,7 @@ if [ "$CONNECT" = 1 ] && [ "$pushed" = 1 ]; then
               nmcli connection up id $(printf '%q' "$active_peer")" >/dev/null 2>&1 || true
     fi
 fi
+
+[ -s "$actions" ] || say "sin cambios"
 
 exit 0
