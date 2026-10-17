@@ -79,7 +79,9 @@ Item {
   property color foreground: themeForeground
   property color barForeground: useTransparentForeground ? transparentForeground : themeForeground
   property bool foregroundAnimationEnabled: true
-  property color background: Qt.rgba(0, 0, 0, 0.90)
+  // AMOLED: la barra hereda el color de superficie del tema (Color.bar.background),
+  // que el override de ~/.config/omarchy/shell.toml fija en #000000 opaco.
+  property color background: Color.bar.background
   property color urgent: Color.accent
 
   Behavior on barForeground { enabled: root.foregroundAnimationEnabled; ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
