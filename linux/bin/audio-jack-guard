@@ -47,6 +47,21 @@ current_port() {
     | sed -n 's/^[[:space:]]*Active Port: //p' | head -1
 }
 
+# Al arrancar, PipeWire carga el sink nulo del micrófono del teléfono
+# (phone_mic_sink) y WirePlumber lo elige como salida por defecto: todo el
+# audio va a un sink que no va a ningún lado (silencio total). Si el default
+# es ese nulo (o no hay), devolvemos el default a la placa real. No tocamos
+# otra salida que el usuario haya elegido a propósito (HDMI, Bluetooth…).
+ensure_default_sink() {
+  local cur
+  cur="$(pactl get-default-sink 2>/dev/null)"
+  case "$cur" in
+    ""|"phone_mic_sink"|"phone-mic")
+      pactl set-default-sink "$SINK" >/dev/null 2>&1 || true
+      ;;
+  esac
+}
+
 # Puerto + amplificador activo. Solo cambia el puerto si hace falta, y repone el
 # volumen que WirePlumber salta al cambiar (si no, enchufar auriculares puede
 # saltar a 100%).
@@ -70,6 +85,7 @@ amixer -c "$CARD" sset 'Master' 87 on >/dev/null 2>&1 || true
 amixer -c "$CARD" sset 'PCM' 255 >/dev/null 2>&1 || true
 
 while true; do
+  ensure_default_sink
   case "$(jack_state)" in
     on)  apply analog-output-headphones Headphone Speaker ;;
     off) apply analog-output-speaker   Speaker   Headphone ;;
