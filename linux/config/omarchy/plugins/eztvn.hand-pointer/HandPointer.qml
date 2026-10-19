@@ -39,6 +39,7 @@ Item {
   readonly property real dotSize: 30
 
   function handleLine(line) {
+    console.log("hand-pointer recv:", line)
     var msg
     try {
       msg = JSON.parse(line)
@@ -95,6 +96,7 @@ Item {
     active: false
     path: root.socketPath
     handler: Socket {
+      onConnectedChanged: console.log("hand-pointer socket connected:", connected)
       parser: SplitParser {
         onRead: line => root.handleLine(line)
       }
