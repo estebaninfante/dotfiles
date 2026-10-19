@@ -27,11 +27,12 @@ hl.animation({
     bezier = "default"
 })
 
+-- windowsMove es la hoja que Hyprland usa para el resize/movimiento de ventanas,
+-- incluido el cambio a fullscreen. La apagamos para que el fullscreen (por ej.
+-- al ciclar medios con SUPER+TAB) sea inmediato y no se anime.
 hl.animation({
     leaf = "windowsMove",
-    enabled = true,
-    speed = 4,
-    bezier = "expoSmooth"
+    enabled = false
 })
 
 hl.curve("expoOpen", {
