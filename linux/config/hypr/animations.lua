@@ -119,17 +119,19 @@ hl.animation({
     bezier = "default",
     style = "popin"
 })
+-- El cambio a fullscreen también dispara fundidos que no son de tamaño:
+-- las otras ventanas del workspace y las capas (la barra) se desvanecen con
+-- fadeIn / fadeLayersIn / fadeLayersOut. Los apagamos para que el cambio sea
+-- instantáneo. La apertura de ventanas sigue animándose con windowsIn (slide).
+hl.animation({ leaf = "fadeIn", enabled = false })
+
 hl.animation({
     leaf = "fadeLayersIn",
-    enabled = true,
-    speed = 6,
-    bezier = "default"
+    enabled = false
 })
 hl.animation({
     leaf = "fadeLayersOut",
-    enabled = true,
-    speed = 6,
-    bezier = "default"
+    enabled = false
 })
 
 return true
