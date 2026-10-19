@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-# pi_shim.py — puente Ollama -> Pi headless para el cerebro de OmniVoz.
+# pi_shim.py — puente Ollama -> agente headless para el cerebro de OmniVoz.
 #
 # OmniVoz (y cualquier cliente que hable el protocolo de Ollama) le pega a
 # /api/chat esperando {message:{role,content,tool_calls?}}. Este shim extrae la
-# frase del usuario del contexto, la manda a `voice-pi` (Pi headless, sin
-# razonamiento ni extensiones) y devuelve su respuesta como la del asistente.
+# frase del usuario del contexto, la manda al cerebro headless (`voice-hermes`,
+# o el que diga VOICE_BRAIN_BIN) y devuelve su respuesta como la del asistente.
 #
-# Pi actúa por su cuenta con sus herramientas (bash -> hyprctl, wpctl, ...) y
-# OmniVoz solo relata la respuesta hablada. Así el fallback "no es un comando
-# fijo" lo resuelve Pi, localmente y sin opencode.
+# El agente actúa por su cuenta con sus herramientas (terminal -> hyprctl,
+# wpctl, ...) y OmniVoz solo relata la respuesta hablada. Así el fallback "no es
+# un comando fijo" lo resuelve el harness elegido, localmente y sin opencode.
+#
+# Nombre del servicio y del archivo: histórico (`voice-pi-shim`), cuando el
+# único cerebro era Pi.
 #
 # Puerto: VOICE_PI_SHIM_PORT (default 11435).
 
@@ -24,10 +27,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from spoken import clean  # noqa: E402
 
-VOICE_PI = os.environ.get(
-    "VOICE_PI_BIN", os.path.join(os.path.expanduser("~"), ".local/bin", "voice-pi")
+# VOICE_BRAIN_BIN manda; VOICE_PI_BIN queda por compatibilidad con configs
+# viejas. Por defecto, el cerebro actual: Hermes headless.
+VOICE_BRAIN = (
+    os.environ.get("VOICE_BRAIN_BIN")
+    or os.environ.get("VOICE_PI_BIN")
+    or os.path.join(os.path.expanduser("~"), ".local/bin", "voice-hermes")
 )
-TIMEOUT = float(os.environ.get("VOICE_PI_SHIM_TIMEOUT", "90"))
+TIMEOUT = float(os.environ.get("VOICE_BRAIN_SHIM_TIMEOUT", os.environ.get("VOICE_PI_SHIM_TIMEOUT", "90")))
 PORT = int(os.environ.get("VOICE_PI_SHIM_PORT", "11435"))
 
 # La última línea del contexto de OmniVoz es "petición: <frase>".
@@ -42,15 +49,15 @@ def extract_request(content: str) -> str:
     return (content or "").strip()
 
 
-def ask_pi(text: str, dry: bool = False) -> str:
+def ask_brain(text: str, dry: bool = False) -> str:
     if not text:
         return ""
     env = dict(os.environ)
     if dry:
-        env["VOICE_PI_DRY"] = "1"
+        env["VOICE_BRAIN_DRY"] = "1"
     try:
         proc = subprocess.run(
-            [VOICE_PI, text],
+            [VOICE_BRAIN, text],
             capture_output=True,
             text=True,
             timeout=TIMEOUT,
@@ -78,7 +85,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path.startswith("/api/tags"):
-            self._json({"models": [{"name": "pi", "model": "pi"}]})
+            # "pi" queda listado para clientes/configs viejas; OmniVoz no lo valida.
+            self._json({"models": [{"name": "hermes", "model": "hermes"}, {"name": "pi", "model": "pi"}]})
         else:
             self._json({"ok": True})
 
@@ -92,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path.startswith("/api/generate"):
-            # warmup: no hay nada que calentar del lado de Pi.
+            # warmup: no hay nada que calentar del lado del agente.
             self._json({"response": "", "done": True})
             return
 
@@ -106,16 +114,16 @@ class Handler(BaseHTTPRequestHandler):
                 user_content = str(msg.get("content", ""))
                 break
         text = extract_request(user_content)
-        reply = ask_pi(text, dry=bool(req.get("omnivoz_dry")))
+        reply = ask_brain(text, dry=bool(req.get("omnivoz_dry")))
         self._json({"message": {"role": "assistant", "content": reply}, "done": True})
 
 
 def main() -> int:
-    if not os.path.exists(VOICE_PI):
-        print(f"pi_shim: no existe {VOICE_PI}", file=sys.stderr)
+    if not os.path.exists(VOICE_BRAIN):
+        print(f"pi_shim: no existe {VOICE_BRAIN}", file=sys.stderr)
         return 1
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"pi_shim: Ollama->Pi escuchando en 127.0.0.1:{PORT}", file=sys.stderr)
+    print(f"pi_shim: Ollama->{os.path.basename(VOICE_BRAIN)} escuchando en 127.0.0.1:{PORT}", file=sys.stderr)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

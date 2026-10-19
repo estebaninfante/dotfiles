@@ -75,3 +75,55 @@ solución.
   al archivo de sesión.
 - Que el modelo tenga que crear la tarea a mano en cada turno: costo y olvidos.
   Se captura sola; el modelo solo la renombra o anota si hace falta.
+
+## 2026-10-18 — El cerebro de voz pasa de Pi a Hermes
+
+**Contexto.** Omar (el asistente de voz, wake word "omar") resolvía lo que no
+era comando fijo con Pi headless (`voice-pi`) a través de `pi_shim.py`. El
+usuario usa Hermes como harness y quiere que Omar corra ahí, con el mismo
+modelo que ya usa Hermes (`deepseek-v4.1-flash` de opencode-go), cubierto por
+su plan y sin costo por token.
+
+**Elegido.**
+
+- `linux/bin/voice-hermes`: `hermes -z` dentro de `linux/voice/pi-brain/`, con
+  `--toolsets terminal` (muchos menos esquemas: el prompt baja de ~46 KB a lo
+  mínimo) y el `AGENTS.md` del cerebro, que Hermes ya carga por CWD.
+- `pi_shim.py` apunta a `voice-hermes` por defecto. `VOICE_BRAIN_BIN` manda;
+  `VOICE_PI_BIN` queda por compatibilidad con configs viejas.
+- `voice think` y `omar ask` llaman a `voice-hermes`. `voice-pi` sigue
+  existiendo como variante explícita.
+- El guard de comandos destructivos (`pi-brain/guard/`) se comparte: los
+  symlinks de `omarchy`/`systemctl`/`reboot` siguen haciendo la confirmación
+  hablada sin importar el harness.
+- El modelo no se fija en el script: es el default de `~/.hermes/config.yaml`,
+  para que haya una sola fuente de verdad. `VOICE_HERMES_MODEL` y
+  `VOICE_HERMES_PROVIDER` permiten pisarlo.
+- `voice-pi-shim.service` conserva el nombre (histórico) para no migrar links,
+  timers ni la config de OmniVoz.
+
+**Descartado.**
+
+- `deepseek-v4.1-flash-free` de OpenCode Zen: es el mismo modelo gratis, pero
+  su capa gratuita sólo atiende al cliente de OpenCode (`HTTP 403: free tier
+  can only be used from within OpenCode` desde Hermes y desde `pi`). No es una
+  opción real fuera de esa app.
+- Renombrar el servicio a `voice-brain-shim.service`: obliga a migrar enlaces y
+  unidades por un nombre, sin ganar nada funcional.
+- Un script genérico con ramas Pi/Hermes: más código para una sola decisión de
+  harness. Si mañana vuelve a cambiar, se agrega otro `voice-*` y se cambia
+  `VOICE_BRAIN_BIN`.
+
+## 2026-10-18 — Pi arranca en pensamiento `low`
+
+**Contexto.** El nivel de razonamiento quedaba en `high` al reanudar sesiones y
+para sesiones nuevas, lo que encarece y demora el trabajo de todos los días sin
+que el usuario lo haya pedido.
+
+**Elegido.** `defaultThinkingLevel: "low"` y
+`modelThinkingLevels: {"deepseek/deepseek-flash": "low"}` en
+`linux/pi/agent/settings.json`. Las sesiones ya abiertas conservan su nivel
+hasta que se cambie con `/thinking`; las nuevas arrancan en `low`.
+
+**Descartado.** Forzar `--thinking low` en cada invocación: no cubre las
+sesiones interactivas y duplica la config.

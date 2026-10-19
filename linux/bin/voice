@@ -586,14 +586,14 @@ inbox_cmd() {  # inbox [list|count|clear|play]
   esac
 }
 
-# think: manda el texto al cerebro Pi (headless, sin razonamiento) y habla la
-# respuesta con la voz del asistente. Es el fallback "no es un comando fijo".
+# think: manda el texto al cerebro headless (Hermes) y habla la respuesta con
+# la voz del asistente. Es el fallback "no es un comando fijo".
 think() {  # think <texto>
   local text="$*"
   [ -n "$text" ] || { [ -t 0 ] && return 2; text="$(cat)"; }
   [ -n "$text" ] || { echo "voice think: falta el texto" >&2; return 2; }
   local reply
-  reply=$(VOICE_PI_TIMEOUT="${VOICE_PI_TIMEOUT:-60}" "$HOME/.local/bin/voice-pi" "$text" 2>/dev/null)
+  reply=$(VOICE_HERMES_TIMEOUT="${VOICE_HERMES_TIMEOUT:-60}" "$HOME/.local/bin/voice-hermes" "$text" 2>/dev/null)
   # Limpieza para oido: fuera codigo, HTML, markdown y saltos de linea.
   reply=$(printf '%s' "$reply" | "$PY" "$VOICE_DIR/spoken.py")
   [ -n "$reply" ] || reply="No pude resolver eso."

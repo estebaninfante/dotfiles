@@ -204,11 +204,12 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 | chatterbox_server.py | Server persistente Chatterbox (model in GPU memory) |
 | chatterbox_synth.py | Wrapper legacy (subprocess mode, fallback) |
 | asr_vosk.py | Streaming ASR (Vosk CPU) para el wake-word |
-| pi_shim.py | Puente Ollama->Pi: cerebro de OmniVoz sin tocar su código |
+| pi_shim.py | Puente Ollama->agente: cerebro de OmniVoz sin tocar su código |
 | spoken.py | Limpia la respuesta para oído (código/HTML/markdown) |
-| pi-brain/AGENTS.md | Guía del cerebro Pi: cómo manejar el escritorio |
+| pi-brain/AGENTS.md | Guía del cerebro headless: cómo manejar el escritorio |
 | `linux/bin/voice-asr-stream` | Selector del motor del wake-word: GPU (`[wake] gpu_command`) o CPU (Vosk) |
-| `linux/bin/voice-pi` | Pi headless (sin razonamiento/extensiones) para el cerebro de voz |
+| `linux/bin/voice-hermes` | Hermes headless (una pasada, sólo terminal) para el cerebro de voz |
+| `linux/bin/voice-pi` | Variante Pi headless (sin razonamiento/extensiones) del cerebro |
 | `linux/bin/omar` | CLI de Omar sobre la API local de agentes-platform (tickets/agentes) |
 | `linux/bin/omnivoz-ptt` | Push-to-talk directo: una frase sin palabra clave |
 | `linux/bin/voice-key-listener` | Dispara el PTT desde keyd (tecla física de Windows → F13) |
@@ -374,11 +375,13 @@ lo elige `linux/bin/voice-asr-stream` según `[wake]`: GPU si hay `gpu_command`
 y AC, si no CPU (Vosk, sin VRAM). Servicio `talk-command.service` (unit en
 `linux/system/systemd-user/`); se prepara con `scripts/setup-wake.sh`.
 
-**Asistente y cerebro Pi:** OmniVoz (local, `~/developing/omnivoz`, servicio
+**Asistente y cerebro Hermes:** OmniVoz (local, `~/developing/omnivoz`, servicio
 `omnivoz-listen`) hace wake word → VAD → STT → reglas → cerebro. El cerebro es
-**Pi headless** (`linux/bin/voice-pi`, sin razonamiento ni extensiones) vía
-`linux/voice/pi_shim.py` (traduce Ollama→Pi; servicio `voice-pi-shim.service`),
-así que no usa opencode. **Teclas**: Caps Lock = Super (`layer(meta)` en
+**Hermes headless** (`linux/bin/voice-hermes`: una pasada `-z`, sólo terminal)
+vía `linux/voice/pi_shim.py` (traduce Ollama→agente; servicio
+`voice-pi-shim.service`, nombre histórico). Corre en `linux/voice/pi-brain/`
+con el `AGENTS.md` que le enseña el escritorio, y usa el modelo por defecto de
+Hermes (`deepseek-v4.1-flash` de opencode-go). **Teclas**: Caps Lock = Super (`layer(meta)` en
 keyd); la tecla física de Windows se remapea a **F13** y `voice-key-listener.service`
 (lee `keyd monitor`) corre `linux/bin/omar-open`: abre la **píldora**
 (`omar-pill.service` + `packaging/quickshell/omar-pill.qml`: input de texto y
@@ -396,8 +399,9 @@ caprichoso, por eso se engancha en keyd. El **glow** tipo Google Assistant
 "whisper"`) con **Parakeet CPU** de respaldo, mucho mejor en español que
 Parakeet solo. La CLI `linux/bin/omar` (tickets/agentes sobre la API local de
 agentes-platform) es la primera skill del cerebro; el resto entra en
-`linux/voice/pi-brain/AGENTS.md`. El cerebro por defecto es
-`opencode-go/qwen3.8-flash` vía Pi (`VOICE_PI_MODEL` cambia a uno local).
+`linux/voice/pi-brain/AGENTS.md`. El modelo del cerebro es el de Hermes
+(`~/.hermes/config.yaml`); `VOICE_HERMES_MODEL` / `VOICE_HERMES_PROVIDER`
+permiten pisarlo, y `VOICE_PI_*` sigue sirviendo para la variante Pi.
 
 **Archivos:**
 - `linux/voice/daemon.py` — daemon principal

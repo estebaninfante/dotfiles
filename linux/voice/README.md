@@ -205,31 +205,32 @@ Para GPU real (audio.cpp/Voxtral Realtime) instalá `audiocpp_cli` + un GGUF y
 definí `[wake] gpu_command`; el selector lo preferirá en AC y caerá a Vosk en
 batería o si falta.
 
-## Asistente (Pi headless)
+## Asistente (Hermes headless)
 
-Cuando la frase **no es un comando fijo**, el cerebro es **Pi** corriendo
-headless, sin razonamiento, sin extensiones ni skills, con `bash` como
-herramienta: entiende tu escritorio (Hyprland Lua, `wpctl`, `playerctl`, las
-CLIs `voice`/`omnivoz`) y hace la tarea. Su guía vive en
+Cuando la frase **no es un comando fijo**, el cerebro es **Hermes** corriendo
+headless en una sola pasada (`hermes -z`), con sólo el toolset `terminal`:
+entiende tu escritorio (Hyprland Lua, `wpctl`, `playerctl`, las CLIs
+`voice`/`omnivoz`) y hace la tarea. Su guía vive en
 `linux/voice/pi-brain/AGENTS.md`.
 
-- `voice think "<texto>"` — manda el texto a Pi y habla la respuesta.
-- `voice ptt` — push-to-talk: graba, transcribe (Handy) y responde con Pi.
+- `voice think "<texto>"` — manda el texto a Hermes y habla la respuesta.
+- `voice ptt` — push-to-talk: graba, transcribe (Handy) y responde con Hermes.
 - En OmniVoz, el cerebro se enchufa sin tocar su código con
-  `linux/voice/pi_shim.py` (servicio `voice-pi-shim.service`): traduce el
-  protocolo de Ollama a Pi. Así las reglas van primero y, si no hay comando
-  fijo, responde Pi.
+  `linux/voice/pi_shim.py` (servicio `voice-pi-shim.service`, nombre histórico):
+  traduce el protocolo de Ollama al agente headless. Así las reglas van primero
+  y, si no hay comando fijo, responde Hermes.
 - Teclas: **Caps Lock = Super** (via `layer(meta)` en keyd). La **tecla física
 de Windows** queda remapeada a **F13** y **alterna OmniVoz** on/off en Hyprland.
 `SUPER+ALT+P` sigue siendo push-to-talk explícito (una frase).
 
-El cerebro por defecto es `opencode-go/qwen3.8-flash` vía Pi (rápido y confiable).
-Se puede usar uno local con `VOICE_PI_MODEL=ollama/qwen3.5:4b` (Ollama ya queda
-instalado); se probó y el 4B alucina en este setup, por eso el default es el de
-opencode.
+El modelo del cerebro es el que tenga Hermes configurado
+(`~/.hermes/config.yaml`; hoy `deepseek-v4.1-flash` de opencode-go).
+`VOICE_HERMES_MODEL` y `VOICE_HERMES_PROVIDER` lo pisan sin tocar la config.
+La variante Pi sigue disponible: `VOICE_BRAIN_BIN=voice-pi` (o correr
+`voice-pi` a mano), con `VOICE_PI_MODEL=ollama/qwen3.5:4b` para un modelo local.
 
-La latencia típica del cerebro es ~3–4 s (modelo + arranque). Para bajarla: una
-sesión RPC persistente de Pi o un modelo más chico.
+La latencia típica del cerebro es ~5–6 s (arranque de Hermes + modelo + tools).
+Para bajarla: una sesión persistente o un modelo más chico.
 
 ## Captura de notificaciones (legado swaync)
 

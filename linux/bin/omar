@@ -11,7 +11,7 @@
 #   omar ticket show <id>
 #   omar agents
 #   omar board            # resumen legible del tablero
-#   omar ask "texto"      # entrada de texto a Omar (cerebro Pi + TTS + subtítulo)
+#   omar ask "texto"      # entrada de texto a Omar (cerebro Hermes + TTS + subtítulo)
 #
 # Pensada para que la use el cerebro de voz (Pi) por bash.
 
@@ -144,10 +144,10 @@ ask() {
     fi
   fi
 
-  # 2) Cerebro (Pi), con un reintento si vuelve vacío.
+  # 2) Cerebro (Hermes headless), con un reintento si vuelve vacío.
   local reply clean attempt
   for attempt in 1 2; do
-    reply="$("$HOME/.local/bin/voice-pi" "$text" 2>/dev/null || true)"
+    reply="$("$HOME/.local/bin/voice-hermes" "$text" 2>/dev/null || true)"
     clean="$(printf '%s' "$reply" | "$PY" "$HOME/dotfiles/linux/voice/spoken.py")"
     [ -n "$clean" ] && break
   done
