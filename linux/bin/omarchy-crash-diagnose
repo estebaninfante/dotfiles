@@ -24,7 +24,8 @@ comm=${2:-unknown}
 exe=${3:-unknown}
 signal=${4:-unknown}
 
-# systemd es pobre en PATH: los shims de mise traen opencode/rig/notify.
+# systemd es pobre en PATH: los shims de mise traen las herramientas del sistema
+# (opencode, rig, notify) y sin esto el diagnóstico no las encuentra.
 export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
 # El actor del feed del rig: asi los eventos de este diagnostico se leen como
 # propios y no como de la silla "main".
@@ -104,10 +105,14 @@ attempt=0
 for m in "${free_models[@]}"; do
   attempt=$((attempt + 1))
   echo "--- intento $attempt con $m ---"
-  out=$(timeout "${CRASH_DIAGNOSE_TIMEOUT:-900}" opencode run \
-    --model "$m" --title "$title" --auto --format json "$prompt" 2>&1)
-  rc=$?
-  printf '%s\n' "$out"
+  # Se transmite en vivo (tee al log del script) y se guarda para decidir si
+  # falló por cuota. Así el log sirve para seguir el diagnóstico mientras corre.
+  attempt_log=$(mktemp "${TMPDIR:-/tmp}/crash-diag.XXXXXX")
+  timeout "${CRASH_DIAGNOSE_TIMEOUT:-900}" opencode run \
+    --model "$m" --title "$title" --auto --format json "$prompt" 2>&1 | tee "$attempt_log"
+  rc=${PIPESTATUS[0]}
+  out=$(cat "$attempt_log" 2>/dev/null)
+  rm -f "$attempt_log"
   # Éxito = terminó sin error y sin señal de cuota agotada. Un modelo free
   # rate-limited devuelve 429/FreeUsageLimitError; se prueba el siguiente.
   if ((rc == 0)) && ! printf '%s\n' "$out" |

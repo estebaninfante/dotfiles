@@ -3,6 +3,42 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-19 — El crash se diagnostica solo y queda como ticket del rig
+
+**Contexto.** El watcher de Omarchy (`omarchy-crash-watch`) avisaba el crash con
+un toast "Click to diagnose with AI": el diagnóstico solo corría si el dueño
+hacía click, y no quedaba ticket, traza ni evidencia. Si el aviso se perdía, el
+crash se perdía con él. Se quiere que arranque solo y quede visible en el rig
+para hacerle seguimiento.
+
+**Elegido.**
+
+- Un watcher propio (`linux/bin/omarchy-crash-autodiagnose`) reemplaza al de
+  Omarchy por **drop-in de systemd**, para no editar `/usr/share/omarchy` (se
+  pisa en cada `omarchy update`). Conserva la señal (journal `MESSAGE_ID` de
+  systemd-coredump), el dedupe por programa, el filtro por usuario y el toggle
+  `crash-capture-off`.
+- Cada crash abre un **ticket `CRASH-<pid>-<epoch>`** en el proyecto `infra` y
+  corre el diagnóstico con **`opencode run` headless** (el mismo agente que ya
+  usa el rig), probando **solo modelos free** de OpenCode Zen en orden y pasando
+  al siguiente ante 429. Cierra el ticket con evidencia, sesión y evento.
+- El diagnóstico se desprende con `systemd-run --user` (unit transitorio) para
+  sobrevivir a un reinicio del watcher.
+- El método sigue en la skill `diagnose-crash`; el prompt la nombra en vez de
+  duplicar pasos.
+
+**Descartado.**
+
+- Diagnóstico con Pi headless: los modelos free de Pi que responden son solo
+  `opencode-go/longcat-2.5-preview-free` y `cat-jam-free` (el resto da 403
+  `FreeTierError` o 400 "unavailable"), y las trazas de Pi no entran en el
+  tablero de tickets del rig. OpenCode da muchos más modelos free y el ticket
+  nativo del rig.
+- Habilitar `pi-model-fallback` global: el fallback vive en el propio script
+  (lista de modelos free), sin cambiar el comportamiento de todas las sesiones.
+- Lanzar el diagnóstico en una silla tmux interactiva: nunca cierra sola, así
+  que el ticket no se podría cerrar solo. `opencode run` headless sí termina.
+
 ## 2026-10-18 — Un worktree por agente, y dos flujos por proyecto
 
 **Contexto.** Varios agentes trabajando en el mismo repo compartían carpeta y
