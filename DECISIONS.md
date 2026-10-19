@@ -316,3 +316,35 @@ cualquier otro `pw-play` (y hasta un shell cuyo comando mencionara el patrón).
 - Marcar el corte con un archivo con vencimiento: ventana arbitraria, decide
   por tiempo lo que ya se sabe por generación.
 
+## 2026-10-19 — Cancelar la voz responde en el acto (y calla aunque Omar esté apagado)
+
+**Contexto.** Medido el recorrido de la tecla de Windows: `voice-key-listener`
+tenía un antirrebote de 800 ms que **descartaba la segunda pulsación**, así que
+"cerrar y que se calle" no hacía nada hasta apretar otra vez. `present-remote`
+decidía con `qs ipc` (dos intentos, ~60-150 ms), cerraba la UI antes de avisar
+al oído, y la señal iba por `systemctl kill` (un proceso extra). Peor: si Omar
+estaba apagado y hablaba un aviso de otro agente, la tecla **prendía a Omar** y
+la voz seguía sonando; había que apretar de nuevo para callarla.
+
+**Elegido.**
+
+- Una pulsación, una acción: se elimina el antirrebote por tiempo; el "down"
+  repetido al mantener ya lo cubre el flag por pulsación.
+- La píldora se lee de `pill-open` (el archivo que publica el propio QML y que
+  el glow ya usa). `qs ipc` queda como respaldo si el archivo no existe.
+- Si no hay Omar activo pero `speaking.json` está vigente, la tecla/`Escape`
+  cortan el audio (`voice stop`) en vez de prender a Omar.
+- Cerrar: `SIGUSR2` por `listen.pid` + `kill(2)` (validando la línea de
+  comandos del PID) y `voice stop` en paralelo; UI y limpieza de PTT después,
+  con topes cortos (1,0 / 0,6 / 0,3 s) para no trabar la próxima pulsación.
+
+**Descartado.**
+
+- Sólo adelantar la señal y esperar al loop de Omar: medido ~80 ms extra; el
+  `voice stop` directo baja la pulsación→silencio a ~60 ms.
+- Depender de `status.json` para saber si Omar está despierto: lo publica
+  también el dictado y llega con retardo; `pill-open` es el estado de la
+  superficie que el usuario ve.
+- Un antirrebote más corto (100-200 ms): sigue perdiendo pulsaciones rápidas y
+  no aporta nada que el flag de pulsación no resuelva.
+

@@ -392,7 +392,7 @@ def _is_listen_service(pid):
 
 
 def _signal_service(sig):
-    """Manda una señal de control al único oído, levantándolo si hace falta.
+    """Manda una señal de control ("SIGUSR1"/"SIGUSR2") al único oído.
 
     SIGUSR1 = abrir la conversación sin palabra clave; SIGUSR2 = cerrarla. El
     servicio siempre corre (Restart=always) y el loop registra las señales antes
@@ -407,9 +407,10 @@ def _signal_service(sig):
             pid = int(f.read().strip())
     except (OSError, ValueError):
         pid = 0
-    if pid > 0 and _is_listen_service(pid):
+    signum = getattr(signal, str(sig), None)
+    if pid > 0 and signum is not None and _is_listen_service(pid):
         try:
-            os.kill(pid, sig)
+            os.kill(pid, signum)
             return
         except OSError:
             pass
@@ -436,12 +437,16 @@ def cancel_voice():
     """Apaga Omar: cierra la conversación y la píldora.
 
     El proceso NUNCA se mata: el servicio siempre vivo vuelve solo a esperar la
-    palabra clave (SIGUSR2). La señal va primero porque es la que corta la voz
-    al instante y es lo que el usuario está esperando; la UI y la limpieza de
-    procesos viejos van después.
+    palabra clave (SIGUSR2). Primero se calla el audio y se cierra la
+    conversación, porque es lo que el usuario está esperando; la UI y la
+    limpieza de procesos viejos van después.
     """
-    # 1) Callar YA: la señal cierra la conversación (y la voz) en el acto.
+    # 1) Callar YA, por los dos caminos a la vez: la señal cierra la
+    #    conversación en el oído y `voice stop` corta el audio sin esperar a que
+    #    el loop de Omar procese la señal (medido: ~80 ms). El daemon vacía la
+    #    cola, así que no queda nada encolado para después.
     _signal_service("SIGUSR2")
+    _spawn("voice", "stop")
 
     # 2) Cerrar la pildora YA: la UI no espera al proceso.
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")

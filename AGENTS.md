@@ -342,11 +342,22 @@ voice engine X lang # cambiar motor (chatterbox/piper/espeak)
 
 **Chain de fallback:** chatterbox → piper → espeak
 
-**Cortar la voz.** `voice stop` (lo dispara la tecla de Windows al cerrar Omar)
-vacía la cola y corta el `pw-play` en curso **por PID**. Un corte no es un
-fallo: la frase no se reintenta con otro motor (antes seguía sonando con piper
-o espeak, peor). Si el corte llega mientras se sintetiza, la frase se descarta
-en vez de sonar después. Verificador: `scripts/verify/voz-corte.sh`.
+**Cortar la voz.** `voice stop` vacía la cola y corta el `pw-play` en curso
+**por PID**. Un corte no es un fallo: la frase no se reintenta con otro motor
+(antes seguía sonando con piper o espeak, peor). Si el corte llega mientras se
+sintetiza, la frase se descarta en vez de sonar después. Verificador:
+`scripts/verify/voz-corte.sh`.
+
+**La tecla de Windows (F13).** `voice-key-listener` corre `present-remote
+toggle`; una pulsación, una acción (sin antirrebote por tiempo: el de 800 ms
+se comía la segunda pulsación rápida). La decisión es instantánea: la píldora se
+consulta por su archivo `pill-open` (no por IPC) y, si Omar está apagado pero
+hay un TTS sonando (`speaking.json` vigente), la tecla **calla el audio** en vez
+de prender a Omar encima de la voz. Cerrar corta el audio por los dos caminos a
+la vez (`SIGUSR2` al oído + `voice stop`) y la señal va por `listen.pid` +
+`kill(2)`, sin levantar `systemctl`: medido ~60 ms de la pulsación al silencio
+(antes ~120 ms y, con Omar apagado, ni siquiera callaba). Escape (`cancel_key`)
+hace lo mismo. Verificador: `scripts/verify/cancelar-voz.sh`.
 
 **Registro unificado + API para cualquier proceso:** cada mensaje entregado
 (voz y notificaciones) queda en `~/.local/share/voice/tts/messages.jsonl`, con
