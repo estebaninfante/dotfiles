@@ -261,7 +261,7 @@ def free_color(used) -> str:
     raise RuntimeError("identity: no quedan colores libres")
 
 
-def claim(name: str, role: str = "", pane: str = "") -> dict:
+def claim(name: str, role: str = "", pane: str | None = None) -> dict:
     """Identidad con un color EXCLUSIVO entre los agentes vivos.
 
     Es lo que se usa al arrancar un agente. Mantiene el color si está libre y,
@@ -270,7 +270,11 @@ def claim(name: str, role: str = "", pane: str = "") -> dict:
     actual se marca dentro del lock: dos agentes que arrancan juntos no pueden
     quedarse con el mismo color.
     """
-    pane = (pane or os.environ.get("TMUX_PANE", "")).strip()
+    # pane=None -> usar TMUX_PANE del entorno; pane="" -> no tocar ningún panel
+    # (corridas headless o subagentes, que comparten el panel del padre).
+    if pane is None:
+        pane = os.environ.get("TMUX_PANE", "")
+    pane = str(pane or "").strip()
     with _lock():
         ident = identity(name, role)
         others = live_panes(exclude_pane=pane)
@@ -403,7 +407,7 @@ def _main(argv: list[str]) -> int:
         role = ""
         as_json = False
         do_claim = False
-        pane = ""
+        pane: str | None = None
         i = 0
         while i < len(args):
             a = args[i]

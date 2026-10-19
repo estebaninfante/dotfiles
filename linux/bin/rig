@@ -79,6 +79,8 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig ls                             alias de seats
   rig vivos [--porcelain]            agentes vivos en paneles tmux: nombre, color, ticket
   rig colores                        verifica que no haya colores repetidos entre vivos
+  rig trazas                         indice de trazas de agentes pi (Markdown legible)
+  rig traza [T-XXXXXX]               traza completa de un agente pi
   rig spawn <nombre> [--agent A] [--cwd DIR] [--cmd CMD] [--prompt TEXTO] [--model M] [--ticket ID]
                    [--herdr|--no-herdr] [--focus|--no-focus] [--mirror|--no-mirror] [--herdr-cwd DIR] [--attach] [--dry-run]
   rig send <silla> [--force] [--no-enter] <mensaje...>
@@ -149,6 +151,10 @@ area: identificador de dominio del ticket (hr hypr shell audio meta infra folder
   opcional y se guarda en el store. Mapa de color: hr=#4C9AFF hypr=#B389FF shell=#FFB84C
   audio=#4CD9A0 meta=#8A8F98 infra=#FF7A85 foldertinder=#7ADBFF (sin area=#8A8F98).
   rig board --plain = salida plana sin color ni agrupacion (para pipes).
+vivos: cada panel tmux con @agent_name es un agente vivo. Su color (identity.py) es unico entre
+  vivos: 'rig vivos' los lista y 'rig colores' falla si dos comparten color. Al arrancar, cada
+  agente reclama un color libre; los que ya estaban abiertos se corrigen al recargar o reiniciar.
+un ticket = un agente: 'rig spawn --ticket ID' se niega si otra silla viva ya lo trabaja.
 num: cada ticket tiene un numero secuencial (#N, por orden de creacion) que se muestra como
   prefijo en board y ticket list. Comandos como set/done/rm/metrics aceptan el slug o el numero
   (#12 o 12). El titulo debe ser descriptivo en espanol (>=6 palabras), no un slug.
@@ -683,6 +689,22 @@ cmd_vivos() {
   return 0
 }
 
+PI_TRAZAS_DIR="${PI_RIG_DIR:-$HOME/.local/share/pi}/trazas"
+
+cmd_traza() {
+  local id="${1:-}" f
+  if [ -z "$id" ]; then
+    f="$PI_TRAZAS_DIR/index.md"
+    [ -f "$f" ] || die "no hay trazas de agentes pi todavía ($f)"
+    cat "$f"
+    return 0
+  fi
+  id=$(printf '%s' "$id" | tr '[:lower:]' '[:upper:]')
+  f="$PI_TRAZAS_DIR/$id.md"
+  [ -f "$f" ] || die "no encontré la traza $id (probá: rig trazas)"
+  cat "$f"
+}
+
 cmd_colores() {
   need_tmux
   local color name fails=0
@@ -737,10 +759,14 @@ cmd_spawn() {
   [ -d "$cwd" ] || die "cwd no existe: $cwd"
   cwd=$(cd "$cwd" && pwd)
   if [ -n "$ticket" ]; then
-    local live
-    live=$(ticket_live_seat "$ticket")
+    local live key="$ticket" tk
+    if command -v jq >/dev/null 2>&1 && [ -f "$TICKETS_FILE" ]; then
+      tk=$(resolve_ref "$ticket" 2>/dev/null || true)
+      [ -n "$tk" ] && key="$tk"
+    fi
+    live=$(ticket_live_seat "$key")
     if [ -n "$live" ] && [ "$live" != "$name" ]; then
-      die "el ticket $ticket ya lo trabaja el agente vivo $live (un ticket = un agente)"
+      die "el ticket $key ya lo trabaja el agente vivo $live (un ticket = un agente)"
     fi
   fi
   local cmd
@@ -4019,6 +4045,8 @@ case "$cmd" in
   seats|ls) cmd_seats "$@" ;;
   vivos|live) cmd_vivos "$@" ;;
   colores|colors) cmd_colores "$@" ;;
+  traza|trace) cmd_traza "$@" ;;
+  trazas|traces) cmd_traza ;;
   spawn) cmd_spawn "$@" ;;
   send) cmd_send "$@" ;;
   read) cmd_read "$@" ;;

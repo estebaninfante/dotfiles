@@ -444,6 +444,7 @@ export default function rig(pi: ExtensionAPI) {
       raiz.estado = "activa";
       raiz.hasta = undefined;
       raiz.actualizado = new Date().toISOString();
+      raiz.tipo = "sesion";
       raiz.agente = raiz.agente || agente;
       raiz.dueno = raiz.dueno || sessionId;
       raiz.pasos.push({
@@ -727,12 +728,32 @@ export default function rig(pi: ExtensionAPI) {
       .join(" ")
       .replace(/\s+/g, " ")
       .trim();
-    if (!pensado) return;
-    const resumen = recortar(pensado, 300);
-    const ultimo = tarea.pasos[tarea.pasos.length - 1];
-    if (ultimo?.tipo === "pensamiento" && ultimo.resumen === resumen) return;
-    tarea.pasos.push({ t: new Date().toISOString(), tipo: "pensamiento", resumen });
-    programarGuardado();
+    if (pensado) {
+      const resumen = recortar(pensado, 300);
+      const ultimo = tarea.pasos[tarea.pasos.length - 1];
+      if (!(ultimo?.tipo === "pensamiento" && ultimo.resumen === resumen)) {
+        tarea.pasos.push({ t: new Date().toISOString(), tipo: "pensamiento", resumen });
+      }
+    }
+    // La respuesta final también es parte del trazo: el usuario quiere leer
+    // qué se le dijo, no solo qué herramientas se usaron.
+    const dicho = mensaje.content
+      .filter(
+        (b): b is { type?: string; text?: string } => !!b && typeof b === "object",
+      )
+      .filter((b) => b.type === "text")
+      .map((b) => String(b.text ?? ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (dicho) {
+      const resumen = recortar(dicho, 400);
+      const ultimo = tarea.pasos[tarea.pasos.length - 1];
+      if (!(ultimo?.tipo === "respuesta" && ultimo.resumen === resumen)) {
+        tarea.pasos.push({ t: new Date().toISOString(), tipo: "respuesta", resumen });
+      }
+    }
+    if (pensado || dicho) programarGuardado();
   });
 
   pi.on("agent_settled", async () => {
@@ -747,29 +768,45 @@ export default function rig(pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     const ahora = new Date().toISOString();
     if (esSubagente) {
-      // El subagente cierra su propio ticket, nunca la raíz ni la delegación
-      // del padre (el padre marca el resultado de la delegación).
-      if (tarea && tarea.estado === "activa") {
-        tarea.estado = "cerrada";
-        tarea.hasta = ahora;
+      // El subagente cierra su propio subárbol, nunca la raíz ni la
+      // delegación del padre (el padre marca el resultado de la delegación).
+      if (tarea) {
+        const items = leerTareas();
+        const todos = [tarea, ...descendientesDe(items, tarea.id)];
+        for (const t of todos) {
+          if (t.estado === "activa") {
+            t.estado = "cerrada";
+            t.hasta = ahora;
+          }
+        }
+        guardarVarias(todos);
       }
       volcar();
       return;
     }
-    // La sesión se cierra: el ticket raíz deja de estar abierto y los pedidos
-    // que quedaron activos se cierran con ella (sin borrar nada del trace).
-    if (tarea && tarea.estado === "activa") {
-      tarea.estado = "cerrada";
-      tarea.hasta = ahora;
-    }
+    // La sesión se cierra: el ticket raíz deja de estar abierto y TODO su
+    // subárbol se cierra con ella (sin borrar nada del trace). Así ningún
+    // subticket queda "activo" para siempre por un agente que ya no corre.
     if (raiz) {
+      const items = leerTareas();
+      const todos = [raiz, ...descendientesDe(items, raiz.id)];
       raiz.estado = "cerrada";
       raiz.hasta = ahora;
+      for (const t of todos.slice(1)) {
+        if (t.estado === "activa") {
+          t.estado = "cerrada";
+          t.hasta = ahora;
+        }
+      }
       raiz.pasos.push({
         t: ahora,
         tipo: "nota",
         resumen: "sesión cerrada",
       });
+      guardarVarias(todos);
+    } else if (tarea && tarea.estado === "activa") {
+      tarea.estado = "cerrada";
+      tarea.hasta = ahora;
     }
     volcar();
     emitir();
@@ -991,12 +1028,27 @@ export default function rig(pi: ExtensionAPI) {
         };
       }
       if (accion === "cerrar") {
+        const ahora = new Date().toISOString();
+        const items = leerTareas();
+        const todos = [tarea, ...descendientesDe(items, tarea.id)];
         tarea.estado = "cerrada";
-        tarea.hasta = new Date().toISOString();
-        volcar();
+        tarea.hasta = ahora;
+        for (const t of todos.slice(1)) {
+          if (t.estado === "activa") {
+            t.estado = "cerrada";
+            t.hasta = ahora;
+          }
+        }
+        guardarVarias(todos);
+        exportarTraza();
         emitir();
         return {
-          content: [{ type: "text", text: `Ticket ${tarea.id} cerrado.` }],
+          content: [
+            {
+              type: "text",
+              text: `Ticket ${tarea.id} cerrado${todos.length > 1 ? ` con ${todos.length - 1} subticket(s)` : ""}.`,
+            },
+          ],
           details: { id: tarea.id },
         };
       }
@@ -1034,7 +1086,9 @@ export default function rig(pi: ExtensionAPI) {
       if (params.accion === "ver") {
         const id = String(params.id ?? "").trim().toUpperCase();
         const encontrada = id
-          ? items.find((t) => t.id === id) ?? (tarea?.id === id ? tarea : undefined)
+          ? items.find((t) => t.id === id) ??
+            items.find((t) => t.id.endsWith(id.slice(2))) ??
+            (tarea?.id === id ? tarea : undefined)
           : tarea;
         if (!encontrada) {
           return {

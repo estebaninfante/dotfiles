@@ -78,6 +78,7 @@ La extensión `linux/pi/agent/extensions/rig.ts` captura solo el árbol de traba
   trabajo de esa delegación y nunca crea otra raíz ni toca el panel del padre.
 - Todo se ve con `/tareas`, `/tarea T-XXXXXX`, `/traza` y `/trazas`, y además queda en
   Markdown legible: `~/.local/share/pi/trazas/<ticket-raíz>.md` + `index.md`.
+  Desde la terminal: `rig trazas` (índice) y `rig traza T-XXXXXX` (traza completa).
 - Un ticket pertenece a una sola sesión (`dueno`): otro agente solo lo lee y crea uno nuevo.
 
 Los colores salen de `linux/voice/identity.py`. Al arrancar, cada agente **reclama** un

@@ -15,7 +15,7 @@ import { formatoDuracion, recortar } from "./pensamiento.ts";
 
 export type TipoTarea = "sesion" | "pedido" | "subtarea";
 export type EstadoTarea = "activa" | "lista" | "cerrada";
-export type TipoPaso = "pedido" | "tool" | "pensamiento" | "nota";
+export type TipoPaso = "pedido" | "tool" | "pensamiento" | "nota" | "respuesta";
 
 export interface Paso {
   /** ISO de cuándo empezó el paso. */
@@ -145,6 +145,7 @@ function simbolo(estado: EstadoTarea): string {
 function iconoPaso(p: Paso): string {
   if (p.tipo === "pedido") return "▶";
   if (p.tipo === "pensamiento") return "💭";
+  if (p.tipo === "respuesta") return "💬";
   if (p.tipo === "nota") return "·";
   return p.ok === false ? "✗" : p.ok ? "✓" : "…";
 }

@@ -190,8 +190,7 @@ function resolveIdentity(name: string, roleHint = "", reclamar = false): AgentId
     // repite el color de otro panel. El reclamo se guarda en el registro de
     // identidades, así el nombre conserva ese color la próxima vez.
     if (reclamar) {
-      args.push("--claim");
-      if (TMUX_PANE) args.push("--pane", TMUX_PANE);
+      args.push("--claim", "--pane", TMUX_PANE);
     }
     args.push("--json");
     const out = execFileSync(voiceBin(), args, {
@@ -231,9 +230,16 @@ function projectRole(): string {
 
 let identityCache: AgentIdentity | undefined;
 
-/** Identidad del agente actual (cacheada). */
+/** Identidad del agente actual (cacheada). La primera resolución revisa si
+ *  otro agente vivo ya tiene el mismo color (p. ej. tras un `/reload`) y, si
+ *  hace falta, reclama uno libre en el acto. */
 function agentIdentity(): AgentIdentity {
-  return (identityCache ??= resolveIdentity(agentName(), projectRole()));
+  if (!identityCache) {
+    identityCache = resolveIdentity(agentName(), projectRole());
+    const reclamada = reclamarColorSiRepetido();
+    if (reclamada) identityCache = reclamada;
+  }
+  return identityCache;
 }
 
 /** Identidad guardada en la conversación (entry custom), si la hay. Se busca en
@@ -1182,6 +1188,26 @@ export default function (pi: ExtensionAPI) {
   // El "punto de control" ya NO es un mensaje al modelo (se perdía y lo
   // interrumpía). Ahora es un widget de la UI que muestra hace cuánto trabaja
   // y recuerda cómo preguntar, sin tocar la conversación.
+  pi.registerCommand("color", {
+    description: "Reclama un color único entre agentes vivos y repinta el panel",
+    handler: async (_args, ctx) => {
+      uiCtx = ctx;
+      const ident = resolveIdentity(agentName(), projectRole(), true);
+      identityCache = ident;
+      applyIdentityToPane(ident);
+      try {
+        pi.appendEntry(IDENTITY_ENTRY_TYPE, ident);
+      } catch {
+        /* sesión efímera */
+      }
+      ctx.ui.notify(
+        `Color de ${ident.name}: ${ident.color} (único entre los agentes vivos).`,
+        "info",
+      );
+      updateLatido(true);
+    },
+  });
+
   let timer: ReturnType<typeof setInterval> | undefined;
   if (LATIDO_ENABLED) {
     timer = setInterval(tickLatido, PACER_TICK_MS);

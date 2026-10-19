@@ -86,6 +86,11 @@ test("el texto de la traza incluye el subárbol y el resultado de cada paso", ()
               ms: 12,
               resultado: "archivo.txt",
             },
+            {
+              t: "2026-10-19T03:00:02.000Z",
+              tipo: "respuesta" as const,
+              resumen: "Listo: el archivo existe.",
+            },
           ],
         }
       : x,
@@ -95,6 +100,7 @@ test("el texto de la traza incluye el subárbol y el resultado de cada paso", ()
   assert.match(texto, /TICKET T-CCC/);
   assert.match(texto, /bash \$ ls/);
   assert.match(texto, /archivo\.txt/);
+  assert.match(texto, /💬 Listo: el archivo existe\./);
 });
 
 test("el Markdown de la sesión lista todos los tickets y el agente", () => {
