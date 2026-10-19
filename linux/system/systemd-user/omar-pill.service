@@ -5,7 +5,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/quickshell --no-duplicate -p /home/eztvn/developing/omnivoz/packaging/quickshell/omar-pill.qml
+ExecStart=/usr/bin/quickshell --no-duplicate -p /home/eztvn/developing/omar/packaging/quickshell/omar-pill.qml
 Environment=WAYLAND_DISPLAY=wayland-1
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XDG_CURRENT_DESKTOP=Hyprland

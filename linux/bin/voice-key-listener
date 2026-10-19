@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# voice-key-listener — dispara OmniVoz cuando se presiona la tecla física de
+# voice-key-listener — dispara Omar cuando se presiona la tecla física de
 # Windows, que keyd remapea a F13.
 #
 # Acción por defecto: toggle de Omar (`present-remote toggle`): un toque prende,

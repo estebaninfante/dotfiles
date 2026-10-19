@@ -90,7 +90,7 @@ La barra activa es la de **Omarchy**, no la de dotfiles. Su config vive en
 `~/.config/omarchy/` y se versiona aqui: `shell.json` (barra `eztvn.bar`, layout,
 `centerAnchor`), `shell.toml` (fuente/scrim), `bar/modules/services.qml`,
 `branding/`, `extensions/omarchy-menu.jsonc`, `backgrounds/` (fondos propios),
-`hooks/*.hook` y los plugins locales (`plugins/eztvn.*`, `omnivoz.status`,
+`hooks/*.hook` y los plugins locales (`plugins/eztvn.*`, `omar.status`,
 `talk-command.status`). Los plugins/temas instalados por git NO se copian (peso
 + `.git`): sus id+url viven en `plugins-git.txt` / `themes-git.txt` y se
 reinstalan con `omarchy plugin add` / `omarchy theme install`.
@@ -204,14 +204,14 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 | chatterbox_server.py | Server persistente Chatterbox (model in GPU memory) |
 | chatterbox_synth.py | Wrapper legacy (subprocess mode, fallback) |
 | asr_vosk.py | Streaming ASR (Vosk CPU) para el wake-word |
-| pi_shim.py | Puente Ollama->agente: cerebro de OmniVoz sin tocar su código |
+| pi_shim.py | Puente Ollama->agente: cerebro de Omar sin tocar su código |
 | spoken.py | Limpia la respuesta para oído (código/HTML/markdown) |
 | pi-brain/AGENTS.md | Guía del cerebro headless: cómo manejar el escritorio |
 | `linux/bin/voice-asr-stream` | Selector del motor del wake-word: GPU (`[wake] gpu_command`) o CPU (Vosk) |
 | `linux/bin/voice-hermes` | Hermes headless (una pasada, sólo terminal) para el cerebro de voz |
 | `linux/bin/voice-pi` | Variante Pi headless (sin razonamiento/extensiones) del cerebro |
-| `linux/bin/omar` | CLI de Omar sobre la API local de agentes-platform (tickets/agentes) |
-| `linux/bin/omnivoz-ptt` | Push-to-talk directo: una frase sin palabra clave |
+| `linux/bin/omar-hub` | CLI de Omar sobre la API local de agentes-platform (tickets/agentes) |
+| `linux/bin/omar-ptt` | Push-to-talk directo: una frase sin palabra clave |
 | `linux/bin/voice-key-listener` | Dispara el PTT desde keyd (tecla física de Windows → F13) |
 | `scripts/setup-wake.sh` | Prepara el wake-word: venv + vosk + modelo + servicio `talk-command.service` |
 | `linux/voice/reader/kokoro_server.py` | Daemon Kokoro (modelo en memoria) para Read Aloud + lector standalone |
@@ -375,8 +375,8 @@ lo elige `linux/bin/voice-asr-stream` según `[wake]`: GPU si hay `gpu_command`
 y AC, si no CPU (Vosk, sin VRAM). Servicio `talk-command.service` (unit en
 `linux/system/systemd-user/`); se prepara con `scripts/setup-wake.sh`.
 
-**Asistente y cerebro Hermes:** OmniVoz (local, `~/developing/omnivoz`, servicio
-`omnivoz-listen`) hace wake word → VAD → STT → reglas → cerebro. El cerebro es
+**Asistente y cerebro Hermes:** Omar (local, `~/developing/omar`, servicio
+`omar-listen`) hace wake word → VAD → STT → reglas → cerebro. El cerebro es
 **Hermes headless** (`linux/bin/voice-hermes`: una pasada `-z`, sólo terminal)
 vía `linux/voice/pi_shim.py` (traduce Ollama→agente; servicio
 `voice-pi-shim.service`, nombre histórico). Corre en `linux/voice/pi-brain/`
@@ -386,18 +386,18 @@ keyd); la tecla física de Windows se remapea a **F13** y `voice-key-listener.se
 (lee `keyd monitor`) corre `linux/bin/omar-open`: abre la **píldora**
 (`omar-pill.service` + `packaging/quickshell/omar-pill.qml`: input de texto y
 subtítulos de lo que decís y de lo que responde Omar) y arranca el
-push-to-talk directo (`omnivoz-ptt`) sin palabra clave. El modo manos libres
-(palabra clave "Omar") es `omnivoz-listen`. Sin notificaciones de estado (RIP
+push-to-talk directo (`omar-ptt`) sin palabra clave. El modo manos libres
+(palabra clave "Omar") es `omar-listen`. Sin notificaciones de estado (RIP
 esa caja negra). `voice-duck.service` (`linux/bin/voice-duck`) **baja el volumen**
 del sink mientras está en "listening" y lo restaura. El bind de Hyprland resultó
 caprichoso, por eso se engancha en keyd. El **glow** tipo Google Assistant
-(`omnivoz-glow.service`) va
+(`omar-glow.service`) va
 **solo en el borde inferior**, es sutil y **sigue el nivel del micrófono**
 (`level` en `status.json`): sube cuando hablás y baja al silencio; si el
 `status.json` queda viejo (más de 4 s) vuelve a idle solo. El STT usa **Whisper large-v3-turbo en GPU**
-(`omnivoz-whisper.service`, faster-whisper + CUDA-12 en el venv; `stt.engine =
+(`omar-whisper.service`, faster-whisper + CUDA-12 en el venv; `stt.engine =
 "whisper"`) con **Parakeet CPU** de respaldo, mucho mejor en español que
-Parakeet solo. La CLI `linux/bin/omar` (tickets/agentes sobre la API local de
+Parakeet solo. La CLI `linux/bin/omar-hub` (tickets/agentes sobre la API local de
 agentes-platform) es la primera skill del cerebro; el resto entra en
 `linux/voice/pi-brain/AGENTS.md`. El modelo del cerebro es el de Hermes
 (`~/.hermes/config.yaml`); `VOICE_HERMES_MODEL` / `VOICE_HERMES_PROVIDER`

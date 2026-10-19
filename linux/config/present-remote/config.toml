@@ -39,9 +39,9 @@ cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactiv
 [buttons.f14]
 tap = "@voice"
 
-# 2 toques (Enter -> f17): dictado de OmniVoz. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
+# 2 toques (Enter -> f17): dictado de Omar. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
 [buttons.f17]
-tap = "~/.local/bin/omnivoz dictate"
+tap = "~/.local/bin/omar dictate"
 combo_with = "f14"
 combo = "omarchy-menu toggle"
 

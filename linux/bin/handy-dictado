@@ -28,8 +28,8 @@ runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 archivo_modo="$runtime/handy-dictado.mode"
 
 # Omar se pausa mientras Handy graba: bandera compartida que lee el loop de voz.
-mic_busy="$runtime/omnivoz/mic-busy"
-mic_busy_on() { mkdir -p "$runtime/omnivoz" 2>/dev/null || true; printf '%s' "$$" > "$mic_busy" 2>/dev/null || true; }
+mic_busy="$runtime/omar/mic-busy"
+mic_busy_on() { mkdir -p "$runtime/omar" 2>/dev/null || true; printf '%s' "$$" > "$mic_busy" 2>/dev/null || true; }
 mic_busy_off() { rm -f "$mic_busy" 2>/dev/null || true; }
 
 accion="${1:-pro}"

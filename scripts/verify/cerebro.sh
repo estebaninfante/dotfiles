@@ -5,8 +5,8 @@
 #   1. `voice-hermes` existe, es ejecutable y su sintaxis es válida.
 #   2. El cerebro corre Hermes en una pasada (`-z`) dentro de pi-brain, con
 #      toolset terminal y el guard de comandos destructivos en el PATH.
-#   3. El puente de OmniVoz apunta al cerebro (voice-hermes) y compila.
-#   4. `voice think` y `omar ask` usan el cerebro nuevo.
+#   3. El puente de Omar apunta al cerebro (voice-hermes) y compila.
+#   4. `voice think` y `omar-hub ask` usan el cerebro nuevo.
 #   5. El servicio instalado coincide con el del repo.
 #   6. Pi arranca en pensamiento `low` para deepseek-flash.
 #   7. La copia viva del AGENTS.md del cerebro coincide con el repo.
@@ -22,7 +22,7 @@ QUIET=0
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BIN="$REPO/linux/bin/voice-hermes"
 VOICE="$REPO/linux/bin/voice"
-OMAR="$REPO/linux/bin/omar"
+OMAR="$REPO/linux/bin/omar-hub"
 SHIM="$REPO/linux/voice/pi_shim.py"
 BRAIN_AGENTS="$REPO/linux/voice/pi-brain/AGENTS.md"
 LIVE_BRAIN="$HOME/.local/share/voice/pi-brain"
@@ -57,7 +57,7 @@ else
     fail "voice-hermes no limita el toolset (latencia/prompt inflados)"
 fi
 
-# --- 2. el puente de OmniVoz ---------------------------------------------
+# --- 2. el puente de Omar ---------------------------------------------
 if python3 -m py_compile "$SHIM" 2>/dev/null; then
     ok "pi_shim.py compila"
 else
@@ -74,8 +74,8 @@ grep -q 'voice-hermes' "$VOICE" \
     && ok "voice think usa voice-hermes" \
     || fail "voice think sigue llamando a voice-pi"
 grep -q 'voice-hermes' "$OMAR" \
-    && ok "omar ask usa voice-hermes" \
-    || fail "omar ask sigue llamando a voice-pi"
+    && ok "omar-hub ask usa voice-hermes" \
+    || fail "omar-hub ask sigue llamando a voice-pi"
 
 # --- 4. servicio instalado -----------------------------------------------
 if [ -f "$LIVE_UNIT" ] && diff -q "$UNIT" "$LIVE_UNIT" >/dev/null 2>&1; then

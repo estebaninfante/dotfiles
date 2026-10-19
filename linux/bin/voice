@@ -235,7 +235,7 @@ speak() {  # speak [--profile P] [--voice V] [--engine E] [--lang L] [--source S
   # Lo que suena por los parlantes queda anotado: cualquier proceso (Omar, Pi,
   # notificaciones) escribe acá y el oído de Omar usa esta lista para NO despertarse
   # con su propio eco. Sin esto, un mensaje hablado que dice "Omar" lo despierta.
-  local _spoken="${XDG_RUNTIME_DIR:-/tmp}/omnivoz/spoken.log"
+  local _spoken="${XDG_RUNTIME_DIR:-/tmp}/omar/spoken.log"
   mkdir -p "${_spoken%/*}" 2>/dev/null || true
   printf '%s\t%s\n' "$(date +%s%3N)" "$(printf '%s' "$text" | tr '\n\t' '  ')" \
     >> "$_spoken" 2>/dev/null || true

@@ -3,14 +3,14 @@
 ## Cambio 2026-10-17 — barra y overlays de voz fijos sobre el overview (`keep_layers`)
 
 **Motivo**: al abrir la grilla (`SUPER+Y`) desaparecían la barra de Omarchy y los
-overlays de voz (píldora de Omar, glow de OmniVoz / TTS). El pass del overview se
+overlays de voz (píldora de Omar, glow de Omar / TTS). El pass del overview se
 dibuja por encima de las layer surfaces, y el hook solo repintaba las `TOP`
 —atenuándolas con `topLayerFadeAlpha()`— y nunca las `OVERLAY`.
 
 **Comportamiento**: `plugin:hyprexpo:keep_layers` (default `0` = comportamiento
 anterior). En `1`:
 - las capas `TOP` (barra) se repintan con alpha `1` (sin fade de apertura/cierre);
-- se repintan además las capas `OVERLAY` (Omar, OmniVoz, TTS) después de las `TOP`,
+- se repintan además las capas `OVERLAY` (Omar, Omar, TTS) después de las `TOP`,
   para que queden sobre la grilla.
 
 **Implementación** (fork local, `linux/patches/hyprexpo-local.patch`):

@@ -3998,7 +3998,7 @@ pnr_render() {
 
   printf '\n%sAGENTES / PROCESOS DE IA%s\n' "$C_HEAD" "$C_OFF"
   printf '  %-9s %-3s %-8s %-8s %-6s %s\n' PID ST UPTIME CPUTIME RSS COMANDO
-  pnr_scan | awk -F'\t' '$7 ~ /(pi\/pi|opencode|omnivoz|bin\/lab|kokoro|whisper|pi_shim|voice\/)/ && $7 !~ /quickshell/ && $7 !~ /^awk/' \
+  pnr_scan | awk -F'\t' '$7 ~ /(pi\/pi|opencode|omar|bin\/lab|kokoro|whisper|pi_shim|voice\/)/ && $7 !~ /quickshell/ && $7 !~ /^awk/' \
     | sort -t$'\t' -k4 -nr | while IFS=$'\t' read -r pid ppid state et cpu rss cmd; do
       printf '  %-9s %-3s %-8s %-8s %-6s %s\n' "$pid" "$state" "$(pnr_fmt "$et")" "$(pnr_fmt "$cpu")" "$((rss/1024))M" "${cmd:0:88}"
     done

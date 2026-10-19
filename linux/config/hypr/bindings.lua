@@ -42,16 +42,16 @@ hl.bind(main_mod .. " + ALT + SHIFT + V", hl.dsp.exec_cmd("~/.local/bin/voice re
 hl.bind(main_mod .. " + ALT + RETURN", hl.dsp.exec_cmd("~/.local/bin/pi-new"), { description = "Terminal nueva con pi" })
 -- Buzón de voz: escuchar los mensajes pendientes (SUPER+ALT+B).
 hl.bind(main_mod .. " + ALT + B", hl.dsp.exec_cmd("~/.local/bin/voice play-inbox"))
--- OmniVoz ahora corre SIEMPRE (servicio omnivoz-listen). Se quitaron los
+-- Omar ahora corre SIEMPRE (servicio omar-listen). Se quitaron los
 -- atajos que arrancaban una segunda instancia (peleaban por el micrófono y
 -- abrían la píldora con foco exclusivo, trabando el teclado).
--- hl.bind(main_mod .. " + V", hl.dsp.exec_cmd("~/.local/bin/omnivoz-listen"))
--- hl.bind("F13", hl.dsp.exec_cmd("~/.local/bin/omnivoz-listen"))
+-- hl.bind(main_mod .. " + V", hl.dsp.exec_cmd("~/.local/bin/omar-listen"))
+-- hl.bind("F13", hl.dsp.exec_cmd("~/.local/bin/omar-listen"))
 
 -- Rescate de la píldora de Omar: cierra/reinicia y libera el teclado.
 hl.bind(main_mod .. " + ALT + O", hl.dsp.exec_cmd("~/.local/bin/omar-pill-rescue"), { description = "Omar: rescatar teclado (reinicia píldora)" })
 -- Alternativa push-to-talk explicita (deshabilitada: conflictúa con el servicio).
--- hl.bind(main_mod .. " + ALT + P", hl.dsp.exec_cmd("~/.local/bin/omnivoz listen --no-wake --once"))
+-- hl.bind(main_mod .. " + ALT + P", hl.dsp.exec_cmd("~/.local/bin/omar listen --no-wake --once"))
 
 -- Volumen y brillo usan el OSD del shell (notch negro arriba al centro), no
 -- swayosd. Los scripts de omarchy son los que hablan con wpctl/brightnessctl y
@@ -80,14 +80,14 @@ hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl -M shift v -m shift -m ctrl"
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh down"))
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { release = true })
 
--- Dictado nativo de OmniVoz: graba con VAD, transcribe con Whisper y escribe
+-- Dictado nativo de Omar: graba con VAD, transcribe con Whisper y escribe
 -- en la ventana enfocada. Reemplaza a Handy (ya no se usa). SUPER+I es el
 -- atajo principal; F7 queda como alias cómodo.
-hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/omnivoz dictate"))
+hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/omar dictate"))
 
 hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 
-hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("~/.local/bin/omnivoz dictate"))
+hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("~/.local/bin/omar dictate"))
 
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode opencode --agent dotfiles"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))

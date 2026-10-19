@@ -70,7 +70,7 @@ permanente ver §6.
 Es el hallazgo más grande. `runtime_active_time` es igual al uptime: la RTX 4060
 **nunca se suspende**. Motivos:
 
-1. `omnivoz-whisper` (faster-whisper/CUDA) y `kokoro-tts` mantienen **2.2 GB de
+1. `omar-whisper` (faster-whisper/CUDA) y `kokoro-tts` mantienen **2.2 GB de
    VRAM** reservados constantemente (`nvidia-smi`).
 2. Hyprland, hyprpaper, swaync, swayosd, `ohm-bin` y spotify tienen
    `/dev/dri/card1` abierto (clientes DRM de la dGPU), lo que mantiene
@@ -229,8 +229,8 @@ kernel). Efecto visible: menos contraste/brillo. Empezar por `1` o `2`.
 ### 4.10 Servicios propios: el verdadero piso del sistema
 
 Aun con todo lo anterior, "sin ningún proceso" no es lo que corre esta laptop.
-Al arrancar hay, entre otros: `ollama`, `omnivoz-listen` (wake word escuchando
-micrófono 100 % del tiempo), `omnivoz-whisper`, `kokoro-tts`, `voice-daemon`,
+Al arrancar hay, entre otros: `ollama`, `omar-listen` (wake word escuchando
+micrófono 100 % del tiempo), `omar-whisper`, `kokoro-tts`, `voice-daemon`,
 `agentes-platform-main`/`developing` (dos Next.js), `ohm`, `speeedy`,
 `openclaw-gateway`, `rig-*`, `syncthing` (se apaga en batería), spotify,
 `lan-mouse`, `weylus`, docker.
@@ -423,7 +423,7 @@ haga nada. `power-idle-bench.sh` da el número real en cada arranque.
 
 Los tres caminos concretos, en orden de menor a mayor esfuerzo:
 
-1. **No arrancar los servicios CUDA en batería** (`omnivoz-whisper`,
+1. **No arrancar los servicios CUDA en batería** (`omar-whisper`,
    `kokoro-tts`, `ollama`) y dejarlos a demanda. Libera la dGPU → −8 a −10 W.
    El rango es estimado: lo medido es el sistema *con* la dGPU despierta
    (~30 W de piso), y el foro mide 11 W de salto en el mismo caso.
@@ -444,7 +444,7 @@ Ranking por proceso, ventana de 10 s, sumando procesos con el mismo nombre:
 | `tmux: server` | 7–87 % | paneles de agente |
 | `spotify` | 24–54 % | cliente Electron |
 | `quickshell` | 1–20 % | barra / shell de Omarchy |
-| `node-MainThread` | 12–25 % | `omnivoz-listen` (wake word) |
+| `node-MainThread` | 12–25 % | `omar-listen` (wake word) |
 | `Hyprland`, `kitty`, `bun`, `opencode` | 2–11 % c/u | compositor y terminales |
 | `wireplumber` + `pipewire` + `pipewire-pulse` | ~10 % | audio: el micrófono está abierto 24/7 por el wake word |
 

@@ -172,7 +172,7 @@ su plan y sin costo por token.
   para que haya una sola fuente de verdad. `VOICE_HERMES_MODEL` y
   `VOICE_HERMES_PROVIDER` permiten pisarlo.
 - `voice-pi-shim.service` conserva el nombre (histórico) para no migrar links,
-  timers ni la config de OmniVoz.
+  timers ni la config de Omar.
 
 **Descartado.**
 

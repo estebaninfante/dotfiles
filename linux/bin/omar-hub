@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# omar — utilidades del agente Omar sobre la plataforma de agentes local.
+# omar-hub — utilidades del agente Omar sobre la plataforma de agentes local.
 #
 # API local de agentes-platform (solo host):
 #   OMAR_PLATFORM_URL (default http://127.0.0.1:3031)
 #
 # Uso:
-#   omar ticket add "<titulo>" [--project P] [--owner O] [--status S]
-#   omar ticket list [--project P] [--status S]
-#   omar ticket done <id>
-#   omar ticket show <id>
-#   omar agents
-#   omar board            # resumen legible del tablero
-#   omar ask "texto"      # entrada de texto a Omar (cerebro Hermes + TTS + subtítulo)
+#   omar-hub ticket add "<titulo>" [--project P] [--owner O] [--status S]
+#   omar-hub ticket list [--project P] [--status S]
+#   omar-hub ticket done <id>
+#   omar-hub ticket show <id>
+#   omar-hub agents
+#   omar-hub board            # resumen legible del tablero
+#   omar-hub ask "texto"      # entrada de texto a Omar (cerebro Hermes + TTS + subtítulo)
 #
 # Pensada para que la use el cerebro de voz (Pi) por bash.
 
@@ -20,7 +20,7 @@ set -euo pipefail
 API="${OMAR_PLATFORM_URL:-http://127.0.0.1:3031}"
 PY="${PY:-python3}"
 
-die() { echo "omar: $*" >&2; exit 1; }
+die() { echo "omar-hub: $*" >&2; exit 1; }
 api_get() { curl -fsS "$API$1"; }
 api_post() { curl -fsS "$API$1" -H 'content-type: application/json' -d "$2"; }
 api_patch() { curl -fsS "$API$1" -X PATCH -H 'content-type: application/json' -d "$2"; }
@@ -72,7 +72,7 @@ for t in ts:
 }
 
 ticket_done() {
-  [ $# -ge 1 ] || die "uso: omar ticket done <id>"
+  [ $# -ge 1 ] || die "uso: omar-hub ticket done <id>"
   local body
   body=$("$PY" -c 'import json,sys;print(json.dumps({"id":sys.argv[1],"status":"done"}))' "$1")
   api_patch /api/tickets "$body" | "$PY" -c '
@@ -82,7 +82,7 @@ print("OK" if "ticket" in d else "Error: %s" % d.get("error"))'
 }
 
 ticket_show() {
-  [ $# -ge 1 ] || die "uso: omar ticket show <id>"
+  [ $# -ge 1 ] || die "uso: omar-hub ticket show <id>"
   api_get /api/tickets | "$PY" -c '
 import json,sys
 want=sys.argv[1]
@@ -125,16 +125,16 @@ for t in ts:
 # para los subtítulos.
 ask() {
   local text="$*"
-  [ -n "$text" ] || { [ -t 0 ] && die "uso: omar ask <texto>"; text="$(cat)"; }
-  [ -n "$text" ] || die "uso: omar ask <texto>"
+  [ -n "$text" ] || { [ -t 0 ] && die "uso: omar-hub ask <texto>"; text="$(cat)"; }
+  [ -n "$text" ] || die "uso: omar-hub ask <texto>"
 
   local voice_bin="$HOME/.local/bin/voice"
-  local omnivoz="$HOME/.local/bin/omnivoz"
+  local omar="$HOME/.local/bin/omar"
 
   # 1) Comando fijo (reglas del router): rápido y confiable.
-  if [ -x "$omnivoz" ]; then
+  if [ -x "$omar" ]; then
     local out rc say
-    out="$("$omnivoz" text --no-confirm "$text" 2>&1)"; rc=$?
+    out="$("$omar" text --no-confirm "$text" 2>&1)"; rc=$?
     if [ "$rc" -eq 0 ]; then
       say="$(printf '%s\n' "$out" | sed -n 's/^say: //p' | tail -1)"
       [ -n "$say" ] || say="Listo."
@@ -164,11 +164,11 @@ case "${1:-help}" in
       list) ticket_list "$@" ;;
       done) ticket_done "$@" ;;
       show) ticket_show "$@" ;;
-      *) die "omar ticket add|list|done|show" ;;
+      *) die "omar-hub ticket add|list|done|show" ;;
     esac ;;
   agents) agents_list ;;
   board) board ;;
   ask) shift; ask "$@" ;;
   help|-h|--help) sed -n '2,17p' "$0" ;;
-  *) die "comando desconocido: $1 (omar help)" ;;
+  *) die "comando desconocido: $1 (omar-hub help)" ;;
 esac

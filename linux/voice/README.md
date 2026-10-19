@@ -210,17 +210,17 @@ batería o si falta.
 Cuando la frase **no es un comando fijo**, el cerebro es **Hermes** corriendo
 headless en una sola pasada (`hermes -z`), con sólo el toolset `terminal`:
 entiende tu escritorio (Hyprland Lua, `wpctl`, `playerctl`, las CLIs
-`voice`/`omnivoz`) y hace la tarea. Su guía vive en
+`voice`/`omar`) y hace la tarea. Su guía vive en
 `linux/voice/pi-brain/AGENTS.md`.
 
 - `voice think "<texto>"` — manda el texto a Hermes y habla la respuesta.
 - `voice ptt` — push-to-talk: graba, transcribe (Handy) y responde con Hermes.
-- En OmniVoz, el cerebro se enchufa sin tocar su código con
+- En Omar, el cerebro se enchufa sin tocar su código con
   `linux/voice/pi_shim.py` (servicio `voice-pi-shim.service`, nombre histórico):
   traduce el protocolo de Ollama al agente headless. Así las reglas van primero
   y, si no hay comando fijo, responde Hermes.
 - Teclas: **Caps Lock = Super** (via `layer(meta)` en keyd). La **tecla física
-de Windows** queda remapeada a **F13** y **alterna OmniVoz** on/off en Hyprland.
+de Windows** queda remapeada a **F13** y **alterna Omar** on/off en Hyprland.
 `SUPER+ALT+P` sigue siendo push-to-talk explícito (una frase).
 
 El modelo del cerebro es el que tenga Hermes configurado

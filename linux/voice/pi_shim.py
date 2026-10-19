@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-# pi_shim.py — puente Ollama -> agente headless para el cerebro de OmniVoz.
+# pi_shim.py — puente Ollama -> agente headless para el cerebro de Omar.
 #
-# OmniVoz (y cualquier cliente que hable el protocolo de Ollama) le pega a
+# Omar (y cualquier cliente que hable el protocolo de Ollama) le pega a
 # /api/chat esperando {message:{role,content,tool_calls?}}. Este shim extrae la
 # frase del usuario del contexto, la manda al cerebro headless (`voice-hermes`,
 # o el que diga VOICE_BRAIN_BIN) y devuelve su respuesta como la del asistente.
 #
 # El agente actúa por su cuenta con sus herramientas (terminal -> hyprctl,
-# wpctl, ...) y OmniVoz solo relata la respuesta hablada. Así el fallback "no es
+# wpctl, ...) y Omar solo relata la respuesta hablada. Así el fallback "no es
 # un comando fijo" lo resuelve el harness elegido, localmente y sin opencode.
 #
 # Nombre del servicio y del archivo: histórico (`voice-pi-shim`), cuando el
@@ -37,7 +37,7 @@ VOICE_BRAIN = (
 TIMEOUT = float(os.environ.get("VOICE_BRAIN_SHIM_TIMEOUT", os.environ.get("VOICE_PI_SHIM_TIMEOUT", "90")))
 PORT = int(os.environ.get("VOICE_PI_SHIM_PORT", "11435"))
 
-# La última línea del contexto de OmniVoz es "petición: <frase>".
+# La última línea del contexto de Omar es "petición: <frase>".
 REQUEST_RE = re.compile(r"^\s*petici[oó]n:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 
@@ -45,7 +45,7 @@ def extract_request(content: str) -> str:
     matches = REQUEST_RE.findall(content or "")
     if matches:
         return matches[-1].strip()
-    # Sin el formato de OmniVoz: usar el texto tal cual (servidor genérico).
+    # Sin el formato de Omar: usar el texto tal cual (servidor genérico).
     return (content or "").strip()
 
 
@@ -85,7 +85,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path.startswith("/api/tags"):
-            # "pi" queda listado para clientes/configs viejas; OmniVoz no lo valida.
+            # "pi" queda listado para clientes/configs viejas; Omar no lo valida.
             self._json({"models": [{"name": "hermes", "model": "hermes"}, {"name": "pi", "model": "pi"}]})
         else:
             self._json({"ok": True})
@@ -114,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                 user_content = str(msg.get("content", ""))
                 break
         text = extract_request(user_content)
-        reply = ask_brain(text, dry=bool(req.get("omnivoz_dry")))
+        reply = ask_brain(text, dry=bool(req.get("omar_dry")))
         self._json({"message": {"role": "assistant", "content": reply}, "done": True})
 
 

@@ -5,19 +5,19 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// OmniVoz bar widget: mirrors the live state published by the voice agent in
-// $XDG_RUNTIME_DIR/omnivoz/status.json. Left click opens this panel, right or
-// middle click toggles the background listener (omnivoz-listen).
+// Omar bar widget: mirrors the live state published by the voice agent in
+// $XDG_RUNTIME_DIR/omar/status.json. Left click opens this panel, right or
+// middle click toggles the background listener (omar-listen).
 Panel {
   id: root
 
-  moduleName: "omnivoz.status"
-  ipcTarget: "omnivoz.status"
+  moduleName: "omar.status"
+  ipcTarget: "omar.status"
 
-  readonly property string toggleCommand: cfg("toggleCommand", "omnivoz-listen")
-  readonly property string configPathText: cfg("configPath", "~/.config/omnivoz/config.json")
+  readonly property string toggleCommand: cfg("toggleCommand", "omar-listen")
+  readonly property string configPathText: cfg("configPath", "~/.config/omar/config.json")
   readonly property int refreshMs: Math.max(500, Number(cfg("refreshIntervalMs", 2000)))
-  readonly property string statusPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omnivoz/status.json"
+  readonly property string statusPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omar/status.json"
   // Si el agente no publicó estado en este tiempo, se considera apagado: así el
   // ícono dice la verdad cuando el proceso se cae o queda trabado.
   readonly property int staleMs: 45000
@@ -44,7 +44,7 @@ Panel {
 
   readonly property bool hasTurn: root.turnRows.length > 0
 
-  readonly property string tooltipText: "OmniVoz · " + root.stateLabel +
+  readonly property string tooltipText: "Omar · " + root.stateLabel +
     (root.transcript.length > 0 ? " · «" + root.transcript + "»" : "") +
     (root.state === "off" ? " · clic derecho para activar" : " · clic derecho para pausar")
 
@@ -209,7 +209,7 @@ Panel {
 
           PanelHero {
             width: parent.width
-            title: "OmniVoz"
+            title: "Omar"
             meta: root.stateLabel
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -326,7 +326,7 @@ Panel {
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
-            text: "Lo que OmniVoz le entrega al modelo antes de decidir."
+            text: "Lo que Omar le entrega al modelo antes de decidir."
           }
 
           Repeater {

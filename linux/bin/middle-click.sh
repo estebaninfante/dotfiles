@@ -18,7 +18,7 @@ down)
         send "keyup rightctrl"
         send "keydown rightctrl"
     else
-        exec omnivoz dictate
+        exec omar dictate
     fi
     ;;
 up)

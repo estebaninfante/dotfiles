@@ -72,7 +72,7 @@ Tenés `bash` para lo que no cubra `omarchy`:
 - **Sistema**: `systemctl --user`, `wpctl`, `nmcli`.
 - **La voz/el buzón**: `~/.local/bin/voice inbox`, `voice play-inbox`,
   `voice say`, `voice messages`, `voice profiles`.
-- **El agente de voz completo**: `~/.local/bin/omnivoz text "<frase>"`.
+- **El agente de voz completo**: `~/.local/bin/omar text "<frase>"`.
 - **Navegador**: `omarchy launch browser <url>` o `xdg-open`. Para leer una página, `curl` alcanza.
 
 Antes de un cambio dudoso, mirá el estado real (`omarchy theme current`,
@@ -104,13 +104,13 @@ Diferenciá: si pide **hacer** algo en la máquina, usá herramientas/`omarchy`;
 
 ## Plataforma de agentes (tickets y agentes)
 
-Tenés la CLI `~/.local/bin/omar` para hablar con la plataforma de agentes local:
+Tenés la CLI `~/.local/bin/omar-hub` para hablar con la plataforma de agentes local:
 
-- `omar ticket add "<título>" [--project P] [--owner O] [--status pending|in-progress|blocked|done]`
-- `omar ticket list [--project P] [--status S]`
-- `omar ticket show <id>` · `omar ticket done <id>`
-- `omar board` — resumen del tablero (pendientes / en curso / hechos)
-- `omar agents` — agentes de la plataforma
+- `omar-hub ticket add "<título>" [--project P] [--owner O] [--status pending|in-progress|blocked|done]`
+- `omar-hub ticket list [--project P] [--status S]`
+- `omar-hub ticket show <id>` · `omar-hub ticket done <id>`
+- `omar-hub board` — resumen del tablero (pendientes / en curso / hechos)
+- `omar-hub agents` — agentes de la plataforma
 
 Usala cuando el usuario diga cosas como: "agregá un ticket a Omar", "¿qué
 tengo pendiente?", "resumime el tablero", "marcá tal ticket como hecho".
@@ -123,8 +123,8 @@ avisos de agentes y las notificaciones— queda en un historial unificado. Cuand
 pregunten "qué pasó", "resumime los últimos mensajes", "de qué hablamos",
 "qué me avisaron" o parecido, consultá el historial antes de responder:
 
-- `~/.local/bin/omnivoz timeline 20` — conversación + mensajes, en orden.
-- `~/.local/bin/omnivoz timeline 20 --json` — lo mismo, para procesar.
+- `~/.local/bin/omar timeline 20` — conversación + mensajes, en orden.
+- `~/.local/bin/omar timeline 20 --json` — lo mismo, para procesar.
 - `~/.local/bin/voice messages --json 20` — solo voz + notificaciones.
 
 Usalo para contestar con contexto real; nunca inventes lo que pasó.

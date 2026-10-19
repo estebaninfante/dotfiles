@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# omnivoz-ptt — push-to-talk DIRECTO de OmniVoz.
+# omar-ptt — push-to-talk DIRECTO de Omar.
 #
 # Tocás la tecla (que keyd remapea a F13) y hablás la instrucción directo, sin
 # decir "Omar": "abre brave", "baja el volumen", etc. Es un disparo: escucha una
 # frase, la ejecuta y vuelve a dormir. Si volvés a tocar mientras escucha, corta.
 #
-# Para el modo manos libres (palabra clave "Omar") está `omnivoz-listen`.
+# Para el modo manos libres (palabra clave "Omar") está `omar-listen`.
 set -euo pipefail
 
-OMNIVOZ_BIN="${OMNIVOZ_BIN:-$HOME/.local/bin/omnivoz}"
-PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/omnivoz-ptt.pid"
-STATEDIR="${XDG_STATE_HOME:-$HOME/.local/state}/omnivoz"
+OMAR_BIN="${OMAR_BIN:-$HOME/.local/bin/omar}"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/omar-ptt.pid"
+STATEDIR="${XDG_STATE_HOME:-$HOME/.local/state}/omar"
 LOG="$STATEDIR/listen.log"
 mkdir -p "$STATEDIR"
 
@@ -22,7 +22,7 @@ fi
 
 # Mata solo los push-to-talk previos (con --no-wake); NO toca el listener de
 # fondo del modo comando, que es otro proceso y systemd reiniciaría.
-pkill -f "developing/omnivoz/dist/index.js listen --no-wake" 2>/dev/null || true
+pkill -f "developing/omar/dist/index.js listen --no-wake" 2>/dev/null || true
 
-setsid "$OMNIVOZ_BIN" listen --no-wake --once >>"$LOG" 2>&1 </dev/null &
+setsid "$OMAR_BIN" listen --no-wake --once >>"$LOG" 2>&1 </dev/null &
 echo $! >"$PIDFILE"

@@ -125,7 +125,7 @@ trigger = { type = "swipe", hand = "right", direction = "left", min_displacement
 
 
 
-# ── Dictado (OmniVoz) con pulgar arriba (mano izquierda) ─────────────────────
+# ── Dictado (Omar) con pulgar arriba (mano izquierda) ─────────────────────
 [[bindings]]
 name = "dictate"
 modes = ["pc"]

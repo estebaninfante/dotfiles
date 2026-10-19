@@ -12,7 +12,7 @@
 #   - debounce: el estado tiene que sostenerse un instante para actuar;
 #   - si status.json quedó viejo (el loop murió), trata el estado como idle.
 set -u
-STATUS="${XDG_RUNTIME_DIR:-/tmp}/omnivoz/status.json"
+STATUS="${XDG_RUNTIME_DIR:-/tmp}/omar/status.json"
 SINK="${OMAR_DUCK_SINK:-@DEFAULT_SINK@}"
 DUCK="${OMAR_DUCK_LEVEL:-0.25}"
 DUCK_PCT="$(awk -v d="$DUCK" 'BEGIN{printf "%d", d*100}')"

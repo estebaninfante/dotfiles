@@ -107,4 +107,4 @@ _(agregar aqui pendientes activos)_
 - **Diagnostic**: no confiar en "exit 0" de launchers D-Bus; verificar ventana con `hyprctl clients -j`.
 
 ---
-_Ultima actualización: 2026-10-15 (pi config completa en dotfiles + omnivoz a GitHub + regla permanente de sync de developing)_
+_Ultima actualización: 2026-10-15 (pi config completa en dotfiles + omar a GitHub + regla permanente de sync de developing)_

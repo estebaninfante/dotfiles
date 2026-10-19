@@ -42,7 +42,7 @@ action = { type = "exec", cmd = ["/home/eztvn/.local/share/gesturecontrol/gestur
 signal = "mode_pc"
 action = { type = "exec", cmd = ["/home/eztvn/.local/share/gesturecontrol/gesturecontrol-mode", "pc"] }
 
-# ── Dictado (OmniVoz): escribe lo que hablás con un gesto ────────────────────
+# ── Dictado (Omar): escribe lo que hablás con un gesto ────────────────────
 [[bindings]]
 signal = "dictate"
-action = { type = "exec", cmd = ["/home/eztvn/.local/bin/omnivoz", "dictate"] }
+action = { type = "exec", cmd = ["/home/eztvn/.local/bin/omar", "dictate"] }

@@ -2282,7 +2282,7 @@ index 302ed07..abe9e34 100644
 +    }
 +
 +    // El pass del overview se dibuja por encima de las capas normales, asi que
-+    // las OVERLAY (pildora de Omar, glow de OmniVoz, TTS) hay que repintarlas a
++    // las OVERLAY (pildora de Omar, glow de Omar, TTS) hay que repintarlas a
 +    // mano despues de las TOP para que sigan visibles con la grilla abierta.
 +    if (keepLayers) {
 +        for (auto& w : pMonitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY]) {

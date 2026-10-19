@@ -1,17 +1,17 @@
 ---
-name: omnivoz-palabras
+name: omar-palabras
 description: >
-  Agregar, cambiar o depurar palabras clave de voz (hotwords) de OmniVoz, el
+  Agregar, cambiar o depurar palabras clave de voz (hotwords) de Omar, el
   agente de voz local de esta máquina. Usala cuando el usuario pida "que cuando
   diga X haga Y", "agregá una palabra clave", "quiero decir play/enter/cerrar",
   o cuando una palabra clave no dispare, dispare de más, o haya que acotarla a
-  una aplicación. Cubre el formato de ~/.local/share/omnivoz/hotwords.json, el
+  una aplicación. Cubre el formato de ~/.local/share/omar/hotwords.json, el
   vocabulario cerrado de acciones, el alcance por ventana (`apps`), el guard de
   acciones destructivas y cómo probar sin micrófono. Triggers: hotword, palabra
-  clave, comando de voz, "cuando diga", OmniVoz, dictado, wake word.
+  clave, comando de voz, "cuando diga", Omar, dictado, wake word.
 ---
 
-# Agregar palabras clave a OmniVoz
+# Agregar palabras clave a Omar
 
 Las palabras clave (hotwords) son frases que se ejecutan **al oírlas**: sin decir
 "Omar", sin conversación abierta, sin pasar por el router ni por ningún modelo.
@@ -23,10 +23,10 @@ Hay cuatro lugares distintos para "una palabra que hace algo". Elegí bien:
 
 | Qué querés | Dónde | Archivo |
 | --- | --- | --- |
-| Una orden suelta que diga y haga ya | **hotword** | `~/.local/share/omnivoz/hotwords.json` |
-| Que "Omar" te despierte | wake word | `~/.config/omnivoz/config.json` → `wakeWord.word/words` |
+| Una orden suelta que diga y haga ya | **hotword** | `~/.local/share/omar/hotwords.json` |
+| Que "Omar" te despierte | wake word | `~/.config/omar/config.json` → `wakeWord.word/words` |
 | Cerrar la conversación | end word | `config.json` → `conversation.endWords` |
-| Corregir una frase que el agente entendió mal | regla aprendida | `omnivoz teach "<frase>" <accion> ...` |
+| Corregir una frase que el agente entendió mal | regla aprendida | `omar teach "<frase>" <accion> ...` |
 
 Si el usuario dice "quiero decir X y que pase Y" → **hotword**. Si es una frase
 larga en lenguaje natural que necesita entender el contexto → va por el router o
@@ -34,7 +34,7 @@ el cerebro, no por acá.
 
 ## Formato
 
-Archivo: `~/.local/share/omnivoz/hotwords.json` (o `$OMNIVOZ_HOTWORDS`). Un array
+Archivo: `~/.local/share/omar/hotwords.json` (o `$OMAR_HOTWORDS`). Un array
 de objetos. **Se relee en cada coincidencia: no hay que reiniciar nada.**
 
 ```json
@@ -125,7 +125,7 @@ shift alt super`.
 espeak-ng -v es -w /tmp/t.wav "pausa"
 
 # 2. replay por el loop, sin ejecutar nada
-cd ~/developing/omnivoz
+cd ~/developing/omar
 node dist/index.js listen --file /tmp/t.wav --no-wake --dry-run --no-tts --no-status --once
 ```
 
@@ -138,7 +138,7 @@ Salida esperada: `palabra clave: <acción>` y `[agent] [dry-run] {"kind": ...}`.
 ## Verificar el repo
 
 ```bash
-cd ~/developing/omnivoz
+cd ~/developing/omar
 node scripts/verify/palabras-por-ventana.mjs    # rápido
 bash scripts/verify/run-all.sh                  # build + todos los verificadores
 ```

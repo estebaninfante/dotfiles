@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # spoken.py — deja una respuesta apta para oído: fuera bloques de código, HTML,
 # markdown, etiquetas de razonamiento y saltos de línea. Se usa tanto en el CLI
-# (`voice think`) como en el puente de OmniVoz (pi_shim.py).
+# (`voice think`) como en el puente de Omar (pi_shim.py).
 
 from __future__ import annotations
 

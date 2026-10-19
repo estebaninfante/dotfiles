@@ -299,7 +299,7 @@ si se acepta el riesgo de bloqueo.
 - **Nota de voz entrante** (mensaje de voz de Discord = attachment con `content_type audio/*`):
   el bot descarga el audio y lo pasa a `RIG_STT_CMD` (STT local). En esta maquina NO hay STT
   listo (falta binario `whisper` o `faster-whisper`); hay modelos GGUF de whisper cacheados por
-  `handy` y un server `faster-whisper` de `omnivoz` sin montar. Hasta montarlo, la voz responde
+  `handy` y un server `faster-whisper` de `omar` sin montar. Hasta montarlo, la voz responde
   "escribi texto".
 - **Respuesta en audio**: TTS local ya existe (comando `voice` + chatterbox); se puede enviar la
   respuesta como nota de voz subiendo el audio al canal.

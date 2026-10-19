@@ -47,11 +47,11 @@ CONFIG_PATH = os.environ.get(
     "PRESENT_CONFIG", os.path.join(HOME, ".config/present-remote/config.toml")
 )
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-PTT_PIDFILE = os.path.join(RUNTIME, "omnivoz-ptt.pid")
-LISTEN_UNIT = "omnivoz-listen.service"
-STATUS_FILE = os.path.join(RUNTIME, "omnivoz", "status.json")
-PILL = os.path.join(HOME, "developing/omnivoz/packaging/quickshell/omar-pill.qml")
-GLOW = os.path.join(os.path.dirname(PILL), "omnivoz-glow.qml")
+PTT_PIDFILE = os.path.join(RUNTIME, "omar-ptt.pid")
+LISTEN_UNIT = "omar-listen.service"
+STATUS_FILE = os.path.join(RUNTIME, "omar", "status.json")
+PILL = os.path.join(HOME, "developing/omar/packaging/quickshell/omar-pill.qml")
+GLOW = os.path.join(os.path.dirname(PILL), "omar-glow.qml")
 LOG = open(os.devnull, "w")
 
 ENV = dict(os.environ)
@@ -247,7 +247,7 @@ def service_awake():
     que está esperando la palabra clave.
     """
     try:
-        with open(os.path.join(RUNTIME, "omnivoz", "listen.pid"), encoding="utf-8") as f:
+        with open(os.path.join(RUNTIME, "omar", "listen.pid"), encoding="utf-8") as f:
             listen_pid = int(f.read().strip())
         with open(STATUS_FILE, encoding="utf-8") as f:
             snap = json.load(f)
@@ -286,7 +286,7 @@ def omar_active():
 
 
 # Clientes que capturan el micrófono sin ser una conversación de voz con el
-# usuario: cava (visualizador), los `parec` del propio OmniVoz y los nodos del
+# usuario: cava (visualizador), los `parec` del propio Omar y los nodos del
 # grafo de PipeWire. Cualquier OTRA captura es alguien hablando por su cuenta.
 MIC_BENIGN = {"parec", "pacat", "cava", "node", "ee_soe_plugins", "easyeffects"}
 
@@ -295,7 +295,7 @@ def external_mic_owner():
     """Qué app está capturando el micrófono, si no es de Omar (o None).
 
     Sirve para no pisar una conversación speech-to-speech (STS) abierta en otra
-    app —el navegador, la plataforma de agentes—: al prender Omar, OmniVoz abre
+    app —el navegador, la plataforma de agentes—: al prender Omar, Omar abre
     su propio `parec` y habla, y la sesión ajena se corta o se queda muda.
     """
     if os.environ.get("PRESENT_MIC_GUARD", "1") == "0":
@@ -359,7 +359,7 @@ def _signal_service(sig):
 def start_voice():
     """Prende Omar: abre la conversación en el servicio que ya está corriendo.
 
-    No arranca otro proceso: el servicio omnivoz-listen es el único oído y
+    No arranca otro proceso: el servicio omar-listen es el único oído y
     SIGUSR1 le dice "escuchá directo, sin la palabra clave". La píldora se abre
     ya para que el toque no se sienta muerto. Y le avisamos al glow que la
     píldora está abierta para que no dibuje su franja encima del campo de texto.
@@ -381,7 +381,7 @@ def cancel_voice():
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
     # 1b) Apagar el glow ya tambien: si no, la franja negra y el subrayado se
     #     quedan visibles unos segundos vacios (el "poso" tras el ultimo texto).
-    _spawn("qs", "ipc", "-p", GLOW, "call", "omnivoz-glow", "hide")
+    _spawn("qs", "ipc", "-p", GLOW, "call", "omar-glow", "hide")
     try:
         os.remove(PTT_PIDFILE)
     except FileNotFoundError:
