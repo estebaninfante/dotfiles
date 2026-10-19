@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# voice-hermes — puente headless a Hermes para el cerebro del asistente de voz.
+#
+#   voice-hermes "¿en qué workspace estoy?"      # responde en stdout
+#   echo "sube el volumen" | voice-hermes
+#
+# Hermes corre en un directorio propio con su AGENTS.md que le enseña a manejar
+# el escritorio. Una sola pasada (`-z`, que ya carga tools/memoria/reglas y no
+# pide aprobaciones), con la terminal como única herramienta y sin sesión
+# interactiva: lo más liviano y rápido posible. La respuesta final sale por
+# stdout, igual que en `voice-pi`.
+#
+# Config: VOICE_HERMES_BRAIN_DIR, VOICE_HERMES_MODEL (vacío = default de Hermes),
+#         VOICE_HERMES_PROVIDER (vacío = default de Hermes),
+#         VOICE_HERMES_TOOLSETS, VOICE_HERMES_TIMEOUT (segundos).
+
+set -uo pipefail
+
+# Asegura las rutas propias aunque el servicio arranque con un PATH mínimo.
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+
+BRAIN_DIR="${VOICE_HERMES_BRAIN_DIR:-${VOICE_PI_BRAIN_DIR:-$HOME/.local/share/voice/pi-brain}}"
+MODEL="${VOICE_HERMES_MODEL:-}"
+PROVIDER="${VOICE_HERMES_PROVIDER:-}"
+TOOLSETS="${VOICE_HERMES_TOOLSETS:-terminal}"
+TIMEOUT="${VOICE_HERMES_TIMEOUT:-${VOICE_PI_TIMEOUT:-90}}"
+
+prompt="$*"
+if [ -z "$prompt" ] && [ ! -t 0 ]; then
+  prompt="$(cat)"
+fi
+[ -n "$prompt" ] || { echo "voice-hermes: falta el texto" >&2; exit 2; }
+[ -d "$BRAIN_DIR" ] || { echo "voice-hermes: no existe $BRAIN_DIR" >&2; exit 1; }
+
+# Modo evaluación: decidir y responder sin ejecutar nada (lo usa el scorer).
+if [ "${VOICE_BRAIN_DRY:-${VOICE_PI_DRY:-0}}" = "1" ]; then
+  prompt="MODO EVALUACIÓN. Podés LEER estado (archivos, hyprctl, voice, omarchy) pero NO ejecutes acciones que modifiquen el sistema ni crees/modifiques datos. Decidí qué harías y respondé en 1 o 2 frases, en primera persona y en pasado, COMO SI YA LO HUBIERAS HECHO. No aclares que estás evaluando ni que no ejecutaste; hablá natural. Sin markdown.
+
+$prompt"
+fi
+
+args=(-z "$prompt")
+[ -n "$TOOLSETS" ] && args+=(--toolsets "$TOOLSETS")
+[ -n "$MODEL" ] && args+=(-m "$MODEL")
+[ -n "$PROVIDER" ] && args+=(--provider "$PROVIDER")
+
+# Guardián: sólo dentro del cerebro, `omarchy`/`systemctl` destructivos pasan
+# por confirmación hablada (no afecta a tu shell normal).
+PATH="$BRAIN_DIR/guard:$PATH"
+export PATH
+
+cd "$BRAIN_DIR" || exit 1
+
+out="$(timeout "$TIMEOUT" hermes "${args[@]}" 2>/dev/null)"
+[ -n "$out" ] && printf '%s\n' "$out"
