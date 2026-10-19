@@ -102,26 +102,62 @@ PROMPT
 session=""
 model_ok=""
 attempt=0
+
+# Corre un intento con `opencode run` mientras:
+#   - transmite la salida al log en vivo (tail -f),
+#   - mata el intento si pasa CRASH_DIAGNOSE_STALL segundos sin escribir nada
+#     (un modelo free colgado no debe frenar el fallback),
+#   - y aplica un tope duro CRASH_DIAGNOSE_TIMEOUT.
+# Deja el código en RC y la salida en OUT.
+run_attempt() {  # run_attempt <modelo> <archivo>
+  local m="$1" outf="$2"
+  : >"$outf"
+  opencode run --model "$m" --title "$title" --auto --format json "$prompt" >"$outf" 2>&1 &
+  local cpid=$! tpid last=0 stall=0 waited=0
+  local stall_max=${CRASH_DIAGNOSE_STALL:-150}
+  local hard_max=${CRASH_DIAGNOSE_TIMEOUT:-1200}
+  tail -n +1 -f "$outf" 2>/dev/null &
+  tpid=$!
+  while kill -0 "$cpid" 2>/dev/null; do
+    sleep 5
+    waited=$((waited + 5))
+    local sz
+    sz=$(wc -c <"$outf" 2>/dev/null || echo 0)
+    if [ "$sz" -gt "$last" ]; then last=$sz; stall=0; else stall=$((stall + 5)); fi
+    if [ "$stall" -ge "$stall_max" ]; then
+      echo "--- sin salida por ${stall}s: mato el intento con $m ---"
+      kill "$cpid" 2>/dev/null
+      break
+    fi
+    if [ "$waited" -ge "$hard_max" ]; then
+      echo "--- tope de ${hard_max}s: mato el intento con $m ---"
+      kill "$cpid" 2>/dev/null
+      break
+    fi
+  done
+  wait "$cpid" 2>/dev/null
+  RC=$?
+  kill "$tpid" 2>/dev/null
+  wait "$tpid" 2>/dev/null
+  OUT=$(cat "$outf" 2>/dev/null)
+}
+
 for m in "${free_models[@]}"; do
   attempt=$((attempt + 1))
   echo "--- intento $attempt con $m ---"
-  # Se transmite en vivo (tee al log del script) y se guarda para decidir si
-  # falló por cuota. Así el log sirve para seguir el diagnóstico mientras corre.
   attempt_log=$(mktemp "${TMPDIR:-/tmp}/crash-diag.XXXXXX")
-  timeout "${CRASH_DIAGNOSE_TIMEOUT:-900}" opencode run \
-    --model "$m" --title "$title" --auto --format json "$prompt" 2>&1 | tee "$attempt_log"
-  rc=${PIPESTATUS[0]}
-  out=$(cat "$attempt_log" 2>/dev/null)
+  RC=0 OUT=""
+  run_attempt "$m" "$attempt_log"
   rm -f "$attempt_log"
   # Éxito = terminó sin error y sin señal de cuota agotada. Un modelo free
   # rate-limited devuelve 429/FreeUsageLimitError; se prueba el siguiente.
-  if ((rc == 0)) && ! printf '%s\n' "$out" |
+  if ((RC == 0)) && ! printf '%s\n' "$OUT" |
     grep -qiE 'rate limit|freeusagelimiterror|provider\.quota|status": ?429|quota exceeded'; then
     model_ok="$m"
-    session=$(printf '%s\n' "$out" | grep -o '"sessionID":"[^"]*"' | head -1 | cut -d'"' -f4)
+    session=$(printf '%s\n' "$OUT" | grep -o '"sessionID":"[^"]*"' | head -1 | cut -d'"' -f4)
     break
   fi
-  echo "--- $m no sirvió (rc=$rc); pruebo otro modelo free ---"
+  echo "--- $m no sirvió (rc=$RC); pruebo otro modelo free ---"
 done
 
 if [[ -n $model_ok ]]; then
