@@ -1,6 +1,6 @@
 ---
 name: metodo-software
-description: Método de trabajo para construir y cambiar software pensando en agentes. Usala en cualquier tarea de software (features, bugs, refactors, apps) y cuando haya que optimizar o bajar el consumo. Triggers: implementar, feature, bug, refactor, app, verificar, test, arquitectura, escalar, agentes, rendimiento, optimizar, lento.
+description: Método de trabajo para construir y cambiar software pensando en agentes. Usala en cualquier tarea de software (features, bugs, refactors, apps) y cuando haya que optimizar o bajar el consumo. Triggers: implementar, feature, bug, refactor, app, verificar, test, arquitectura, escalar, agentes, rendimiento, optimizar, lento, presupuesto colibrí.
 ---
 
 # Método de software (pensado para agentes)
@@ -36,7 +36,7 @@ claro, más barato.
    ocultos, docs en `AGENTS.md`. Si un agente nuevo no entiende el repo en cinco
    minutos, el repo está mal.
 
-6. **Eficiencia primero: presupuesto adaptativo.**
+6. **Eficiencia primero: presupuesto adaptativo (colibrí).**
    Antes de escribir, estimá el costo en CPU, memoria, red y batería, y elegí la
    opción más barata que cumpla. Lo que consuma recursos (video, imágenes,
    animación, polling, IA local, build) detecta el hardware y el contexto,
@@ -63,11 +63,12 @@ scripts/verify/<nombre>.sh
 verificado | pendiente
 ```
 
-## Presupuesto adaptativo
+## Presupuesto adaptativo (colibrí)
 
-Un **presupuesto** es un techo de trabajo simultáneo que el sistema se impone
-solo. Elegís el techo **antes** de escribir y lo hacés cumplir en el código: no
-es una optimización que queda para el final.
+Un **presupuesto colibrí** es un techo de trabajo simultáneo que el sistema se
+impone solo: chico, rápido y sin gastar de más. Elegís el techo **antes** de
+escribir y lo hacés cumplir en el código: no es una optimización que queda para
+el final.
 
 ### El modelo
 
