@@ -117,26 +117,25 @@ def case_fallo_real_sigue_cayendo():
     assert llamadas[:2] == ["kokoro", "piper"], f"cadena inesperada: {llamadas}"
 
 
-def case_stop_solo_corta_la_voz():
-    matados = []
-    real_run = d.subprocess.run
+def case_stop_corta_por_pid():
+    cortado = []
 
-    def run(argv, *a, **k):
-        if argv and argv[0] == "pkill":
-            matados.append(argv)
-            class R:
-                returncode = 0
-            return R()
-        return real_run(argv, *a, **k)
+    class FakeProc:
+        def poll(self):
+            return None
 
-    d.subprocess.run = run
+        def terminate(self):
+            cortado.append("term")
+
+        def wait(self, timeout=None):
+            return 0
+
+    d._current_play = FakeProc()
     d._queue[:] = [{"text": "pendiente"}]
     antes = d._play_epoch
     d.handle({"cmd": "stop"})
-    d.subprocess.run = real_run
-    assert matados, "stop no cortó el audio"
-    patron = " ".join(matados[0]).lower()
-    assert "voice tts" in patron, f"stop mata audio ajeno: {matados[0]}"
+    d._current_play = None
+    assert cortado == ["term"], f"stop no cortó el pw-play en curso: {cortado}"
     assert d._play_epoch == antes + 1, "stop no marcó el corte (epoch)"
     assert not d._queue, "stop no vació la cola"
 
@@ -144,7 +143,7 @@ def case_stop_solo_corta_la_voz():
 for name, fn in list(globals().items()):
     if name.startswith("case_"):
         fn()
-print("casos: corte en play, corte en síntesis, fallback real, pkill acotado")
+print("casos: corte en play, corte en síntesis, fallback real, corte por pid")
 PY
 )"; then
     ok "reglas de corte del daemon"
@@ -153,11 +152,11 @@ else
     printf '%s\n' "$out" | tail -5
 fi
 
-# --- 2. stop no mata pw-play ajenos (chequeo de fuente) -------------------
-if grep -q 'pkill", "-f", "pw-play' "$DAEMON"; then
-    fail "stop sigue matando todos los pw-play"
+# --- 2. stop no mata audio ajeno (chequeo de fuente) ----------------------
+if grep -v '^[[:space:]]*#' "$DAEMON" | grep -q 'pkill'; then
+    fail "el daemon usa pkill (mata audio ajeno)"
 else
-    ok "stop no mata todos los pw-play"
+    ok "stop corta el pw-play en curso por PID (sin pkill)"
 fi
 
 if grep -q '"Voice TTS"' "$DAEMON"; then

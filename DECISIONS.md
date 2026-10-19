@@ -289,3 +289,30 @@ sesión no la levantaba) y `Restart=on-failure` no revive un TERM externo.
   hacerlo desde la unidad, sin proceso extra ni latencia.
 - Dejar el puente en `default.target` y atarlo por `Wants=` desde `omar-listen`:
   mezcla ciclo de vida de sesión con ciclo de vida de usuario.
+
+## 2026-10-19 — Cortar la voz la calla, no la degrada
+
+**Contexto.** Con la tecla física de Windows `present-remote toggle` cierra a
+Omar, que manda `voice stop`. El daemon hacía `pkill -f pw-play` y el
+`synth_and_play` tomaba el playback muerto como "falló el motor", así que
+reintentaba la MISMA frase con piper y después espeak: en vez de silencio se
+oía otra voz, peor. Además el `pkill` por patrón se llevaba earcons, chimes y
+cualquier otro `pw-play` (y hasta un shell cuyo comando mencionara el patrón).
+
+**Elegido.**
+
+- Un contador de generación (`_play_epoch`) que sube en `stop`; `_play` lo mira
+  y devuelve `cancelled` en vez de `error`. En `synth_and_play`, `cancelled`
+  corta la cadena de motores; `error` sigue cayendo a piper/espeak como antes.
+- Se chequea el epoch antes de sintetizar y antes de reproducir: si el corte
+  llega durante la síntesis, la frase se descarta (no suena después).
+- El playback se corta por **PID** (`_current_play.terminate()`), no con
+  `pkill -f`. `voice repeat` usa un patrón anclado (`^pw-play .*Voice TTS`).
+
+**Descartado.**
+
+- `pkill -f "Voice TTS"`: más acotado que `pw-play`, pero seguía matando
+  procesos ajenos que mencionaran el texto (medido: mató el shell del test).
+- Marcar el corte con un archivo con vencimiento: ventana arbitraria, decide
+  por tiempo lo que ya se sabe por generación.
+

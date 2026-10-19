@@ -71,6 +71,10 @@ _chatterbox_proc: subprocess.Popen | None = None
 _chatterbox_lock = threading.Lock()
 _kokoro_proc: subprocess.Popen | None = None
 _kokoro_lock = threading.Lock()
+# Proceso de playback en curso: así el stop corta EXACTAMENTE ese pw-play, sin
+# `pkill -f` (que también mataba otros pw-play, earcons e incluso un shell cuyo
+# comando mencionara el patrón).
+_current_play: subprocess.Popen | None = None
 
 
 def log(msg: str) -> None:
@@ -699,6 +703,7 @@ def _play(wav: str, text: str | None = None, source: str = "",
     "cancelled" = alguien pidió cortar (`voice stop`) mientras sonaba. Es
     distinto de un fallo real del motor: no hay que degradar a piper/espeak.
     """
+    global _current_play
     if not os.path.isfile(wav):
         return "error"
     epoch = _play_epoch
@@ -722,13 +727,23 @@ def _play(wav: str, text: str | None = None, source: str = "",
     if duck and (paused or len([m for _, m in muted if not m]) > 0):
         log(f"duck: pausados={paused or '[]'} acallados={len([m for _, m in muted if not m])}")
     published = False
+    proc: subprocess.Popen | None = None
     try:
         # Publicar qué se está diciendo, para que el glow muestre los subtítulos.
         if text:
             _publish_speaking(text, wav, source, engine, voice)
             published = True
-        r = subprocess.run(argv, capture_output=True, timeout=900)
-        if r.returncode == 0:
+        proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
+        _current_play = proc
+        try:
+            rc = proc.wait(timeout=900)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            log("play timeout (900s): corto la voz")
+            return "error"
+        if rc == 0:
             return "ok"
         if _play_epoch != epoch:
             return "cancelled"
@@ -739,6 +754,8 @@ def _play(wav: str, text: str | None = None, source: str = "",
         log(f"play error: {e}")
         return "error"
     finally:
+        if proc is not None and _current_play is proc:
+            _current_play = None
         if published:
             _clear_speaking()
         if muted:
@@ -789,17 +806,32 @@ def ensure_fifo() -> None:
         os.mkfifo(FIFO, 0o600)
 
 
+def _stop_playback() -> None:
+    """Corta el pw-play de la voz por PID (sin matar por patrón)."""
+    proc = _current_play
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=1.5)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    except OSError:
+        pass
+
+
 def handle(req: dict) -> None:
     global _play_epoch
     cmd = req.get("cmd")
     if cmd == "stop":
         _queue.clear()
         _play_epoch += 1  # marca el corte para que no haya fallback
-        # Cortar SOLO el stream de la voz (mismo criterio que `voice repeat`):
-        # `pkill -f pw-play` se llevaba también earcons, avisos y cualquier
-        # otra reproducción del sistema. Si todavía no empezó a sonar (estaba
-        # sintetizando), no hay nada que matar: el epoch hace que se descarte.
-        subprocess.run(["pkill", "-f", "Voice TTS"], capture_output=True)
+        # Si todavía no empezó a sonar (estaba sintetizando) no hay nada que
+        # cortar: el epoch hace que la frase se descarte al terminar.
+        _stop_playback()
         log("cmd=stop (cola vaciada + playback detenido)")
     elif cmd == "flush":
         _queue.clear()

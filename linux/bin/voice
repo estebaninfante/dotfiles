@@ -477,7 +477,7 @@ PY
     fi
     # Cortar SOLO lo que dice el daemon (su stream se llama "Voice TTS"),
     # así no matamos el replay que estamos por arrancar.
-    pkill -f 'Voice TTS' 2>/dev/null || true
+    pkill -f '^pw-play .*Voice TTS' 2>/dev/null || true
     sleep 0.15
     if [ -n "$cur" ] && [ -f "$cur" ]; then
       pw-play --volume="$(tts_volume)" "$cur" >/dev/null 2>&1

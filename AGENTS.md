@@ -342,6 +342,12 @@ voice engine X lang # cambiar motor (chatterbox/piper/espeak)
 
 **Chain de fallback:** chatterbox → piper → espeak
 
+**Cortar la voz.** `voice stop` (lo dispara la tecla de Windows al cerrar Omar)
+vacía la cola y corta el `pw-play` en curso **por PID**. Un corte no es un
+fallo: la frase no se reintenta con otro motor (antes seguía sonando con piper
+o espeak, peor). Si el corte llega mientras se sintetiza, la frase se descarta
+en vez de sonar después. Verificador: `scripts/verify/voz-corte.sh`.
+
 **Registro unificado + API para cualquier proceso:** cada mensaje entregado
 (voz y notificaciones) queda en `~/.local/share/voice/tts/messages.jsonl`, con
 `voice messages` para verlo y `voice repeat` para releerlo. La interfaz que
