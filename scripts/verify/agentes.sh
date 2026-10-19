@@ -69,6 +69,12 @@ grep -q '"subtarea"' "$RIG_TS" \
 grep -q 'markdownTraza' "$RIG_TS" \
   && ok "rig: traza en Markdown para el usuario" \
   || fail "rig: falta la traza en Markdown"
+grep -q 'PI_RIG_PADRE' "$RIG_TS" \
+  && ok "rig: el subagente cuelga su ticket de la delegación" \
+  || fail "rig: falta el enlace del subagente a la delegación"
+grep -q 'modoHeadless' "$CONVERSAR" \
+  && ok "conversar: el subagente no le roba nombre/color al panel del padre" \
+  || fail "conversar: falta el guard para corridas headless"
 grep -q 'ticket_live_seat' "$RIG_SH" \
   && ok "rig: un ticket no lo trabaja más de un agente vivo" \
   || fail "rig: falta el candado de un agente por ticket"

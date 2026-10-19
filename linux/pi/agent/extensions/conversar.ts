@@ -82,7 +82,20 @@ import {
 const HOME = process.env.HOME ?? "";
 const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/agente`;
 
-const TMUX_PANE = process.env.TMUX_PANE?.trim() ?? "";
+/** Los subagentes (y cualquier corrida `-p`/`--no-session`) comparten el panel
+ *  de tmux con el agente que los lanzó. Si tocaran el panel, le robarían el
+ *  nombre y el color al padre: en modo headless no se toca tmux. */
+function modoHeadless(): boolean {
+  const args = process.argv.slice(1);
+  if (args.includes("-p") || args.includes("--print") || args.includes("--no-session")) {
+    return true;
+  }
+  const i = args.indexOf("--mode");
+  return i >= 0 && args[i + 1] === "json";
+}
+
+const HEADLESS = modoHeadless();
+const TMUX_PANE = HEADLESS ? "" : process.env.TMUX_PANE?.trim() ?? "";
 
 /** Tipo de entrada de sesión donde vive la identidad del agente: así el nombre,
  *  el rol, el color y la voz quedan atados a la conversación y vuelven al

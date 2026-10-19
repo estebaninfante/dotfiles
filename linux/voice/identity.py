@@ -395,6 +395,9 @@ def _main(argv: list[str]) -> int:
         print(_usage(), file=sys.stderr)
         return 2
     cmd, args = argv[0], argv[1:]
+    # `voice identity check` / `selftest` son atajos de verificación.
+    if cmd in ("identity", "id") and len(args) == 1 and args[0] in ("check", "duplicados", "selftest"):
+        cmd, args = args[0], []
     if cmd in ("identity", "id"):
         name = ""
         role = ""

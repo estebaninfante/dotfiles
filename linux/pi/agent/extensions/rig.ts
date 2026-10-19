@@ -70,7 +70,7 @@ const TAREAS = join(DIR, "tareas.json");
 const TRAZAS = join(DIR, "trazas");
 const MAX_PASOS = 300;
 /** Sesiones que se conservan completas. Cada una puede tener muchos hijos. */
-const MAX_SESIONES = 50;
+const MAX_SESIONES = 200;
 
 interface Revision {
   id: string;
@@ -234,7 +234,9 @@ function tmuxOut(args: string[]): string {
 }
 
 function nombreAgente(): string {
-  const explicit = process.env.PI_VOICE_AGENT?.trim();
+  const explicit =
+    (corridaHeadless() ? process.env.PI_RIG_AGENTE?.trim() : "") ||
+    process.env.PI_VOICE_AGENT?.trim();
   if (explicit) return explicit;
   const pane = process.env.TMUX_PANE?.trim();
   if (pane) {
@@ -248,6 +250,17 @@ function nombreAgente(): string {
     /* sin cwd */
   }
   return "pi";
+}
+
+/** Un subagente corre `pi -p --no-session` en el mismo panel que el padre.
+ *  No debe crear otra raíz ni tocar el panel: solo aporta su ticket hijo. */
+function corridaHeadless(): boolean {
+  const args = process.argv.slice(1);
+  if (args.includes("-p") || args.includes("--print") || args.includes("--no-session")) {
+    return true;
+  }
+  const i = args.indexOf("--mode");
+  return i >= 0 && args[i + 1] === "json";
 }
 
 function cwdActual(): string {
@@ -264,6 +277,9 @@ export default function rig(pi: ExtensionAPI) {
   let tarea: Tarea | undefined;
   /** Ticket raíz: la sesión/agente vivo. Uno por sesión. */
   let raiz: Tarea | undefined;
+  /** En un subagente, ticket de la delegación que lo lanzó. */
+  let padreExterno: string | undefined;
+  let esSubagente = false;
   let agente = "pi";
   let sessionPath: string | undefined;
   let sessionId: string | undefined;
@@ -333,7 +349,8 @@ export default function rig(pi: ExtensionAPI) {
     }
   }
 
-  /** Escribe solo la tarea actual y la raíz, sin pisar las demás. */
+  /** Escribe solo la tarea actual y la raíz, sin pisar las demás. En un
+   *  subagente, la raíz es del padre: no se toca ni se exporta desde acá. */
   function volcar(): void {
     if (guardadoTimer) {
       clearTimeout(guardadoTimer);
@@ -346,11 +363,11 @@ export default function rig(pi: ExtensionAPI) {
       tarea.actualizado = new Date().toISOString();
       guardarUna(tarea);
     }
-    if (raiz && raiz.id !== tarea?.id) {
+    if (raiz && raiz.id !== tarea?.id && !esSubagente) {
       raiz.actualizado = new Date().toISOString();
       guardarUna(raiz);
     }
-    exportarTraza();
+    if (!esSubagente) exportarTraza();
   }
 
   function programarGuardado(): void {
@@ -429,6 +446,11 @@ export default function rig(pi: ExtensionAPI) {
       raiz.actualizado = new Date().toISOString();
       raiz.agente = raiz.agente || agente;
       raiz.dueno = raiz.dueno || sessionId;
+      raiz.pasos.push({
+        t: raiz.actualizado,
+        tipo: "nota",
+        resumen: "sesión reanudada",
+      });
       guardarUna(raiz);
       return raiz;
     }
@@ -470,7 +492,21 @@ export default function rig(pi: ExtensionAPI) {
     agente = nombreAgente();
     tarea = undefined;
     raiz = undefined;
+    padreExterno = undefined;
     subagentes.clear();
+
+    const envPadre = process.env.PI_RIG_PADRE?.trim();
+    esSubagente = Boolean(envPadre) && corridaHeadless();
+    if (esSubagente) {
+      // Subagente: no crea otra raíz ni toca el panel del padre. Su trabajo
+      // cuelga del ticket de delegación que ya creó el padre.
+      padreExterno = envPadre;
+      const items = leerTareas();
+      const padre = items.find((t) => t.id === envPadre);
+      raiz = padre ? raizDe(items, padre) : undefined;
+      emitir();
+      return;
+    }
 
     raiz = asegurarRaiz();
     const items = leerTareas();
@@ -488,7 +524,7 @@ export default function rig(pi: ExtensionAPI) {
     const texto = String(event.text ?? "").trim();
     if (!texto) return;
     actualizarSesion(ctx);
-    if (!raiz) raiz = asegurarRaiz();
+    if (!raiz && !esSubagente) raiz = asegurarRaiz();
     const resumen = recortar(texto, 240);
     const ultimo = tarea?.pasos[tarea.pasos.length - 1];
     const repetido =
@@ -496,7 +532,22 @@ export default function rig(pi: ExtensionAPI) {
       ultimo.resumen === resumen &&
       Date.now() - Date.parse(ultimo.t) < 2000;
 
-    if (
+    if (esSubagente) {
+      // El subagente deja su propio ticket hijo, colgando de la delegación.
+      // Si ya existe, el encargo se suma al mismo trace.
+      if (!tarea) {
+        tarea = crearTarea(texto, {
+          padre: padreExterno,
+          tipo: "subtarea",
+          agente,
+        });
+      } else if (!repetido) {
+        tarea.estado = "activa";
+        tarea.hasta = undefined;
+        tarea.actualizado = new Date().toISOString();
+        tarea.pasos.push({ t: tarea.actualizado, tipo: "pedido", resumen });
+      }
+    } else if (
       tarea &&
       tarea.id !== raiz?.id &&
       esMia(tarea) &&
@@ -576,7 +627,9 @@ export default function rig(pi: ExtensionAPI) {
   }
 
   /** Crea el subticket de una llamada `subagent`. El agente que delega sigue
-   *  con su ticket; la delegación queda como hijo en el árbol. */
+   *  con su ticket; la delegación queda como hijo en el árbol. El proceso hijo
+   *  hereda PI_RIG_PADRE/PI_RIG_AGENTE y cuelga su propio trabajo de este
+   *  ticket en vez de inventar otra sesión. */
   function subticketDeSubagente(event: {
     toolCallId: string;
     input: unknown;
@@ -591,6 +644,8 @@ export default function rig(pi: ExtensionAPI) {
       agente: d.agente,
     });
     guardarUna(hijo);
+    process.env.PI_RIG_PADRE = hijo.id;
+    process.env.PI_RIG_AGENTE = d.agente;
     return hijo;
   }
 
@@ -690,9 +745,19 @@ export default function rig(pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async () => {
+    const ahora = new Date().toISOString();
+    if (esSubagente) {
+      // El subagente cierra su propio ticket, nunca la raíz ni la delegación
+      // del padre (el padre marca el resultado de la delegación).
+      if (tarea && tarea.estado === "activa") {
+        tarea.estado = "cerrada";
+        tarea.hasta = ahora;
+      }
+      volcar();
+      return;
+    }
     // La sesión se cierra: el ticket raíz deja de estar abierto y los pedidos
     // que quedaron activos se cierran con ella (sin borrar nada del trace).
-    const ahora = new Date().toISOString();
     if (tarea && tarea.estado === "activa") {
       tarea.estado = "cerrada";
       tarea.hasta = ahora;

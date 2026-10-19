@@ -10,7 +10,11 @@ top-level), un store de tickets en vivo y su render. bash + tmux + jq (+ sqlite3
 ### Sillas
 
 - `rig seats [--porcelain]` — lista sillas (sesiones tmux marcadas `@agent 1`).
+- `rig vivos [--porcelain]` — **agentes vivos** en cualquier panel tmux: nombre, rol, color,
+  ticket actual y ticket raíz. Avisa (y sale 1) si dos vivos comparten color.
+- `rig colores` — verifica que no haya colores repetidos entre agentes vivos.
 - `rig spawn <nombre> [--agent A] [--cwd DIR] ...` — crea la silla corriendo opencode.
+  Si `--ticket ID` ya lo trabaja otra silla viva, se niega: **un ticket = un agente**.
 - `rig send <silla> [--force] "..."` — inyecta texto + Enter (bracket-paste si multilinea).
 - `rig read <silla> [--lines N]` — captura el output reciente.
 - `rig whoami` — silla actual (dentro de tmux).
@@ -63,3 +67,21 @@ Campo opcional `area` por ticket; es el eje de agrupacion de `rig board` y su fi
 
 Estados y forma del store, worktrees y metricas: ver el `AGENTS.md` de `~/.config/opencode/`
 (seccion "Tablero de tickets en vivo"). Verificacion: `verify run rig` + `rig --selftest`.
+
+## Agentes pi: un color por vivo, un ticket por agente
+
+La extensión `linux/pi/agent/extensions/rig.ts` captura solo el árbol de trabajo:
+
+- Cada sesión de pi abre un **ticket raíz** (`tipo: sesion`): el agente vivo.
+- Cada pedido del usuario abre un **subticket** con su propio trace.
+- Cada delegación (`subagent`) abre un **subticket hijo**; el proceso hijo cuelga su
+  trabajo de esa delegación y nunca crea otra raíz ni toca el panel del padre.
+- Todo se ve con `/tareas`, `/tarea T-XXXXXX`, `/traza` y `/trazas`, y además queda en
+  Markdown legible: `~/.local/share/pi/trazas/<ticket-raíz>.md` + `index.md`.
+- Un ticket pertenece a una sola sesión (`dueno`): otro agente solo lo lee y crea uno nuevo.
+
+Los colores salen de `linux/voice/identity.py`. Al arrancar, cada agente **reclama** un
+color libre entre los vivos (`voice identity --claim`); si otro agente ya lo tiene, toma
+el siguiente y lo guarda. En cada turno, `conversar.ts` revisa si quedó un color repetido
+y lo corrige sin reiniciar. Verificación: `scripts/verify/agentes.sh`, `rig colores`,
+`rig vivos`.
