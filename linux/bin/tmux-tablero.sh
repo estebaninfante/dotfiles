@@ -36,7 +36,21 @@ list_sessions() {
 }
 
 close_dash() {
+  local -a pids=() ttys=()
+  mapfile -t pids < <(tmux list-panes -t "$DASH:tablero" -F '#{pane_pid}' 2>/dev/null)
+  mapfile -t ttys < <(tmux list-panes -t "$DASH:tablero" -F '#{pane_tty}' 2>/dev/null)
   tmux kill-session -t "$DASH" 2>/dev/null || true
+  # Los clientes anidados (uno por panel) no mueren solos al cerrar la sesión;
+  # se los mata por pid y, por las dudas, por tty (evita huérfanos acumulados).
+  local p t cp ct
+  for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && kill "$p" 2>/dev/null; done
+  if [ "${#ttys[@]}" -gt 0 ]; then
+    while read -r cp ct; do
+      for t in "${ttys[@]}"; do
+        [ "$ct" = "$t" ] && kill "$cp" 2>/dev/null
+      done
+    done < <(tmux list-clients -F '#{client_pid} #{client_tty}' 2>/dev/null)
+  fi
 }
 
 reload_grid() {
