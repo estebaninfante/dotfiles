@@ -37,9 +37,23 @@ wait_url() {
   local i
   for i in $(seq 1 120); do
     alive_url && return 0
+    # Si el unit ya quedó en failed no tiene sentido seguir esperando.
+    [[ $(systemctl --user is-failed "$UNIT" 2>/dev/null) == failed ]] && return 1
     sleep 0.5
   done
   return 1
+}
+
+ensure_server() {
+  alive_url && return 0
+  # systemd corta los arranques repetidos (start-limit-hit) y deja el unit en
+  # failed: se limpia el contador y se reintenta una vez. Sin esto, abrir la
+  # UI dos veces seguidas podía quedar bloqueado cinco minutos.
+  if ! systemctl --user start "$UNIT" >/dev/null 2>&1; then
+    systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
+    systemctl --user start "$UNIT" >/dev/null 2>&1 || true
+  fi
+  wait_url
 }
 
 case "${1:-}" in
@@ -53,7 +67,7 @@ case "${1:-}" in
     exit "${PIPESTATUS[0]}"
     ;;
   --url)
-    alive_url || { systemctl --user start "$UNIT" >/dev/null 2>&1 || true; wait_url; } || exit 1
+    alive_url || ensure_server || exit 1
     exit 0
     ;;
   --stop)
@@ -77,8 +91,7 @@ case "${1:-}" in
 esac
 
 if ! url=$(alive_url); then
-  systemctl --user start "$UNIT" >/dev/null 2>&1 || true
-  if ! url=$(wait_url); then
+  if ! url=$(ensure_server); then
     echo "dsh-web: el servidor no respondió. Revisá: journalctl --user -u $UNIT" >&2
     command -v notify-send >/dev/null && notify-send -u critical "DeepSeek Harness" "El servidor no arrancó"
     exit 1
