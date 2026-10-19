@@ -45,6 +45,25 @@ for u in $(managed_units); do
   echo "enlazado: $u"
 done
 
+# Drop-ins versionados: <unit>.d/*.conf en el repo se enlazan al mismo lugar.
+# Así un unit de Omarchy (p. ej. omarchy-crash-watch) se sobrescribe por
+# drop-in sin editar /usr/share, que se pisa en cada update.
+for d in "$SRC"/*.d; do
+  [ -d "$d" ] || continue
+  name="$(basename "$d")"
+  mkdir -p "$DST/$name"
+  for f in "$d"/*; do
+    [ -f "$f" ] || continue
+    link="$DST/$name/$(basename "$f")"
+    if [ -L "$link" ] && [ "$(readlink -f "$link")" = "$(readlink -f "$f")" ]; then
+      continue
+    fi
+    ln -sfn "$f" "$link"
+    changed=1
+    echo "enlazado: $name/$(basename "$f")"
+  done
+done
+
 [ "$changed" = 1 ] && systemctl --user daemon-reload
 
 for u in $(managed_units); do

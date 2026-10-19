@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=Diagnostica un crash solo y lo sigue como ticket del rig
+# omarchy:args=<pid> [comm] [exe] [signal]
+# omarchy:hidden=true
+#
+# Lo lanza omarchy-crash-autodiagnose cuando systemd-coredump registra un core
+# dump, sin click de por medio. Abre un ticket en el tablero del rig, corre el
+# diagnostico con opencode en modo headless usando SOLO modelos free, y cierra
+# el ticket con la evidencia. El metodo lo dicta la skill diagnose-crash, que se
+# nombra en el prompt para editarla en un solo lugar.
+
+set -uo pipefail
+
+pid=${1:?uso: omarchy-crash-diagnose <pid> [comm] [exe] [signal]}
+
+if [[ ! $pid =~ ^[0-9]+$ ]]; then
+  echo "No es un PID: $pid" >&2
+  echo "Uso: omarchy-crash-diagnose <pid>   (ver: coredumpctl list)" >&2
+  exit 1
+fi
+
+comm=${2:-unknown}
+exe=${3:-unknown}
+signal=${4:-unknown}
+
+# systemd es pobre en PATH: los shims de mise traen opencode/rig/notify.
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
+# El actor del feed del rig: asi los eventos de este diagnostico se leen como
+# propios y no como de la silla "main".
+export RIG_ACTOR="crash-${comm//[^A-Za-z0-9._-]/_}"
+# El diagnostico ya avisa al usuario: que el ticket no lo haga de nuevo.
+export RIG_STATE_NOTIFY=0
+
+# nf-md-robot_dead, escapado para leerse sin Nerd Font.
+readonly CRASH_GLYPH=$'\U000f16a1'
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/crash-autodiagnose"
+mkdir -p "$state"
+readonly log="$state/diagnose-${comm//[^A-Za-z0-9._-]/_}-$pid.log"
+# Todo va al log: el watcher lo lanza desprendido y este archivo es la unica
+# forma de reconstruir que paso.
+exec > >(tee -a "$log") 2>&1
+
+echo "=== $(date -Is) diagnóstico del crash de $comm (pid $pid, señal $signal) ==="
+
+# Modelos free de OpenCode Zen, en orden de preferencia. Si uno esta
+# rate-limited (429) se pasa al siguiente; no se toca ningun modelo pago.
+readonly -a free_models=(
+  opencode/longcat-2.5-preview-free
+  opencode/beam-free
+  opencode/nemotron-3-ultra-free
+  opencode/nemotron-3.5-lightning-free
+  opencode/space-bunny-free
+  opencode/mimo-v2.6-flash-free
+)
+
+# Ticket del rig: es el rastro visible del diagnostico en el tablero.
+ticket="CRASH-$pid-$(date +%s)"
+title="Diagnóstico automático del crash de $comm con señal $signal"
+if rig ticket add "$ticket" --project infra --title "$title" \
+     --status in-progress --owner crash --area infra; then
+  echo "ticket rig: $ticket"
+else
+  echo "aviso: no pude crear el ticket $ticket (sigo con el diagnóstico)"
+fi
+
+skill="${OMARCHY_PATH:-/usr/share/omarchy}/default/agents/skills/diagnose-crash/SKILL.md"
+
+# El detalle del core solo aporta el momento; un core rotado no debe abortar.
+when=$(coredumpctl list "$pid" --no-pager --no-legend 2>/dev/null | tail -1 | cut -d' ' -f1-4) || true
+when=${when:-unknown}
+
+prompt=$(
+  cat <<PROMPT
+Diagnóstico automático del crash de $comm (pid $pid).
+
+Un proceso crasheó en esta máquina Omarchy y quiero saber por qué. No hubo click:
+este diagnóstico se lanzó solo desde el watcher de crash y queda como ticket $ticket
+en el tablero del rig.
+
+Lo que systemd-coredump registró:
+  proceso:  $comm
+  PID:      $pid
+  binario:  $exe
+  señal:    $signal
+  momento:  $when
+
+Seguí el método de la skill diagnose-crash: cubre cómo investigar, qué reportar y
+cuándo un crash merece reportarse aguas arriba a Omarchy. Si tu harness no tiene
+mecanismo de skills, leé el archivo directamente y seguilo:
+
+  $skill
+
+Dejá el sistema como lo encontraste: la investigación lee, no arregla ni reconfigura.
+El único cleanup es el core temporal que extraigas. Al final resumí, en pocas líneas,
+qué crasheó, por qué y si va a repetirse.
+PROMPT
+)
+
+session=""
+model_ok=""
+attempt=0
+for m in "${free_models[@]}"; do
+  attempt=$((attempt + 1))
+  echo "--- intento $attempt con $m ---"
+  out=$(timeout "${CRASH_DIAGNOSE_TIMEOUT:-900}" opencode run \
+    --model "$m" --title "$title" --auto --format json "$prompt" 2>&1)
+  rc=$?
+  printf '%s\n' "$out"
+  # Éxito = terminó sin error y sin señal de cuota agotada. Un modelo free
+  # rate-limited devuelve 429/FreeUsageLimitError; se prueba el siguiente.
+  if ((rc == 0)) && ! printf '%s\n' "$out" |
+    grep -qiE 'rate limit|freeusagelimiterror|provider\.quota|status": ?429|quota exceeded'; then
+    model_ok="$m"
+    session=$(printf '%s\n' "$out" | grep -o '"sessionID":"[^"]*"' | head -1 | cut -d'"' -f4)
+    break
+  fi
+  echo "--- $m no sirvió (rc=$rc); pruebo otro modelo free ---"
+done
+
+if [[ -n $model_ok ]]; then
+  echo "=== ok con $model_ok (sesión ${session:-?}) ==="
+  evidence="diagnóstico en opencode con $model_ok; log $log"
+  args=(--status done --evidence "$evidence" --force)
+  [[ -n $session ]] && args+=(--session "$session")
+  rig ticket set "$ticket" "${args[@]}" >/dev/null 2>&1 || true
+  rig log "diagnóstico del crash de $comm (pid $pid) terminado con $model_ok" \
+    --ticket "$ticket" --kind crash-ok --area infra 2>/dev/null || true
+  notify -g "$CRASH_GLYPH" "Diagnóstico de $comm listo" \
+    "Ticket $ticket en el tablero del rig." 2>/dev/null || true
+else
+  echo "=== ningún modelo free pudo completar el diagnóstico ==="
+  rig ticket set "$ticket" --status blocked \
+    --evidence "ningún modelo free disponible; log $log" --force >/dev/null 2>&1 || true
+  rig log "diagnóstico del crash de $comm (pid $pid) bloqueado: sin modelo free" \
+    --ticket "$ticket" --kind crash-fail --area infra 2>/dev/null || true
+  notify -u critical -g "$CRASH_GLYPH" "No pude diagnosticar el crash de $comm" \
+    "Ticket $ticket en el rig; log en $log" 2>/dev/null || true
+fi

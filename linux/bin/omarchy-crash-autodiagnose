@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+# omarchy:summary=Detecta crashes y lanza solo el diagnóstico en el rig
+# omarchy:args=[]
+# omarchy:hidden=true
+#
+# Reemplaza al watcher de Omarchy (vía drop-in del unit omarchy-crash-watch):
+# donde aquel ofrecía "click para diagnosticar", este arranca el diagnóstico
+# sin intervención y lo deja como ticket/traza en el rig. Mantiene la misma
+# señal (systemd-coredump), el dedupe por programa, el filtro por usuario y el
+# respeto por el toggle `crash-capture-off`.
+
+set -uo pipefail
+
+# systemd-coredump journaliza cada core dump bajo un MESSAGE_ID conocido, con
+# campos COREDUMP_* estructurados. Ver systemd.journal-fields(7).
+readonly COREDUMP_MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1
+
+# nf-md-robot_dead, escapado para leerse sin Nerd Font.
+readonly CRASH_GLYPH=$'\U000f16a1'
+
+# Un loop de crashes dumpea core una y otra vez: se anuncia cada programa como
+# mucho una vez por ventana.
+readonly dedupe_seconds=${OMARCHY_CRASH_DEDUPE_SECONDS:-60}
+
+# Regex extendida de nombres de proceso que nunca vale la pena anunciar.
+readonly ignore_pattern=${OMARCHY_CRASH_IGNORE:-}
+
+readonly diagnose_bin=${OMARCHY_CRASH_DIAGNOSE:-$HOME/.local/bin/omarchy-crash-diagnose}
+readonly diag_path="$HOME/.local/bin:$HOME/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
+
+declare -A last_seen
+
+notify() {
+  command -v omarchy-notification-send >/dev/null 2>&1 || return 0
+  # La shell puede haberse caído con el proceso que crasheó; esperar a que
+  # recupere el bus evita perder el aviso más importante.
+  command -v omarchy-notification-wait >/dev/null 2>&1 && omarchy-notification-wait 3 >/dev/null 2>&1
+  omarchy-notification-send --urgency normal --glyph "$CRASH_GLYPH" "$1" "$2" >/dev/null 2>&1 || true
+}
+
+# Desprende el diagnóstico del cgroup del watcher para que sobreviva a un
+# reinicio del servicio. systemd-run da un unit propio; setsid es el plan B.
+launch_diagnose() {
+  local pid=$1 name=$2 exe=$3 signal=$4
+  if command -v systemd-run >/dev/null 2>&1; then
+    systemd-run --user --collect --quiet \
+      --unit="omarchy-crash-diag-$pid-$(date +%s)" \
+      --setenv=PATH="$diag_path" \
+      --setenv=HOME="$HOME" \
+      "$diagnose_bin" "$pid" "$name" "$exe" "$signal" >/dev/null 2>&1 && return 0
+  fi
+  setsid "$diagnose_bin" "$pid" "$name" "$exe" "$signal" >/dev/null 2>&1 &
+}
+
+# -n 0 para no reanunciar crashes viejos si el servicio se reinicia.
+journalctl -f -n 0 -o json "MESSAGE_ID=$COREDUMP_MESSAGE_ID" 2>/dev/null |
+  while IFS= read -r entry; do
+    IFS=$'\t' read -r uid comm pid exe signal < <(
+      jq -r '[(._UID // "-"),
+              (.COREDUMP_COMM // "-"),
+              (.COREDUMP_PID // "-"),
+              (.COREDUMP_EXE // "-"),
+              (.COREDUMP_SIGNAL_NAME // "-")] | @tsv' <<<"$entry" 2>/dev/null
+    )
+
+    [[ $pid =~ ^[0-9]+$ ]] || continue
+
+    # Solo crashes de este usuario; un daemon es problema de sysadmin.
+    [[ $uid =~ ^[0-9]+$ ]] || continue
+    ((uid == UID)) || continue
+
+    # comm viene truncado a 15 caracteres: preferir el basename del ejecutable.
+    name=$comm
+    [[ $exe == /* ]] && name=${exe##*/}
+
+    [[ -n $ignore_pattern && $name =~ $ignore_pattern ]] && continue
+
+    # Nunca anunciar nuestra propia maquinaria.
+    [[ $name == omarchy-crash-* || $name == omarchy-agent-* ]] && continue
+
+    now=$EPOCHSECONDS
+    ((now - ${last_seen[$name]:-0} < dedupe_seconds)) && continue
+    last_seen[$name]=$now
+
+    launch_diagnose "$pid" "$name" "$exe" "$signal"
+    notify "Diagnosticando el crash de $name" "Arrancó solo; seguilo en el tablero del rig."
+  done
