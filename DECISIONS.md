@@ -191,3 +191,36 @@ sólo si no alcanza, nunca al revés. Hermes venía con
   que el usuario no quiere.
 - Un respaldo pago: gastaría solo, sin que el usuario lo pida. Si los gratis no
   alcanzan, se decide entonces, no de antemano.
+
+## 2026-10-19 — La actividad de los agentes va a una bodega unificada (NDJSON + SQLite)
+
+**Contexto.** Los agentes se hablan, abren tickets y dejan eventos, pero todo
+queda en archivos sueltos sin IDs estables entre sí: el buzón de correo
+(`~/.local/state/rig/correo`), el feed de eventos, los dos tableros de tickets
+(rig y pi) y las sesiones de pi. Se quiere guardar todo junto para poder subirlo
+alguna vez a la nube y leerlo desde varias aplicaciones.
+
+**Elegido.**
+
+- Un log **append-only en NDJSON** (`~/.local/share/rig/db/unificado.ndjson`) como
+  fuente de verdad y unidad de réplica: idempotente, con id determinista por
+  hecho, sin cursores que se rompan cuando un archivo muta (el buzón reescribe
+  `leido` in-place y los tickets se reescriben enteros, así que se releen enteros
+  y se deduplica por id).
+- **SQLite reconstruible** (`rig.db`, con FTS5) como vista de consulta, no como
+  fuente. Se puede borrar y regenerar del NDJSON.
+- Los archivos originales **siguen siendo la fuente de escritura**: no se reescribe
+  rig para que use una base.
+- `sync` se corre al mandar un mensaje, al tocar un ticket y desde un timer
+  opcional de systemd; no hay daemon.
+- Contenido crudo de sesiones y `opencode.db` quedan afuera: se indexa metadata
+  y se referencia la ruta.
+
+**Descartado.**
+
+- API HTTP propia, outbox/CDC y esquema cloud desde el arranque: no hay
+  consumidor todavía, y se agregan después sin cambiar la ingesta.
+- Ingerir `opencode.db` (3,6 GB): acopla a un esquema ajeno y cambiante, y es la
+  fuente de menor valor para este objetivo.
+- Postgres/Supabase ya: SQLite no sirve multi-escritor en la nube, pero el NDJSON
+  es el formato de importación cuando haga falta. Ver `docs/bodega-agentica.md`.
