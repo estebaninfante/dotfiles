@@ -6,6 +6,6 @@ Comment=Web UI de DeepSeek Harness (dsh web)
 Exec=/home/eztvn/.local/bin/dsh-web
 Icon=dsh
 Terminal=false
-Categories=Development;Utility;
+Categories=Development;
 Keywords=dsh;deepseek;harness;ai;agente;web;
 StartupNotify=false

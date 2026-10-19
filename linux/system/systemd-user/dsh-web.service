@@ -6,16 +6,12 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
-# dsh se instala con npm bajo mise: el login shell arma el PATH.
-# El log se trunca en cada arranque porque lleva la URL con token del proceso,
-# y dsh-web la relee para abrir la UI (ver ~/.local/bin/dsh-web).
-ExecStartPre=/usr/bin/mkdir -p %h/.local/state/dsh-web
-ExecStartPre=/usr/bin/truncate -s 0 %h/.local/state/dsh-web/server.log
-ExecStart=/usr/bin/bash -lc 'exec dsh web --no-open'
+# El wrapper --serve arma el PATH de dsh (npm bajo mise), escribe la URL con
+# token en $XDG_STATE_HOME/dsh-web/server.log y replica la salida al journal.
+# El token es por proceso: dsh-web la relee para abrir la UI.
+ExecStart=%h/.local/bin/dsh-web --serve
 Restart=on-failure
 RestartSec=10
-StandardOutput=append:%h/.local/state/dsh-web/server.log
-StandardError=append:%h/.local/state/dsh-web/server.log
 
 [Install]
 WantedBy=default.target
