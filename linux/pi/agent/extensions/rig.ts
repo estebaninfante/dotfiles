@@ -1,7 +1,7 @@
 /**
  * rig — las reglas de trabajo del usuario, siempre presentes.
  *
- * Hace tres cosas:
+ * Hace cuatro cosas:
  *
  * 1. **Cola de revisión humana.** Cuando el agente crea una skill o un agente
  *    (o cualquier artefacto que necesite ojo humano), lo registra con
@@ -16,17 +16,19 @@
  *
  * 3. **Regla de skills/agentes.** Instalar de inmediato y pedir revisión humana.
  *
- * 4. **Tareas con id y trace.** Cada pedido del usuario abre una tarea con id
- *    (`T-XXXXXX`), título corto y un trace de pasos: el pedido, cada llamada a
- *    herramienta con su resultado y un resumen de lo que pensó el modelo. No
- *    hay que crearlas a mano: se capturan solas. `/tareas` las lista y
- *    `/tarea <id>` muestra el trace en el panel. El agente también las ve con
- *    las tools `tarea` y `tareas`, y puede renombrar o anotar la actual.
+ * 4. **Tickets y trazas.** Un agente vivo = un ticket raíz abierto (su sesión).
+ *    Cada pedido del usuario abre un subticket; cada delegación del agente abre
+ *    otro subticket. Todo queda en un árbol (`~/.local/share/pi/tareas.json`),
+ *    visible con las tools `tarea`/`tareas` y en `/tareas`, `/traza`, y además
+ *    en Markdown legible (`~/.local/share/pi/trazas/<raíz>.md`) para que el
+ *    usuario siga el trazo sin leer JSON.
  *
- * Los pendientes viven en `~/.local/share/pi/revisiones.json` y las tareas en
- * `~/.local/share/pi/tareas.json` (configurable con PI_RIG_DIR).
+ * Los pendientes viven en `~/.local/share/pi/revisiones.json`, las tareas en
+ * `~/.local/share/pi/tareas.json` y las trazas en `~/.local/share/pi/trazas/`
+ * (configurable con PI_RIG_DIR).
  */
 
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -37,22 +39,38 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
-  formatoDuracion,
   idTarea,
   recortar,
   resumenEntrada,
   tituloDePedido,
 } from "./lib/pensamiento.ts";
+import {
+  deLaSesion,
+  descendientesDe,
+  esRaiz,
+  indiceMarkdown,
+  lineasArbol,
+  markdownTraza,
+  raicesDe,
+  raizDe,
+  textoTraza,
+  type EstadoTarea,
+  type Paso,
+  type Tarea,
+  type TipoTarea,
+} from "./lib/trazas.ts";
 
 const DIR = process.env.PI_RIG_DIR ?? join(homedir(), ".local", "share", "pi");
 const ARCHIVO = join(DIR, "revisiones.json");
 const TAREAS = join(DIR, "tareas.json");
-const MAX_TAREAS = 200;
-const MAX_PASOS = 200;
+const TRAZAS = join(DIR, "trazas");
+const MAX_PASOS = 300;
+/** Sesiones que se conservan completas. Cada una puede tener muchos hijos. */
+const MAX_SESIONES = 50;
 
 interface Revision {
   id: string;
@@ -84,35 +102,6 @@ function pendientes(): Revision[] {
 
 // ------------------------------------------------------------------ tareas
 
-type EstadoTarea = "activa" | "lista" | "cerrada";
-type TipoPaso = "pedido" | "tool" | "pensamiento" | "nota";
-
-interface Paso {
-  /** ISO de cuándo empezó el paso. */
-  t: string;
-  tipo: TipoPaso;
-  resumen: string;
-  nombre?: string;
-  /** id de la llamada, para engancharle el resultado cuando vuelve. */
-  id?: string;
-  ok?: boolean;
-  ms?: number;
-  resultado?: string;
-}
-
-interface Tarea {
-  id: string;
-  titulo: string;
-  pedido: string;
-  creado: string;
-  actualizado: string;
-  hasta?: string;
-  estado: EstadoTarea;
-  session?: string;
-  sessionId?: string;
-  pasos: Paso[];
-}
-
 function leerTareas(): Tarea[] {
   try {
     const data = JSON.parse(readFileSync(TAREAS, "utf8"));
@@ -126,11 +115,21 @@ function leerTareas(): Tarea[] {
   }
 }
 
+/** Guarda sin romper los árboles: conserva las últimas MAX_SESIONES completas
+ *  (raíz + todos sus subtickets) en vez de cortar por cantidad de tickets. */
+function podar(items: Tarea[]): Tarea[] {
+  const roots = raicesDe(items);
+  if (!roots.length) return items.slice(-MAX_SESIONES * 20);
+  const conservar = new Set(roots.slice(-MAX_SESIONES).map((r) => r.id));
+  return items.filter((t) => conservar.has(raizDe(items, t).id));
+}
+
 /** Guarda con write+rename: si el proceso muere a mitad, no deja el JSON roto. */
 function guardarTareas(items: Tarea[]): void {
   mkdirSync(dirname(TAREAS), { recursive: true });
   const tmp = `${TAREAS}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(items.slice(-MAX_TAREAS), null, 2)}\n`, "utf8");
+  const finales = podar(items).sort((a, b) => a.creado.localeCompare(b.creado));
+  writeFileSync(tmp, `${JSON.stringify(finales, null, 2)}\n`, "utf8");
   renameSync(tmp, TAREAS);
 }
 
@@ -182,41 +181,6 @@ function conLock<T>(fn: () => T): T {
   }
 }
 
-function hora(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "--:--:--"
-    : d.toLocaleTimeString("es-AR", { hour12: false });
-}
-
-function iconoPaso(p: Paso): string {
-  if (p.tipo === "pedido") return "▶";
-  if (p.tipo === "pensamiento") return "💭";
-  if (p.tipo === "nota") return "·";
-  return p.ok === false ? "✗" : p.ok ? "✓" : "…";
-}
-
-/** Trace legible de una tarea: lo que se pidió, qué herramientas se usaron,
- *  si salieron bien y qué se pensó. La conversación completa queda enlazada en
- *  `sesión:` para quien necesite el detalle exacto. */
-function trazaTarea(t: Tarea, maxPasos = 120, conSesion = true): string {
-  const dur = (t.hasta ? Date.parse(t.hasta) : Date.now()) - Date.parse(t.creado);
-  const lineas = [
-    `TAREA ${t.id} · ${t.titulo}`,
-    `estado: ${t.estado} · ${formatoDuracion(dur)} · ${t.pasos.length} pasos`,
-    `pedido: ${recortar(t.pedido, 400)}`,
-  ];
-  if (conSesion && t.session) lineas.push(`sesión: ${t.session}`);
-  lineas.push("");
-  for (const p of t.pasos.slice(-maxPasos)) {
-    const nombre = p.nombre ? `${p.nombre} ` : "";
-    const ms = p.ms != null ? ` (${p.ms}ms)` : "";
-    lineas.push(`${hora(p.t)} ${iconoPaso(p)} ${nombre}${p.resumen}${ms}`);
-    if (p.resultado) lineas.push(`        ↳ ${p.resultado}`);
-  }
-  return lineas.join("\n");
-}
-
 /** Texto plano de un resultado de herramienta, para el resumen del trace. */
 function textoResultado(contenido: unknown): string {
   if (!Array.isArray(contenido)) return "";
@@ -234,13 +198,20 @@ const POLITICA_SOFTWARE = `Todo trabajo de software se hace así, siempre:
 2. **Un verificador determinista por feature.** Cada feature tiene un script que la chequea sin criterio humano (en \`scripts/verify/\` o equivalente). Si agregás una feature, agregás su verificador; sin verificador, la feature no está terminada.
 3. **Verificá antes de publicar.** Antes de decir que un cambio quedó listo, corré el verificador de las features que tocaste y el global (\`make check\` / \`scripts/verify/run-all.sh\`). Si falla, no está listo. Si no podés correrlo, decilo.
 4. **Rastro de decisiones.** Las decisiones de arquitectura van a \`DECISIONS.md\` con qué se eligió, por qué y qué se descartó. No reescribas la historia: agregá una entrada.
-5. **Pensá en agentes.** Estructura, nombres y docs tienen que dejar que otro agente entienda y extienda la app sin contexto previo. Menos código, más claro.`;
+5. **Pensá en agentes.** Estructura, nombres y docs tienen que dejar que otro agente entienda y extienda la app sin contexto previo. Menos código, más claro.
+6. **Eficiencia primero: presupuesto adaptativo.** Antes de escribir, estimá el costo en CPU, memoria, red y batería, y elegí la opción más barata que cumpla. Lo que consuma recursos (video, imágenes, animación, polling, IA local, build) detecta el hardware y el contexto, arranca con un presupuesto conservador, se degrada sola cuando el equipo no da y deja un override explícito al usuario. Cargá al acercarse, reusá antes que recrear, medí antes de suponer. Aprovechar el hardware que hay sin trabarlo es parte del trabajo, no una optimización para después.`;
 
 const POLITICA_REVISION = `Cuando crees una **skill**, un **agente**, o cualquier artefacto que el usuario deba aprobar:
 1. **Instalala de inmediato** (symlink/registro en el lugar que corresponda).
 2. **Pedí revisión humana** con \`pedir_revision_humana\`, indicando tipo, nombre, ruta y una nota de qué mirar.
 3. **Avisá al usuario** en la respuesta: qué creaste, dónde quedó y que está pendiente de su revisión.
 Nunca des por buena una skill/agente nuevo sin que haya pasado el check humano. Si el usuario ya lo revisó, resolvelo con \`revisiones_pendientes\`.`;
+
+const POLITICA_TRAZABILIDAD = `Trazabilidad (rig): cada agente vivo tiene UN ticket raíz abierto (su sesión) y cada pedido del usuario abre un subticket propio; no mezcles pedidos distintos en el mismo trace.
+- Cuando delegues en un subagente o dividas el trabajo, creá un subticket con \`tarea\` (acción \`subtarea\`) antes de empezar.
+- Dejá notas de decisiones con \`tarea\` (acción \`nota\`).
+- El mismo ticket no lo trabaja otro agente: si un ticket es de otra sesión, solo lo leés y creás uno nuevo para lo tuyo.
+- Todo el árbol queda en \`~/.local/share/pi/trazas/<raíz>.md\` (Markdown legible) y en \`/tareas\` / \`/traza\`.`;
 
 function formatoLista(items: Revision[]): string {
   if (items.length === 0) return "No hay revisiones pendientes.";
@@ -249,12 +220,56 @@ function formatoLista(items: Revision[]): string {
     .join("\n\n");
 }
 
+/** Nombre del agente en este proceso: el mismo que usan la voz y el color. */
+function tmuxOut(args: string[]): string {
+  try {
+    return execFileSync("tmux", args, {
+      encoding: "utf8",
+      timeout: 1500,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function nombreAgente(): string {
+  const explicit = process.env.PI_VOICE_AGENT?.trim();
+  if (explicit) return explicit;
+  const pane = process.env.TMUX_PANE?.trim();
+  if (pane) {
+    const n = tmuxOut(["display-message", "-p", "-t", pane, "#{@agent_name}"]);
+    if (n) return n;
+  }
+  try {
+    const base = basename(process.cwd());
+    if (base) return base;
+  } catch {
+    /* sin cwd */
+  }
+  return "pi";
+}
+
+function cwdActual(): string {
+  try {
+    return process.cwd();
+  } catch {
+    return "";
+  }
+}
+
 export default function rig(pi: ExtensionAPI) {
   // --------------------------------------------------------------- tareas
+  /** Ticket activo: el subticket del pedido en curso. */
   let tarea: Tarea | undefined;
+  /** Ticket raíz: la sesión/agente vivo. Uno por sesión. */
+  let raiz: Tarea | undefined;
+  let agente = "pi";
   let sessionPath: string | undefined;
   let sessionId: string | undefined;
   let guardadoTimer: ReturnType<typeof setTimeout> | undefined;
+  /** toolCallId del subagente -> ticket hijo que sigue su resultado. */
+  const subagentes = new Map<string, string>();
 
   function actualizarSesion(ctx: unknown): void {
     const sm = (ctx as {
@@ -274,23 +289,68 @@ export default function rig(pi: ExtensionAPI) {
     }
   }
 
-  /** Escribe solo la tarea actual, sin pisar las demás del archivo. */
+  /** Dueño del ticket. Un ticket solo se muta desde su sesión. */
+  function duenoDe(t: Tarea): string {
+    return String(t.dueno ?? t.sessionId ?? "");
+  }
+
+  function esMia(t: Tarea | undefined): boolean {
+    if (!t) return false;
+    const dueno = duenoDe(t);
+    return !dueno || dueno === sessionId;
+  }
+
+  function guardarUna(t: Tarea): void {
+    conLock(() => {
+      const items = leerTareas().filter((x) => x.id !== t.id);
+      items.push(t);
+      guardarTareas(items);
+    });
+  }
+
+  function guardarVarias(ts: Tarea[]): void {
+    if (!ts.length) return;
+    conLock(() => {
+      const ids = new Set(ts.map((t) => t.id));
+      const items = leerTareas().filter((x) => !ids.has(x.id));
+      items.push(...ts);
+      guardarTareas(items);
+    });
+  }
+
+  /** Las trazas también viven en Markdown: fácil de abrir y de seguir. */
+  function exportarTraza(): void {
+    const root = raiz;
+    if (!root) return;
+    try {
+      mkdirSync(TRAZAS, { recursive: true });
+      const items = leerTareas();
+      const actual = items.find((t) => t.id === root.id) ?? root;
+      writeFileSync(join(TRAZAS, `${actual.id}.md`), markdownTraza(actual, items), "utf8");
+      writeFileSync(join(TRAZAS, "index.md"), indiceMarkdown(items), "utf8");
+    } catch {
+      /* sin permiso o disco lleno: el JSON sigue siendo la fuente */
+    }
+  }
+
+  /** Escribe solo la tarea actual y la raíz, sin pisar las demás. */
   function volcar(): void {
     if (guardadoTimer) {
       clearTimeout(guardadoTimer);
       guardadoTimer = undefined;
     }
-    if (!tarea) return;
-    if (tarea.pasos.length > MAX_PASOS) {
-      tarea.pasos.splice(0, tarea.pasos.length - MAX_PASOS);
+    if (tarea) {
+      if (tarea.pasos.length > MAX_PASOS) {
+        tarea.pasos.splice(0, tarea.pasos.length - MAX_PASOS);
+      }
+      tarea.actualizado = new Date().toISOString();
+      guardarUna(tarea);
     }
-    tarea.actualizado = new Date().toISOString();
-    conLock(() => {
-      const items = leerTareas().filter((t) => t.id !== tarea!.id);
-      items.push(tarea!);
-      items.sort((a, b) => a.creado.localeCompare(b.creado));
-      guardarTareas(items);
-    });
+    if (raiz && raiz.id !== tarea?.id) {
+      raiz.actualizado = new Date().toISOString();
+      guardarUna(raiz);
+    }
+    exportarTraza();
   }
 
   function programarGuardado(): void {
@@ -309,30 +369,85 @@ export default function rig(pi: ExtensionAPI) {
         titulo: tarea?.titulo ?? "",
         estado: tarea?.estado ?? "",
         session: sessionPath,
+        raiz: raiz?.id ?? "",
+        agente,
       });
     } catch {
       /* sin bus de eventos: el latido igual muestra el pedido de respaldo */
     }
   }
 
-  function crearTarea(texto: string): Tarea {
+  interface CrearOpciones {
+    titulo?: string;
+    pedido?: string;
+    padre?: string;
+    tipo?: TipoTarea;
+    agente?: string;
+    pasos?: Paso[];
+    estado?: EstadoTarea;
+  }
+
+  function crearTarea(texto: string, opciones: CrearOpciones = {}): Tarea {
     const ahora = new Date();
     const usados = new Set(leerTareas().map((t) => t.id));
     let id = idTarea(ahora.getTime());
     while (usados.has(id)) id = idTarea(ahora.getTime(), Math.random());
     return {
       id,
-      titulo: tituloDePedido(texto),
-      pedido: recortar(texto, 1200),
+      titulo: opciones.titulo ?? tituloDePedido(texto),
+      pedido: recortar(opciones.pedido ?? texto, 1200),
       creado: ahora.toISOString(),
       actualizado: ahora.toISOString(),
-      estado: "activa",
+      estado: opciones.estado ?? "activa",
       session: sessionPath,
       sessionId,
-      pasos: [
-        { t: ahora.toISOString(), tipo: "pedido", resumen: recortar(texto, 240) },
-      ],
+      dueno: sessionId,
+      agente: opciones.agente ?? agente,
+      padre: opciones.padre,
+      tipo: opciones.tipo ?? "pedido",
+      pasos:
+        opciones.pasos ?? [
+          { t: ahora.toISOString(), tipo: "pedido", resumen: recortar(texto, 240) },
+        ],
     };
+  }
+
+  /** Ticket raíz de ESTA sesión. Si la sesión se reanuda, se reabre el mismo
+   *  (no se crea otro): un agente vivo = un ticket raíz. */
+  function asegurarRaiz(): Tarea {
+    const items = leerTareas();
+    const existente = items.find(
+      (t) =>
+        esRaiz(t) &&
+        ((sessionId && (t.sessionId === sessionId || t.dueno === sessionId)) ||
+          (sessionPath && t.session === sessionPath)),
+    );
+    if (existente) {
+      raiz = existente;
+      raiz.estado = "activa";
+      raiz.hasta = undefined;
+      raiz.actualizado = new Date().toISOString();
+      raiz.agente = raiz.agente || agente;
+      raiz.dueno = raiz.dueno || sessionId;
+      guardarUna(raiz);
+      return raiz;
+    }
+    const cwd = cwdActual();
+    const r = crearTarea(`Sesión de ${agente}${cwd ? ` en ${cwd}` : ""}`, {
+      titulo: `sesión ${agente}`,
+      pedido: `Sesión de ${agente}${cwd ? ` en ${cwd}` : ""}`,
+      tipo: "sesion",
+      pasos: [
+        {
+          t: new Date().toISOString(),
+          tipo: "nota",
+          resumen: `sesión abierta${cwd ? ` en ${cwd}` : ""}`,
+        },
+      ],
+    });
+    raiz = r;
+    guardarUna(r);
+    return r;
   }
 
   // Solo continuaciones explícitas y cortas ("dale", "seguí", "y ..."). Ojo:
@@ -341,7 +456,7 @@ export default function rig(pi: ExtensionAPI) {
     /^(continuemos|continuá|continua|continúa|seguí|segui|sigue|dale|ok\b|okey|perfecto|bien\b|y\b|pero\b)/i;
 
   /** Un mensaje corto justo después de cerrar una tarea es la misma tarea.
-   *  Si no, es un pedido nuevo y merece su propio id. */
+   *  Si no, es un pedido nuevo y merece su propio ticket. */
   function esContinuacion(texto: string, t: Tarea): boolean {
     if (t.estado !== "lista") return false;
     const hace = Date.now() - Date.parse(t.actualizado);
@@ -352,14 +467,19 @@ export default function rig(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     actualizarSesion(ctx);
-    // Al reanudar, el encabezado vuelve a mostrar la última tarea de ESTA
-    // conversación (o se limpia si es una sesión nueva).
-    const previas = leerTareas().filter(
-      (t) =>
-        (sessionPath && t.session === sessionPath) ||
-        (!sessionPath && sessionId && t.sessionId === sessionId),
+    agente = nombreAgente();
+    tarea = undefined;
+    raiz = undefined;
+    subagentes.clear();
+
+    raiz = asegurarRaiz();
+    const items = leerTareas();
+    // Al reanudar, el header vuelve a mostrar el último subticket de ESTA
+    // conversación. Si no hay, queda la raíz hasta el primer pedido.
+    const propias = deLaSesion(items, sessionId, sessionPath).filter(
+      (t) => t.id !== raiz!.id,
     );
-    tarea = previas.length ? previas[previas.length - 1] : undefined;
+    tarea = propias.length ? propias[propias.length - 1] : undefined;
     emitir();
   });
 
@@ -368,13 +488,20 @@ export default function rig(pi: ExtensionAPI) {
     const texto = String(event.text ?? "").trim();
     if (!texto) return;
     actualizarSesion(ctx);
+    if (!raiz) raiz = asegurarRaiz();
     const resumen = recortar(texto, 240);
     const ultimo = tarea?.pasos[tarea.pasos.length - 1];
     const repetido =
       ultimo?.tipo === "pedido" &&
       ultimo.resumen === resumen &&
       Date.now() - Date.parse(ultimo.t) < 2000;
-    if (tarea && (tarea.estado === "activa" || esContinuacion(texto, tarea))) {
+
+    if (
+      tarea &&
+      tarea.id !== raiz?.id &&
+      esMia(tarea) &&
+      (tarea.estado === "activa" || esContinuacion(texto, tarea))
+    ) {
       // Mismo trabajo: el pedido extra queda como paso del mismo trace.
       tarea.estado = "activa";
       tarea.hasta = undefined;
@@ -383,36 +510,152 @@ export default function rig(pi: ExtensionAPI) {
         tarea.pasos.push({ t: tarea.actualizado, tipo: "pedido", resumen });
       }
     } else if (!repetido) {
-      tarea = crearTarea(texto);
+      // Pedido nuevo = subticket nuevo bajo la sesión, con su propio trace.
+      tarea = crearTarea(texto, { padre: raiz?.id, tipo: "pedido" });
     }
     volcar();
     emitir();
   });
 
-  pi.on("tool_call", (event) => {
-    if (event.parentToolCallId || !tarea) return;
-    if (tarea.pasos.some((p) => p.id === event.toolCallId)) return;
-    const ahora = new Date().toISOString();
-    tarea.pasos.push({
-      t: ahora,
+  function ticketPorId(id: string): Tarea | undefined {
+    if (tarea?.id === id) return tarea;
+    if (raiz?.id === id) return raiz;
+    return leerTareas().find((t) => t.id === id);
+  }
+
+  function registrarPaso(ticketId: string, event: {
+    toolName: string;
+    toolCallId: string;
+    input: unknown;
+  }): void {
+    const t = ticketPorId(ticketId);
+    if (!t || t.pasos.some((p) => p.id === event.toolCallId)) return;
+    t.pasos.push({
+      t: new Date().toISOString(),
       tipo: "tool",
       nombre: event.toolName,
       id: event.toolCallId,
       resumen: resumenEntrada(event.toolName, event.input),
     });
-    if (tarea.pasos.length > MAX_PASOS) {
-      tarea.pasos.splice(0, tarea.pasos.length - MAX_PASOS);
+    if (t.pasos.length > MAX_PASOS) {
+      t.pasos.splice(0, t.pasos.length - MAX_PASOS);
     }
-    programarGuardado();
+    if (t.id !== tarea?.id && t.id !== raiz?.id) guardarUna(t);
+    else programarGuardado();
+  }
+
+  /** Texto que describe una delegación: quién(es) y qué se les pidió. */
+  function delegacion(event: { input: unknown }): { titulo: string; agente: string } {
+    const input = (event.input ?? {}) as {
+      agent?: string;
+      task?: string;
+      tasks?: Array<{ agent?: string; task?: string }>;
+      chain?: Array<{ agent?: string; task?: string }>;
+    };
+    const tareaDe = (x: { agent?: string; task?: string } | undefined) =>
+      String(x?.task ?? "").replace(/\s+/g, " ").trim();
+    if (Array.isArray(input.tasks) && input.tasks.length) {
+      const agentes = input.tasks.map((x) => String(x?.agent ?? "?")).join(", ");
+      return {
+        titulo: recortar(`subagentes ${agentes}: ${tareaDe(input.tasks[0])}`, 80),
+        agente: agentes,
+      };
+    }
+    if (Array.isArray(input.chain) && input.chain.length) {
+      const agentes = input.chain.map((x) => String(x?.agent ?? "?")).join(" → ");
+      return {
+        titulo: recortar(`cadena ${agentes}: ${tareaDe(input.chain[0])}`, 80),
+        agente: agentes,
+      };
+    }
+    const agenteSub = String(input.agent ?? "").trim() || "subagente";
+    return {
+      titulo: recortar(`${agenteSub}: ${tareaDe(input)}`, 80),
+      agente: agenteSub,
+    };
+  }
+
+  /** Crea el subticket de una llamada `subagent`. El agente que delega sigue
+   *  con su ticket; la delegación queda como hijo en el árbol. */
+  function subticketDeSubagente(event: {
+    toolCallId: string;
+    input: unknown;
+  }): Tarea | undefined {
+    if (!tarea) return undefined;
+    const d = delegacion(event);
+    const hijo = crearTarea(d.titulo, {
+      titulo: d.titulo,
+      pedido: d.titulo,
+      padre: tarea.id,
+      tipo: "subtarea",
+      agente: d.agente,
+    });
+    guardarUna(hijo);
+    return hijo;
+  }
+
+  pi.on("tool_call", (event) => {
+    if (!raiz) return;
+    // Herramientas ejecutadas dentro de un subagente (si el harness las
+    // propaga): se anotan en el ticket hijo que les corresponde.
+    if (event.parentToolCallId) {
+      const hijo = subagentes.get(event.parentToolCallId);
+      if (hijo) registrarPaso(hijo, event);
+      return;
+    }
+    if (!tarea) return;
+    if (event.toolName === "subagent") {
+      const hijo = subticketDeSubagente(event);
+      if (hijo) {
+        subagentes.set(event.toolCallId, hijo.id);
+        tarea.pasos.push({
+          t: new Date().toISOString(),
+          tipo: "nota",
+          resumen: `subticket ${hijo.id} · ${hijo.titulo}`,
+        });
+      }
+    }
+    registrarPaso(tarea.id, event);
   });
 
   pi.on("tool_result", (event) => {
-    if (event.parentToolCallId || !tarea) return;
+    if (event.parentToolCallId) {
+      const hijo = subagentes.get(event.parentToolCallId);
+      if (hijo) {
+        const t = ticketPorId(hijo);
+        if (t) {
+          t.pasos.push({
+            t: new Date().toISOString(),
+            tipo: "nota",
+            resumen: `resultado: ${recortar(textoResultado(event.content), 220)}`,
+          });
+          guardarUna(t);
+        }
+      }
+      return;
+    }
+    const hijoId = subagentes.get(event.toolCallId);
+    if (hijoId) {
+      // La delegación terminó: el subticket queda listo, con su resultado.
+      const t = ticketPorId(hijoId);
+      if (t) {
+        t.estado = "lista";
+        t.hasta = new Date().toISOString();
+        t.pasos.push({
+          t: t.hasta,
+          tipo: "nota",
+          resumen: `delegación terminada: ${recortar(textoResultado(event.content), 220)}`,
+        });
+        guardarUna(t);
+      }
+    }
+    if (!tarea) return;
     const paso = tarea.pasos.find((p) => p.id === event.toolCallId);
-    if (!paso) return;
-    paso.ok = !event.isError;
-    paso.ms = Math.max(0, Date.now() - Date.parse(paso.t));
-    paso.resultado = recortar(textoResultado(event.content), 140);
+    if (paso) {
+      paso.ok = !event.isError;
+      paso.ms = Math.max(0, Date.now() - Date.parse(paso.t));
+      paso.resultado = recortar(textoResultado(event.content), 140);
+    }
     programarGuardado();
   });
 
@@ -447,7 +690,24 @@ export default function rig(pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async () => {
+    // La sesión se cierra: el ticket raíz deja de estar abierto y los pedidos
+    // que quedaron activos se cierran con ella (sin borrar nada del trace).
+    const ahora = new Date().toISOString();
+    if (tarea && tarea.estado === "activa") {
+      tarea.estado = "cerrada";
+      tarea.hasta = ahora;
+    }
+    if (raiz) {
+      raiz.estado = "cerrada";
+      raiz.hasta = ahora;
+      raiz.pasos.push({
+        t: ahora,
+        tipo: "nota",
+        resumen: "sesión cerrada",
+      });
+    }
     volcar();
+    emitir();
   });
 
   // ---------------------------------------------------------------- tools
@@ -536,19 +796,20 @@ export default function rig(pi: ExtensionAPI) {
 
   pi.registerTool({
     name: "tarea",
-    label: "Ver o ajustar la tarea actual",
+    label: "Ver o ajustar el ticket actual",
     description:
-      "Cada pedido del usuario abre una tarea con id y trace automáticamente. " +
-      "Usá esta tool para renombrarla si el título automático no describe el " +
-      "trabajo, para dejar una nota en el trace o para cerrarla. Con acción " +
-      "'ver' devuelve el trace de la tarea actual (pedido, herramientas y " +
-      "pensamientos).",
-    promptSnippet: "Ver o ajustar la tarea actual (el rig le pone id y trace solo)",
+      "Cada sesión es un ticket raíz (el agente vivo) y cada pedido del usuario es " +
+      "un subticket con su trace. Usá esta tool para renombrar el ticket actual, " +
+      "dejar una nota de decisión, crear un subticket para una delegación o " +
+      "cerrarlo. Con acción 'ver' devuelve el trace del ticket y sus hijos.",
+    promptSnippet: "Ver o ajustar el ticket actual y crear subtickets",
     promptGuidelines: [
-      "Las tareas se capturan solas: no hace falta crearlas. Si el título " +
-        "automático no describe el trabajo, renombrala con `tarea` (acción renombrar).",
-      "Antes de cerrar, podés dejar una nota en el trace con `tarea` (acción nota) " +
-        "y revisar tareas anteriores con `tareas`.",
+      "Los tickets se capturan solos: no hace falta crearlos. Si el título " +
+        "automático no describe el trabajo, renombralo con `tarea` (acción renombrar).",
+      "Antes de cerrar, dejá una nota con `tarea` (acción nota) y revisá el " +
+        "árbol con `tareas`.",
+      "Cuando delegues o dividas trabajo, creá un subticket con `tarea` " +
+        "(acción subtarea) y después usá ese id en la delegación.",
     ],
     parameters: Type.Object({
       accion: Type.Optional(
@@ -557,22 +818,37 @@ export default function rig(pi: ExtensionAPI) {
             Type.Literal("ver"),
             Type.Literal("renombrar"),
             Type.Literal("nota"),
+            Type.Literal("subtarea"),
             Type.Literal("cerrar"),
           ],
-          { description: "ver | renombrar | nota | cerrar (default ver)" },
+          { description: "ver | renombrar | nota | subtarea | cerrar (default ver)" },
         ),
       ),
       titulo: Type.Optional(
-        Type.String({ description: "Título nuevo y corto (acción renombrar)." }),
+        Type.String({ description: "Título nuevo o del subticket." }),
       ),
       nota: Type.Optional(
-        Type.String({ description: "Nota o decisión para el trace (acción nota)." }),
+        Type.String({ description: "Nota, decisión o encargo del subticket." }),
+      ),
+      agente: Type.Optional(
+        Type.String({ description: "Agente que va a trabajar el subticket (opcional)." }),
       ),
     }),
     async execute(_toolCallId, params) {
       if (!tarea) {
         return {
-          content: [{ type: "text", text: "No hay tarea activa en esta sesión." }],
+          content: [{ type: "text", text: "No hay ticket activo en esta sesión." }],
+          details: undefined,
+        };
+      }
+      if (!esMia(tarea)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `El ticket ${tarea.id} pertenece a otro agente (${duenoDe(tarea)}); en esta sesión solo lo puedo leer.`,
+            },
+          ],
           details: undefined,
         };
       }
@@ -589,7 +865,7 @@ export default function rig(pi: ExtensionAPI) {
         volcar();
         emitir();
         return {
-          content: [{ type: "text", text: `Tarea ${tarea.id} renombrada: "${titulo}".` }],
+          content: [{ type: "text", text: `Ticket ${tarea.id} renombrado: "${titulo}".` }],
           details: { id: tarea.id, titulo },
         };
       }
@@ -608,31 +884,73 @@ export default function rig(pi: ExtensionAPI) {
           details: { id: tarea.id },
         };
       }
+      if (accion === "subtarea") {
+        const titulo = recortar(String(params.titulo ?? "").trim(), 80);
+        if (!titulo) {
+          return {
+            content: [{ type: "text", text: "Falta el título del subticket." }],
+            details: undefined,
+          };
+        }
+        const encargo = String(params.nota ?? "").trim();
+        const subAgente = String(params.agente ?? "").trim() || agente;
+        const hijo = crearTarea(encargo || titulo, {
+          titulo,
+          pedido: encargo || titulo,
+          padre: tarea.id,
+          tipo: "subtarea",
+          agente: subAgente,
+          pasos: [
+            {
+              t: new Date().toISOString(),
+              tipo: "pedido",
+              resumen: recortar(encargo || titulo, 240),
+            },
+          ],
+        });
+        tarea.pasos.push({
+          t: new Date().toISOString(),
+          tipo: "nota",
+          resumen: `subticket ${hijo.id} · ${titulo}${subAgente ? ` · ${subAgente}` : ""}`,
+        });
+        guardarVarias([tarea, hijo]);
+        exportarTraza();
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Subticket ${hijo.id} creado bajo ${tarea.id}: "${titulo}"${subAgente ? ` (agente ${subAgente})` : ""}.`,
+            },
+          ],
+          details: { id: hijo.id, padre: tarea.id },
+        };
+      }
       if (accion === "cerrar") {
         tarea.estado = "cerrada";
         tarea.hasta = new Date().toISOString();
         volcar();
         emitir();
         return {
-          content: [{ type: "text", text: `Tarea ${tarea.id} cerrada.` }],
+          content: [{ type: "text", text: `Ticket ${tarea.id} cerrado.` }],
           details: { id: tarea.id },
         };
       }
+      const items = leerTareas();
       return {
-        content: [{ type: "text", text: trazaTarea(tarea, 60) }],
-        details: { id: tarea.id },
+        content: [{ type: "text", text: textoTraza(tarea, items, { maxPasos: 80 }) }],
+        details: { id: tarea.id, raiz: raiz?.id },
       };
     },
   });
 
   pi.registerTool({
     name: "tareas",
-    label: "Listar tareas o ver el trace de una",
+    label: "Listar el árbol de tickets o ver un trace",
     description:
-      "Lista las tareas recientes con su id y título, o devuelve el trace " +
-      "completo de una tarea (pedido, herramientas, resultados y pensamientos). " +
-      "Sirve para retomar el hilo exacto de un trabajo anterior.",
-    promptSnippet: "Listar tareas o ver el trace exacto de una",
+      "Lista el árbol de tickets (sesión → pedidos → delegaciones) o devuelve el " +
+      "trace completo de un ticket con sus hijos. Sirve para retomar el hilo " +
+      "exacto de un trabajo anterior y para ver qué agente hizo cada cosa.",
+    promptSnippet: "Listar el árbol de tickets o ver el trace de uno",
     parameters: Type.Object({
       accion: Type.Optional(
         Type.Union([Type.Literal("listar"), Type.Literal("ver")], {
@@ -640,46 +958,61 @@ export default function rig(pi: ExtensionAPI) {
         }),
       ),
       id: Type.Optional(
-        Type.String({ description: "Id de la tarea a ver (ej. T-3F7K2A)." }),
+        Type.String({ description: "Id del ticket a ver (ej. T-3F7K2A)." }),
       ),
       limite: Type.Optional(
-        Type.Number({ description: "Cuántas tareas listar (default 12)." }),
+        Type.Number({ description: "Cuántas sesiones listar (default 12)" }),
       ),
     }),
     async execute(_toolCallId, params) {
+      const items = leerTareas();
       if (params.accion === "ver") {
         const id = String(params.id ?? "").trim().toUpperCase();
         const encontrada = id
-          ? leerTareas().find((t) => t.id === id) ?? (tarea?.id === id ? tarea : undefined)
+          ? items.find((t) => t.id === id) ?? (tarea?.id === id ? tarea : undefined)
           : tarea;
         if (!encontrada) {
           return {
             content: [
-              { type: "text", text: id ? `No encontré la tarea ${id}.` : "No hay tarea activa." },
+              { type: "text", text: id ? `No encontré el ticket ${id}.` : "No hay ticket activo." },
             ],
             details: undefined,
           };
         }
+        const lineas: string[] = [];
+        const root = raizDe(items, encontrada);
+        if (esRaiz(encontrada)) {
+          lineas.push("ÁRBOL", ...lineasArbol(items, encontrada.id), "");
+        } else {
+          lineas.push(`raíz: ${root.id} · ${root.titulo}`, "");
+        }
+        lineas.push(textoTraza(encontrada, items, { maxPasos: 120 }));
         return {
-          content: [{ type: "text", text: trazaTarea(encontrada) }],
-          details: { id: encontrada.id },
+          content: [{ type: "text", text: lineas.join("\n") }],
+          details: { id: encontrada.id, raiz: root.id },
         };
       }
+
       const limite = Math.max(1, Math.min(40, Number(params.limite ?? 12) || 12));
-      const items = leerTareas().slice(-limite).reverse();
-      if (!items.length) {
-        return {
-          content: [{ type: "text", text: "Todavía no hay tareas registradas." }],
-          details: undefined,
-        };
+      const propias = deLaSesion(items, sessionId, sessionPath);
+      const miRaiz = raiz ?? (propias.length ? raizDe(items, propias[0]!) : undefined);
+      const roots = raicesDe(items);
+      const otras = roots.filter((r) => r.id !== miRaiz?.id).slice(-limite).reverse();
+      const lineas: string[] = [];
+      if (miRaiz) {
+        lineas.push(`SESIÓN ACTUAL · ${miRaiz.id}`, ...lineasArbol(items, miRaiz.id));
       }
-      const texto = items
-        .map(
-          (t) =>
-            `${t.id} · ${t.estado} · ${t.titulo}${t.id === tarea?.id ? " (actual)" : ""}`,
-        )
-        .join("\n");
-      return { content: [{ type: "text", text: texto }], details: undefined };
+      if (otras.length) {
+        lineas.push("", "OTRAS SESIONES");
+        for (const r of otras) {
+          const n = 1 + descendientesDe(items, r.id).length;
+          lineas.push(
+            `${r.id} ${r.estado} · ${r.titulo} · ${r.agente || "sin agente"} · ${n} ticket(s)`,
+          );
+        }
+      }
+      if (!lineas.length) lineas.push("Todavía no hay tickets registrados.");
+      return { content: [{ type: "text", text: lineas.join("\n") }], details: undefined };
     },
   });
 
@@ -692,26 +1025,33 @@ export default function rig(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("tareas", {
-    description: "Lista las tareas recientes con su id",
+    description: "Árbol de tickets de esta sesión y de las anteriores",
     handler: async (_args, ctx) => {
-      const items = leerTareas().slice(-12).reverse();
-      if (!items.length) {
-        ctx.ui.notify("Todavía no hay tareas registradas.", "info");
+      const items = leerTareas();
+      const propias = deLaSesion(items, sessionId, sessionPath);
+      const miRaiz = raiz ?? (propias.length ? raizDe(items, propias[0]!) : undefined);
+      const lineas: string[] = [];
+      if (miRaiz) lineas.push(...lineasArbol(items, miRaiz.id));
+      const otras = raicesDe(items)
+        .filter((r) => r.id !== miRaiz?.id)
+        .slice(-10)
+        .reverse();
+      if (otras.length) {
+        lineas.push("", "Otras sesiones:");
+        for (const r of otras) {
+          lineas.push(`■ ${r.id} · ${r.titulo} · ${r.agente || "sin agente"}`);
+        }
+      }
+      if (!lineas.length) {
+        ctx.ui.notify("Todavía no hay tickets registrados.", "info");
         return;
       }
-      const actual = tarea?.id;
-      const texto = items
-        .map((t) => {
-          const marca = t.estado === "activa" ? "▶" : t.estado === "lista" ? "✓" : "■";
-          return `${marca} ${t.id} · ${t.titulo}${t.id === actual ? "  (actual)" : ""}`;
-        })
-        .join("\n");
-      ctx.ui.notify(texto, "info");
+      ctx.ui.notify(lineas.slice(0, 32).join("\n"), "info");
     },
   });
 
   pi.registerCommand("tarea", {
-    description: "Muestra el trace de una tarea (/tarea T-XXXXXX; sin id lo cierra)",
+    description: "Muestra el trace de un ticket (/tarea T-XXXXXX; sin id cierra el panel)",
     handler: async (args, ctx) => {
       const pedido = String(args ?? "").trim();
       if (!pedido) {
@@ -721,19 +1061,64 @@ export default function rig(pi: ExtensionAPI) {
       const id = pedido.toUpperCase().startsWith("T-")
         ? pedido.toUpperCase()
         : `T-${pedido.toUpperCase()}`;
+      const items = leerTareas();
       const encontrada =
-        leerTareas().find((t) => t.id === id) ??
+        items.find((t) => t.id === id) ??
         (tarea && (tarea.id === id || tarea.id.endsWith(id.slice(2))) ? tarea : undefined);
       if (!encontrada) {
-        ctx.ui.notify(`No encontré la tarea ${id}. Probá con /tareas.`, "warning");
+        ctx.ui.notify(`No encontré el ticket ${id}. Probá con /tareas.`, "warning");
         return;
       }
-      const lineas = trazaTarea(encontrada, 40, true)
+      const lineas = textoTraza(encontrada, items, { maxPasos: 60 })
         .split("\n")
         .map((l) => recortar(l, 180))
-        .slice(0, 36);
+        .slice(0, 40);
       ctx.ui.setWidget("rig-tarea", lineas);
       ctx.ui.notify(`Trace de ${encontrada.id} en el panel. /tarea sin id lo cierra.`, "info");
+    },
+  });
+
+  pi.registerCommand("traza", {
+    description: "Árbol completo de esta sesión + ruta del Markdown (/traza [T-XXXXXX])",
+    handler: async (args, ctx) => {
+      const pedido = String(args ?? "").trim();
+      if (!pedido) {
+        ctx.ui.setWidget("rig-traza", undefined);
+        return;
+      }
+      const items = leerTareas();
+      const id = pedido.toUpperCase().startsWith("T-")
+        ? pedido.toUpperCase()
+        : `T-${pedido.toUpperCase()}`;
+      const encontrada =
+        items.find((t) => t.id === id) ??
+        items.find((t) => t.id.endsWith(id.slice(2)));
+      const root = encontrada
+        ? esRaiz(encontrada)
+          ? encontrada
+          : raizDe(items, encontrada)
+        : raiz;
+      if (!root) {
+        ctx.ui.notify("No hay una sesión con traza todavía.", "info");
+        return;
+      }
+      const lineas = lineasArbol(items, root.id).slice(0, 40).map((l) => recortar(l, 180));
+      ctx.ui.setWidget("rig-traza", lineas);
+      ctx.ui.notify(
+        `Traza de ${root.id} en el panel (${lineas.length} línea(s)). Markdown: ${join(TRAZAS, `${root.id}.md`)}. /traza sin id lo cierra.`,
+        "info",
+      );
+    },
+  });
+
+  pi.registerCommand("trazas", {
+    description: "Índice de trazas de todos los agentes",
+    handler: async (_args, ctx) => {
+      if (!existsSync(join(TRAZAS, "index.md"))) {
+        ctx.ui.notify("Todavía no hay trazas. Pedile algo a un agente y volvé.", "info");
+        return;
+      }
+      ctx.ui.notify(`Trazas: ${join(TRAZAS, "index.md")}`, "info");
     },
   });
 
@@ -752,5 +1137,6 @@ export default function rig(pi: ExtensionAPI) {
   pi.on("before_agent_start", (event) => {
     event.systemPromptOptions.sections.metodo_software = POLITICA_SOFTWARE;
     event.systemPromptOptions.sections.revision_humana = POLITICA_REVISION;
+    event.systemPromptOptions.sections.trazabilidad = POLITICA_TRAZABILIDAD;
   });
 }

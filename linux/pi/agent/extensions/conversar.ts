@@ -278,6 +278,35 @@ function applyPaneLook(name: string): AgentIdentity {
   return ident;
 }
 
+/** Si OTRO agente vivo quedó con el mismo color (por ejemplo, porque ya estaba
+ *  abierto antes de esta regla), reclama uno libre y repinta este panel. Se
+ *  corre al empezar cada turno, así los agentes abiertos se corrigen solos sin
+ *  reiniciarlos. */
+function reclamarColorSiRepetido(): AgentIdentity | undefined {
+  const ident = identityCache;
+  if (!ident || !TMUX_PANE) return undefined;
+  const filas = tmux([
+    "list-panes",
+    "-a",
+    "-F",
+    "#{pane_id}\t#{@agent_name}\t#{@agent_color}",
+  ]);
+  let repetido = false;
+  for (const fila of filas.split("\n")) {
+    const [pane, name, color] = fila.split("\t");
+    if (!pane || pane === TMUX_PANE || !name) continue;
+    if (normHex(color) === normHex(ident.color)) {
+      repetido = true;
+      break;
+    }
+  }
+  if (!repetido) return undefined;
+  const reclamada = resolveIdentity(ident.name, ident.role, true);
+  identityCache = reclamada;
+  applyIdentityToPane(reclamada);
+  return reclamada;
+}
+
 /** Nombre automático del agente. Prioridad: PI_VOICE_AGENT > nombre del panel
  *  > carpeta del proyecto > nombre al azar. Se registra en el panel de tmux
  *  para que `agente-pane list/focus <nombre>` funcione solo, sin nombrar nada
@@ -965,7 +994,13 @@ export default function (pi: ExtensionAPI) {
   // `agente-pane list` diga en qué anda cada uno.
   let tareaSesion: string | undefined;
   pi.events.on("rig:tarea", (datos) => {
-    const t = datos as { id?: string; titulo?: string; estado?: string; session?: string };
+    const t = datos as {
+      id?: string;
+      titulo?: string;
+      estado?: string;
+      session?: string;
+      raiz?: string;
+    };
     tareaSesion = t?.session;
     tareaActual = t?.id
       ? {
@@ -977,7 +1012,11 @@ export default function (pi: ExtensionAPI) {
     if (tareaActual) {
       tmuxSet("@agent_task", tareaActual.id);
       tmuxSet("@agent_task_title", tareaActual.titulo);
+      tmuxSet("@agent_ticket", tareaActual.id);
+      if (t?.raiz) tmuxSet("@agent_ticket_root", String(t.raiz));
       tmuxSet("@agent_goal", truncateWords(tareaActual.titulo, 80));
+    } else {
+      tmuxSet("@agent_ticket", "");
     }
     updateLatido(true);
   });
@@ -1063,6 +1102,16 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", (_event, ctx) => {
+    // Si otro agente vivo tiene el mismo color, este turno arranca con uno
+    // libre (y queda guardado en la identidad de la conversación).
+    const reclamada = reclamarColorSiRepetido();
+    if (reclamada) {
+      try {
+        pi.appendEntry(IDENTITY_ENTRY_TYPE, reclamada);
+      } catch {
+        /* sesión efímera */
+      }
+    }
     // Si un turno anterior no llegó a asentarse, no perdemos su tiempo.
     if (working && workStart) sessionThinkingMs += Date.now() - workStart;
     working = true;
