@@ -27,7 +27,9 @@ DASH="${TMUX_TABLERO_SESSION:-tablero}"
 GRID="${TMUX_TABLERO_GRID:-auto}"
 MIN_W="${TMUX_TABLERO_MIN_W:-40}"
 MIN_H="${TMUX_TABLERO_MIN_H:-9}"
-TERM_BIN="${TERMINAL:-kitty}"
+# La terminal del tablero es kitty por defecto. NO usar $TERMINAL: en Omarchy
+# apunta a xdg-terminal-exec y puede relanzar la terminal actual (y anidar tmux).
+TERM_BIN="${TMUX_TABLERO_TERM:-kitty}"
 
 command -v tmux >/dev/null 2>&1 || { echo "tmux-tablero: falta tmux" >&2; exit 1; }
 
@@ -118,9 +120,10 @@ echo "tablero: $(tmux list-panes -t "$DASH:tablero" 2>/dev/null | wc -l) panel(e
 
 [ "${OPEN:-0}" = "1" ] || exit 0
 
-# Una sola ventana de kitty con el tablero. `</dev/null` evita que kitty herede
-# la terminal desde la que se llama (si no, el comando queda colgado).
-setsid "$TERM_BIN" --title "tablero · ${#sessions[@]} paneles" \
+# Una sola ventana de kitty con el tablero. Se limpia TMUX (para no anidar la
+# terminal actual dentro de tmux) y `</dev/null` evita que herede la terminal
+# desde la que se llama.
+setsid env -u TMUX "$TERM_BIN" --title "tablero · ${#sessions[@]} paneles" \
   tmux attach -t "$DASH" </dev/null >/dev/null 2>&1 &
 
 # El reajuste al tamaño real corre en segundo plano: no bloquea el comando.
