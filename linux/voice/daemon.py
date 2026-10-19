@@ -61,6 +61,12 @@ DEDUP_TTL = float(os.environ.get("VOICE_DEDUP_TTL", "20"))
 _last_key: dict[str, float] = {}
 _queue: list[dict] = []
 _stop = False
+
+# "Generación" de reproducción: sube cada vez que el usuario pide cortar la voz
+# (`voice stop`). Sirve para distinguir "me cortaron a propósito" de "el motor
+# falló": antes cualquier playback abortado se tomaba como fallo y el fallback
+# hablaba la misma frase con piper o espeak —se oía peor en vez de callarse—.
+_play_epoch = 0
 _chatterbox_proc: subprocess.Popen | None = None
 _chatterbox_lock = threading.Lock()
 _kokoro_proc: subprocess.Popen | None = None
@@ -272,7 +278,11 @@ def synth_and_play(req: dict) -> bool:
     speed = _as_float(req.get("speed"), 1.0)
     ok = False
     played_engine = ""
+    epoch = _play_epoch  # si llega un stop, esta frase ya no se dice
     for eng in chain:
+        if _play_epoch != epoch:
+            log("stop: frase descartada antes de sintetizar")
+            break
         if not _synth(eng, voice, lang, text, wav):
             log(f"fallback: {eng} -> siguiente motor de la cadena")
             if os.path.exists(wav):
@@ -283,9 +293,19 @@ def synth_and_play(req: dict) -> bool:
             continue
         # Tono/velocidad del perfil ("personalidad"): mismo motor, otra voz.
         _apply_effects(wav, pitch, speed)
-        if _play(wav, text=text, source=req.get("source") or "voice", engine=eng, voice=voice):
+        if _play_epoch != epoch:
+            # Cortaron mientras se sintetizaba: no arrancar el audio.
+            log("stop: lo sintetizado se descarta (no se reproduce)")
+            break
+        played = _play(wav, text=text, source=req.get("source") or "voice",
+                       engine=eng, voice=voice)
+        if played == "ok":
             ok = True
             played_engine = eng
+            break
+        if played == "cancelled":
+            # El usuario cortó: callarse, sin degradar a otro motor.
+            log("stop: no se reintenta con otro motor")
             break
         log(f"fallback: {eng} -> siguiente motor de la cadena")
         if os.path.exists(wav):
@@ -673,9 +693,15 @@ def _clear_speaking() -> None:
 
 
 def _play(wav: str, text: str | None = None, source: str = "",
-          engine: str = "", voice: str = "") -> bool:
+          engine: str = "", voice: str = "") -> str:
+    """Reproduce el WAV. Devuelve "ok", "error" o "cancelled".
+
+    "cancelled" = alguien pidió cortar (`voice stop`) mientras sonaba. Es
+    distinto de un fallo real del motor: no hay que degradar a piper/espeak.
+    """
     if not os.path.isfile(wav):
-        return False
+        return "error"
+    epoch = _play_epoch
     # El volumen es un factor relativo sobre el volumen general de salida
     # (pw-play lo aplica sobre el sink): no es un volumen independiente, asi
     # que bajar el general tambien baja la voz.
@@ -702,12 +728,16 @@ def _play(wav: str, text: str | None = None, source: str = "",
             _publish_speaking(text, wav, source, engine, voice)
             published = True
         r = subprocess.run(argv, capture_output=True, timeout=900)
-        if r.returncode != 0:
-            return False
-        return True
+        if r.returncode == 0:
+            return "ok"
+        if _play_epoch != epoch:
+            return "cancelled"
+        return "error"
     except Exception as e:
+        if _play_epoch != epoch:
+            return "cancelled"
         log(f"play error: {e}")
-        return False
+        return "error"
     finally:
         if published:
             _clear_speaking()
@@ -760,10 +790,16 @@ def ensure_fifo() -> None:
 
 
 def handle(req: dict) -> None:
+    global _play_epoch
     cmd = req.get("cmd")
     if cmd == "stop":
         _queue.clear()
-        subprocess.run(["pkill", "-f", "pw-play"], capture_output=True)
+        _play_epoch += 1  # marca el corte para que no haya fallback
+        # Cortar SOLO el stream de la voz (mismo criterio que `voice repeat`):
+        # `pkill -f pw-play` se llevaba también earcons, avisos y cualquier
+        # otra reproducción del sistema. Si todavía no empezó a sonar (estaba
+        # sintetizando), no hay nada que matar: el epoch hace que se descarte.
+        subprocess.run(["pkill", "-f", "Voice TTS"], capture_output=True)
         log("cmd=stop (cola vaciada + playback detenido)")
     elif cmd == "flush":
         _queue.clear()
