@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# oa-agent — maneja sesiones de pi en paralelo para los cambios de openagents
+# (pi-desktop). Cada agente vive en su propio worktree, en su propio tmux, con su
+# ventana de kitty en un workspace que el usuario puede mirar sin que le robe foco.
+#
+#   oa-agent nuevo <slug> "<tema>"    crea worktree + tmux + ventana y lo registra
+#   oa-agent enviar <slug> "<texto>"  le manda un encargo a la sesión de pi
+#   oa-agent adoptar <slug> <ws> "<tema>"  registra una sesión que ya existe
+#   oa-agent estado <slug>            últimas líneas + si está trabajando
+#   oa-agent esperar <slug> [seg]     espera a que termine el encargo
+#   oa-agent listar                   tabla de agentes vivos
+#   oa-agent cerrar <slug>            cierra ventana, tmux y worktree
+#
+# Nunca cambia el workspace activo del usuario ni le da foco a la ventana.
+set -euo pipefail
+
+REPO="${OA_REPO:-$HOME/developing/pi-desktop}"
+WTROOT="${OA_WTROOT:-$HOME/developing/.rig-worktrees/pi-desktop}"
+STATE="${OA_STATE:-$HOME/.local/share/openagents-agents}"
+REG="$STATE/agentes.tsv"
+MARCAS="$STATE/marcas"
+mkdir -p "$MARCAS"
+# Workspaces donde se muestran las sesiones: ni el activo del usuario, ni el 9.
+WS_CANDIDATOS=(1 3 5 8 10)
+WS_PROHIBIDOS=(6 9)
+MAX_POR_WS=2
+
+mkdir -p "$STATE"
+touch "$REG"
+
+ws_activo() { hyprctl activeworkspace -j | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])'; }
+
+# Elige el workspace con menos agentes entre los candidatos.
+elegir_ws() {
+  local mejor="" mejor_n=999 ws n activo
+  activo=$(ws_activo)
+  for ws in "${WS_CANDIDATOS[@]}"; do
+    [ "$ws" = "$activo" ] && continue
+    n=$(awk -F'\t' -v w="$ws" '$2==w' "$REG" | wc -l)
+    if [ "$n" -lt "$MAX_POR_WS" ] && [ "$n" -lt "$mejor_n" ]; then
+      mejor="$ws"; mejor_n="$n"
+    fi
+  done
+  [ -n "$mejor" ] || { echo "no hay workspace libre" >&2; return 1; }
+  echo "$mejor"
+}
+
+existe() { awk -F'\t' -v s="$1" '$1==s{found=1} END{exit !found}' "$REG"; }
+campo()  { awk -F'\t' -v s="$1" -v c="$2" '$1==s{print $c}' "$REG"; }
+
+registrar() { # slug ws tmux worktree rama tema
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" >>"$REG"
+}
+
+abrir_ventana() { # slug ws worktree
+  local slug="$1" ws="$2" wt="$3"
+  # La ventana nace ya en su workspace y sin foco: la sesión de tmux se crea
+  # dentro de la propia kitty (una sesión tmux suelta y sin cliente no arranca
+  # bien la TUI de pi).
+  hyprctl eval "hl.window_rule({ name=\"oa-$slug\", match={ title=\"^oa-$slug\$\" }, workspace=\"$ws\", no_focus=true, suppress_event=\"activate\" })" >/dev/null
+  hyprctl dispatch "hl.dsp.exec_cmd(\"kitty --title oa-$slug tmux new-session -A -s oa-$slug -c $wt 'pi --name $slug'\")" >/dev/null
+}
+
+cmd_nuevo() { # slug tema
+  local slug="$1" tema="${2:-}" ws wt tmux="oa-$1"
+  existe "$slug" && { echo "ya existe el agente $slug" >&2; return 1; }
+  ws=$(elegir_ws)
+  wt="$WTROOT/$slug"
+  git -C "$REPO" worktree add -q -b "agente/$slug" "$wt" main
+  abrir_ventana "$slug" "$ws" "$wt"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do tmux has-session -t "$tmux" 2>/dev/null && break; sleep 1; done
+  registrar "$slug" "$ws" "$tmux" "$wt" "agente/$slug" "$tema"
+  echo "agente $slug | workspace $ws | tmux $tmux | worktree $wt"
+}
+
+cmd_adoptar() { # slug ws tema
+  local slug="$1" ws="$2" tema="${3:-}"
+  existe "$slug" && { echo "ya existe el agente $slug" >&2; return 1; }
+  registrar "$slug" "$ws" "oa-$slug" "$WTROOT/$slug" "agente/$slug" "$tema"
+  echo "adoptado $slug en workspace $ws"
+}
+
+enviar_texto() { # slug texto
+  local tmux="$1" texto="$2"
+  printf '%s' "$texto" | tmux load-buffer -b oa-msg -
+  tmux paste-buffer -b oa-msg -t "$tmux"
+  sleep 0.4
+  tmux send-keys -t "$tmux" Enter
+}
+
+marca_de() { echo "$MARCAS/$1.txt"; }
+
+# Instrucción que se agrega a cada encargo: deja una marca en disco cuando
+# termina. Es la señal determinista que espera `oa-agent esperar`.
+cierre() { # slug
+  local slug="$1"
+  printf '\n\nCuando termines (bien o mal), escribí con la herramienta write el archivo %s con exactamente dos líneas: primero `ok` o `error`, después un resumen de una línea de lo que hiciste. Ese archivo es la señal de que terminaste: escribilo siempre, aunque falles.' "$(marca_de "$slug")"
+}
+
+cmd_enviar() { # slug texto
+  local slug="$1" texto="$2" tmux
+  tmux=$(campo "$slug" 3)
+  [ -n "$tmux" ] || { echo "no conozco el agente $slug" >&2; return 1; }
+  rm -f "$(marca_de "$slug")"
+  enviar_texto "$tmux" "$texto$(cierre "$slug")"
+  echo "encargo enviado a $slug"
+}
+
+trabajando() { # tmux -> 0 si está procesando
+  tmux capture-pane -p -t "$1" 2>/dev/null | tail -12 | grep -q '✓ ' && return 1 || return 0
+}
+
+cmd_estado() {
+  local slug="$1" tmux m
+  tmux=$(campo "$slug" 3)
+  [ -n "$tmux" ] || { echo "no conozco el agente $slug" >&2; return 1; }
+  m=$(marca_de "$slug")
+  if [ -f "$m" ]; then echo "estado: terminado ($(head -1 "$m"))";
+  elif trabajando "$tmux"; then echo "estado: trabajando";
+  else echo "estado: libre (sin encargo terminado)"; fi
+  tmux capture-pane -p -t "$tmux" | grep -v '^$' | tail -12
+}
+
+cmd_esperar() { # slug [segundos]
+  local slug="$1" limite="${2:-900}" m i=0
+  m=$(marca_de "$slug")
+  while [ "$i" -lt "$limite" ]; do
+    [ -f "$m" ] && break
+    sleep 2; i=$((i + 2))
+  done
+  if [ -f "$m" ]; then
+    echo "agente $slug terminó: $(head -1 "$m") — $(sed -n 2p "$m")"
+  else
+    echo "agente $slug no dejó marca en ${limite}s" >&2
+  fi
+  git -C "$(campo "$slug" 4)" status --short 2>/dev/null | head -20
+}
+
+cmd_listar() {
+  printf '%-16s %-4s %-18s %-52s %s\n' AGENTE WS TMUX RUTA TEMA
+  awk -F'\t' '{printf "%-16s %-4s %-18s %-52s %s\n", $1, $2, $3, $4, $6}' "$REG"
+}
+
+cmd_cerrar() { # slug
+  local slug="$1" tmux wt
+  tmux=$(campo "$slug" 3); wt=$(campo "$slug" 4)
+  tmux kill-session -t "$tmux" 2>/dev/null || true
+  hyprctl clients -j | python3 -c "
+import json,sys
+for c in json.load(sys.stdin):
+    if c.get('title') == 'oa-$slug':
+        print(c['address'])
+" | while read -r addr; do hyprctl dispatch "hl.dsp.window.close({ window = \"address:$addr\" })" >/dev/null 2>&1 || true; done
+  [ -n "$wt" ] && git -C "$REPO" worktree remove --force "$wt" 2>/dev/null || true
+  git -C "$REPO" branch -D "agente/$slug" >/dev/null 2>&1 || true
+  grep -v "^$slug	" "$REG" >"$REG.tmp" && mv "$REG.tmp" "$REG" || true
+  rm -f "$(marca_de "$slug")" 2>/dev/null || true
+  echo "cerrado $slug"
+}
+
+case "${1:-listar}" in
+  nuevo)   shift; cmd_nuevo "$@" ;;
+  adoptar) shift; cmd_adoptar "$@" ;;
+  enviar)  shift; cmd_enviar "$@" ;;
+  estado)  shift; cmd_estado "$@" ;;
+  esperar) shift; cmd_esperar "$@" ;;
+  listar)  cmd_listar ;;
+  cerrar)  shift; cmd_cerrar "$@" ;;
+  *) echo "uso: oa-agent {nuevo|adoptar|enviar|estado|esperar|listar|cerrar} ..." >&2; exit 2 ;;
+esac
