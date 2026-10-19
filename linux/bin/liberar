@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+# liberar — cierra todo lo que la sesión abrió después del arranque.
+#
+#   liberar              cierra apps y servicios que no arrancaron con el
+#                        sistema (navegadores, terminales, servidores sueltos)
+#   liberar -s           además baja los servicios de usuario que arrancan
+#                        solos (ollama, plataformas, bots)
+#   liberar -n           no cierra nada: muestra qué cerraría y cuánta memoria
+#
+# Nunca toca: procesos del sistema, la base de la sesión gráfica
+# (~/.config/liberar/keep.conf) ni la terminal desde donde se ejecuta.
+set -uo pipefail
+# busybox tapa ps/grep/sed/awk en ~/bin: usar los de verdad.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+SELF_PID=$$
+SELF_UID="$(id -u)"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/liberar"
+KEEP_FILE="$CONF_DIR/keep.conf"
+VENTANA="${LIBERAR_VENTANA:-300}"   # seg tras el arranque/sesión que cuentan como "arranca solo"
+ESPERA="${LIBERAR_ESPERA:-4}"       # seg de gracia entre TERM y KILL
+
+MODO="normal"   # normal | servicios
+DRY=0
+
+usage() {
+    cat <<'EOF'
+liberar — cierra todo lo que la sesión abrió después del arranque.
+
+Uso: liberar [opciones]
+
+  (sin opciones)        cierra lo que abriste vos: navegadores, apps,
+                        terminales y servidores que arrancaron después del
+                        arranque. Deja intacto lo que arranca solo.
+  -s, --con-servicios   además baja los servicios de usuario que arrancan
+                        solos (ollama, plataformas, bots). Queda solo la base
+                        del escritorio y esta terminal.
+  -n, --lista           no cierra nada: muestra qué se cerraría y cuánta RAM.
+  -h, --ayuda           esta ayuda.
+
+Nunca se toca: procesos del sistema, la base de la sesión gráfica
+(~/.config/liberar/keep.conf) ni la terminal desde donde lo corrés.
+
+Ajustes por entorno: LIBERAR_VENTANA (seg, default 300),
+LIBERAR_ESPERA (seg de gracia entre TERM y KILL, default 4).
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -n|--lista|--seco)   DRY=1 ;;
+        -s|--con-servicios)  MODO="servicios" ;;
+        -h|--ayuda|--help)   usage; exit 0 ;;
+        *) echo "liberar: opción desconocida: $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+# ── Datos base ────────────────────────────────────────────────
+BTIME="$(awk '/^btime/{print $2}' /proc/stat 2>/dev/null)"
+HZ="$(getconf CLK_TCK 2>/dev/null || echo 100)"
+PAGE="$(getconf PAGESIZE 2>/dev/null || echo 4096)"
+
+declare -A PPID_OF=() STATE_OF=() START_OF=() RSS_OF=() UNIT_OF=() CMD_OF=() EXE_OF=() IN_MGR=()
+PIDS=()
+
+for d in /proc/[0-9]*; do
+    pid="${d#/proc/}"
+    [ -r "$d/cgroup" ] || continue
+    cg="$(<"$d/cgroup")"
+    cg="${cg#0::}"
+    case "$cg" in
+        "/user.slice/user-${SELF_UID}.slice/user@${SELF_UID}.service/"*) IN_MGR[$pid]=1 ;;
+        "/user.slice/user-${SELF_UID}.slice/"*) IN_MGR[$pid]=0 ;;
+        *) continue ;;
+    esac
+    [ -r "$d/stat" ] || continue
+    st="$(<"$d/stat")"
+    rest="${st##*) }"
+    read -r -a f <<< "$rest"          # f[0]=state, f[1]=ppid, f[19]=starttime
+    state="${f[0]}"; ppid="${f[1]}"; startt="${f[19]:-}"
+    [ -n "${startt:-}" ] || continue
+    sm="0 0"
+    [ -r "$d/statm" ] && sm="$(<"$d/statm")"
+    rss="${sm#* }"; rss="${rss%% *}"
+
+    UNIT_OF[$pid]="$(basename "$cg")"
+    STATE_OF[$pid]="$state"
+    PPID_OF[$pid]="$ppid"
+    START_OF[$pid]="$(awk -v b="$BTIME" -v t="$startt" -v h="$HZ" 'BEGIN{printf "%d", b + t/h}')"
+    RSS_OF[$pid]="$(( ${rss:-0} * PAGE ))"
+    CMD_OF[$pid]="$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)"
+    EXE_OF[$pid]="$(basename "$(readlink "$d/exe" 2>/dev/null)" 2>/dev/null)"
+    [ -n "${CMD_OF[$pid]}" ] || CMD_OF[$pid]="[${EXE_OF[$pid]:-?}]"
+    PIDS+=("$pid")
+done
+
+[ "${#PIDS[@]}" -gt 0 ] || { echo "liberar: no hay procesos de usuario que revisar."; exit 0; }
+
+# ── Protegidos: cadena de esta terminal (+ lo que colgó de ella) ──
+declare -A KEEP=()
+TERM_PID=""
+p="$SELF_PID"
+while [[ "${p:-1}" -gt 1 ]]; do
+    KEEP[$p]=1
+    u="${UNIT_OF[$p]:-}"
+    case "$u" in
+        *.scope) case "$u" in session-*.scope|init.scope) ;; *) TERM_PID="$p" ;; esac ;;
+    esac
+    p="${PPID_OF[$p]:-}"
+done
+if [ -n "$TERM_PID" ]; then
+    for pid in "${PIDS[@]}"; do
+        q="$pid"
+        while [[ "${q:-1}" -gt 1 ]]; do
+            [[ "$q" == "$TERM_PID" ]] && { KEEP[$pid]=1; break; }
+            q="${PPID_OF[$q]:-}"
+        done
+    done
+fi
+
+# ── Anchors de arranque: booty cada login ─────────────────────
+ANCHORS=("$BTIME")
+for pid in "${PIDS[@]}"; do
+    case "${UNIT_OF[$pid]}" in
+        init.scope|session-*.scope) ANCHORS+=("${START_OF[$pid]}") ;;
+    esac
+done
+
+# ── keep.conf ────────────────────────────────────────────────
+KEEP_PATTERNS=()
+if [ -r "$KEEP_FILE" ]; then
+    while IFS= read -r line; do
+        line="${line%%#*}"; line="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+        [ -n "$line" ] && KEEP_PATTERNS+=("$line")
+    done < "$KEEP_FILE"
+else
+    echo "liberar: no existe $KEEP_FILE (uso la base mínima interna)" >&2
+fi
+
+matches_keep() {
+    local pid="$1"
+    local pat
+    for pat in "${KEEP_PATTERNS[@]}"; do
+        if [[ "${CMD_OF[$pid]}" =~ $pat ]] || [[ "${EXE_OF[$pid]}" =~ $pat ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# ── Clasificación ────────────────────────────────────────────
+declare -A REASON=()      # pid -> motivo por el que se deja
+declare -A SERVICES=()    # unidad .service a parar
+declare -A TARGETS=()     # pid -> 1 (kill directo)
+declare -A UNIT_PIDS=()   # unidad -> pids (para el inicio de cada unidad)
+
+for pid in "${PIDS[@]}"; do
+    u="${UNIT_OF[$pid]}"
+    if [[ -z "${UNIT_PIDS[$u]:-}" ]]; then UNIT_PIDS[$u]="$pid"; else UNIT_PIDS[$u]="${UNIT_PIDS[$u]} $pid"; fi
+done
+
+unit_start() {   # arranque más viejo entre los procesos de la unidad
+    local best="" pid t
+    for pid in ${UNIT_PIDS[$1]}; do
+        t="${START_OF[$pid]}"
+        [ -z "$best" ] && best="$t"
+        [ "$t" -lt "$best" ] && best="$t"
+    done
+    echo "$best"
+}
+
+unit_baseline() {   # ¿arrancó junto con el arranque de la máquina o de la sesión?
+    local t; t="$(unit_start "$1")"
+    local a
+    for a in "${ANCHORS[@]}"; do
+        [ "$t" -le "$(( a + VENTANA ))" ] && [ "$t" -ge "$(( a - VENTANA ))" ] && return 0
+    done
+    return 1
+}
+
+for pid in "${PIDS[@]}"; do
+    u="${UNIT_OF[$pid]}"
+    s="${STATE_OF[$pid]}"
+    if [[ "$s" == "Z" ]]; then REASON[$pid]="zombi"; continue; fi
+    if [[ "${IN_MGR[$pid]:-0}" != "1" ]]; then REASON[$pid]="sesión de login"; continue; fi
+    if [[ "${KEEP[$pid]:-}" == "1" ]]; then REASON[$pid]="esta terminal"; continue; fi
+    case "$u" in
+        init.scope)   REASON[$pid]="systemd de usuario"; continue ;;
+        session-*.scope) REASON[$pid]="sesión de login"; continue ;;
+    esac
+    if matches_keep "$pid"; then REASON[$pid]="keep.conf"; continue; fi
+
+    case "$u" in
+        *.scope) TARGETS[$pid]="scope" ;;
+        *.service)
+            if [[ "$MODO" == "servicios" ]] || ! unit_baseline "$u"; then
+                SERVICES[$u]="1"
+            else
+                REASON[$pid]="arranca solo"
+            fi
+            ;;
+        *) TARGETS[$pid]="otro" ;;
+    esac
+done
+
+# ── Informe ──────────────────────────────────────────────────
+fmt_mb() { awk -v b="$1" 'BEGIN{printf "%.0f MB", b/1048576}'; }
+
+TOTAL_B=0; TOTAL_N=0
+ordered_units="$(for pid in "${PIDS[@]}"; do
+        if [[ -n "${TARGETS[$pid]:-}" ]]; then echo "kill ${UNIT_OF[$pid]}"
+        elif [[ -n "${SERVICES[${UNIT_OF[$pid]}]:-}" ]]; then echo "stop ${UNIT_OF[$pid]}"; fi
+    done | sort -u)"
+
+echo
+if [ -z "$ordered_units" ]; then
+    echo "Nada que liberar: todo lo que corre es sistema, arranque o keep.conf."
+    exit 0
+fi
+
+printf '\033[1m%-46s %5s %10s  %s\033[0m\n' "QUÉ" "PROCS" "MEMORIA" "CÓMO"
+while read -r how u; do
+    [ -n "$u" ] || continue
+    bytes=0; n=0; nombres=""
+    for pid in ${UNIT_PIDS[$u]}; do
+        chk=0
+        [ "$how" = kill ] && [[ -n "${TARGETS[$pid]:-}" ]] && chk=1
+        [ "$how" = stop ] && [[ -n "${SERVICES[$u]:-}" ]] && chk=1
+        [ "$chk" = 1 ] || continue
+        bytes=$(( bytes + RSS_OF[$pid] )); n=$(( n + 1 ))
+        case "$nombres" in *"${EXE_OF[$pid]}"*) ;; *) nombres="$nombres ${EXE_OF[$pid]}" ;; esac
+    done
+    [ "$n" -gt 0 ] || continue
+    TOTAL_B=$(( TOTAL_B + bytes )); TOTAL_N=$(( TOTAL_N + n ))
+    printf '%-46s %5s %10s  %s\n' "${u:0:46}" "$n" "$(fmt_mb "$bytes")" \
+        "$([ "$how" = stop ] && echo "parar servicio" || echo "cerrar${nombres}")"
+done <<< "$ordered_units"
+
+echo
+echo "Total: $TOTAL_N procesos, $(fmt_mb "$TOTAL_B") de memoria en uso."
+if [ "$DRY" = 1 ]; then
+    echo "(modo lista: no se cerró nada; corré 'liberar' para hacerlo)"
+    exit 0
+fi
+
+# ── Ejecución ────────────────────────────────────────────────
+STOP_LIST=("${!SERVICES[@]}")
+if [ "${#STOP_LIST[@]}" -gt 0 ]; then
+    echo "→ parando ${#STOP_LIST[@]} servicio(s) de usuario…"
+    systemctl --user stop -- "${STOP_LIST[@]}" 2>&1 | sed 's/^/  /'
+fi
+
+KILL_LIST=()
+for pid in "${PIDS[@]}"; do
+    [[ -n "${TARGETS[$pid]:-}" ]] && KILL_LIST+=("$pid")
+    [[ -n "${SERVICES[${UNIT_OF[$pid]}]:-}" ]] && [[ "${STATE_OF[$pid]}" != "Z" ]] && KILL_LIST+=("$pid")
+done
+
+if [ "${#KILL_LIST[@]}" -gt 0 ]; then
+    echo "→ cerrando ${#KILL_LIST[@]} proceso(s)…"
+    kill -TERM -- "${KILL_LIST[@]}" 2>/dev/null
+fi
+
+[ "$ESPERA" -gt 0 ] && sleep "$ESPERA"
+
+SOBREVIVEN=()
+for pid in "${KILL_LIST[@]}"; do
+    [ -d "/proc/$pid" ] || continue
+    st=""
+    [ -r "/proc/$pid/stat" ] && st="$(< "/proc/$pid/stat")"
+    case "${st##*) }" in Z*) continue ;; esac
+    SOBREVIVEN+=("$pid")
+done
+if [ "${#SOBREVIVEN[@]}" -gt 0 ]; then
+    echo "→ forzando ${#SOBREVIVEN[@]} proceso(s) que no se fueron…"
+    kill -KILL -- "${SOBREVIVEN[@]}" 2>/dev/null
+fi
+
+echo "Listo."
