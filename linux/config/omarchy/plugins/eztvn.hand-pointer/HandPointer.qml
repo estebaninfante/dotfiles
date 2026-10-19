@@ -79,7 +79,6 @@ Item {
     root.okL = !blockedLeft
     root.okR = !blockedRight
     root.present = left.length > 0 || right.length > 0
-    if (root.present) console.log("hp-present", msg.n, left.length, right.length)
   }
 
   // Limpia el socket de una corrida anterior y recién ahí escucha: un
