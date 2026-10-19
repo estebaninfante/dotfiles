@@ -33,6 +33,7 @@ Item {
   property var tipsR: []
   property bool okL: true
   property bool okR: true
+  property var headTip: null         // [x, y] del puntero de cabeza, o null
   property int lastSeq: -1
   property real lastFresh: 0         // Date.now() del último `n` nuevo
 
@@ -78,7 +79,9 @@ Item {
     root.tipsR = right
     root.okL = !blockedLeft
     root.okR = !blockedRight
-    root.present = left.length > 0 || right.length > 0
+    root.headTip = (Array.isArray(msg.head) && msg.head.length >= 2)
+      ? msg.head : null
+    root.present = left.length > 0 || right.length > 0 || root.headTip !== null
   }
 
   // Limpia el socket de una corrida anterior y recién ahí escucha: un
@@ -156,6 +159,12 @@ Item {
         screenH: panel.height
         dotSize: root.dotSize
       }
+    }
+
+    HeadPointer {
+      tip: root.headTip
+      screenW: panel.width
+      screenH: panel.height
     }
   }
 }
