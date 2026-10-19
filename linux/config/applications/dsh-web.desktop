@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=DeepSeek Harness
+GenericName=AI Agent Harness
+Comment=Web UI de DeepSeek Harness (dsh web)
+Exec=/home/eztvn/.local/bin/dsh-web
+Icon=dsh
+Terminal=false
+Categories=Development;Utility;
+Keywords=dsh;deepseek;harness;ai;agente;web;
+StartupNotify=false

@@ -37,6 +37,9 @@ alias office='lo'
 alias wall='wallpaper-switch.sh'
 alias walls='wallpaper-switch.sh list'
 
+# DeepSeek Harness: abre/levanta la web UI (servidor en dsh-web.service)
+alias dshw='dsh-web'
+
 
 # TTS rápido: tts "hola mundo" | tts -en "hello world"
 tts() {

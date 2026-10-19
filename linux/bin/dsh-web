@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# dsh-web — abre la Web UI de DeepSeek Harness (dsh web).
+#
+# El servidor vive en el unit de usuario dsh-web.service (sobrevive a este
+# script y se reusa entre lanzamientos). El token de acceso es por proceso y
+# cambia en cada arranque, así que la URL se lee del log que escribe el unit:
+# el ExecStartPre lo trunca, así que la última línea siempre es la vigente.
+#
+# Uso:
+#   dsh-web            levanta el servidor si hace falta y abre/focaliza la UI
+#   dsh-web --url      imprime la URL con token (no abre nada)
+#   dsh-web --stop     apaga el servidor
+set -uo pipefail
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dsh-web"
+LOG="$STATE/server.log"
+UNIT=dsh-web.service
+
+current_url() {
+  grep -o 'http://[^[:space:]]*' "$LOG" 2>/dev/null | tail -1
+}
+
+alive_url() {
+  local url
+  url=$(current_url)
+  [[ -n $url ]] || return 1
+  # 000 = conexión rechazada: el log quedó de un arranque anterior.
+  [[ $(curl -s -o /dev/null -m 2 -w '%{http_code}' "$url" 2>/dev/null) != 000 ]] || return 1
+  printf '%s\n' "$url"
+}
+
+wait_url() {
+  local i
+  for i in $(seq 1 120); do
+    alive_url && return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+case "${1:-}" in
+  --url)
+    alive_url || { systemctl --user start "$UNIT" >/dev/null 2>&1 || true; wait_url; } || exit 1
+    exit 0
+    ;;
+  --stop)
+    exec systemctl --user stop "$UNIT"
+    ;;
+  --status)
+    systemctl --user status "$UNIT" --no-pager | head -20
+    alive_url
+    exit 0
+    ;;
+  -h | --help)
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  "") ;;
+  *)
+    echo "dsh-web: opción desconocida '$1'" >&2
+    exit 2
+    ;;
+esac
+
+if ! url=$(alive_url); then
+  systemctl --user start "$UNIT" >/dev/null 2>&1 || true
+  if ! url=$(wait_url); then
+    echo "dsh-web: el servidor no respondió. Revisá: journalctl --user -u $UNIT" >&2
+    command -v notify-send >/dev/null && notify-send -u critical "DeepSeek Harness" "El servidor no arrancó"
+    exit 1
+  fi
+fi
+
+# Si ya hay un panel abierto, enfocarlo; si no, abrirlo como web app en Brave.
+if command -v hyprctl >/dev/null && hyprctl clients -j >/dev/null 2>&1; then
+  exec omarchy-launch-or-focus-webapp "DeepSeek Harness" "$url"
+fi
+exec omarchy-launch-webapp "$url"
