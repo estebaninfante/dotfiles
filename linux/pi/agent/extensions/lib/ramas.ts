@@ -131,9 +131,9 @@ export function mutacionDetectada(comando: string): string | null {
     [/\bgit\s+branch\s+(?:-[dDmMcCf]|--delete|--move|--copy|--set-upstream)/, "git branch que cambia ramas"],
     [/\bgit\s+config\s+[^|;&]*\s--?(?:add|unset|replace-all)\b/, "git config que escribe"],
     [/\b(sed|perl|ruby)\s+(?:-\S+\s+)*-i/, "edición en el lugar (sed/perl -i)"],
+    [/(?:^|[^0-9&])>>?\s*[^\s&|;)]/, "redirección a un archivo"],
     [/\b(tee|dd|truncate|patch)\b/, "escritura directa a un archivo"],
     [/\b(rm|rmdir|mv|cp|mkdir|touch|ln|chmod|chown)\b/, "movimiento de archivos"],
-    [/(?:^|[^0-9&])>>?\s*[^\s&|;)]/, "redirección a un archivo"],
     [/\b(npm|pnpm|yarn|bun|cargo|uv|pip|poetry|composer)\s+(install|add|remove|uninstall|sync|update)\b/, "instalación de dependencias"],
   ];
   for (const [patron, motivo] of reglas) {
