@@ -18,6 +18,7 @@
  * avisa ahí. Estado en `~/.local/state/rig/correo` (lo maneja rig).
  */
 
+import { watch } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { Type } from "typebox";
@@ -25,7 +26,18 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 const RIG = process.env.RIG_BIN ?? `${homedir()}/.local/bin/rig`;
 const CADA_PULSO_MS = 15_000;
-const CADA_REVISION_OCIOSO_MS = 25_000;
+// Respaldo: si el vigilante de archivos no ve el cambio, igual revisamos.
+const CADA_REVISION_OCIOSO_MS = 15_000;
+// Anti-bucle: no despertamos por el mismo remitente más de N veces por minuto,
+// ni dos veces seguidas en menos de este tiempo, ni por mensajes propios.
+const VENTANA_ANTIBUCLE_MS = 60_000;
+const MAX_DESPIERTES_POR_REMITENTE = 3;
+const MIN_MS_ENTRE_DESPIERTES = 5_000;
+// Un mensaje largo se resume; muchos mensajes juntos entran como digest.
+const MAX_MENSAJES_POR_ENTREGA = 6;
+const BUZON = process.env.RIG_CORREO_DIR
+  ? `${process.env.RIG_CORREO_DIR}/buzon`
+  : `${homedir()}/.local/state/rig/correo/buzon`;
 
 interface Correo {
   de: string;
@@ -85,16 +97,18 @@ function resumenDeLlamada(nombre: string, entrada: Record<string, unknown>): str
 }
 
 function textoDelCorreo(pendientes: Correo[]): string {
-  const lineas = pendientes.map(
-    (m) => `- de **${m.de}** (${m.ts.slice(11, 16)}): ${m.texto}`,
-  );
+  const muestra = pendientes.slice(-MAX_MENSAJES_POR_ENTREGA);
+  const lineas = muestra.map((m) => `- de **${m.de}** (${m.ts.slice(11, 16)}): ${m.texto}`);
+  const resto = pendientes.length - muestra.length;
   return [
     `## Correo de otros agentes`,
     ``,
-    `${pendientes.length} mensaje(s) sin leer:`,
+    resto > 0
+      ? `${pendientes.length} mensajes sin leer (los ${resto} más viejos quedan en el buzón):`
+      : `${muestra.length} mensaje(s) sin leer:`,
     ...lineas,
     ``,
-    `Contestá con la tool \`mensaje\` (o callate si no hace falta). Para ver quién más está trabajando: tool \`agentes\`.`,
+    `No contestes por reflejo: si es un acuse, una confirmación o no te pide nada, no respondas y seguí con tu tarea. Contestá con la tool \`mensaje\` solo si hay algo que destrabar, una vez por tema, y no respondas a quien te acaba de responder.`,
   ].join("\n");
 }
 
@@ -104,7 +118,12 @@ export default function (pi: ExtensionAPI) {
 
   let ultimoPulso = 0;
   let revision: ReturnType<typeof setInterval> | undefined;
+  let vigilante: ReturnType<typeof watch> | undefined;
+  let rebote: ReturnType<typeof setTimeout> | undefined;
   let pendienteDeEntrega = false;
+  let ultimoDespertar = 0;
+  let ctxActual: ExtensionContext | undefined;
+  const despiertes = new Map<string, number[]>();
 
   const registrar = (ctx: ExtensionContext, tarea: string) => {
     rig([
@@ -136,26 +155,70 @@ export default function (pi: ExtensionAPI) {
     }
   };
 
+  /** ¿Este remitente puede despertarnos ahora? Corta bucles y avalanchas. */
+  const puedeDespertar = (de: string): boolean => {
+    if (!de || de === nombre) return false; // nunca por un mensaje propio
+    const ahora = Date.now();
+    if (ahora - ultimoDespertar < MIN_MS_ENTRE_DESPIERTES) return false;
+    const previos = (despiertes.get(de) ?? []).filter((t) => ahora - t < VENTANA_ANTIBUCLE_MS);
+    if (previos.length >= MAX_DESPIERTES_POR_REMITENTE) {
+      despiertes.set(de, previos);
+      return false;
+    }
+    previos.push(ahora);
+    despiertes.set(de, previos);
+    ultimoDespertar = ahora;
+    return true;
+  };
+
+  /** Intenta entregar lo pendiente: solo despierta si hay algo nuevo y sano. */
+  const intentarEntrega = () => {
+    const ctx = ctxActual;
+    if (!ctx || pendienteDeEntrega || !ctx.isIdle()) return;
+    const pendientes = leerPendientes(false);
+    if (!pendientes.length) return;
+
+    const ajenos = pendientes.filter((m) => m.de && m.de !== nombre);
+    if (!ajenos.length) {
+      // Todo es correo propio (eco): lo damos por leído para no arrastrarlo.
+      leerPendientes(true);
+      return;
+    }
+    const ultimo = ajenos[ajenos.length - 1];
+    if (!puedeDespertar(ultimo.de)) return;
+
+    const entregados = leerPendientes(true).filter((m) => m.de && m.de !== nombre);
+    if (!entregados.length) return;
+    pendienteDeEntrega = true;
+    try {
+      pi.sendUserMessage(textoDelCorreo(entregados), { deliverAs: "followUp" });
+    } catch {
+      /* si no se puede entregar ahora, queda en el buzon */
+    } finally {
+      pendienteDeEntrega = false;
+    }
+  };
+
+  /** Entrega en cuanto el buzón cambia, sin esperar el turno de revisión. */
+  const vigilarBuzon = () => {
+    if (vigilante) return;
+    try {
+      vigilante = watch(BUZON, { persistent: false }, () => {
+        if (rebote) clearTimeout(rebote);
+        rebote = setTimeout(intentarEntrega, 400);
+      });
+    } catch {
+      /* sin vigilante queda el intervalo */
+    }
+  };
+
   pi.on("session_start", async (_event, ctx) => {
     registrar(ctx, "arrancando");
+    ctxActual = ctx;
     pendienteDeEntrega = false;
 
-    revision ??= setInterval(() => {
-      if (pendienteDeEntrega) return;
-      const pendientes = leerPendientes(false);
-      if (!pendientes.length) return;
-      if (!ctx.isIdle()) return; // mientras trabaja, entra en el próximo turno
-      const entregados = leerPendientes(true);
-      if (!entregados.length) return;
-      pendienteDeEntrega = true;
-      try {
-        pi.sendUserMessage(textoDelCorreo(entregados), { deliverAs: "followUp" });
-      } catch {
-        /* si no se puede entregar ahora, queda en el buzon */
-      } finally {
-        pendienteDeEntrega = false;
-      }
-    }, CADA_REVISION_OCIOSO_MS);
+    vigilarBuzon();
+    revision ??= setInterval(intentarEntrega, CADA_REVISION_OCIOSO_MS);
   });
 
   pi.on("tool_result", (event) => {
@@ -163,7 +226,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", (event) => {
-    const pendientes = leerPendientes(true);
+    const pendientes = leerPendientes(true).filter((m) => m.de && m.de !== nombre);
     if (pendientes.length) {
       event.systemPromptOptions.sections.correo = textoDelCorreo(pendientes);
     } else {
@@ -174,6 +237,11 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     if (revision) clearInterval(revision);
     revision = undefined;
+    if (vigilante) vigilante.close();
+    vigilante = undefined;
+    if (rebote) clearTimeout(rebote);
+    rebote = undefined;
+    ctxActual = undefined;
     rig(["msg", "apagar"]);
   });
 
