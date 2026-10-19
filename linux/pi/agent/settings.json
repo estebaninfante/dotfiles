@@ -1,11 +1,14 @@
 {
   "theme": "omarchy-system",
   "lastChangelogVersion": "1.3.0",
-  "defaultProvider": "deepseek",
-  "defaultModel": "deepseek-flash",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "deepseek-v4.1-flash",
   "defaultThinkingLevel": "low",
   "modelThinkingLevels": {
-    "deepseek/deepseek-flash": "low"
+    "deepseek/deepseek-flash": "low",
+    "opencode-go/deepseek-v4.1-flash": "low",
+    "opencode/deepseek-v4.1-flash-free": "low",
+    "opencode/deepseek-v4.1-flash": "low"
   },
   "packages": [
     "npm:pi-model-fallback"
