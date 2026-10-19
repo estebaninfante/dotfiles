@@ -36,7 +36,7 @@ notify() {
   # La shell puede haberse caído con el proceso que crasheó; esperar a que
   # recupere el bus evita perder el aviso más importante.
   command -v omarchy-notification-wait >/dev/null 2>&1 && omarchy-notification-wait 3 >/dev/null 2>&1
-  omarchy-notification-send --urgency normal --glyph "$CRASH_GLYPH" "$1" "$2" >/dev/null 2>&1 || true
+  omarchy-notification-send --urgency critical --glyph "$CRASH_GLYPH" "$1" "$2" >/dev/null 2>&1 || true
 }
 
 # Desprende el diagnóstico del cgroup del watcher para que sobreviva a un
