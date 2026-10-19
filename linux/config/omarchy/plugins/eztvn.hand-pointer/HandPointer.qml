@@ -146,6 +146,12 @@ Item {
 
         x: (tip ? tip[0] : 0) * panel.width - width / 2
         y: (tip ? tip[1] : 0) * panel.height - height / 2
+
+        // Interpolación corta: el detector entrega ~19 muestras/s y sin esto
+        // se ven saltos. 70 ms lineales alcanzan para que el movimiento se lea
+        // continuo sin agregar un retraso perceptible.
+        Behavior on x { NumberAnimation { duration: 70; easing.type: Easing.Linear } }
+        Behavior on y { NumberAnimation { duration: 70; easing.type: Easing.Linear } }
       }
     }
   }
