@@ -3,22 +3,25 @@ import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
 
-// Mapa en vivo de las yemas de los 5 dedos que ve vision-hub.
+// Mapa en vivo de las yemas de los 5 dedos que ve vision-hub, para las DOS
+// manos a la vez: izquierda en azul, derecha en rojo.
 //
 // vision-hub publica una línea JSON por muestra en un socket Unix:
-//   {"v":1,"n":12,"p":1,"ok":1,"t":[[x,y],...5]}
-//   {"v":1,"n":13,"p":0}                  // no hay mano
+//   {"v":1,"n":12,"p":1,"hands":[
+//      {"h":"Left","ok":1,"t":[[x,y],...5]},
+//      {"h":"Right","ok":1,"t":[[x,y],...5]}]}
+//   {"v":1,"n":13,"p":0}                  // no hay manos
 //
-// `t` son las puntas (pulgar, índice, medio, anular, meñique) normalizadas y ya
-// espejadas por vision-hub: acá sólo se escalan a la pantalla.
+// El lado y las coordenadas ya vienen resueltos por el motor (espejadas para
+// la cámara frontal); acá sólo se escalan a la pantalla.
 //
 // Es solo lectura: `mask: Region {}` deja pasar todos los clics. La ventana se
-// muestra únicamente mientras hay mano, así no queda una capa transparente
+// muestra únicamente mientras hay manos, así no queda una capa transparente
 // encima del escritorio cuando no se usa.
 //
-// Optimización: un socket (sin procesos ni polling), 30 Hz como máximo, 5
-// rectángulos chicos y sin animaciones intermedias (los landmarks ya vienen
-// suavizados). El latido `n` apaga el overlay si el pipeline se cuelga.
+// Optimización: un socket (sin procesos ni polling), 5 rectángulos chicos por
+// mano y una interpolación corta. El latido `n` apaga el overlay si el
+// pipeline se cuelga.
 Item {
   id: root
 
@@ -26,23 +29,14 @@ Item {
     + "/vision-hub-hand.sock"
 
   property bool present: false
-  property bool blocked: false       // mano sobre la cara u otra compuerta
-  property string hand: ""           // "L" izquierda | "R" derecha | "" sin dato
-  property var tips: []
+  property var tipsL: []
+  property var tipsR: []
+  property bool okL: true
+  property bool okR: true
   property int lastSeq: -1
   property real lastFresh: 0         // Date.now() del último `n` nuevo
 
-  // Diámetro de la yema, un poco más grande en pantallas con escala alta.
   readonly property real dotSize: 30
-
-  // Cámara frontal: mano IZQUIERDA en azul, DERECHA en rojo. Sin dato de lado,
-  // se mantiene el azul (el pedido original).
-  readonly property color dotColor: root.hand === "R"
-    ? Qt.rgba(0.95, 0.30, 0.30, 0.45)
-    : Qt.rgba(0.29, 0.56, 0.95, 0.45)
-  readonly property color dotBorder: root.hand === "R"
-    ? Qt.rgba(1.0, 0.62, 0.62, 0.55)
-    : Qt.rgba(0.60, 0.78, 1.0, 0.55)
 
   function handleLine(line) {
     var msg
@@ -55,10 +49,7 @@ Item {
     if (msg.p !== 1) {
       // No se borran las puntas: al volver la mano, los círculos salen desde
       // donde estaban en vez de saltar desde la esquina.
-      if (root.present) {
-        root.present = false
-        root.hand = ""
-      }
+      if (root.present) root.present = false
       return
     }
     // Si el shell se reengancha a mitad de una mano, `n` puede coincidir con el
@@ -66,10 +57,28 @@ Item {
     if (msg.n === root.lastSeq && root.present) return
     root.lastSeq = msg.n
     root.lastFresh = Date.now()
-    root.blocked = msg.ok === 0
-    root.hand = msg.h === "L" || msg.h === "R" ? msg.h : ""
-    root.tips = msg.t || []
-    root.present = root.tips.length > 0
+
+    var hands = msg.hands || []
+    var left = []
+    var right = []
+    var blockedLeft = false
+    var blockedRight = false
+    for (var i = 0; i < hands.length; i++) {
+      var hand = hands[i]
+      if (!hand || !hand.t || hand.t.length < 5) continue
+      if (hand.h === "Right") {
+        right = hand.t
+        blockedRight = hand.ok === 0
+      } else {
+        left = hand.t            // "Left" o sin dato de lado -> azul
+        blockedLeft = hand.ok === 0
+      }
+    }
+    root.tipsL = left
+    root.tipsR = right
+    root.okL = !blockedLeft
+    root.okR = !blockedRight
+    root.present = left.length > 0 || right.length > 0
   }
 
   // Limpia el socket de una corrida anterior y recién ahí escucha: un
@@ -98,9 +107,7 @@ Item {
     running: root.present
     repeat: true
     onTriggered: {
-      if (Date.now() - root.lastFresh > 1200) {
-        root.present = false
-      }
+      if (Date.now() - root.lastFresh > 1200) root.present = false
     }
   }
 
@@ -124,34 +131,30 @@ Item {
     Repeater {
       model: 5
 
-      delegate: Rectangle {
+      delegate: HandDot {
         required property int index
 
-        readonly property var tip: root.tips[index]
+        tip: root.tipsL[index] !== undefined ? root.tipsL[index] : null
+        side: "Left"
+        dim: !root.okL
+        screenW: panel.width
+        screenH: panel.height
+        dotSize: root.dotSize
+      }
+    }
 
-        visible: root.present && root.tips.length > index
-        width: root.dotSize
-        height: root.dotSize
-        radius: width / 2
-        antialiasing: true
-        color: root.blocked
-          ? Qt.rgba(root.hand === "R" ? 0.95 : 0.29,
-                    root.hand === "R" ? 0.30 : 0.56,
-                    root.hand === "R" ? 0.30 : 0.95, 0.20)
-          : root.dotColor
-        border.width: 1
-        border.color: root.blocked
-          ? Qt.rgba(root.dotBorder.r, root.dotBorder.g, root.dotBorder.b, 0.25)
-          : root.dotBorder
+    Repeater {
+      model: 5
 
-        x: (tip ? tip[0] : 0) * panel.width - width / 2
-        y: (tip ? tip[1] : 0) * panel.height - height / 2
+      delegate: HandDot {
+        required property int index
 
-        // Interpolación corta: el detector entrega ~19 muestras/s y sin esto
-        // se ven saltos. 70 ms lineales alcanzan para que el movimiento se lea
-        // continuo sin agregar un retraso perceptible.
-        Behavior on x { NumberAnimation { duration: 70; easing.type: Easing.Linear } }
-        Behavior on y { NumberAnimation { duration: 70; easing.type: Easing.Linear } }
+        tip: root.tipsR[index] !== undefined ? root.tipsR[index] : null
+        side: "Right"
+        dim: !root.okR
+        screenW: panel.width
+        screenH: panel.height
+        dotSize: root.dotSize
       }
     }
   }
