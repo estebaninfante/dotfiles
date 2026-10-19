@@ -50,6 +50,14 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 PTT_PIDFILE = os.path.join(RUNTIME, "omar-ptt.pid")
 LISTEN_UNIT = "omar-listen.service"
 STATUS_FILE = os.path.join(RUNTIME, "omar", "status.json")
+# La píldora publica su estado en este archivo (lo mismo que lee el glow):
+# leerlo es instantáneo, sin arrancar un cliente de Quickshell.
+PILL_OPEN = os.path.join(RUNTIME, "omar", "pill-open")
+# Lo escribe `linux/voice/daemon.py` mientras reproduce y lo borra al terminar.
+SPEAKING_FILE = os.path.join(
+    os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache"),
+    "voice", "speaking.json",
+)
 PILL = os.path.join(HOME, "developing/omar/packaging/quickshell/omar-pill.qml")
 GLOW = os.path.join(os.path.dirname(PILL), "omar-glow.qml")
 LOG = open(os.devnull, "w")
@@ -226,17 +234,6 @@ def ptt_active():
     return bool(_ptt_pids())
 
 
-def _main_pid():
-    """PID del proceso node del servicio (el único que atiende señales)."""
-    try:
-        out = subprocess.check_output(
-            ["systemctl", "--user", "show", "-p", "MainPID", "--value", LISTEN_UNIT],
-            text=True, stderr=subprocess.DEVNULL, timeout=3,
-        ).strip()
-        pid = int(out)
-        return pid if pid > 0 else None
-    except Exception:  # noqa: BLE001
-        return None
 
 
 def service_awake():
@@ -261,13 +258,18 @@ def service_awake():
 
 
 def pill_is_open():
-    """¿La píldora está abierta? Se lo pregunta a Quickshell por IPC.
+    """¿La píldora está abierta?
 
-    Es el estado que de verdad ve el usuario: el proceso de push-to-talk es de
-    un solo disparo (`--once`) y ya murió, pero la píldora puede seguir visible.
-    Reintenta: con el sistema cargado, un solo IPC con timeout corto devolvía
-    un falso negativo y el toggle reabría en vez de cerrar.
+    La píldora publica `pill-open` ("1"/"0") en el runtime cada vez que abre o
+    cierra —el mismo archivo que lee el glow—, así que el caso normal se
+    resuelve leyendo un byte, sin arrancar Quickshell. El IPC queda de respaldo
+    para cuando el archivo todavía no existe (arranque, píldora nunca abierta).
     """
+    try:
+        with open(PILL_OPEN, encoding="utf-8") as f:
+            return f.read(1) == "1"
+    except OSError:
+        pass
     for _ in range(2):
         try:
             out = subprocess.check_output(
@@ -278,6 +280,35 @@ def pill_is_open():
         except Exception:  # noqa: BLE001
             time.sleep(0.15)
     return False
+
+
+def voice_is_speaking():
+    """¿El daemon de voz está reproduciendo algo AHORA?
+
+    `speaking.json` lo escribe el daemon mientras suena y lo borra al terminar;
+    la ventana de tiempo evita creerle a un archivo que quedó de un daemon
+    caído. Sirve para que la tecla calle también el TTS de otro agente.
+    """
+    try:
+        with open(SPEAKING_FILE, encoding="utf-8") as f:
+            snap = json.load(f)
+        started = int(snap.get("startedAt") or 0)
+        dur = int(snap.get("durationMs") or 0)
+    except (OSError, ValueError, TypeError):
+        return False
+    if started <= 0 or dur <= 0:
+        return False
+    now = time.time() * 1000
+    return started - 500 <= now <= started + dur + 500
+
+
+def cut_speaking():
+    """Corta el TTS que esté sonando, sea de Omar o de otro agente."""
+    if not voice_is_speaking():
+        return False
+    log("voice: corto el TTS que estaba sonando")
+    _spawn("voice", "stop")
+    return True
 
 
 def omar_active():
@@ -343,13 +374,45 @@ def _systemctl(*args, timeout=6):
         return False
 
 
+def _is_listen_service(pid):
+    """¿Ese PID es el `node … dist/index.js listen` del servicio?
+
+    `listen.pid` puede quedar de un proceso muerto y el número reasignarse a
+    otra cosa: antes de mandarle una señal se mira la línea de comandos.
+    """
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            argv = [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return False
+    if not argv or "node" not in os.path.basename(argv[0]):
+        return False
+    joined = " ".join(argv)
+    return "dist/index.js" in joined and " listen" in joined
+
+
 def _signal_service(sig):
     """Manda una señal de control al único oído, levantándolo si hace falta.
 
     SIGUSR1 = abrir la conversación sin palabra clave; SIGUSR2 = cerrarla. El
     servicio siempre corre (Restart=always) y el loop registra las señales antes
     de cargar modelos, así que no hay que esperar a que esté "listo".
+
+    Se lee `listen.pid` y se usa kill(2): `systemctl kill` arrancaba un cliente
+    de systemd (~10-20 ms) y `start` podía esperar a que la unidad quedara
+    activa, justo en el camino que tiene que ser instantáneo.
     """
+    try:
+        with open(os.path.join(RUNTIME, "omar", "listen.pid"), encoding="utf-8") as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        pid = 0
+    if pid > 0 and _is_listen_service(pid):
+        try:
+            os.kill(pid, sig)
+            return
+        except OSError:
+            pass
     _systemctl("start", LISTEN_UNIT)
     # --kill-whom=main: `systemctl kill` manda a TODO el cgroup por defecto y
     # así le llegaba también a `parec` (el micrófono se cortaba y reiniciaba).
@@ -370,16 +433,19 @@ def start_voice():
 
 
 def cancel_voice():
-    """Apaga Omar: cierra la píldora y cierra la conversación en el servicio.
+    """Apaga Omar: cierra la conversación y la píldora.
 
     El proceso NUNCA se mata: el servicio siempre vivo vuelve solo a esperar la
-    palabra clave (SIGUSR2). Cierra la UI primero para que desaparezca al
-    instante, después corta cualquier proceso viejo de push-to-talk que haya
-    quedado suelto de versiones anteriores, y al final cierra la conversación.
+    palabra clave (SIGUSR2). La señal va primero porque es la que corta la voz
+    al instante y es lo que el usuario está esperando; la UI y la limpieza de
+    procesos viejos van después.
     """
-    # 1) Cerrar la pildora YA: la UI no espera al proceso.
+    # 1) Callar YA: la señal cierra la conversación (y la voz) en el acto.
+    _signal_service("SIGUSR2")
+
+    # 2) Cerrar la pildora YA: la UI no espera al proceso.
     _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
-    # 1b) Apagar el glow ya tambien: si no, la franja negra y el subrayado se
+    # 2b) Apagar el glow ya tambien: si no, la franja negra y el subrayado se
     #     quedan visibles unos segundos vacios (el "poso" tras el ultimo texto).
     _spawn("qs", "ipc", "-p", GLOW, "call", "omar-glow", "hide")
     try:
@@ -387,7 +453,9 @@ def cancel_voice():
     except FileNotFoundError:
         pass
 
-    # 2) Cortar cualquier proceso de voz que haya quedado suelto.
+    # 3) Cortar cualquier proceso de voz que haya quedado suelto. Es limpieza:
+    #    la voz ya se cortó, así que los topes son cortos para no trabar la
+    #    próxima pulsación de la tecla.
     pids = _ptt_pids()
     if pids:
         log(f"cancel: corto {pids}")
@@ -396,27 +464,23 @@ def cancel_voice():
                 os.kill(pid, signal.SIGINT)
             except OSError:
                 pass
-        if not _wait_dead(pids, 3.0):
+        if not _wait_dead(pids, 1.0):
             for pid in pids:
                 if _alive(pid):
                     try:
                         os.kill(pid, signal.SIGTERM)
                     except OSError:
                         pass
-            if not _wait_dead(pids, 1.0):
+            if not _wait_dead(pids, 0.6):
                 for pid in pids:
                     if _alive(pid):
                         try:
                             os.kill(pid, signal.SIGKILL)
                         except OSError:
                             pass
-                _wait_dead(pids, 0.5)
+                _wait_dead(pids, 0.3)
     else:
         log("cancel: sin PTT suelto")
-
-    # 3) Cerrar la conversación en el servicio (no matarlo): vuelve solo a
-    #    esperar la palabra clave. El servicio nunca se detiene.
-    _signal_service("SIGUSR2")
 
 
 def toggle_voice():
@@ -429,6 +493,11 @@ def toggle_voice():
     """
     if omar_active():
         cancel_voice()
+        return
+    # Aunque Omar no tenga la conversación abierta, si hay TTS sonando la tecla
+    # lo calla: apretar "Windows" mientras habla un aviso tiene que silenciarlo,
+    # no prender a Omar encima de la voz.
+    if cut_speaking():
         return
     owner = external_mic_owner()
     if owner:
@@ -542,8 +611,12 @@ def handle_event(out, buttons, settings, states):
         log(f"evt {key} {state}")
 
     if settings.get("cancel_key") and key == settings["cancel_key"] and state == "down":
+        # Escape también calla un TTS suelto (aviso de otro agente) aunque Omar
+        # no tenga la conversación abierta.
         if omar_active():
             cancel_voice()
+        else:
+            cut_speaking()
         return True
 
     # Supresion: si algun boton apretado suprime esta tecla, la ignoramos

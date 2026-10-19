@@ -6,7 +6,9 @@
 # otro apaga. Se engancha a la salida de `keyd monitor` (no depende de un bind de
 # Hyprland, que resultó caprichoso). Corre como servicio de usuario. Una sola
 # acción por pulsación: se ignora la repetición "down" mientras la tecla sigue
-# apretada; el antirrebote de 800 ms queda como segunda red.
+# apretada (keyd reemite "down" al mantener). No hay antirrebote por tiempo:
+# el de 800 ms se comía la segunda pulsación rápida, así que "cerrar y ya
+# quiero que se calle" no hacía nada hasta apretar de nuevo.
 #
 # Variables: VOICE_KEY_BIN (acción; default present-remote toggle), VOICE_KEY_DISABLE=1.
 set -u
@@ -15,7 +17,6 @@ set -u
 # Se acepta comando con argumentos (ej. "present-remote toggle"): se parte por
 # espacios y se ejecuta como lista, no como un unico nombre con espacios.
 read -r -a TOGGLE_CMD <<< "${VOICE_KEY_BIN:-$HOME/.local/bin/present-remote toggle}"
-last=0
 down=0
 
 # `keyd monitor` muere si keyd se reinicia (reload/restart) y con él el
@@ -29,11 +30,7 @@ while true; do
         # "down" y un segundo toggle apagaba a Omar medio segundo después.
         if [ "$down" = 0 ]; then
           down=1
-          now=$(date +%s%3N)
-          if (( now - last > 800 )); then
-            last=$now
-            "${TOGGLE_CMD[@]}"
-          fi
+          "${TOGGLE_CMD[@]}"
         fi
         ;;
       *"f13 up"*)
