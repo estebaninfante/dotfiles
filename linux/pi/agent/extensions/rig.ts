@@ -213,6 +213,14 @@ const POLITICA_TRAZABILIDAD = `Trazabilidad (rig): cada agente vivo tiene UN tic
 - El mismo ticket no lo trabaja otro agente: si un ticket es de otra sesión, solo lo leés y creás uno nuevo para lo tuyo.
 - Todo el árbol queda en \`~/.local/share/pi/trazas/<raíz>.md\` (Markdown legible) y en \`/tareas\` / \`/traza\`.`;
 
+const POLITICA_INTERFAZ = `Filosofía de interfaz (del usuario; aplica a toda UI que disenes o toqués):
+- **Ahorrar espacio.** La pantalla es del contenido, no de los controles. Si un control no se gana su lugar, no va.
+- **Menos botones, mejor.** Antes de agregar un botón preguntate si puede ser un atajo, un ítem de menú, un gesto o texto. Lo de uso ocasional va a un menú agrupado por tema; lo de uso frecuente puede quedar a la vista con su atajo.
+- **Simple antes que completo.** La opción más simple que resuelve, gana. No agregues modalidades, opciones ni ajustes que nadie pidió.
+- **Intuitiva.** Agrupá por lo que hace cada cosa, etiquetá claro y en el idioma del resto. Si el usuario puede dudar de un icono sin texto, ponele etiqueta.
+- **Específica.** Un control por cosa concreta; no dupliques ni mezcles cosas que no van juntas. Nada de contenedores genéricos "por las dudas".
+La misma regla vale fuera de la UI: menús, CLI, mensajes y configuración se leen y se usan igual.`;
+
 function formatoLista(items: Revision[]): string {
   if (items.length === 0) return "No hay revisiones pendientes.";
   return items
@@ -1257,5 +1265,6 @@ export default function rig(pi: ExtensionAPI) {
     event.systemPromptOptions.sections.metodo_software = POLITICA_SOFTWARE;
     event.systemPromptOptions.sections.revision_humana = POLITICA_REVISION;
     event.systemPromptOptions.sections.trazabilidad = POLITICA_TRAZABILIDAD;
+    event.systemPromptOptions.sections.interfaz = POLITICA_INTERFAZ;
   });
 }
