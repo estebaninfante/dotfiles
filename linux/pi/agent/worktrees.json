@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "flujoPorDefecto": "main",
+  "prefijoRama": "agente",
+  "repos": {
+    "foldertinder": { "flujo": "main", "rama": "master" },
+    "zentr0": { "flujo": "developing", "rama": "dev" },
+    "agentes-platform": { "flujo": "developing", "rama": "developing" },
+    "dotfiles": { "flujo": "directo" }
+  }
+}

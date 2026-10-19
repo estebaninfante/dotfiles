@@ -134,18 +134,50 @@ del timer. Ver skill `dotfiles-publish`.
 
 ### Pi agent (`linux/pi/agent/` — symlink por archivo)
 
-Solo se versionan extensiones propias de Pi (la voz). El resto de `~/.pi/agent/`
+Solo se versionan extensiones propias de Pi y su config. El resto de `~/.pi/agent/`
 (sesiones, auth, skills de terceros) no se toca.
 
 | Archivo | Ruta destino |
 |---------|-------------|
+| extensions/rig.ts | `~/.pi/agent/extensions/rig.ts` |
+| extensions/worktrees.ts | `~/.pi/agent/extensions/worktrees.ts` |
+| extensions/lib/ | `~/.pi/agent/extensions/lib/` (helpers puros, sin `index.ts`) |
 | extensions/tts-summary.ts | `~/.pi/agent/extensions/tts-summary.ts` |
+| extensions/conversar.ts | `~/.pi/agent/extensions/conversar.ts` |
+| extensions/buscar-web.ts | `~/.pi/agent/extensions/buscar-web.ts` |
+| extensions/herdr-agent-state.ts | `~/.pi/agent/extensions/herdr-agent-state.ts` |
+| settings.json | `~/.pi/agent/settings.json` |
+| worktrees.json | `~/.pi/agent/worktrees.json` |
 
-La extensión es solo un cliente de `voice avisar --source Pi`: la lógica de voz,
-perfiles y registro vive en el sistema de voz (`linux/voice`), no en Pi, para
+La extension de voz es solo un cliente de `voice avisar --source Pi`: la logica de
+voz, perfiles y registro vive en el sistema de voz (`linux/voice`), no en Pi, para
 que cualquier proceso la use igual.
 
 Cambios en una extension se aplican con `/reload` (o reiniciando Pi).
+
+#### Un worktree por agente (`worktrees.json` + `extensions/worktrees.ts`)
+
+Dos agentes en la misma carpeta se pisan: uno borra el archivo que el otro lee y un
+`git add -A` se lleva trabajo ajeno. Por eso cada agente trabaja en su propio git
+worktree (carpeta y rama propias) y lo mergea al terminar.
+
+`worktrees.json` decide el flujo de cada proyecto:
+
+| Flujo | Qué significa |
+|-------|----------------|
+| `main` | worktree obligatorio; base y merge en la rama principal (o la de `rama`) |
+| `developing` | worktree obligatorio; base y merge en la rama de desarrollo |
+| `directo` | se edita en el lugar, sin worktree (dotfiles y configs que la maquina lee del repo) |
+
+Un repo que no esta en la lista usa `flujoPorDefecto` (`main`). La extension pone
+las reglas en el system prompt de cada turno, **bloquea** `write`/`edit` y los
+comandos bash que escriben en la copia principal (con motivo y escape: `/worktrees
+libre` o `PI_SIN_WORKTREES=1`), le da un worktree propio a cada subagente, y expone
+la tool `worktree` (`abrir` / `lista` / `cerrar`). Los worktrees viven en
+`<parent del repo>/.rig-worktrees/<repo>/<id>`, la misma convencion que `rig work`.
+
+`rig work new` tambien saca su rama base de este archivo: un solo lugar decide el
+flujo de cada proyecto. Verificador: `scripts/verify/ramas.sh`.
 
 ### Home (`linux/home/`)
 

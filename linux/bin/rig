@@ -1927,6 +1927,25 @@ valid_ticket_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
 git_root() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
 
+# Rama base por defecto, segun ~/.pi/agent/worktrees.json (la misma config que
+# usan las extensiones de pi: un solo lugar decide el flujo de cada repo).
+# Vacio = no hay preferencia, se usa HEAD.
+repo_base_config() {
+  local repo="$1" archivo="${PI_RAMAS:-$HOME/.pi/agent/worktrees.json}" nombre flujo rama
+  [ -f "$archivo" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  nombre=$(basename "$repo")
+  flujo=$(jq -r --arg n "$nombre" '.repos[$n].flujo // .flujoPorDefecto // "main"' "$archivo" 2>/dev/null)
+  rama=$(jq -r --arg n "$nombre" '.repos[$n].rama // ""' "$archivo" 2>/dev/null)
+  [ "$flujo" = "directo" ] && return 0
+  if [ -n "$rama" ]; then
+    printf '%s' "$rama"
+  elif [ "$flujo" = "developing" ]; then
+    printf 'developing'
+  fi
+  return 0
+}
+
 branch_for_id() {
   printf '%s/%s' "${RIG_BRANCH_PREFIX:-ticket}" "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
 }
@@ -1972,6 +1991,8 @@ rig work - cambios paralelos y trazables: un git worktree + branch por ticket
   rig work rm <id> [--delete-branch] [--force]
       elimina el worktree (conserva el branch salvo --delete-branch).
 
+  La base por defecto sale de ~/.pi/agent/worktrees.json (flujo main -> rama
+  principal; flujo developing -> su rama de desarrollo; --base la pisa).
   El merge a la base es explicito y serial: git -C <repo> merge --no-ff ticket/<id>
   Ubicacion por defecto: <parent-del-repo>/.rig-worktrees/<repo>/<id> (override: RIG_WORKTREE_DIR).
 EOF
@@ -2015,6 +2036,14 @@ work_new() {
   repo=$(git_root "$cwd")
   [ -n "$repo" ] || die "no es repo git: $cwd"
   git -C "$repo" rev-parse --verify -q HEAD >/dev/null 2>&1 || die "repo sin commits (HEAD inexistente): $repo"
+  if [ "$base" = "HEAD" ]; then
+    local cfg_base
+    cfg_base=$(repo_base_config "$repo")
+    if [ -n "$cfg_base" ] && git -C "$repo" rev-parse --verify -q "refs/heads/$cfg_base" >/dev/null 2>&1; then
+      base="$cfg_base"
+      info "base: $base (worktrees.json)"
+    fi
+  fi
 
   store_lock
   store_ensure
