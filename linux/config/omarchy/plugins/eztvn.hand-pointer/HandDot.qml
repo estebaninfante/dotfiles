@@ -13,7 +13,7 @@ Rectangle {
   property real screenH: 0
   property real dotSize: 30
 
-  readonly property bool right: side === "Right"
+  readonly property bool isRight: side === "Right"
 
   visible: tip !== null && tip !== undefined
   width: dotSize
@@ -21,11 +21,11 @@ Rectangle {
   radius: width / 2
   antialiasing: true
 
-  color: right
+  color: isRight
     ? Qt.rgba(0.95, 0.30, 0.30, dim ? 0.20 : 0.45)
     : Qt.rgba(0.29, 0.56, 0.95, dim ? 0.20 : 0.45)
   border.width: 1
-  border.color: right
+  border.color: isRight
     ? Qt.rgba(1.0, 0.62, 0.62, dim ? 0.25 : 0.55)
     : Qt.rgba(0.60, 0.78, 1.0, dim ? 0.25 : 0.55)
 

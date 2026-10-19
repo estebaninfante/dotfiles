@@ -39,7 +39,6 @@ Item {
   readonly property real dotSize: 30
 
   function handleLine(line) {
-    console.log("hand-pointer recv:", line)
     var msg
     try {
       msg = JSON.parse(line)
@@ -80,6 +79,7 @@ Item {
     root.okL = !blockedLeft
     root.okR = !blockedRight
     root.present = left.length > 0 || right.length > 0
+    if (root.present) console.log("hp-present", msg.n, left.length, right.length)
   }
 
   // Limpia el socket de una corrida anterior y recién ahí escucha: un
@@ -96,7 +96,6 @@ Item {
     active: false
     path: root.socketPath
     handler: Socket {
-      onConnectedChanged: console.log("hand-pointer socket connected:", connected)
       parser: SplitParser {
         onRead: line => root.handleLine(line)
       }
