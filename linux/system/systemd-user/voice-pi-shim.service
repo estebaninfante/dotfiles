@@ -1,6 +1,14 @@
 [Unit]
 Description=Puente Ollama->Hermes (cerebro de voz headless)
-After=network-online.target voice-daemon.service
+After=graphical-session.target voice-daemon.service
+# Vive con la sesión gráfica, igual que voice-daemon: si Hyprland se reinicia
+# (logout/login, crash del compositor), el cerebro vuelve solo. Con
+# WantedBy=default.target quedaba muerto hasta el próximo arranque y Omar
+# contestaba "no pude resolver eso" (fetch failed al :11435).
+PartOf=graphical-session.target
+# Siempre vivo: sin límite de reintentos. Si el proceso muere (crash, OOM,
+# señal externa) systemd lo vuelve a levantar.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -8,8 +16,10 @@ ExecStart=/usr/bin/python3 /home/eztvn/dotfiles/linux/voice/pi_shim.py
 # PATH explícito: si el servicio arranca antes de que el entorno del usuario
 # tenga mise/~/.local/bin, `hermes` no se encuentra y el cerebro queda mudo.
 Environment=PATH=/home/eztvn/.local/bin:/home/eztvn/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin
-Restart=on-failure
+# on-failure dejaba el cerebro apagado tras un TERM externo en el teardown de
+# la sesión (pasó el 2026-10-19); always lo revive en ese caso también.
+Restart=always
 RestartSec=3
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

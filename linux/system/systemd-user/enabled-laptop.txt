@@ -4,5 +4,9 @@
 
 dsh-web.service
 
+# Cerebro de Omar (puente Ollama -> Hermes). Vive con la sesión gráfica:
+# si queda fuera del repo, la copia viva drifta y el cerebro muere en silencio.
+voice-pi-shim.service
+
 # Ejemplos de lo que podría ir acá (hoy se manejan aparte):
 #   rig-main-seat.service

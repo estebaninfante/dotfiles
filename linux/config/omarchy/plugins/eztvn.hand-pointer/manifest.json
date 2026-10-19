@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.hand-pointer",
+  "name": "Hand Pointer",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Dibuja en tiempo real las yemas de los 5 dedos que ve vision-hub, como círculos azules translúcidos sobre la pantalla.",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "HandPointer.qml"
+  }
+}
