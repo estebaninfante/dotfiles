@@ -5,10 +5,15 @@
  * las dos piezas que faltan:
  *
  *  1. Tool `hablar`: el agente LE HABLA al usuario (un avance, contexto o una
- *     explicación) y, si hace falta, ESPERA su respuesta hablada. Primero dice
- *     el contexto y después la pregunta: no se limita a preguntar. Usa el bus
- *     `agente` (hablar / preguntar → esperar), que reutiliza el daemon de voz
+ *     explicación). NUNCA bloquea el turno: si pregunta, deja un escucha en
+ *     segundo plano y la respuesta hablada entra después como mensaje del
+ *     usuario, así el turno termina igual. Usa el bus `agente` (hablar /
+ *     preguntar + esperar en segundo plano), que reutiliza el daemon de voz
  *     (`voice send --agent <nombre>`) y serializa varios agentes.
+ *
+ *     Si el interruptor maestro de voz (`tts.enabled` en el state.json del
+ *     sistema de voz, el mismo que togglea el widget de la barra) está
+ *     apagado, `hablar` no se le declara al modelo y no se llama a la voz.
  *
  *  2. Subtítulos de trabajo: mientras el modelo piensa, un widget de la UI
  *     muestra, en una sola fila, el agente y la tarea que está haciendo (con
@@ -81,6 +86,23 @@ import {
 
 const HOME = process.env.HOME ?? "";
 const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/agente`;
+const VOICE_STATE = `${HOME}/.local/state/voice/state.json`;
+
+/** Interruptor maestro de voz: `tts.enabled` del sistema de voz (state.json
+ *  pisa a config.toml). Si está apagado no se habla, no se espera respuesta y
+ *  la tool no se le ofrece al modelo. Sin archivo de estado se asume encendido
+ *  (el default de config.toml). */
+function ttsEnabled(): boolean {
+  try {
+    const j = JSON.parse(readFileSync(VOICE_STATE, "utf8")) as {
+      tts?: { enabled?: unknown };
+    };
+    if (typeof j?.tts?.enabled === "boolean") return j.tts.enabled;
+  } catch {
+    /* sin estado legible: vale el default del sistema de voz */
+  }
+  return true;
+}
 
 /** Los subagentes (y cualquier corrida `-p`/`--no-session`) comparten el panel
  *  de tmux con el agente que los lanzó. Si tocaran el panel, le robarían el
@@ -497,15 +519,16 @@ const HABLAR_PARAMS = Type.Object({
   esperar: Type.Optional(
     Type.Boolean({
       description:
-        "true si necesitás que el usuario te responda por voz y querés " +
-        "esperar. false o ausente para solo decir algo y seguir.",
+        "true si además querés escuchar la respuesta hablada. NO bloquea el " +
+        "turno: la respuesta llega después como mensaje del usuario. false o " +
+        "ausente para solo decir algo y seguir.",
     }),
   ),
   segundos: Type.Optional(
     Type.Number({
       description:
-        "Cuánto esperar la respuesta hablada (solo si esperar=true). " +
-        "Default 300.",
+        "Cuánto tiempo queda escuchando una respuesta por voz (solo si " +
+        "esperar=true). Default 300.",
     }),
   ),
 });
@@ -935,6 +958,68 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  /* Escucha la respuesta hablada en SEGUNDO PLANO. El turno no se queda
+     colgado: si el usuario contesta, entra como mensaje suyo y arranca un
+     turno nuevo; si no contesta, no pasa nada. Un solo escucha a la vez. */
+  let cancelAnswer: (() => void) | undefined;
+
+  function watchVoiceAnswer(segundos: number): void {
+    cancelAnswer?.();
+    let child;
+    try {
+      child = spawn(AGENTE_BIN, ["esperar", agentName(), "--timeout", String(segundos)], {
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch {
+      return;
+    }
+    let out = "";
+    let closed = false;
+    const cancel = () => {
+      if (closed) return;
+      closed = true;
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        /* ya terminó */
+      }
+      if (cancelAnswer === cancel) cancelAnswer = undefined;
+    };
+    cancelAnswer = cancel;
+    child.stdout?.on("data", (d) => (out += String(d)));
+    child.on("error", cancel);
+    child.on("close", (code) => {
+      if (closed) return;
+      closed = true;
+      if (cancelAnswer === cancel) cancelAnswer = undefined;
+      const text = out.trim();
+      if (code !== 0 || !text) return;
+      try {
+        // Si el turno sigue, se encola; si ya terminó, arranca uno nuevo.
+        pi.sendUserMessage(text, { deliverAs: "followUp" });
+      } catch {
+        /* sesión cerrada o en transición: no rompe nada */
+      }
+    });
+  }
+
+  /* El interruptor de la barra (`tts.enabled`) manda: con la voz apagada, la
+     tool ni se le declara al modelo. Se revisa al arrancar y en cada turno,
+     así togglear el widget aplica sin reiniciar Pi. */
+  function syncVoiceTool(): void {
+    try {
+      const activas = pi.getActiveTools();
+      const tiene = activas.includes("hablar");
+      if (ttsEnabled()) {
+        if (!tiene) pi.setActiveTools([...activas, "hablar"]);
+      } else if (tiene) {
+        pi.setActiveTools(activas.filter((n) => n !== "hablar"));
+      }
+    } catch {
+      /* API no disponible: queda como está */
+    }
+  }
+
   pi.registerTool({
     name: "hablar",
     label: "Hablar al usuario (voz; con esperar, espera respuesta)",
@@ -949,8 +1034,12 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Para hablarle al usuario por voz usá `hablar`. Sirve para contar un " +
         "avance, dar contexto o preguntar; es la vía general.",
-      "Si necesitás una respuesta del usuario, llamá `hablar` con `esperar: true` " +
-        "y una pregunta concreta. Si no, dejala sin `esperar`.",
+      "Nunca te quedes esperando una respuesta: `hablar` no bloquea el turno. " +
+        "Si preguntás, hacelo con `esperar: true` y TERMINÁ el turno en el acto " +
+        "(con `avisar` si corresponde); la respuesta hablada llega sola como " +
+        "mensaje nuevo.",
+      "No cierres pidiendo confirmación y quedándote a esperar: preguntá y " +
+        "terminá. Si no necesitás respuesta, llamá `hablar` sin `esperar`.",
       "Nunca mandes solo una pregunta si tenés contexto para dar: primero el " +
         "contexto en `mensaje`, después la pregunta. Así el usuario no se pierde.",
       "No uses `hablar` para cosas que ya podés resolver leyendo el repositorio " +
@@ -964,6 +1053,21 @@ export default function (pi: ExtensionAPI) {
       if (!mensaje) {
         return { content: [{ type: "text", text: "Falta el mensaje." }], details: undefined };
       }
+      // Doble seguro: aunque la tool siguiera activa, con la voz apagada no se
+      // llama al bus ni se deja un escucha dando vueltas.
+      if (!ttsEnabled()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "La voz está desactivada. No se dijo nada: seguí por texto y " +
+                "terminá el turno normalmente.",
+            },
+          ],
+          details: undefined,
+        };
+      }
       if (params.esperar !== true) {
         const dicho = await execCapture(["hablar", agentName(), mensaje], 15000, signal);
         if (dicho.code === 0) announceSpoken(mensaje);
@@ -972,35 +1076,19 @@ export default function (pi: ExtensionAPI) {
           details: undefined,
         };
       }
+      // Pregunta SIN bloquear: se dice ahora y el turno sigue. La respuesta,
+      // si llega por voz, entra después como mensaje del usuario.
       const segundos = Math.max(10, Number(params.segundos ?? 300) || 300);
       await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
-      const answer = await execCapture(
-        ["esperar", agentName(), "--timeout", String(segundos)],
-        segundos * 1000 + 5000,
-        signal,
-      );
-      const text = answer.stdout.trim();
-      if (answer.code === 0 && text) {
-        return {
-          content: [
-            { type: "text", text: `El usuario respondió por voz: "${text}". Continuá con eso.` },
-          ],
-          details: undefined,
-        };
-      }
-      if (signal?.aborted) {
-        return {
-          content: [{ type: "text", text: "El usuario interrumpió antes de responder." }],
-          details: undefined,
-        };
-      }
+      watchVoiceAnswer(segundos);
       return {
         content: [
           {
             type: "text",
             text:
-              `El usuario no respondió en ${segundos}s. Seguí con tu mejor criterio ` +
-              "y, cuando puedas, contale con `hablar` qué asumiste.",
+              "Preguntaste por voz. No te quedes esperando: terminá el turno ya " +
+              "(con `avisar` si corresponde). Si el usuario responde por voz, su " +
+              "respuesta llega sola como mensaje nuevo.",
           },
         ],
         details: undefined,
@@ -1065,6 +1153,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     uiCtx = ctx;
+    syncVoiceTool();
     // Si la tarea que quedó en memoria es de otra conversación, se descarta.
     // (La de esta sesión la vuelve a anunciar `rig.ts` al arrancar.)
     const sesion = sessionPathOf(ctx);
@@ -1121,6 +1210,8 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", (_event, ctx) => {
+    // El interruptor de voz pudo cambiar desde la barra: se aplica acá.
+    syncVoiceTool();
     // Si otro agente vivo tiene el mismo color, este turno arranca con uno
     // libre (y queda guardado en la identidad de la conversación).
     const reclamada = reclamarColorSiRepetido();
