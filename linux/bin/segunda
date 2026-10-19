@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""segunda — segunda opinión de otro modelo, barata y determinista.
+
+Uso:
+  segunda brief.md              consulta el modelo por defecto (kimi-k3)
+  segunda -                     lee el brief de stdin
+  segunda "texto breve"         brief inline
+  segunda -m opus brief.md      cambia de modelo
+
+Contrato de salida (stdout): solo el texto del veredicto. El resto va a stderr.
+Formato fijo: VEREDICTO / RIESGOS / SIMPLIFICAR / ALTERNATIVA / SUPUESTOS.
+
+Determinismo: mismo brief + mismo modelo = mismo resultado (cache por hash).
+Traza: cada consulta queda en ~/.local/share/segunda-opinion/<fecha>-<hash>.md
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+CACHE = Path(os.environ.get("SEGUNDA_CACHE", Path.home() / ".local/share/segunda-opinion"))
+CACHE_DIR = CACHE / "cache"
+LOG_DIR = CACHE / "log"
+MAX_CHARS = 9000
+
+ALIASES = {
+    "k3": "opencode-go/kimi-k3",
+    "opus": "opencode/claude-opus-5-5",
+    "sonnet": "opencode/claude-sonnet-5-5",
+    "gpt": "opencode/gpt-6-sol",
+    "glm": "opencode-go/glm-5.3",
+}
+
+TEMPLATE = """Sos revisor crítico de ingeniería. NO ejecutes nada, no pidas más contexto ni archivos.
+Evaluá el brief de abajo. Respondé en español, sin preámbulo, con EXACTAMENTE este formato:
+
+VEREDICTO: SEGUIR | AJUSTAR | DESCARTAR
+RIESGOS:
+- (máx 3, concretos y verificables)
+SIMPLIFICAR:
+- (máx 2, qué sacar del alcance)
+ALTERNATIVA:
+- (1, la más simple que logre el 80% del objetivo)
+SUPUESTOS:
+- (máx 2, qué asumís que podría invalidar la propuesta)
+
+Límite: 400 palabras. Priorizá lo que puede romper o encarecer el plan.
+
+BRIEF:
+"""
+
+
+def die(msg: str, code: int = 2) -> "NoReturn":
+    print(f"segunda: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def resolve(model: str) -> str:
+    return ALIASES.get(model, model)
+
+
+def read_source(arg: str) -> str:
+    if arg == "-":
+        return sys.stdin.read()
+    p = Path(arg).expanduser()
+    if p.is_file():
+        return p.read_text(encoding="utf-8", errors="replace")
+    return arg
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+
+    model = os.environ.get("SEGUNDA_MODELO", "k3")
+    timeout = int(os.environ.get("SEGUNDA_TIMEOUT", "240"))
+    as_json = False
+    no_cache = False
+    thinking = "off"
+    source: list[str] = []
+
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-m", "--modelo") and i + 1 < len(args):
+            model = args[i + 1]; i += 2
+        elif a in ("--json",):
+            as_json = True; i += 1
+        elif a in ("--crudo", "--no-cache"):
+            no_cache = True; i += 1
+        elif a in ("--pensar",) and i + 1 < len(args):
+            thinking = args[i + 1]; i += 2
+        elif a in ("--timeout",) and i + 1 < len(args):
+            timeout = int(args[i + 1]); i += 2
+        elif a == "--modelos":
+            for k, v in ALIASES.items():
+                print(f"{k:8} {v}")
+            return 0
+        elif a.startswith("-") and a != "-":
+            die(f"opción desconocida: {a}")
+        else:
+            source.append(a); i += 1
+
+    if not source:
+        die("falta el brief (archivo, '-' o texto)")
+
+    brief = read_source(" ".join(source)).strip()
+    if not brief:
+        die("el brief está vacío")
+    if len(brief) > MAX_CHARS:
+        print(f"segunda: brief recortado a {MAX_CHARS} de {len(brief)} chars", file=sys.stderr)
+        brief = brief[:MAX_CHARS]
+    elif len(brief.split()) > 300:
+        print("segunda: el brief pasa de 300 palabras; recortá para gastar menos", file=sys.stderr)
+
+    model_id = resolve(model)
+    prompt = TEMPLATE + brief + "\n"
+    key = hashlib.sha256(f"{model_id}\n{thinking}\n{prompt}".encode()).hexdigest()[:16]
+    cache_file = CACHE_DIR / f"{key}.md"
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    cached = False
+    if cache_file.exists() and not no_cache:
+        out = cache_file.read_text(encoding="utf-8")
+        cached = True
+        elapsed = 0.0
+    else:
+        if not shutil_which("pi"):
+            die("no encuentro el comando pi", 2)
+        t0 = time.time()
+        cmd = [
+            "pi", "--print", "--no-session", "--offline",
+            "--no-tools", "--no-extensions", "--no-skills",
+            "--no-prompt-templates", "--no-context-files",
+            "--thinking", thinking, "--model", model_id, prompt,
+        ]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            die(f"timeout de {timeout}s con {model_id}", 4)
+        elapsed = time.time() - t0
+        out = (r.stdout or "").strip()
+        if r.returncode != 0 or not out:
+            err = (r.stderr or "").strip().splitlines()
+            die(f"{model_id} falló (exit {r.returncode}): " + (err[-1] if err else "sin salida"), 3)
+        cache_file.write_text(out + "\n", encoding="utf-8")
+
+    verdict = "?"
+    m = re.search(r"VEREDICTO:\s*(SEGUIR|AJUSTAR|DESCARTAR)", out)
+    if m:
+        verdict = m.group(1)
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_file = LOG_DIR / f"{stamp}-{key}.md"
+    log_file.write_text(
+        f"# segunda {stamp}\n\nmodelo: {model_id}\nthinking: {thinking}\ncache: {key}\n"
+        f"veredicto: {verdict}\nsegundos: {elapsed:.1f}\n\n## brief\n\n{brief}\n\n## opinión\n\n{out}\n",
+        encoding="utf-8",
+    )
+
+    print(
+        f"[segunda] {model_id} · ~{len(prompt)//4} tok in · {elapsed:.0f}s · "
+        f"{'cache' if cached else 'nuevo'} · {verdict} · {log_file.name}",
+        file=sys.stderr,
+    )
+
+    if as_json:
+        print(json.dumps({
+            "modelo": model_id, "veredicto": verdict, "cache": cached,
+            "segundos": round(elapsed, 1), "transcripcion": str(log_file), "texto": out,
+        }, ensure_ascii=False, indent=1))
+    else:
+        print(out)
+    return 0
+
+
+def shutil_which(name: str) -> str | None:
+    from shutil import which
+    return which(name)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
