@@ -53,9 +53,10 @@ Item {
     }
     if (!msg || msg.v !== 1) return
     if (msg.p !== 1) {
+      // No se borran las puntas: al volver la mano, los círculos salen desde
+      // donde estaban en vez de saltar desde la esquina.
       if (root.present) {
         root.present = false
-        root.tips = []
         root.hand = ""
       }
       return
@@ -99,7 +100,6 @@ Item {
     onTriggered: {
       if (Date.now() - root.lastFresh > 1200) {
         root.present = false
-        root.tips = []
       }
     }
   }
