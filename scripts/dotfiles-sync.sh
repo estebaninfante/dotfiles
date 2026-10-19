@@ -36,6 +36,15 @@ RESOLVER_MODEL="${DOTFILES_SYNC_AGENT_MODEL:-}"               # vacío = modelo 
 
 log() { echo "$(date '+%F %T') $*" >>"$LOG"; }
 
+# git_net <args...>: git contra el remoto con reintento. En esta red el HTTP/2
+# se cae solo ("Error in the HTTP2 framing layer") y tumbaba fetch/push, que
+# escalaban a un agente sin necesidad. Un reintento por HTTP/1.1 lo resuelve.
+git_net() {
+    git "$@" 2>>"$LOG" && return 0
+    log "net: fallo de red, reintento con HTTP/1.1 ($*)"
+    git -c http.version=HTTP/1.1 "$@" 2>>"$LOG"
+}
+
 # spawn_resolver <motivo>: deja el repo en manos de un agente Pi headless que
 # resuelve el conflicto y vuelve a commitear/pushear. Cooldown para que, si el
 # agente no puede, no se relance en bucle cada 5 minutos.
@@ -69,7 +78,10 @@ Al final, resume en una linea que hiciste."
     [[ -n "$RESOLVER_MODEL" ]] && args+=(--model "$RESOLVER_MODEL")
 
     log "resolver: lanzando agente headless ($reason)"
-    ( cd "$REPO" && timeout "$RESOLVER_TIMEOUT" pi "${args[@]}" "$prompt" ) >>"$RESOLVER_LOG" 2>&1
+    # 9>&- : el agente NO hereda el lock del sync (fd 9). Si lo heredara, viviria
+    # hasta $RESOLVER_TIMEOUT s bloqueando toda corrida del timer ("otro sync en
+    # curso") justo mientras el mismo intenta arreglar el repo.
+    ( cd "$REPO" && exec 9>&- && timeout "$RESOLVER_TIMEOUT" pi "${args[@]}" "$prompt" ) >>"$RESOLVER_LOG" 2>&1
     local rc=$?
     log "resolver: termino rc=$rc"
     if (( rc == 0 )); then
@@ -147,7 +159,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 # 3) Integrar lo remoto.
-if ! git fetch origin --quiet 2>>"$LOG"; then
+if ! git_net fetch origin --quiet; then
     log "WARN fetch fallo (sin red?)"
     exit 0
 fi
@@ -236,7 +248,7 @@ fi
 
 # 5) Subir.
 if [[ "$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo 0)" -gt 0 ]]; then
-    if git push --quiet origin "$BRANCH" >>"$LOG" 2>&1; then
+    if git_net push --quiet origin "$BRANCH" >>"$LOG"; then
         log "OK push"
     else
         log "WARN push fallido — llamado al resolutor"
