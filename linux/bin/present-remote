@@ -285,6 +285,52 @@ def omar_active():
     return pill_is_open() or service_awake() or ptt_active()
 
 
+# Clientes que capturan el micrófono sin ser una conversación de voz con el
+# usuario: cava (visualizador), los `parec` del propio OmniVoz y los nodos del
+# grafo de PipeWire. Cualquier OTRA captura es alguien hablando por su cuenta.
+MIC_BENIGN = {"parec", "pacat", "cava", "node", "ee_soe_plugins", "easyeffects"}
+
+
+def external_mic_owner():
+    """Qué app está capturando el micrófono, si no es de Omar (o None).
+
+    Sirve para no pisar una conversación speech-to-speech (STS) abierta en otra
+    app —el navegador, la plataforma de agentes—: al prender Omar, OmniVoz abre
+    su propio `parec` y habla, y la sesión ajena se corta o se queda muda.
+    """
+    if os.environ.get("PRESENT_MIC_GUARD", "1") == "0":
+        return None
+    try:
+        out = subprocess.check_output(
+            ["pw-dump"], text=True, stderr=subprocess.DEVNULL, timeout=3,
+        )
+        nodes = json.loads(out)
+    except Exception:  # noqa: BLE001
+        return None
+    for node in nodes:
+        info = node.get("info") or {}
+        props = info.get("props") or {}
+        if props.get("media.class") != "Stream/Input/Audio":
+            continue
+        if (props.get("node.state") or info.get("state")) == "suspended":
+            continue
+        names = {
+            str(props.get(key) or "").lower()
+            for key in (
+                "application.name", "application.process.binary", "node.name",
+            )
+        }
+        if names & MIC_BENIGN:
+            continue
+        return (
+            props.get("application.name")
+            or props.get("application.process.binary")
+            or props.get("node.name")
+            or "otra app"
+        )
+    return None
+
+
 def _systemctl(*args, timeout=6):
     """systemctl --user best-effort: si no está, no rompe el gesto."""
     try:
@@ -383,8 +429,13 @@ def toggle_voice():
     """
     if omar_active():
         cancel_voice()
-    else:
-        start_voice()
+        return
+    owner = external_mic_owner()
+    if owner:
+        # Alguien ya está hablando (STS): prender Omar le cortaría el micrófono.
+        log(f"voice: no prendo Omar — el micrófono lo usa {owner}")
+        return
+    start_voice()
 
 
 def builtin(cmd):
