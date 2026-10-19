@@ -260,3 +260,32 @@ alguna vez a la nube y leerlo desde varias aplicaciones.
   fuente de menor valor para este objetivo.
 - Postgres/Supabase ya: SQLite no sirve multi-escritor en la nube, pero el NDJSON
   es el formato de importación cuando haga falta. Ver `docs/bodega-agentica.md`.
+
+## 2026-10-19 — El cerebro de voz vive con la sesión gráfica
+
+**Contexto.** El 2026-10-19 a las 04:25 la sesión gráfica se reinició (logout/
+login) y `voice-pi-shim.service` no volvió: quedó `inactive (dead)` con el
+proceso terminado por SIGTERM en el teardown. Estuvo 9 horas caído y Omar
+contestaba "no pude resolver eso" — el `fetch` al `127.0.0.1:11435` fallaba y el
+error solo se logueaba. Dos causas juntas: la unidad era `WantedBy=
+default.target` (sin `PartOf=graphical-session.target`, así que el reinicio de la
+sesión no la levantaba) y `Restart=on-failure` no revive un TERM externo.
+
+**Elegido.**
+
+- `After=`/`PartOf=`/`WantedBy=graphical-session.target`, igual que
+  `voice-daemon`: el cerebro vuelve solo cuando vuelve la sesión.
+- `Restart=always` + `StartLimitIntervalSec=0`: si el proceso muere por una
+  señal externa, systemd lo levanta; sin tope de reintentos.
+- La unidad entra en `enabled-laptop.txt` para que `install-user-units.sh` la
+  enlace al repo (symlink). Antes era una copia suelta y driftaba en silencio.
+- `scripts/verify/cerebro.sh` ya avisaba del drift del `AGENTS.md` del cerebro;
+  se copió el del repo. La copia viva decía `omar ticket …`, que no existe:
+  el CLI de tickets es `omar-hub`.
+
+**Descartado.**
+
+- Un healthcheck externo con timer que reinicie el puente: systemd ya puede
+  hacerlo desde la unidad, sin proceso extra ni latencia.
+- Dejar el puente en `default.target` y atarlo por `Wants=` desde `omar-listen`:
+  mezcla ciclo de vida de sesión con ciclo de vida de usuario.
