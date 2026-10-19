@@ -19,9 +19,10 @@ readonly COREDUMP_MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1
 # nf-md-robot_dead, escapado para leerse sin Nerd Font.
 readonly CRASH_GLYPH=$'\U000f16a1'
 
-# Un loop de crashes dumpea core una y otra vez: se anuncia cada programa como
-# mucho una vez por ventana.
-readonly dedupe_seconds=${OMARCHY_CRASH_DEDUPE_SECONDS:-60}
+# Un loop de crashes dumpea core una y otra vez, y ahora cada diagnóstico gasta
+# cuota de modelos free: se anuncia/diagnostica cada programa como mucho una vez
+# por ventana (más conservador que el watcher original, por el costo del agente).
+readonly dedupe_seconds=${OMARCHY_CRASH_DEDUPE_SECONDS:-300}
 
 # Regex extendida de nombres de proceso que nunca vale la pena anunciar.
 readonly ignore_pattern=${OMARCHY_CRASH_IGNORE:-}
