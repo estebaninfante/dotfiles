@@ -27,12 +27,22 @@ Item {
 
   property bool present: false
   property bool blocked: false       // mano sobre la cara u otra compuerta
+  property string hand: ""           // "L" izquierda | "R" derecha | "" sin dato
   property var tips: []
   property int lastSeq: -1
   property real lastFresh: 0         // Date.now() del último `n` nuevo
 
   // Diámetro de la yema, un poco más grande en pantallas con escala alta.
   readonly property real dotSize: 30
+
+  // Cámara frontal: mano IZQUIERDA en azul, DERECHA en rojo. Sin dato de lado,
+  // se mantiene el azul (el pedido original).
+  readonly property color dotColor: root.hand === "R"
+    ? Qt.rgba(0.95, 0.30, 0.30, 0.45)
+    : Qt.rgba(0.29, 0.56, 0.95, 0.45)
+  readonly property color dotBorder: root.hand === "R"
+    ? Qt.rgba(1.0, 0.62, 0.62, 0.55)
+    : Qt.rgba(0.60, 0.78, 1.0, 0.55)
 
   function handleLine(line) {
     var msg
@@ -46,6 +56,7 @@ Item {
       if (root.present) {
         root.present = false
         root.tips = []
+        root.hand = ""
       }
       return
     }
@@ -55,6 +66,7 @@ Item {
     root.lastSeq = msg.n
     root.lastFresh = Date.now()
     root.blocked = msg.ok === 0
+    root.hand = msg.h === "L" || msg.h === "R" ? msg.h : ""
     root.tips = msg.t || []
     root.present = root.tips.length > 0
   }
@@ -123,12 +135,14 @@ Item {
         radius: width / 2
         antialiasing: true
         color: root.blocked
-          ? Qt.rgba(0.29, 0.56, 0.95, 0.20)
-          : Qt.rgba(0.29, 0.56, 0.95, 0.45)
+          ? Qt.rgba(root.hand === "R" ? 0.95 : 0.29,
+                    root.hand === "R" ? 0.30 : 0.56,
+                    root.hand === "R" ? 0.30 : 0.95, 0.20)
+          : root.dotColor
         border.width: 1
         border.color: root.blocked
-          ? Qt.rgba(0.60, 0.78, 1.0, 0.25)
-          : Qt.rgba(0.60, 0.78, 1.0, 0.55)
+          ? Qt.rgba(root.dotBorder.r, root.dotBorder.g, root.dotBorder.b, 0.25)
+          : root.dotBorder
 
         x: (tip ? tip[0] : 0) * panel.width - width / 2
         y: (tip ? tip[1] : 0) * panel.height - height / 2
