@@ -11,6 +11,7 @@ import {
   politicaDe,
   ramaDe,
   rutaWorktree,
+  rutasEscritas,
   slug,
 } from "./ramas.ts";
 
@@ -137,4 +138,14 @@ test("un comando que trabaja en la copia principal se bloquea", () => {
     String(comandoMutaRepo("python3 -c 'print(1)' > static/index.html", { repo, cwd: repo })),
     /redirección/,
   );
+});
+
+test("las rutas que escribe un comando salen a la vista", () => {
+  assert.deepEqual(rutasEscritas("echo hola > /tmp/wt2/afuera.txt"), ["/tmp/wt2/afuera.txt"]);
+  assert.deepEqual(rutasEscritas("ls -la 2>&1"), []);
+  assert.deepEqual(rutasEscritas("git commit -am wip"), []);
+  assert.deepEqual(rutasEscritas("sed -i s/a/b/ ft/server.py"), ["ft/server.py"]);
+  assert.deepEqual(rutasEscritas("cp a.txt b.txt"), ["b.txt"]);
+  assert.deepEqual(rutasEscritas("rm -rf build tmp"), ["build", "tmp"]);
+  assert.deepEqual(rutasEscritas("cat x | tee /tmp/registro.log"), ["/tmp/registro.log"]);
 });

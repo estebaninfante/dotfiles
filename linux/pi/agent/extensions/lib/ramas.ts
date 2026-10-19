@@ -145,6 +145,49 @@ export function mutacionDetectada(comando: string): string | null {
   return null;
 }
 
+function limpiarToken(token: string): string {
+  const limpio = token.trim().replace(/^["']|["']$/g, "");
+  return limpio.replace(/[;|&]+$/, "");
+}
+
+function tokens(texto: string): string[] {
+  return (texto.match(/"[^"]+"|'[^']+'|[^\s]+/g) ?? [])
+    .map(limpiarToken)
+    .filter((t) => t && !t.startsWith("-"));
+}
+
+/**
+ * Las rutas que un comando de bash escribe, tal como vienen escritas (relativas
+ * al `cwd` o al último `cd` del comando). No incluye lecturas.
+ */
+export function rutasEscritas(comando: string): string[] {
+  const cmd = String(comando ?? "");
+  const rutas: string[] = [];
+  const push = (ruta: string) => {
+    const limpia = limpiarToken(ruta);
+    if (!limpia || limpia === "/dev/null" || limpia.startsWith("-")) return;
+    rutas.push(limpia);
+  };
+
+  for (const m of cmd.matchAll(/(?<![\d&])>>?\s*("[^"]+"|'[^']+'|[^\s&|;)]+)/g)) push(m[1]);
+
+  for (const m of cmd.matchAll(/\b(?:sed|perl|ruby)\s+(?:-\S+\s+)*-i\S*\s+(.+)$/gm)) {
+    const partes = tokens(m[1]);
+    push(partes[partes.length - 1] ?? "");
+  }
+
+  for (const m of cmd.matchAll(/\b(rm|rmdir|mkdir|touch|chmod|chown|truncate)\b([^&|;]*)/g)) {
+    for (const token of tokens(m[2])) push(token);
+  }
+
+  for (const m of cmd.matchAll(/\b(cp|mv|ln|tee|dd)\b([^&|;]*)/g)) {
+    const destino = m[1] === "dd" ? (m[2].match(/of=(\S+)/)?.[1] ?? "") : (tokens(m[2]).pop() ?? "");
+    push(destino);
+  }
+
+  return [...new Set(rutas)];
+}
+
 /**
  * true si el comando escribe en la copia principal del repo (`repo`), mirando
  * dónde corre (`cwd`) y a qué rutas apunta. Los comandos que se van a otro

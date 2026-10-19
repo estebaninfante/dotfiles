@@ -39,14 +39,15 @@ import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import {
-  comandoMutaRepo,
   configNormalizada,
   dentroDe,
   idCorto,
+  mutacionDetectada,
   normalizar,
   politicaDe,
   ramaDe,
   rutaWorktree,
+  rutasEscritas,
   type Config,
   type Politica,
 } from "./lib/ramas.ts";
@@ -60,6 +61,8 @@ interface Datos {
   principal: string;
   esWorktree: boolean;
   rama: string | null;
+  /** Repo recién creado, sin commits: no hay historia que aislar. */
+  vacio: boolean;
 }
 
 interface Worktree {
@@ -108,6 +111,7 @@ function datosRepo(dir: string): Datos | null {
     principal: esWorktree ? dirname(comun) : normalizar(raiz),
     esWorktree,
     rama: tal(raiz, ["symbolic-ref", "--short", "HEAD"]),
+    vacio: !tal(raiz, ["rev-parse", "--verify", "--quiet", "HEAD"]),
   };
 }
 
@@ -144,6 +148,11 @@ function leerConfig(): Config {
   } catch {
     return configNormalizada({});
   }
+}
+
+/** Un repo pide worktree si su flujo lo exige y hay algo que aislar. */
+function pideWorktree(actual: { datos: Datos; politica: Politica } | null): boolean {
+  return Boolean(actual && actual.politica.exigeWorktree && !actual.datos.esWorktree && !actual.datos.vacio);
 }
 
 function situacion(dir: string): { datos: Datos; politica: Politica } | null {
@@ -286,6 +295,9 @@ function textoPolitica(datos: Datos | null, politica: Politica): string {
   if (politica.flujo === "directo") {
     return `## Worktrees\n\nRepo **${nombre}**: flujo directo, se edita acá en el lugar (\`${datos.principal}\`). No hace falta worktree.`;
   }
+  if (datos.vacio) {
+    return `## Worktrees\n\nRepo **${nombre}**: todavía no tiene commits, así que no hay nada que aislar. Se edita en el lugar hasta el primer commit; después, worktree por agente.`;
+  }
   const base = politica.base ?? "la rama principal";
   if (datos.esWorktree) {
     return [
@@ -324,6 +336,41 @@ function motivoBloqueo(datos: Datos, politica: Politica, que: string): string {
   );
 }
 
+/**
+ * Candado de bash. No alcanza con mirar el cwd: un comando puede apuntar a otro
+ * repo con rutas absolutas o con `git -C`. Se fija en qué escribe de verdad
+ * (redirecciones, `sed -i`, `rm`, `cp`...) y frena si cae en la copia principal
+ * de un repo con worktree obligatorio.
+ */
+function candadoBash(comando: string, cwd: string): { block: true; reason: string } | undefined {
+  const motivo = mutacionDetectada(comando);
+  if (!motivo) return undefined;
+  const home = homedir();
+
+  const cds = [...comando.matchAll(/\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s&;|)]+))/g)]
+    .map((m) => m[1] ?? m[2] ?? m[3])
+    .filter(Boolean);
+  const base = cds.length ? normalizar(cds[cds.length - 1], cwd, home) : normalizar(cwd, "/", home);
+
+  const rutas = rutasEscritas(comando).map((ruta) => normalizar(ruta, base, home));
+  const objetivos = new Set(rutas.length ? rutas : [base]);
+  if (/\bgit\b/.test(comando)) {
+    const conC = comando.match(/-C\s+("[^"]+"|'[^']+'|[^\s&|;]+)/);
+    objetivos.add(normalizar(conC ? conC[1] : base, base, home));
+  }
+
+  for (const objetivo of objetivos) {
+    const actual = repoDeRuta(objetivo);
+    if (!pideWorktree(actual)) continue;
+    if (!dentroDe(actual.datos.principal, objetivo)) continue;
+    return {
+      block: true,
+      reason: motivoBloqueo(actual.datos, actual.politica, `Comando que escribe (${motivo})`),
+    };
+  }
+  return undefined;
+}
+
 // ------------------------------------------------------------ subagentes
 
 function anotar(tarea: string, wt: Worktree): string {
@@ -339,7 +386,7 @@ function prepararSubagentes(entrada: Record<string, unknown>, ctx: ExtensionCont
   const preparar = (item: Record<string, unknown>, idBase: string): void => {
     const cwd = typeof item.cwd === "string" ? item.cwd : ctx.cwd;
     const actual = situacion(cwd);
-    if (!actual || !actual.politica.exigeWorktree || actual.datos.esWorktree) return;
+    if (!pideWorktree(actual)) return;
     const agente = typeof item.agent === "string" ? item.agent : "agente";
     try {
       const wt = abrirWorktree(cwd, `${idBase}-${agente}`, actual.datos.raiz);
@@ -374,12 +421,10 @@ function prepararSubagentes(entrada: Record<string, unknown>, ctx: ExtensionCont
 export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     const actual = situacion(ctx.cwd);
-    if (!actual) return;
-    const { datos, politica } = actual;
-    if (!politica.exigeWorktree || datos.esWorktree) return;
+    if (!pideWorktree(actual) || !actual) return;
     ctx.ui.notify(
-      `Estás en la copia principal de ${politica.repo}: para tocar código abrí un worktree ` +
-        `(tool worktree) — base ${politica.base ?? "principal"}.`,
+      `Estás en la copia principal de ${actual.politica.repo}: para tocar código abrí un worktree ` +
+        `(tool worktree) — base ${actual.politica.base ?? "principal"}.`,
       "warning",
     );
   });
@@ -407,19 +452,13 @@ export default function (pi: ExtensionAPI) {
       if (!destino) return undefined;
       const absoluta = normalizar(destino, ctx.cwd);
       const actual = repoDeRuta(absoluta);
-      if (!actual || !actual.politica.exigeWorktree || actual.datos.esWorktree) return undefined;
+      if (!pideWorktree(actual)) return undefined;
       if (!dentroDe(actual.datos.principal, absoluta)) return undefined;
       return { block: true, reason: motivoBloqueo(actual.datos, actual.politica, `Escritura de ${destino}`) };
     }
 
     if (event.toolName === "bash") {
-      const actual = situacion(ctx.cwd);
-      if (!actual || !actual.politica.exigeWorktree || actual.datos.esWorktree) return undefined;
-      const { datos, politica } = actual;
-      const comando = String(entrada.command ?? "");
-      const motivo = comandoMutaRepo(comando, { repo: datos.principal, cwd: ctx.cwd, home: homedir() });
-      if (!motivo) return undefined;
-      return { block: true, reason: motivoBloqueo(datos, politica, `Comando que escribe (${motivo})`) };
+      return candadoBash(String(entrada.command ?? ""), ctx.cwd);
     }
 
     return undefined;
@@ -439,7 +478,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Abre, lista o cierra el worktree (carpeta + rama propias) de este agente. " +
       'abrir: {accion:"abrir", id:"slug"} devuelve ruta y rama. ' +
-      'cerrar: {accion:"cerrar", ruta} commitea lo pendiente ya hecho, mergea a la base y borra el worktree.',
+      'cerrar: {accion:"cerrar", ruta} mergea la rama a la base y borra el worktree (pide los cambios ya commiteados).',
     promptSnippet: "Trabajar en un worktree propio en vez de la copia principal",
     promptGuidelines: [
       "Antes de tocar código en un repo con flujo main/developing, abrí un worktree con la tool " +
@@ -464,7 +503,8 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       try {
         if (params.accion === "lista") {
-          return { content: [{ type: "text", text: listarWorktrees(ctx.cwd) }], details: {} };
+          const donde = normalizar(String(params.repo ?? ""), ctx.cwd);
+          return { content: [{ type: "text", text: listarWorktrees(donde) }], details: {} };
         }
         if (params.accion === "cerrar") {
           const ruta = String(params.ruta ?? "");
