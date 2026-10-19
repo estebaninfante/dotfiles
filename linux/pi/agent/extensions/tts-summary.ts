@@ -31,6 +31,8 @@
  *
  * Interruptor: el `tts.enabled` del sistema de voz (config.toml [tts] + override
  * en state.json). El widget de barra eztvn.pi-tts lo togglea con `voice tts`.
+ * Con la voz apagada, `avisar` no se le declara al modelo, `deliver` no llama
+ * al sistema de voz y el resumen de respaldo no se genera.
  *
  * Config:
  *   PI_TTS_VOICE_BIN   binario del sistema de voz (default: ~/.local/bin/voice)
@@ -38,7 +40,7 @@
  */
 
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -55,6 +57,21 @@ type RunSummary = {
 const MAX_SUMMARY = 240;
 const DEDUP_MS = 20000;
 const HOME = process.env.HOME ?? "";
+const VOICE_STATE = `${HOME}/.local/state/voice/state.json`;
+
+/** Interruptor maestro de voz (`tts.enabled`). Sin estado legible se asume
+ *  encendido, como el default de config.toml. */
+function ttsEnabled(): boolean {
+  try {
+    const j = JSON.parse(readFileSync(VOICE_STATE, "utf8")) as {
+      tts?: { enabled?: unknown };
+    };
+    if (typeof j?.tts?.enabled === "boolean") return j.tts.enabled;
+  } catch {
+    /* sin estado: vale el default */
+  }
+  return true;
+}
 
 /** Nombre del agente que habla: así el subtítulo y la notificación dicen QUIÉN
  *  es (su color sale del nombre), no el harness. Prioridad: PI_VOICE_AGENT >
@@ -187,6 +204,7 @@ let lastDeliveredAt = 0;
 /* Dedup: evita repetir la misma frase en pocos segundos (el agente puede
    llamar a `avisar` a mitad y al final). */
 function deliver(text: string, limit = MAX_SUMMARY): void {
+  if (!ttsEnabled()) return;
   const line = clean(text, limit);
   if (!line) return;
   const now = Date.now();
@@ -201,6 +219,23 @@ function deliver(text: string, limit = MAX_SUMMARY): void {
 }
 
 export default function (pi: ExtensionAPI) {
+  /* Con la voz apagada, `avisar` ni se le declara al modelo. Se revisa en
+     `session_start` y en cada turno, así el toggle de la barra aplica sin
+     reiniciar Pi. */
+  function syncVoiceTool(): void {
+    try {
+      const activas = pi.getActiveTools();
+      const tiene = activas.includes("avisar");
+      if (ttsEnabled()) {
+        if (!tiene) pi.setActiveTools([...activas, "avisar"]);
+      } else if (tiene) {
+        pi.setActiveTools(activas.filter((n) => n !== "avisar"));
+      }
+    } catch {
+      /* API no disponible: queda como está */
+    }
+  }
+
   let run: RunSummary = { texts: [], errors: 0 };
   let announced = false;
   // Último aviso de la corrida: `avisar` ya no habla cada vez que lo llaman,
@@ -244,7 +279,8 @@ export default function (pi: ExtensionAPI) {
         "incluyas tecnicismos, rutas ni nombres de herramientas; se dirá en voz " +
         "alta o se dejará en su buzón.",
       "Si necesitás que el usuario te responda, no te quedes en `avisar`: usá " +
-        "`hablar` con `esperar: true` y una pregunta concreta. `avisar` es para " +
+        "`hablar` con `esperar: true` y una pregunta concreta, y TERMINÁ el turno " +
+        "en el acto (no esperes la respuesta en el momento). `avisar` es para " +
         "reportar, no para preguntar.",
       "Para avisar algo en medio del trabajo, que el usuario necesite AHORA, usá " +
         "`hablar` (inmediato): eso ya cuenta como tu voz en la corrida, así que " +
@@ -266,11 +302,13 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", () => {
+    syncVoiceTool();
     announced = false;
     pendingAviso = "";
   });
 
   pi.on("session_start", () => {
+    syncVoiceTool();
     // La identidad vive con la conversación: al reanudar otra, el nombre (y con
     // él la voz y el color) puede cambiar. Se resuelve de nuevo desde el panel.
     agentNameCache = undefined;
@@ -317,6 +355,8 @@ export default function (pi: ExtensionAPI) {
        voz ni le resumimos trabajo a medias. La voz automática queda reservada
        para las corridas que terminan sin interrupción. */
     if ((event as { aborted?: boolean }).aborted) return;
+    /* Voz apagada: ni cierre ni resumen de respaldo. */
+    if (!ttsEnabled()) return;
     /* El agente ya habló con `hablar`: el cierre calla, haya o no `avisar`. */
     if (hablados.length > 0) return;
     /* El agente ya reportó con `avisar`: se dice SOLO el último aviso de la

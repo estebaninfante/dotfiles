@@ -1030,7 +1030,7 @@ export default function (pi: ExtensionAPI) {
       "comunicarte con el usuario por voz. Si el usuario se perdió o pide " +
       "contexto, contale el contexto en `mensaje`; no te limites a preguntar.",
     promptSnippet:
-      "Hablar al usuario por voz; con `esperar` espera su respuesta en vez de asumir",
+      "Hablar al usuario por voz; con `esperar` escucha su respuesta sin bloquear el turno",
     promptGuidelines: [
       "Para hablarle al usuario por voz usá `hablar`. Sirve para contar un " +
         "avance, dar contexto o preguntar; es la vía general.",
