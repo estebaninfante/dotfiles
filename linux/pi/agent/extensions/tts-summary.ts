@@ -50,6 +50,7 @@ import { basename } from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { cierreDeCorrida, esInterrupcion, esTextoDeLaCorrida } from "./lib/tts-cierre.ts";
 
 type Block = { type?: string; text?: string };
 type Message = { content?: unknown };
@@ -60,12 +61,6 @@ type RunSummary = {
   /** Algún turno de la corrida terminó interrumpido (`stopReason: aborted`). */
   aborted: boolean;
 };
-
-/** Interrupción del usuario: sea cual sea el nombre que use el proveedor. */
-function isInterruptedStop(reason: unknown): boolean {
-  const r = String(reason ?? "").toLowerCase();
-  return r === "aborted" || r === "interrupted" || r === "cancelled" || r === "canceled";
-}
 
 const MAX_SUMMARY = 240;
 const DEDUP_MS = 20000;
@@ -339,7 +334,7 @@ export default function (pi: ExtensionAPI) {
      callar el cierre de esta corrida y el que quedó en vuelo. */
   pi.on("message_end", (event) => {
     const m = (event as { message?: { role?: string; stopReason?: string } }).message;
-    if (m?.role === "assistant" && isInterruptedStop(m.stopReason)) {
+    if (m?.role === "assistant" && esInterrupcion(m.stopReason)) {
       run.aborted = true;
       abortedUntilPrompt = true;
       abortEpoch += 1;
@@ -360,7 +355,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("turn_end", async (event, ctx) => {
     const message = (event as { message?: Message }).message;
-    if (isInterruptedStop((message as { stopReason?: string } | undefined)?.stopReason)) {
+    if (esInterrupcion((message as { stopReason?: string } | undefined)?.stopReason)) {
       run.aborted = true;
       abortedUntilPrompt = true;
       abortEpoch += 1;
@@ -382,8 +377,8 @@ export default function (pi: ExtensionAPI) {
       for (const entry of ctx.sessionManager.getEntries().slice(-8)) {
         if (entry.type !== "message" || entry.message.role !== "assistant") continue;
         const when = Number((entry.message as { timestamp?: number }).timestamp ?? 0);
-        if (when && when < runStartedAt) continue;
-        if (isInterruptedStop((entry.message as { stopReason?: string }).stopReason)) {
+        if (!esTextoDeLaCorrida(when, runStartedAt)) continue;
+        if (esInterrupcion((entry.message as { stopReason?: string }).stopReason)) {
           run.aborted = true;
           continue;
         }
@@ -407,30 +402,37 @@ export default function (pi: ExtensionAPI) {
        para que el final suene una sola vez. */
     const hablados = spokenByHablar;
     spokenByHablar = [];
+    const decision = cierreDeCorrida({
+      aborted: (event as { aborted?: boolean }).aborted === true,
+      turnoInterrumpido: snapshot.aborted,
+      yaHablado: hablados.length > 0,
+      aviso: hadAviso,
+      hayTexto: Boolean((snapshot.texts[snapshot.texts.length - 1] ?? "").trim()),
+      errores: snapshot.errors,
+    });
     /* Corrida interrumpida: el usuario ya sabe que cortó; no lo llamamos por
        voz ni le resumimos trabajo a medias. Se mira el evento y también los
        turnos de la corrida, porque `aborted` no siempre viene en el cierre. El
        silencio sigue vigente hasta el próximo pedido (ver `deliver`). */
-    if ((event as { aborted?: boolean }).aborted === true || snapshot.aborted) {
-      abortedUntilPrompt = true;
-      abortEpoch += 1;
+    if (decision === "nada") {
+      if ((event as { aborted?: boolean }).aborted === true || snapshot.aborted) {
+        abortedUntilPrompt = true;
+        abortEpoch += 1;
+      }
       return;
     }
     /* Voz apagada: ni cierre ni resumen de respaldo. */
     if (!ttsEnabled()) return;
-    /* El agente ya habló con `hablar`: el cierre calla, haya o no `avisar`. */
-    if (hablados.length > 0) return;
     /* El agente ya reportó con `avisar`: se dice SOLO el último aviso de la
        corrida (los anteriores se descartaron) y no corre el resumen de
        respaldo. */
-    if (hadAviso) {
+    if (decision === "aviso") {
       const line = deferred.trim();
       if (line) deliver(line, 0);
       return;
     }
 
     const raw = (snapshot.texts[snapshot.texts.length - 1] ?? "").trim();
-    if (!raw && snapshot.errors === 0) return;
 
     const model = ctx?.model;
     const registry = ctx?.modelRegistry;
