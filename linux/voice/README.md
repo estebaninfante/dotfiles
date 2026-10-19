@@ -224,8 +224,11 @@ de Windows** queda remapeada a **F13** y **alterna OmniVoz** on/off en Hyprland.
 `SUPER+ALT+P` sigue siendo push-to-talk explícito (una frase).
 
 El modelo del cerebro es el que tenga Hermes configurado
-(`~/.hermes/config.yaml`; hoy `deepseek-v4.1-flash` de opencode-go).
-`VOICE_HERMES_MODEL` y `VOICE_HERMES_PROVIDER` lo pisan sin tocar la config.
+(`~/.hermes/config.yaml`). Hoy arranca barato: primario **gratis**
+(`cat-jam-free`) y la cadena de respaldo también gratis (`beam-free`,
+`longcat-2.5-preview-free`), todos del plan opencode-go. La idea es empezar
+desde lo barato y pagar sólo si hace falta, nunca al revés. `VOICE_HERMES_MODEL`
+y `VOICE_HERMES_PROVIDER` lo pisan sin tocar la config.
 La variante Pi sigue disponible: `VOICE_BRAIN_BIN=voice-pi` (o correr
 `voice-pi` a mano), con `VOICE_PI_MODEL=ollama/qwen3.5:4b` para un modelo local.
 

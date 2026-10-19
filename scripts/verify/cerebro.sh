@@ -102,7 +102,28 @@ else
     fail "Pi no arranca en low (defaultThinkingLevel/modelThinkingLevels)"
 fi
 
-# --- 6. copia viva del cerebro -------------------------------------------
+# --- 6. Hermes arranca gratis (empezar barato, nunca al revés) ----------
+if python3 - <<'PY' >/dev/null 2>&1
+import os, sys
+try:
+    import yaml
+except Exception:
+    sys.exit(0)  # sin PyYAML no se puede chequear; no es falla del cerebro
+path = os.path.expanduser("~/.hermes/config.yaml")
+cfg = yaml.safe_load(open(path)) or {}
+primary = (cfg.get("model") or {}).get("default") or ""
+assert primary.endswith("-free"), primary
+for fb in cfg.get("fallback_providers") or []:
+    model = (fb or {}).get("model") or ""
+    assert model.endswith("-free"), model
+PY
+then
+    ok "Hermes arranca con modelo gratis (y respaldos gratis)"
+else
+    fail "Hermes no arranca gratis: revisar model.default/fallback_providers en ~/.hermes/config.yaml"
+fi
+
+# --- 7. copia viva del cerebro -------------------------------------------
 if diff -q "$BRAIN_AGENTS" "$LIVE_BRAIN/AGENTS.md" >/dev/null 2>&1; then
     ok "el AGENTS.md del cerebro coincide con el repo"
 else

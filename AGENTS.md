@@ -381,7 +381,7 @@ y AC, si no CPU (Vosk, sin VRAM). Servicio `talk-command.service` (unit en
 vía `linux/voice/pi_shim.py` (traduce Ollama→agente; servicio
 `voice-pi-shim.service`, nombre histórico). Corre en `linux/voice/pi-brain/`
 con el `AGENTS.md` que le enseña el escritorio, y usa el modelo por defecto de
-Hermes (`deepseek-v4.1-flash` de opencode-go). **Teclas**: Caps Lock = Super (`layer(meta)` en
+Hermes (hoy gratis: `cat-jam-free`, con respaldos gratis). **Teclas**: Caps Lock = Super (`layer(meta)` en
 keyd); la tecla física de Windows se remapea a **F13** y `voice-key-listener.service`
 (lee `keyd monitor`) corre `linux/bin/omar-open`: abre la **píldora**
 (`omar-pill.service` + `packaging/quickshell/omar-pill.qml`: input de texto y

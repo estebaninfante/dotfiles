@@ -127,3 +127,31 @@ hasta que se cambie con `/thinking`; las nuevas arrancan en `low`.
 
 **Descartado.** Forzar `--thinking low` en cada invocación: no cubre las
 sesiones interactivas y duplica la config.
+
+## 2026-10-18 — El cerebro de voz arranca gratis
+
+**Contexto.** El usuario quiere empezar desde lo más barato (gratis) y pagar
+sólo si no alcanza, nunca al revés. Hermes venía con
+`deepseek-v4.1-flash` (opencode-go): barato, pero pago.
+
+**Elegido.**
+
+- En `~/.hermes/config.yaml`: primario **`cat-jam-free`** y cadena de respaldo
+  **`beam-free`** y **`longcat-2.5-preview-free`**, los tres gratis del plan
+  opencode-go. Omar hereda ese default.
+- Medidos con tareas reales del cerebro (foco, ventanas del workspace 5,
+  volumen, multi-paso en dry-run): `cat-jam-free` y `beam-free` 3–5 s y
+  `longcat-2.5-preview-free` 13–18 s; los tres usan herramientas y aciertan.
+  `cat-jam-free` primario por balance calidad/latencia, `beam-free` de respaldo
+  rápido y `longcat` por si hace falta más cabeza.
+- `scripts/verify/cerebro.sh` falla si el modelo primario o un respaldo dejan
+  de ser gratis: la regla "nunca pagar primero" queda chequeada.
+- `VOICE_HERMES_MODEL` no está fijado: cambiar de modelo es editar la config de
+  Hermes, un solo lugar.
+
+**Descartado.**
+
+- `deepseek-v4.1-flash` como primario: más capaz, pero es exactamente el orden
+  que el usuario no quiere.
+- Un respaldo pago: gastaría solo, sin que el usuario lo pida. Si los gratis no
+  alcanzan, se decide entonces, no de antemano.
