@@ -155,6 +155,15 @@ que cualquier proceso la use igual.
 
 Cambios en una extension se aplican con `/reload` (o reiniciando Pi).
 
+Cierre hablado (`extensions/tts-summary.ts`): al asentarse la corrida se dice una
+frase (el aviso del agente o un resumen de respaldo). Si el usuario interrumpio,
+no se dice nada: se mira `agent_settled.aborted`, el `stopReason` de los turnos
+(`message_end`/`turn_end`) y el silencio dura hasta el proximo pedido, asi que un
+cierre que se estaba generando en segundo plano tampoco suena. El respaldo que
+lee la sesion solo acepta texto escrito en esa misma corrida (antes rescataba
+trabajo viejo y lo repetia por voz al cortar). Reglas puras en
+`extensions/lib/tts-cierre.ts`. Verificador: `scripts/verify/voz-cierre.sh`.
+
 #### Un worktree por agente (`worktrees.json` + `extensions/worktrees.ts`)
 
 Dos agentes en la misma carpeta se pisan: uno borra el archivo que el otro lee y un
