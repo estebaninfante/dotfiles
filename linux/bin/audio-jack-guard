@@ -106,12 +106,47 @@ amp() {  # amp <control> on|off
   fi
 }
 
-# Un sink virtual/nulo no es una salida real: si quedó como default, devolvemos
-# el default a la placa. No tocamos HDMI/Bluetooth elegidos a propósito.
+# Nombre (pactl) de la placa analógica cuyo perfil quedó en 'off'. Sin perfil
+# activo esa placa no expone sink, y entonces no hay nada que reponer.
+analog_card_off() {
+  pactl list cards 2>/dev/null | awk '
+    /^Card #[0-9]/ {
+      if (name != "" && analog && off) print name
+      name=""; analog=0; off=0; next
+    }
+    /^[[:space:]]*Name: / { name=$2 }
+    /output:analog-stereo:/ { analog=1 }
+    /Active Profile: off/ { off=1 }
+    END { if (name != "" && analog && off) print name }
+  '
+}
+
+# WirePlumber deja a veces la placa analógica en perfil 'off' al arrancar o al
+# cambiar el jack. Como el perfil apagado no expone sink, ni el default ni el
+# puerto se pueden arreglar hasta reactivarla. La volvemos a encender (duplex
+# si se puede, salida sola si no).
+ensure_analog_profile() {
+  local card
+  card="$(analog_card_off | head -1)"
+  [ -n "$card" ] || return 0
+  pactl set-card-profile "$card" output:analog-stereo+input:analog-stereo >/dev/null 2>&1 \
+    || pactl set-card-profile "$card" output:analog-stereo >/dev/null 2>&1 || true
+}
+
+# Un sink virtual/nulo (o un default roto tipo @DEFAULT_SINK@) no es una salida
+# real: devolvemos el default a la placa. No tocamos HDMI/Bluetooth elegidos a
+# propósito. Re-detectamos el sink por si apareció tras reactivar el perfil.
 ensure_default_sink() {
+  local cur
+  cur="$(detect_sink)"
+  case "$cur" in
+    *analog-stereo*) SINK="$cur" ;;
+  esac
   case "$(pactl get-default-sink 2>/dev/null)" in
-    ""|"phone_mic_sink"|"phone-mic")
-      pactl set-default-sink "$SINK" >/dev/null 2>&1 || true
+    ""|"@DEFAULT_SINK@"|"phone_mic_sink"|"phone-mic")
+      case "$SINK" in
+        *analog-stereo*) pactl set-default-sink "$SINK" >/dev/null 2>&1 || true ;;
+      esac
       ;;
   esac
 }
@@ -123,6 +158,7 @@ if [ "$HAVE_JACK" = 1 ]; then
 fi
 
 while true; do
+  ensure_analog_profile
   ensure_default_sink
   if [ "$HAVE_JACK" = 1 ]; then
     case "$(jack_state)" in
