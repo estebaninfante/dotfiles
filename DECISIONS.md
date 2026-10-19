@@ -3,6 +3,42 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-19 — `liberar`: cerrar lo que no arrancó con el sistema
+
+**Contexto.** Hacía falta una palabra en la terminal para soltar memoria y
+procesos que quedaron dando vueltas sin reiniciar sesión ni tocar el escritorio.
+El riesgo obvio es matar de más: el systemd de usuario, la barra, el audio o la
+propia terminal desde donde se ejecuta el comando.
+
+**Elegido.**
+
+- Clasificar por **cgroup v2**, sin `ps` ni `pgrep` (que en esta máquina están
+  tapados por busybox en `~/bin`): solo se mira `user.slice/user-<uid>.slice`.
+- Se considera "arranca solo" la unidad cuyo proceso más viejo empezó dentro de
+  la ventana (`LIBERAR_VENTANA`, 300 s) de un **ancla**: el `btime` del arranque
+  o el inicio de una `session-*.scope` (cada login). Son las dos únicas cosas
+  que se conservan sin discutir.
+- Los `*.scope` (apps lanzadas a mano) son siempre candidatos; los `.service`
+  viejos se respetan, y `liberar -s` baja también esos servicios con
+  `systemctl --user stop` (no `kill`, así no los revive el `Restart=`).
+- Nunca se toca la **cadena de ancestros de la terminal actual ni su subárbol**
+  (si corre dentro de tmux, protege todo el servidor tmux): el resultado tiene
+  que verse en la misma ventana.
+- `~/.config/liberar/keep.conf` (regex contra cmdline, ejecutable y nombre de
+  unidad) es el override humano; los patrones se evalúan **a nivel de unidad**:
+  si un solo proceso de la unidad está protegido, no se para la unidad entera.
+- `-n` lista y suma RSS antes de matar: es un comando destructivo, así que el
+  antes/después se muestra siempre.
+
+**Descartado.**
+
+- `loginctl terminate-user` / `systemctl --user exit`: tira la sesión gráfica
+  entera y no se puede ver el resultado.
+- Filtrar por antigüedad del proceso o por nombre de app (`matar todo menos
+  brave`): no distingue un servidor de usuario de una app abierta, y envejece
+  mal.
+- `pkill`/`killall` por patrón: mata procesos del sistema y de otras sesiones.
+
 ## 2026-10-19 — El crash se diagnostica solo y queda como ticket del rig
 
 **Contexto.** El watcher de Omarchy (`omarchy-crash-watch`) avisaba el crash con

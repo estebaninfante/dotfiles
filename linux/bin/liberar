@@ -22,6 +22,7 @@ ESPERA="${LIBERAR_ESPERA:-4}"       # seg de gracia entre TERM y KILL
 
 MODO="normal"   # normal | servicios
 DRY=0
+VERBOSE=0
 
 usage() {
     cat <<'EOF'
@@ -36,6 +37,8 @@ Uso: liberar [opciones]
                         solos (ollama, plataformas, bots). Queda solo la base
                         del escritorio y esta terminal.
   -n, --lista           no cierra nada: muestra qué se cerraría y cuánta RAM.
+  -v, --verboso         además cuenta qué queda y por qué (sistema, arranque,
+                        keep.conf, esta terminal).
   -h, --ayuda           esta ayuda.
 
 Nunca se toca: procesos del sistema, la base de la sesión gráfica
@@ -49,6 +52,7 @@ EOF
 while [ $# -gt 0 ]; do
     case "$1" in
         -n|--lista|--seco)   DRY=1 ;;
+        -v|--verboso)        VERBOSE=1 ;;
         -s|--con-servicios)  MODO="servicios" ;;
         -h|--ayuda|--help)   usage; exit 0 ;;
         *) echo "liberar: opción desconocida: $1" >&2; usage >&2; exit 2 ;;
@@ -138,7 +142,7 @@ else
     echo "liberar: no existe $KEEP_FILE (uso la base mínima interna)" >&2
 fi
 
-matches_keep() {
+matches_pid() {   # ¿este proceso está en keep.conf?
     local pid="$1"
     local pat
     for pat in "${KEEP_PATTERNS[@]}"; do
@@ -149,11 +153,25 @@ matches_keep() {
     return 1
 }
 
+unit_keep() {   # ¿la unidad (por nombre o por alguno de sus procesos) está en keep.conf?
+    local u="$1" pat pid
+    for pat in "${KEEP_PATTERNS[@]}"; do
+        [[ "$u" =~ $pat ]] && return 0
+    done
+    for pid in ${UNIT_PIDS[$u]}; do
+        [[ "${KEEP[$pid]:-}" == "1" ]] && return 0
+        matches_pid "$pid" && return 0
+    done
+    return 1
+}
+
 # ── Clasificación ────────────────────────────────────────────
 declare -A REASON=()      # pid -> motivo por el que se deja
 declare -A SERVICES=()    # unidad .service a parar
-declare -A TARGETS=()     # pid -> 1 (kill directo)
-declare -A UNIT_PIDS=()   # unidad -> pids (para el inicio de cada unidad)
+ declare -A TARGETS=()     # pid -> 1 (kill directo)
+ declare -A UNIT_PIDS=()   # unidad -> pids (para el inicio de cada unidad)
+ declare -A UNIT_KEEP=()   # unidad protegida entera por keep.conf
+ declare -A UNIT_SEEN=()
 
 for pid in "${PIDS[@]}"; do
     u="${UNIT_OF[$pid]}"
@@ -185,11 +203,15 @@ for pid in "${PIDS[@]}"; do
     if [[ "$s" == "Z" ]]; then REASON[$pid]="zombi"; continue; fi
     if [[ "${IN_MGR[$pid]:-0}" != "1" ]]; then REASON[$pid]="sesión de login"; continue; fi
     if [[ "${KEEP[$pid]:-}" == "1" ]]; then REASON[$pid]="esta terminal"; continue; fi
+    if [[ -z "${UNIT_SEEN[$u]:-}" ]]; then
+        UNIT_SEEN[$u]=1
+        unit_keep "$u" && UNIT_KEEP[$u]=1 || UNIT_KEEP[$u]=0
+    fi
     case "$u" in
         init.scope)   REASON[$pid]="systemd de usuario"; continue ;;
         session-*.scope) REASON[$pid]="sesión de login"; continue ;;
     esac
-    if matches_keep "$pid"; then REASON[$pid]="keep.conf"; continue; fi
+    if [[ "${UNIT_KEEP[$u]}" == "1" ]]; then REASON[$pid]="keep.conf"; continue; fi
 
     case "$u" in
         *.scope) TARGETS[$pid]="scope" ;;
@@ -233,9 +255,20 @@ while read -r how u; do
     done
     [ "$n" -gt 0 ] || continue
     TOTAL_B=$(( TOTAL_B + bytes )); TOTAL_N=$(( TOTAL_N + n ))
-    printf '%-46s %5s %10s  %s\n' "${u:0:46}" "$n" "$(fmt_mb "$bytes")" \
+    printf '%-46s %5s %10s  %s\n' "$(printf '%b' "${u:0:46}")" "$n" "$(fmt_mb "$bytes")" \
         "$([ "$how" = stop ] && echo "parar servicio" || echo "cerrar${nombres}")"
 done <<< "$ordered_units"
+
+if [ "$VERBOSE" = 1 ]; then
+    declare -A RC=()
+    for pid in "${PIDS[@]}"; do
+        r="${REASON[$pid]:-}"
+        [ -n "$r" ] && RC[$r]=$(( ${RC[$r]:-0} + 1 ))
+    done
+    echo
+    echo "Se dejan ($(( ${#PIDS[@]} - TOTAL_N )) procesos):"
+    for r in "${!RC[@]}"; do printf '  %-26s %s\n' "$r" "${RC[$r]}"; done
+fi
 
 echo
 echo "Total: $TOTAL_N procesos, $(fmt_mb "$TOTAL_B") de memoria en uso."
