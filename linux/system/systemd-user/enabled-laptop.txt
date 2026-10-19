@@ -5,5 +5,4 @@
 dsh-web.service
 
 # Ejemplos de lo que podría ir acá (hoy se manejan aparte):
-#   omar-pill.service
 #   rig-main-seat.service
