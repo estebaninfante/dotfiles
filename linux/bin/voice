@@ -19,6 +19,8 @@
 #   voice profile show|set|remove|test   ver/cambiar/probar la voz de un agente
 #   voice profile auto [on|off]          reparto automatico de voces
 #   voice identity [nombre] [--json]     nombre, rol y color estable del agente
+#   voice identity [nombre] --claim      color unico entre los agentes vivos
+#   voice identity check                 colores repetidos entre agentes vivos
 #   voice color [nombre] [--tint]        color (hex) del agente (o version oscura)
 #   voice color <nombre> --set #hex      fijar el color de un agente
 #   voice role <nombre> [rol]            ver/fijar el rol (main, audio, ...)
@@ -775,6 +777,8 @@ case "${1:-status}" in
   color) shift; identity_cmd color "$@" ;;
   role) shift; identity_cmd role "$@" ;;
   agents) shift; identity_cmd agents "$@" ;;
+  check|duplicados) shift; identity_cmd check "$@" ;;
+  identity-selftest|selftest-colores) shift; identity_cmd selftest "$@" ;;
   profile) shift; profile_cmd "$@" ;;
   repeat) shift; repeat "$@" ;;
   resolve) shift; "$PY" "$VOICE_DIR/engine.py" resolve "$@" ;;

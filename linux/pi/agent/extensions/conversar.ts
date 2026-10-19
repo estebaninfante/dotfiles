@@ -162,7 +162,7 @@ function truecolorFg(hex: string): string {
   return `\x1b[38;2;${r};${g};${b}m`;
 }
 
-function resolveIdentity(name: string, roleHint = ""): AgentIdentity {
+function resolveIdentity(name: string, roleHint = "", reclamar = false): AgentIdentity {
   const fallbackRole = process.env.PI_AGENT_ROLE?.trim() || roleHint || "general";
   const fallback: AgentIdentity = {
     name,
@@ -173,10 +173,17 @@ function resolveIdentity(name: string, roleHint = ""): AgentIdentity {
   try {
     const args = ["identity", name];
     if (fallbackRole) args.push("--role", fallbackRole);
+    // Al arrancar se RECLAMA un color libre entre los agentes vivos: nunca se
+    // repite el color de otro panel. El reclamo se guarda en el registro de
+    // identidades, así el nombre conserva ese color la próxima vez.
+    if (reclamar) {
+      args.push("--claim");
+      if (TMUX_PANE) args.push("--pane", TMUX_PANE);
+    }
     args.push("--json");
     const out = execFileSync(voiceBin(), args, {
       encoding: "utf8",
-      timeout: 2000,
+      timeout: 2500,
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     const j = JSON.parse(out) as Partial<AgentIdentity>;
@@ -265,7 +272,7 @@ function applyIdentityToPane(ident: AgentIdentity): void {
  *  "fondo del agente" que permite tmux cuando varios agentes comparten ventana.
  *  El fondo se oscurece para que el texto siga legible. */
 function applyPaneLook(name: string): AgentIdentity {
-  const ident = resolveIdentity(name, projectRole());
+  const ident = resolveIdentity(name, projectRole(), true);
   identityCache = ident;
   applyIdentityToPane(ident);
   return ident;
@@ -1017,11 +1024,22 @@ export default function (pi: ExtensionAPI) {
     );
     const stored = readStoredIdentity(ctx);
     if (stored && !forced) {
-      // La conversación ya tiene agente: se respeta aunque el panel o la
-      // carpeta ahora digan otra cosa.
+      // La conversación ya tiene agente: se respetan nombre y rol aunque el
+      // panel o la carpeta ahora digan otra cosa. El color sí se reclama de
+      // nuevo: si otro agente vivo ya lo tiene, este toma uno libre y queda
+      // guardado en la identidad de la conversación.
       identityCache = stored;
       agentNameCache = stored.name;
-      applyIdentityToPane(stored);
+      const reclamada = resolveIdentity(stored.name, stored.role, true);
+      identityCache = reclamada;
+      applyIdentityToPane(reclamada);
+      if (!sameIdentity(stored, reclamada)) {
+        try {
+          pi.appendEntry(IDENTITY_ENTRY_TYPE, reclamada);
+        } catch {
+          /* sesión efímera: se resuelve de nuevo la próxima vez */
+        }
+      }
     } else {
       agentName(); // resuelve y registra el nombre en el panel (o lo lee)
       const ident = agentIdentity();
