@@ -7,5 +7,6 @@ node = "26.8.1"
 "npm:playwright" = "latest"
 pi = "latest"
 "pipx:hermes-agent" = { version = "latest", extras = "all" }
+rust = "stable"
 [settings.upgrade]
 auto_prune = false
