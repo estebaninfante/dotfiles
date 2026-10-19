@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# px0-rama — abrir px0 en la rama o worktree que querés revisar.
+#
+# px0 no trae selector de ramas: solo muestra la rama del directorio que abrís.
+# Este lanzador elige la rama y abre px0 en un worktree aparte (no toca tu
+# copia de trabajo), o cambia la rama en el repo y deja que px0 la siga.
+#
+#   px0-rama                  elegir con fzf entre ramas y worktrees
+#   px0-rama agente/barra-ui  abrir una rama directo
+#   px0-rama -c main          cambiar la rama en el repo y abrir px0 ahí
+#   px0-rama -l               listar ramas y worktrees, sin abrir nada
+#   px0-rama -r ~/otro/repo   apuntar a otro repo
+#   px0-rama -- -no-lsp       lo que va después de -- pasa a px0
+
+set -euo pipefail
+
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/px0-rama"
+REPO=""
+RAMA=""
+MODO="worktree"
+SOLO_LISTAR=0
+PX0_ARGS=()
+
+uso() {
+	sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+while (($#)); do
+	case "$1" in
+	-r | --repo)
+		REPO="${2:?falta la ruta}"
+		shift 2
+		;;
+	-c | --checkout)
+		MODO="checkout"
+		RAMA="${2:?falta la rama}"
+		shift 2
+		;;
+	-l | --listar)
+		SOLO_LISTAR=1
+		shift
+		;;
+	-h | --help)
+		uso
+		exit 0
+		;;
+	--)
+		shift
+		PX0_ARGS=("$@")
+		break
+		;;
+	-*)
+		printf 'px0-rama: opción desconocida: %s\n' "$1" >&2
+		uso >&2
+		exit 2
+		;;
+	*)
+		RAMA="$1"
+		shift
+		;;
+	esac
+done
+
+command -v px0 >/dev/null || {
+	echo "px0-rama: no encontré px0 en el PATH" >&2
+	exit 1
+}
+
+if [[ -z "$REPO" ]]; then
+	REPO=$(git rev-parse --show-toplevel 2>/dev/null) || {
+		echo "px0-rama: no estoy dentro de un repo git (pasá -r <ruta>)" >&2
+		exit 1
+	}
+fi
+REPO=$(cd "$REPO" && pwd -P)
+
+# rama <TAB> ruta <TAB> origen (worktree existente o "sin worktree")
+tabla() {
+	git -C "$REPO" worktree list --porcelain | awk '
+		/^worktree / { ruta = substr($0, 10) }
+		/^branch /   { rama = substr($0, 8); sub("^refs/heads/", "", rama); print rama "\t" ruta "\tworktree" }
+		/^detached$/ { print "(detached)\t" ruta "\tworktree" }
+	'
+	local usadas
+	usadas=$(git -C "$REPO" worktree list --porcelain |
+		awk '/^branch /{sub("^refs/heads/", "", $2); print $2}')
+	git -C "$REPO" for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads |
+		while IFS= read -r b; do
+			grep -qxF -- "$b" <<<"$usadas" || printf '%s\t%s\tsin worktree\n' "$b" "-"
+		done
+}
+
+TABLA=$(tabla)
+
+if [[ $SOLO_LISTAR -eq 1 ]]; then
+	printf '%s\n' "$TABLA" | column -t -s $'\t'
+	exit 0
+fi
+
+if [[ -z "$RAMA" ]]; then
+	command -v fzf >/dev/null || {
+		printf '%s\n' "$TABLA" | column -t -s $'\t'
+		exit 1
+	}
+	RAMA=$(printf '%s\n' "$TABLA" | fzf --delimiter='\t' --with-nth=1,3 \
+		--height=60% --reverse --prompt='rama> ' \
+		--header='Rama a revisar en px0 (Enter abre)') || exit 130
+	RAMA=${RAMA%%$'\t'*}
+fi
+
+if [[ "$MODO" == "checkout" ]]; then
+	git -C "$REPO" switch "$RAMA"
+	printf 'px0-rama: rama %s en %s\n' "$RAMA" "$REPO"
+	exec px0 -port 0 "${PX0_ARGS[@]}" "$REPO"
+fi
+
+RUTA=$(printf '%s\n' "$TABLA" | awk -F'\t' -v r="$RAMA" '$1 == r { print $2; exit }')
+
+if [[ -z "$RUTA" || "$RUTA" == "-" ]]; then
+	if ! git -C "$REPO" show-ref --verify --quiet "refs/heads/$RAMA"; then
+		echo "px0-rama: no existe la rama '$RAMA'" >&2
+		exit 1
+	fi
+	slug=${RAMA//\//-}
+	RUTA="$CACHE/$slug"
+	if [[ -e "$RUTA/.git" ]]; then
+		git -C "$RUTA" switch --quiet "$RAMA" 2>/dev/null || true
+	else
+		mkdir -p "$CACHE"
+		git -C "$REPO" worktree add --quiet "$RUTA" "$RAMA"
+	fi
+fi
+
+printf 'px0-rama: %s → %s\n' "$RAMA" "$RUTA"
+exec px0 -port 0 "${PX0_ARGS[@]}" "$RUTA"
