@@ -180,14 +180,17 @@ for root in $ROOTS; do
       fi
       # 3) integrar y publicar
       if git -C "$repo" remote get-url origin >/dev/null 2>&1; then
-        if ! git -C "$repo" pull --rebase --autostash -q 2>>"$LOG"; then
-          git -C "$repo" rebase --abort 2>/dev/null
-          errores+=("$nombre: conflicto al rebase (revisar)")
-          log "$nombre: pull --rebase falló; abortado"
-        else
-          if ! git -C "$repo" push -q -u origin HEAD 2>>"$LOG"; then
-            errores+=("$nombre: no pude pushear"); log "$nombre: push falló"
+        # Con un repo recién creado el remoto está vacío: no hay nada que traer.
+        if [ -n "$(git -C "$repo" ls-remote --heads origin 2>/dev/null)" ]; then
+          if ! git -C "$repo" pull --rebase --autostash -q 2>>"$LOG"; then
+            git -C "$repo" rebase --abort 2>/dev/null
+            errores+=("$nombre: conflicto al rebase (revisar)")
+            log "$nombre: pull --rebase falló; abortado"
+            continue
           fi
+        fi
+        if ! git -C "$repo" push -q -u origin HEAD 2>>"$LOG"; then
+          errores+=("$nombre: no pude pushear"); log "$nombre: push falló"
         fi
       else
         errores+=("$nombre: sin remoto (no hay por dónde viajar)")
