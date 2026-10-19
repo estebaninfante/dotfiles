@@ -1,0 +1,763 @@
+#!/usr/bin/env python3
+"""rig-db — la bodega unificada de la actividad de los agentes.
+
+Junta en un solo log append-only (NDJSON) lo que hoy vive disperso en archivos:
+
+  correo   ~/.local/state/rig/correo/{agentes,buzon}
+  eventos  ~/.local/state/rig/events.jsonl
+  tickets  ~/.config/opencode/tickets.json   (tablero rig)
+  tareas   ~/.local/share/pi/tareas.json     (tickets pi + pasos)
+  sesiones ~/.pi/agent/sessions/**/*.jsonl   (solo metadata)
+  agentes  ~/.local/state/rig/correo/agentes (presencia)
+
+El NDJSON es la fuente de verdad y la unidad de réplica a la nube. La SQLite
+(rig.db) es una vista reconstruible para consultar. Los archivos originales
+siguen siendo la fuente de escritura: rig no cambia cómo escribe.
+
+Uso:
+  rig db sync [--forzar] [--callado] [--si-viejo SEG]
+  rig db estado
+  rig db buscar TEXTO [--limite N]
+  rig db mensajes [--entre A:B] [--limite N]
+  rig db eventos [--tipo K] [--limite N]
+  rig db tickets [--estado E] [--limite N]
+  rig db sesiones [--limite N]
+  rig db exportar [--desde FECHA]
+  rig db sql "SELECT ..."
+  rig db ruta
+  rig db timer [instalar|quitar|estado]
+
+Nada de esto levanta un daemon: sync se corre a mano, al mandar un mensaje o
+desde un timer de systemd opcional (`rig db timer instalar`).
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+HOME = Path.home()
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
+STATE_HOME = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state")
+CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
+
+BODEGA = Path(os.environ.get("RIG_DB_DIR") or DATA_HOME / "rig" / "db")
+LOG = BODEGA / "unificado.ndjson"
+DB = BODEGA / "rig.db"
+CACHE = BODEGA / "cache.json"
+MARCA = BODEGA / "ultimo-sync"
+LOCK = BODEGA / "sync.lock"
+
+CORREO = Path(os.environ.get("RIG_CORREO_DIR") or STATE_HOME / "rig" / "correo")
+EVENTOS = Path(os.environ.get("RIG_EVENTS_FILE") or STATE_HOME / "rig" / "events.jsonl")
+TICKETS = Path(os.environ.get("RIG_TICKETS_FILE") or CONFIG_HOME / "opencode" / "tickets.json")
+TAREAS = Path(os.environ.get("RIG_TAREAS_FILE") or DATA_HOME / "pi" / "tareas.json")
+SESIONES = Path(os.environ.get("RIG_SESIONES_DIR") or HOME / ".pi/agent/sessions")
+
+
+# ------------------------------------------------------------------ utilidades
+
+def ahora_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def sha(*partes: str, n: int = 16) -> str:
+    h = hashlib.sha256("\x1f".join(partes).encode("utf-8", "replace"))
+    return h.hexdigest()[:n]
+
+
+def a_utc(ts: str | None) -> float:
+    """Epoch de un ISO 8601 (con o sin offset). Devuelve 0 si no se entiende."""
+    if not ts:
+        return 0.0
+    texto = str(ts).strip().replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(texto).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def leer_lineas(ruta: Path):
+    try:
+        with ruta.open("r", encoding="utf-8", errors="replace") as f:
+            for linea in f:
+                linea = linea.strip()
+                if linea:
+                    yield linea
+    except OSError:
+        return
+
+
+def leer_json(ruta: Path):
+    try:
+        return json.loads(ruta.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def cargar_cache() -> dict:
+    datos = leer_json(CACHE)
+    return datos if isinstance(datos, dict) else {}
+
+
+def guardar_cache(datos: dict) -> None:
+    BODEGA.mkdir(parents=True, exist_ok=True)
+    tmp = CACHE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(datos, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    tmp.replace(CACHE)
+
+
+def registro(tipo, ts, fuente, actor="", sujeto="", proyecto="", ticket="", estado="", datos=None, rid=""):
+    ts = ts or ""
+    return {
+        "id": rid,
+        "tipo": tipo,
+        "ts": ts,
+        "ts_utc": a_utc(ts),
+        "fuente": fuente,
+        "actor": actor or "",
+        "sujeto": sujeto or "",
+        "proyecto": proyecto or "",
+        "ticket": ticket or "",
+        "estado": estado or "",
+        "datos": datos or {},
+    }
+
+
+# -------------------------------------------------------------------- colectores
+
+def colectar_correo():
+    """Mensajes y acuses de lectura del buzón de cada agente.
+
+    El buzón es mutable (`leido` se escribe in-place), así que se relee entero
+    cada vez y se deduplica por id: nunca se pierde un estado de lectura.
+    """
+    buzon = CORREO / "buzon"
+    if not buzon.is_dir():
+        return
+    for archivo in sorted(buzon.glob("*.jsonl")):
+        for linea in leer_lineas(archivo):
+            try:
+                m = json.loads(linea)
+            except ValueError:
+                continue
+            if not isinstance(m, dict):
+                continue
+            de = str(m.get("de") or "")
+            para = str(m.get("para") or "")
+            ts = str(m.get("ts") or "")
+            texto = str(m.get("texto") or "")
+            mid = "msg:" + sha("msg", de, para, ts, texto)
+            yield registro(
+                "mensaje", ts, "correo", actor=de, sujeto=para,
+                datos={"texto": texto, "archivo": archivo.name}, rid=mid,
+            )
+            leido = m.get("leido")
+            if leido:
+                yield registro(
+                    "lectura", str(leido), "correo", actor=para, sujeto=mid,
+                    datos={"mensaje": mid}, rid="lec:" + sha("lec", mid, str(leido)),
+                )
+
+
+def colectar_agentes():
+    """Presencia viva. Los campos volátiles (visto, tarea) no cuentan para la
+    revisión: si no cambió la identidad, no se emite un registro nuevo."""
+    carpeta = CORREO / "agentes"
+    if not carpeta.is_dir():
+        return
+    for archivo in sorted(carpeta.glob("*.json")):
+        a = leer_json(archivo)
+        if not isinstance(a, dict):
+            continue
+        nombre = str(a.get("nombre") or archivo.stem)
+        estable = {k: a.get(k) for k in ("nombre", "harness", "cwd", "tmux", "desde", "ticket")}
+        rev = sha("ag", json.dumps(estable, sort_keys=True, ensure_ascii=False), n=10)
+        yield registro(
+            "agente", str(a.get("visto") or ""), "correo", actor=nombre, sujeto=nombre,
+            ticket=str(a.get("ticket") or ""),
+            datos={"harness": a.get("harness"), "cwd": a.get("cwd"), "tmux": a.get("tmux"),
+                   "desde": a.get("desde"), "visto": a.get("visto"), "tarea": a.get("tarea")},
+            rid=f"ag:{nombre}:{rev}",
+        )
+
+
+def colectar_eventos():
+    if not EVENTOS.is_file():
+        return
+    for linea in leer_lineas(EVENTOS):
+        try:
+            e = json.loads(linea)
+        except ValueError:
+            continue
+        if not isinstance(e, dict):
+            continue
+        yield registro(
+            "evento", str(e.get("ts") or ""), "rig", actor=str(e.get("actor") or ""),
+            sujeto=str(e.get("ticket") or ""), ticket=str(e.get("ticket") or ""),
+            proyecto=str(e.get("area") or ""),
+            datos={"kind": e.get("kind"), "summary": e.get("summary"),
+                   "seat": e.get("seat"), "data": e.get("data")},
+            rid="ev:" + sha("ev", linea),
+        )
+
+
+def _ticket(store, t, fuente, ts, estado, proyecto, titulo, agente):
+    limpio = dict(t)
+    limpio.pop("pasos", None)
+    rev = sha("tk", json.dumps(limpio, sort_keys=True, ensure_ascii=False))
+    tid = str(t.get("id") or "")
+    return registro(
+        "ticket", ts, fuente, actor=agente, sujeto=tid, proyecto=proyecto,
+        ticket=tid, estado=estado,
+        datos={"store": store, "estado": estado, "titulo": titulo, "agente": agente,
+               "ticket": limpio},
+        rid=f"tk:{store}:{tid}:{rev}",
+    )
+
+
+def colectar_tickets():
+    # Tablero de rig: lista de tickets con status/owner.
+    if TICKETS.is_file():
+        d = leer_json(TICKETS)
+        for t in (d or {}).get("tickets", []) if isinstance(d, dict) else []:
+            if not isinstance(t, dict):
+                continue
+            yield _ticket("rig", t, "rig", str(t.get("updated") or t.get("created") or ""),
+                          str(t.get("status") or ""), str(t.get("project") or ""),
+                          str(t.get("title") or ""), str(t.get("owner") or ""))
+
+    # Tickets de pi (sesiones, pedidos, subtickets) + sus pasos.
+    d = leer_json(TAREAS)
+    for t in d if isinstance(d, list) else []:
+        if not isinstance(t, dict):
+            continue
+        tid = str(t.get("id") or "")
+        agente = str(t.get("agente") or "")
+        estado = str(t.get("estado") or "")
+        proyecto = str(t.get("tipo") or "")
+        yield _ticket("pi", t, "pi", str(t.get("actualizado") or t.get("creado") or ""),
+                      estado, proyecto, str(t.get("titulo") or ""), agente)
+        for paso in t.get("pasos") or []:
+            if not isinstance(paso, dict):
+                continue
+            ts = str(paso.get("t") or "")
+            yield registro(
+                "paso", ts, "pi", actor=agente, sujeto=tid, proyecto=proyecto,
+                ticket=tid, datos={"tipo": paso.get("tipo"), "resumen": paso.get("resumen")},
+                rid="paso:" + sha("paso", tid, ts, str(paso.get("tipo") or ""), str(paso.get("resumen") or "")),
+            )
+
+
+UUID_RE = re.compile(r"_([0-9a-fA-F-]{36})\.jsonl$")
+
+
+def colectar_sesiones():
+    """Solo metadata: el contenido crudo (158MB) no se duplica."""
+    if not SESIONES.is_dir():
+        return
+    cache = cargar_cache()
+    sesiones = cache.setdefault("sesiones", {})
+    for archivo in SESIONES.glob("*/*.jsonl"):
+        try:
+            st = archivo.stat()
+        except OSError:
+            continue
+        clave = str(archivo)
+        previo = sesiones.get(clave) or {}
+        if previo.get("mtime") == st.st_mtime and previo.get("size") == st.st_size:
+            continue
+        cabecera, ultima = {}, {}
+        try:
+            with archivo.open("r", encoding="utf-8", errors="replace") as f:
+                primera = f.readline()
+                cabecera = json.loads(primera) if primera.strip() else {}
+        except (OSError, ValueError):
+            pass
+        try:
+            with archivo.open("rb") as f:
+                f.seek(max(0, st.st_size - 8192))
+                cola = f.read().decode("utf-8", "replace").strip().splitlines()
+            if cola:
+                ultima = json.loads(cola[-1])
+        except (OSError, ValueError, IndexError):
+            pass
+        sid = str(cabecera.get("id") or (UUID_RE.search(archivo.name).group(1) if UUID_RE.search(archivo.name) else sha("ses", clave)))
+        ts = str(cabecera.get("timestamp") or "")
+        fin = ultima.get("timestamp")
+        if isinstance(fin, (int, float)) and fin > 10**11:
+            fin = datetime.fromtimestamp(fin / 1000, timezone.utc).isoformat(timespec="seconds")
+        sesiones[clave] = {"mtime": st.st_mtime, "size": st.st_size, "id": sid}
+        yield registro(
+            "sesion", ts, "pi", actor=str(cabecera.get("cwd") or ""), sujeto=sid,
+            datos={"session_id": sid, "cwd": cabecera.get("cwd"), "version": cabecera.get("version"),
+                   "archivo": clave, "bytes": st.st_size, "fin": fin,
+                   "sha256": previo.get("sha256")},
+            rid=f"ses:{sid}",
+        )
+    cache["sesiones"] = sesiones
+    guardar_cache(cache)
+
+
+COLECTORES = (colectar_correo, colectar_agentes, colectar_eventos, colectar_tickets, colectar_sesiones)
+
+
+# ----------------------------------------------------------------------- sync
+
+def ids_existentes() -> tuple[set[str], int]:
+    """Ids ya guardados. También cuenta líneas repetidas (carreras viejas)."""
+    vistos: set[str] = set()
+    lineas = 0
+    if not LOG.is_file():
+        return vistos, 0
+    with LOG.open("r", encoding="utf-8", errors="replace") as f:
+        for linea in f:
+            if '"id":"' not in linea:
+                continue
+            lineas += 1
+            try:
+                vistos.add(json.loads(linea)["id"])
+            except (ValueError, KeyError):
+                continue
+    return vistos, lineas - len(vistos)
+
+
+def compactar():
+    """Deja una sola línea por id (la última) y reescribe el log atómicamente."""
+    ultimas: dict[str, str] = {}
+    for linea in leer_lineas(LOG):
+        try:
+            ultimas[json.loads(linea)["id"]] = linea
+        except (ValueError, KeyError):
+            continue
+    tmp = LOG.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        for linea in ultimas.values():
+            f.write(linea + "\n")
+    tmp.replace(LOG)
+
+
+def sync(forzar=False, callado=False, si_viejo=0):
+    BODEGA.mkdir(parents=True, exist_ok=True)
+    with LOCK.open("w") as cerrojo:
+        # Varios agentes pueden llamar a sync a la vez: se serializa acá.
+        fcntl.flock(cerrojo, fcntl.LOCK_EX)
+        if not forzar and si_viejo and MARCA.is_file():
+            try:
+                edad = int(time.time() - MARCA.stat().st_mtime)
+                if edad < si_viejo:
+                    if not callado:
+                        print(f"rig-db: sync reciente ({edad}s), salteado")
+                    return 0
+            except OSError:
+                pass
+
+        if not LOG.is_file():
+            guardar_cache({})  # sin log no vale la pena confiar en hashes viejos
+
+        vistos, duplicados = ids_existentes()
+        nuevos = []
+        for colector in COLECTORES:
+            try:
+                for r in colector():
+                    if r["id"] and r["id"] not in vistos:
+                        vistos.add(r["id"])
+                        nuevos.append(r)
+            except Exception as error:  # una fuente rota no frena las demás
+                print(f"rig-db: {colector.__name__}: {error}", file=sys.stderr)
+
+        nuevos.sort(key=lambda r: (r["ts_utc"], r["id"]))
+        if nuevos:
+            with LOG.open("a", encoding="utf-8") as f:
+                for r in nuevos:
+                    f.write(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n")
+        if duplicados:
+            compactar()
+        construir(forzar=bool(nuevos) or duplicados > 0 or not DB.is_file())
+        MARCA.write_text(str(int(time.time())), encoding="utf-8")
+    if not callado:
+        extra = f", {duplicados} duplicados compactados" if duplicados else ""
+        print(f"rig-db: +{len(nuevos)} registros · {LOG} ({LOG.stat().st_size // 1024} KB{extra})")
+    return 0
+
+
+ESQUEMA = """
+CREATE TABLE registro (
+  id TEXT PRIMARY KEY, tipo TEXT, ts TEXT, ts_utc REAL, fuente TEXT,
+  actor TEXT, sujeto TEXT, proyecto TEXT, ticket TEXT, datos TEXT);
+CREATE INDEX idx_reg_tipo ON registro(tipo, ts_utc);
+CREATE INDEX idx_reg_ticket ON registro(ticket);
+CREATE INDEX idx_reg_actor ON registro(actor);
+
+CREATE TABLE mensaje (
+  id TEXT PRIMARY KEY, ts TEXT, ts_utc REAL, de TEXT, para TEXT,
+  texto TEXT, leido_ts TEXT);
+CREATE INDEX idx_msg_ts ON mensaje(ts_utc);
+CREATE INDEX idx_msg_de ON mensaje(de);
+CREATE INDEX idx_msg_para ON mensaje(para);
+
+CREATE TABLE evento (
+  id TEXT PRIMARY KEY, ts TEXT, ts_utc REAL, kind TEXT, actor TEXT,
+  ticket TEXT, area TEXT, summary TEXT, datos TEXT);
+CREATE INDEX idx_ev_ts ON evento(ts_utc);
+
+CREATE TABLE ticket (
+  store TEXT, ticket_id TEXT, ts TEXT, ts_utc REAL, estado TEXT,
+  proyecto TEXT, titulo TEXT, agente TEXT, datos TEXT,
+  PRIMARY KEY(store, ticket_id));
+
+CREATE TABLE agente (
+  id TEXT PRIMARY KEY, nombre TEXT, ts TEXT, ts_utc REAL, harness TEXT,
+  cwd TEXT, tmux TEXT, tarea TEXT, datos TEXT);
+
+CREATE TABLE sesion (
+  id TEXT PRIMARY KEY, session_id TEXT, ts TEXT, ts_utc REAL, cwd TEXT,
+  archivo TEXT, bytes INTEGER, fin TEXT, datos TEXT);
+
+CREATE VIRTUAL TABLE busqueda USING fts5(contenido, tipo UNINDEXED, ref UNINDEXED);
+"""
+
+
+def construir(forzar=False):
+    if not LOG.is_file():
+        return
+    if not forzar and DB.is_file() and DB.stat().st_mtime >= LOG.stat().st_mtime:
+        return
+    tmp = Path(tempfile.mktemp(prefix="rig-db-", suffix=".sqlite", dir=str(BODEGA)))
+    con = sqlite3.connect(tmp)
+    try:
+        con.executescript(ESQUEMA)
+        filas = []
+        lecturas = {}
+        for linea in leer_lineas(LOG):
+            try:
+                r = json.loads(linea)
+                filas.append((
+                    r.get("id"), r.get("tipo"), r.get("ts"), r.get("ts_utc"),
+                    r.get("fuente"), r.get("actor"), r.get("sujeto"),
+                    r.get("proyecto"), r.get("ticket"),
+                    json.dumps(r.get("datos") or {}, ensure_ascii=False, separators=(",", ":")),
+                ))
+            except ValueError:
+                continue
+        con.executemany(
+            "INSERT OR REPLACE INTO registro (id,tipo,ts,ts_utc,fuente,actor,sujeto,proyecto,ticket,datos) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            filas,
+        )
+
+        # mensajes + acuses
+        for rid, tipo, ts, ts_utc, fuente, actor, sujeto, proyecto, ticket, datos in filas:
+            d = json.loads(datos) if datos else {}
+            if tipo == "lectura":
+                lecturas.setdefault(d.get("mensaje") or sujeto, []).append(ts)
+        for rid, tipo, ts, ts_utc, fuente, actor, sujeto, proyecto, ticket, datos in filas:
+            if tipo != "mensaje":
+                continue
+            d = json.loads(datos)
+            leido = max(lecturas.get(rid, []), default=None)
+            con.execute("INSERT OR REPLACE INTO mensaje VALUES (?,?,?,?,?,?,?)",
+                        (rid, ts, ts_utc, actor, sujeto, d.get("texto"), leido))
+
+        # eventos
+        for rid, tipo, ts, ts_utc, fuente, actor, sujeto, proyecto, ticket, datos in filas:
+            if tipo != "evento":
+                continue
+            d = json.loads(datos)
+            con.execute("INSERT OR REPLACE INTO evento VALUES (?,?,?,?,?,?,?,?,?)",
+                        (rid, ts, ts_utc, d.get("kind"), actor, ticket, proyecto, d.get("summary"), datos))
+
+        # tickets: se queda con la última versión de cada (store, id)
+        for rid, tipo, ts, ts_utc, fuente, actor, sujeto, proyecto, ticket, datos in filas:
+            if tipo != "ticket":
+                continue
+            d = json.loads(datos)
+            con.execute(
+                "INSERT INTO ticket (store,ticket_id,ts,ts_utc,estado,proyecto,titulo,agente,datos) "
+                "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(store,ticket_id) DO UPDATE SET "
+                "ts=excluded.ts, ts_utc=excluded.ts_utc, estado=excluded.estado, "
+                "proyecto=excluded.proyecto, titulo=excluded.titulo, agente=excluded.agente, datos=excluded.datos",
+                (d.get("store"), ticket, ts, ts_utc, d.get("estado"), proyecto, d.get("titulo"), actor, datos),
+            )
+
+        # agentes: último registro por nombre
+        for rid, tipo, ts, ts_utc, fuente, actor, sujeto, proyecto, ticket, datos in filas:
+            if tipo != "agente":
+                continue
+            d = json.loads(datos)
+            con.execute("INSERT OR REPLACE INTO agente VALUES (?,?,?,?,?,?,?,?,?)",
+                        (rid, sujeto, ts, ts_utc, d.get("harness"), d.get("cwd"), d.get("tmux"), d.get("tarea"), datos))
+
+        # sesiones: última versión por session_id
+        for rid, tipo, ts, ts_utc, fuente, actor, sujeto, proyecto, ticket, datos in filas:
+            if tipo != "sesion":
+                continue
+            d = json.loads(datos)
+            con.execute("INSERT OR REPLACE INTO sesion VALUES (?,?,?,?,?,?,?,?,?)",
+                        (rid, d.get("session_id"), ts, ts_utc, d.get("cwd"), d.get("archivo"),
+                         d.get("bytes"), d.get("fin"), datos))
+
+        # búsqueda full-text
+        con.execute("INSERT INTO busqueda (contenido,tipo,ref) SELECT COALESCE(texto,''), 'mensaje', id FROM mensaje")
+        con.execute("INSERT INTO busqueda (contenido,tipo,ref) SELECT COALESCE(summary,''), 'evento', id FROM evento")
+        con.execute("INSERT INTO busqueda (contenido,tipo,ref) SELECT COALESCE(titulo,''), 'ticket', store||':'||ticket_id FROM ticket")
+        con.execute("INSERT INTO busqueda (contenido,tipo,ref) SELECT COALESCE(resumen,''), 'paso', id FROM (SELECT id, json_extract(datos,'$.resumen') AS resumen FROM registro WHERE tipo='paso')")
+        con.commit()
+        con.execute("PRAGMA optimize")
+    finally:
+        con.close()
+    tmp.replace(DB)
+
+
+# -------------------------------------------------------------------- consultas
+
+def abrir_db():
+    if not DB.is_file():
+        print("rig-db: no hay base todavía; corré `rig db sync`", file=sys.stderr)
+        sys.exit(2)
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    return con
+
+
+def cmd_estado(_args):
+    con = abrir_db()
+    print(f"bodega   {BODEGA}")
+    print(f"log      {LOG}  ({LOG.stat().st_size // 1024} KB, {(LOG.read_text(errors='replace').count(chr(10)))} registros)")
+    print(f"base     {DB}  ({DB.stat().st_size // 1024} KB)")
+    print()
+    for tabla in ("mensaje", "evento", "ticket", "agente", "sesion", "registro"):
+        try:
+            n = con.execute(f"SELECT COUNT(*) FROM {tabla}").fetchone()[0]
+            print(f"{tabla:10} {n}")
+        except sqlite3.Error:
+            pass
+    fila = con.execute("SELECT MIN(ts), MAX(ts) FROM registro WHERE ts != ''").fetchone()
+    print(f"\nrango    {fila[0]} → {fila[1]}")
+    print("\nfuentes")
+    for f, n in con.execute("SELECT fuente, COUNT(*) FROM registro GROUP BY fuente ORDER BY 2 DESC"):
+        print(f"  {f or '?':10} {n}")
+    pendientes = con.execute("SELECT COUNT(*) FROM mensaje WHERE leido_ts IS NULL").fetchone()[0]
+    print(f"\nmensajes sin leer: {pendientes}")
+    return 0
+
+
+def cmd_buscar(args):
+    con = abrir_db()
+    patron = " ".join(args.texto)
+    try:
+        filas = con.execute(
+            "SELECT tipo, ref, snippet(busqueda, 0, '[', ']', '…', 18) AS t "
+            "FROM busqueda WHERE busqueda MATCH ? ORDER BY rank LIMIT ?",
+            (patron, args.limite),
+        ).fetchall()
+    except sqlite3.Error:
+        like = f"%{patron}%"
+        filas = con.execute(
+            "SELECT tipo, ref, substr(contenido,1,200) AS t FROM busqueda "
+            "WHERE contenido LIKE ? LIMIT ?", (like, args.limite)).fetchall()
+    for f in filas:
+        print(f"[{f['tipo']}] {f['ref']}\n  {f['t']}\n")
+    return 0
+
+
+def cmd_mensajes(args):
+    con = abrir_db()
+    sql = "SELECT ts, de, para, texto, leido_ts FROM mensaje"
+    where, params = [], []
+    if args.entre:
+        a, _, b = args.entre.partition(":")
+        where.append("(de = ? OR para = ?)")
+        params += [a, a]
+        if b:
+            where.append("(de = ? OR para = ?)")
+            params += [b, b]
+    if args.sin_leer:
+        where.append("leido_ts IS NULL")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY ts_utc DESC LIMIT ?"
+    params.append(args.limite)
+    for f in con.execute(sql, params):
+        marca = " " if f["leido_ts"] else "•"
+        print(f"{marca} {f['ts']}  {f['de']} → {f['para']}")
+        print(f"  {f['texto']}")
+        print()
+    return 0
+
+
+def cmd_eventos(args):
+    con = abrir_db()
+    sql, params = "SELECT ts, kind, actor, ticket, summary FROM evento", []
+    if args.tipo:
+        sql += " WHERE kind = ?"
+        params.append(args.tipo)
+    sql += " ORDER BY ts_utc DESC LIMIT ?"
+    params.append(args.limite)
+    for f in con.execute(sql, params):
+        print(f"{f['ts']}  {f['kind']:14} {f['actor'] or '-':20} {f['ticket'] or ''}  {f['summary'] or ''}")
+    return 0
+
+
+def cmd_tickets(args):
+    con = abrir_db()
+    sql, params = "SELECT store, ticket_id, ts, estado, proyecto, titulo, agente FROM ticket", []
+    if args.estado:
+        sql += " WHERE estado = ?"
+        params.append(args.estado)
+    sql += " ORDER BY ts_utc DESC LIMIT ?"
+    params.append(args.limite)
+    for f in con.execute(sql, params):
+        print(f"{f['store']:4} {f['ticket_id']:10} {f['estado'] or '-':12} {f['proyecto'] or '-':12} {f['titulo']}")
+    return 0
+
+
+def cmd_sesiones(args):
+    con = abrir_db()
+    for f in con.execute("SELECT ts, session_id, cwd, bytes, archivo FROM sesion ORDER BY ts_utc DESC LIMIT ?", (args.limite,)):
+        print(f"{f['ts']}  {f['session_id']}  {f['cwd'] or '-'}  {f['bytes']}B")
+        print(f"  {f['archivo']}")
+    return 0
+
+
+def cmd_exportar(args):
+    desde = a_utc(args.desde) if args.desde else 0.0
+    if not LOG.is_file():
+        return 0
+    for linea in leer_lineas(LOG):
+        if not desde:
+            print(linea)
+            continue
+        try:
+            if (json.loads(linea).get("ts_utc") or 0) >= desde:
+                print(linea)
+        except ValueError:
+            continue
+    return 0
+
+
+def cmd_sql(args):
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    for f in con.execute(" ".join(args.consulta)):
+        print(json.dumps(dict(f), ensure_ascii=False))
+    return 0
+
+
+# ----------------------------------------------------------------------- timer
+
+UNIDAD = """[Unit]
+Description=rig-db: guarda la actividad de los agentes en la bodega unificada
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/rig-db sync --callado
+"""
+
+TEMPORIZADOR = """[Unit]
+Description=rig-db: sync cada 2 minutos
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
+"""
+
+
+def cmd_timer(args):
+    accion = args.accion or "estado"
+    destino = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "systemd" / "user"
+    servicio, timer = destino / "rig-db-sync.service", destino / "rig-db-sync.timer"
+    if accion == "instalar":
+        destino.mkdir(parents=True, exist_ok=True)
+        servicio.write_text(UNIDAD, encoding="utf-8")
+        timer.write_text(TEMPORIZADOR, encoding="utf-8")
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        subprocess.run(["systemctl", "--user", "enable", "--now", "rig-db-sync.timer"], check=False)
+        print("rig-db: timer instalado (cada 2 min)")
+    elif accion == "quitar":
+        subprocess.run(["systemctl", "--user", "disable", "--now", "rig-db-sync.timer"], check=False)
+        for f in (servicio, timer):
+            f.unlink(missing_ok=True)
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        print("rig-db: timer quitado")
+    else:
+        subprocess.run(["systemctl", "--user", "list-timers", "rig-db-sync.timer", "--no-pager"], check=False)
+    return 0
+
+
+# ------------------------------------------------------------------------ main
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="rig db", description="bodega unificada de la actividad de los agentes")
+    sub = p.add_subparsers(dest="cmd")
+
+    s = sub.add_parser("sync", help="guardar lo nuevo en la bodega")
+    s.add_argument("--forzar", action="store_true")
+    s.add_argument("--callado", action="store_true")
+    s.add_argument("--si-viejo", type=int, default=0)
+    s.set_defaults(func=lambda a: sync(a.forzar, a.callado, a.si_viejo))
+
+    sub.add_parser("estado", help="qué hay guardado").set_defaults(func=cmd_estado)
+
+    s = sub.add_parser("buscar", help="búsqueda full-text")
+    s.add_argument("texto", nargs="+")
+    s.add_argument("--limite", type=int, default=20)
+    s.set_defaults(func=cmd_buscar)
+
+    s = sub.add_parser("mensajes", help="mensajes entre agentes")
+    s.add_argument("--entre", help="A:B (o solo A)")
+    s.add_argument("--sin-leer", action="store_true")
+    s.add_argument("--limite", type=int, default=20)
+    s.set_defaults(func=cmd_mensajes)
+
+    s = sub.add_parser("eventos", help="eventos de rig")
+    s.add_argument("--tipo")
+    s.add_argument("--limite", type=int, default=30)
+    s.set_defaults(func=cmd_eventos)
+
+    s = sub.add_parser("tickets", help="tickets (rig y pi)")
+    s.add_argument("--estado")
+    s.add_argument("--limite", type=int, default=40)
+    s.set_defaults(func=cmd_tickets)
+
+    s = sub.add_parser("sesiones", help="sesiones de pi (metadata)")
+    s.add_argument("--limite", type=int, default=20)
+    s.set_defaults(func=cmd_sesiones)
+
+    s = sub.add_parser("exportar", help="NDJSON para subir a la nube")
+    s.add_argument("--desde")
+    s.set_defaults(func=cmd_exportar)
+
+    s = sub.add_parser("sql", help="consulta cruda")
+    s.add_argument("consulta", nargs="+")
+    s.set_defaults(func=cmd_sql)
+
+    sub.add_parser("ruta", help="dónde vive la bodega").set_defaults(
+        func=lambda a: (print(BODEGA), print(LOG), print(DB)) and 0)
+
+    s = sub.add_parser("timer", help="sync periódico opcional")
+    s.add_argument("accion", nargs="?", choices=["instalar", "quitar", "estado"])
+    s.set_defaults(func=cmd_timer)
+
+    args = p.parse_args()
+    if not getattr(args, "func", None):
+        p.print_help()
+        return 0
+    return args.func(args) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

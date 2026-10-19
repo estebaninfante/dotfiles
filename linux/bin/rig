@@ -135,6 +135,9 @@ rig - sillas de agentes sobre tmux + tablero de tickets (sin daemon)
   rig msg <ls|registrar|pulso|enviar|leer|historia|apagar> [args]
                                      correo entre agentes, independiente del harness: quien esta
                                      vivo, que esta haciendo cada uno y mensajes con buzon
+  rig db sync|estado|buscar|mensajes|eventos|tickets|sesiones|exportar|sql|timer
+                                     bodega unificada (NDJSON + SQLite) con todo lo de rig:
+                                     correo, eventos, tickets, tareas y sesiones de pi
                                      una silla pide una decision y queda esperando: delega en
                                      rig-escalate (evento kind=ask + bloqueo + avisos)
 
@@ -1911,9 +1914,9 @@ cmd_ticket() {
   local action="${1:-}"
   [ $# -gt 0 ] && shift
   case "$action" in
-    add) ticket_add "$@" ;;
+    add) ticket_add "$@"; db_auto_sync ;;
     list|ls) ticket_list "$@" ;;
-    set) ticket_set "$@" ;;
+    set) ticket_set "$@"; db_auto_sync ;;
     done)
       local close=0 tid="" a
       local -a dargs=()
@@ -1925,6 +1928,7 @@ cmd_ticket() {
         esac
       done
       ticket_set "${dargs[@]}" --status 'done'
+      db_auto_sync
       if [ "$close" = "1" ] && [ -n "$tid" ]; then
         store_ensure
         local key wt
@@ -1935,7 +1939,7 @@ cmd_ticket() {
         fi
       fi
       ;;
-    rm|remove) ticket_rm "$@" ;;
+    rm|remove) ticket_rm "$@"; db_auto_sync ;;
     backfill|backfill-area|migrate|renumber) ticket_backfill ;;
     metrics|cost) ticket_metrics "$@" ;;
     show|info|ficha) ticket_show "$@" ;;
@@ -4346,18 +4350,26 @@ msg_apagar() {
   info "apagado: $nombre (su buzon queda en $CORREO_DIR/buzon)"
 }
 
+# Guarda la actividad en la bodega unificada (rig-db). Nunca frena un comando.
+db_auto_sync() {
+  [ "${RIG_DB_AUTO:-1}" = "1" ] || return 0
+  local bin
+  bin="$(dirname "$SELF")/rig-db"
+  [ -x "$bin" ] && "$bin" sync --callado --si-viejo 45 >/dev/null 2>&1 || true
+}
+
 cmd_msg() {
   local sub="${1:-ls}"
   [ $# -gt 0 ] && shift
   case "$sub" in
     ls|list) msg_ls "$@" ;;
-    registrar|reg) msg_registrar "$@" ;;
+    registrar|reg) msg_registrar "$@"; db_auto_sync ;;
     pulso|estado) msg_pulso "$@" ;;
-    enviar|send|decir) msg_enviar "$@" ;;
-    leer|inbox) msg_leer "$@" ;;
+    enviar|send|decir) msg_enviar "$@"; db_auto_sync ;;
+    leer|inbox) msg_leer "$@"; db_auto_sync ;;
     historia|hist) msg_historia "$@" ;;
     apagar|off) msg_apagar "$@" ;;
-    avisar) [ $# -ge 2 ] || die "uso: rig msg avisar <agente> \"<texto>\""; msg_avisar "$1" "$2" || die "no encontre la ventana de $1"; info "avisado: $1" ;;
+    avisar) [ $# -ge 2 ] || die "uso: rig msg avisar <agente> \"<texto>\""; msg_avisar "$1" "$2" || die "no encontre la ventana de $1"; info "avisado: $1"; db_auto_sync ;;
     -h|--help|help) msg_usage; return 0 ;;
     *) msg_usage; die "rig msg: subcomando desconocido: $sub" ;;
   esac
@@ -4385,6 +4397,7 @@ case "$cmd" in
   say|reply) cmd_say "$@" ;;
   ask) cmd_ask "$@" ;;
   msg|correo|mail) cmd_msg "$@" ;;
+  db|bodega) exec "$(dirname "$SELF")/rig-db" "$@" ;;
   launch|lg) cmd_launch "$@" ;;
   export|extract|transcript) cmd_export "$@" ;;
   agents|a) cmd_agents "$@" ;;
