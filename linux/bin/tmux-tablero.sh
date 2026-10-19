@@ -59,7 +59,7 @@ split_target() {
     if (( area > best_area )); then best_area=$area; best="$id"; best_w=$w; best_h=$h; fi
   done < <(tmux list-panes -t "$DASH:tablero" -F '#{pane_id} #{pane_width} #{pane_height}' 2>/dev/null)
   [ -n "$best" ] || return 1
-  if (( best_w >= best_h )); then printf '%s -h' "$best"; else printf '%s -v' "$best"; fi
+  if (( best_w >= best_h )); then printf '%s -h\n' "$best"; else printf '%s -v\n' "$best"; fi
 }
 
 case "${1:-}" in
@@ -104,14 +104,18 @@ echo "tablero: $(tmux list-panes -t "$DASH:tablero" 2>/dev/null | wc -l) panel(e
 
 [ "${OPEN:-0}" = "1" ] || exit 0
 
-# Una sola ventana de kitty con el tablero.
+# Una sola ventana de kitty con el tablero. `</dev/null` evita que kitty herede
+# la terminal desde la que se llama (si no, el comando queda colgado).
 setsid "$TERM_BIN" --title "tablero · ${#sessions[@]} paneles" \
-  tmux attach -t "$DASH" >/dev/null 2>&1 &
+  tmux attach -t "$DASH" </dev/null >/dev/null 2>&1 &
 
-# Reajuste al tamaño real del cliente nuevo.
-for _ in $(seq 1 100); do
-  tmux list-clients -t "$DASH" 2>/dev/null | grep -q . && break
-  sleep 0.1
-done
-sleep 0.4
-reload_grid
+# El reajuste al tamaño real corre en segundo plano: no bloquea el comando.
+(
+  for _ in $(seq 1 100); do
+    tmux list-clients -t "$DASH" 2>/dev/null | grep -q . && break
+    sleep 0.1
+  done
+  sleep 0.4
+  reload_grid
+) >/dev/null 2>&1 &
+disown 2>/dev/null || true
