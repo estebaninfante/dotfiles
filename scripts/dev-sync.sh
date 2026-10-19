@@ -30,8 +30,9 @@
 #
 # Variables: DEV_SYNC_ROOTS (raíces a recorrer), DEV_SYNC_PEER (máquina par).
 set -uo pipefail
-# ~/bin tapa ps/grep/sed/awk con busybox: usar los del sistema.
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# ~/bin tapa ps/grep/sed/awk con busybox: los del sistema primero. El resto del
+# PATH se conserva: los hooks del repo necesitan pnpm/node de mise.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 ROOTS="${DEV_SYNC_ROOTS:-$HOME/developing $HOME/proyectos}"
 PEER="${DEV_SYNC_PEER:-desktop-lan}"
@@ -65,6 +66,9 @@ en_casa() {
         | awk -F: '$2=="802-11-wireless"{print $1; exit}')
   [ -n "$red" ] && printf '%s' "$red" | grep -qiE "$SSID"
 }
+log() { echo "$(date '+%F %T') [$MODO] $*" >>"$LOG"; }
+ms()  { echo $(( $(date +%s%N) / 1000000 )); }
+
 saltar_por_entorno() {
   if ! enchufado; then log "auto: sin corriente, no sincronizo"; return 0; fi
   if ! en_casa; then log "auto: fuera del wifi de casa, no sincronizo"; return 0; fi
@@ -72,34 +76,59 @@ saltar_por_entorno() {
 }
 if [ "$AUTO" = 1 ] && saltar_por_entorno; then exit 0; fi
 
-log() { echo "$(date '+%F %T') [$MODO] $*" >>"$LOG"; }
-ms()  { echo $(( $(date +%s%N) / 1000000 )); }
-
 # ---------------------------------------------------------------- paquetes
 
-if [ "$MODO" = "paquetes" ]; then
-  tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
-  pacman -Qe | awk '{print $1}' | sort >"$tmp/repo.local"
-  pacman -Qm | awk '{print $1}' | sort >"$tmp/aur.local"
+if [ "$MODO" = "apps" ]; then
+  APLICAR=0
+  [ "${2:-}" = "--aplicar" ] && APLICAR=1
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+
+  pacman -Qe | awk '{print $1}' >"$tmp/repo.local"
+  pacman -Qm | awk '{print $1}' >"$tmp/aur.local"
+  pacman -Q | awk '{print $1" "$2}' >"$tmp/ver.local"
   if ! ssh -o ConnectTimeout=8 "$PEER" \
-      'pacman -Qe | awk "{print \$1}" | sort; echo __AUR__; pacman -Qm | awk "{print \$1}" | sort' \
+      'pacman -Qe | awk "{print \$1}"; echo __AUR__; pacman -Qm | awk "{print \$1}"; echo __VER__; pacman -Q | awk "{print \$1\" \"\$2}"' \
       >"$tmp/peer.raw" 2>"$tmp/peer.err"; then
     echo "no pude hablar con $PEER:"; cat "$tmp/peer.err"; exit 1
   fi
-  sed -n '1,/__AUR__/p' "$tmp/peer.raw" | sed '$d' >"$tmp/repo.peer"
-  sed -n '/__AUR__/,$p' "$tmp/peer.raw" | sed '1d' >"$tmp/aur.peer"
-  echo "== esta máquina: $(wc -l <"$tmp/repo.local") de repo + $(wc -l <"$tmp/aur.local") AUR"
-  echo "== $PEER:        $(wc -l <"$tmp/repo.peer") de repo + $(wc -l <"$tmp/aur.peer") AUR"
-  lfaltan=$(comm -23 "$tmp/repo.local" "$tmp/repo.peer" | grep -v '^-' || true)
-  pfaltan=$(comm -13 "$tmp/repo.local" "$tmp/repo.peer" | grep -v '^-' || true)
-  alfalta=$(comm -23 "$tmp/aur.local" "$tmp/aur.peer" | grep -v '^-' || true)
-  apfalta=$(comm -13 "$tmp/aur.local" "$tmp/aur.peer" | grep -v '^-' || true)
-  echo; echo "== sólo acá (repo):";  [ -n "$lfaltan" ] && echo "$lfaltan" | tr '\n' ' ' && echo
-  echo "== sólo en $PEER (repo):";   [ -n "$pfaltan" ] && echo "$pfaltan" | tr '\n' ' ' && echo
-  echo "== sólo acá (AUR):";         [ -n "$alfalta" ] && echo "$alfalta" | tr '\n' ' ' && echo
-  echo "== sólo en $PEER (AUR):";    [ -n "$apfalta" ] && echo "$apfalta" | tr '\n' ' ' && echo
-  log "paquetes: acá $(wc -l <"$tmp/repo.local")+$(wc -l <"$tmp/aur.local"), $PEER $(wc -l <"$tmp/repo.peer")+$(wc -l <"$tmp/aur.peer")"
+  awk '/^__AUR__$/{f=1;next} /^__VER__$/{f=2;next} f==0{print >"'$tmp'/repo.peer"} f==1{print >"'$tmp'/aur.peer"} f==2{print >"'$tmp'/ver.peer"}' "$tmp/peer.raw"
+
+  cat "$tmp/repo.local" "$tmp/aur.local" | sort -u >"$tmp/todo.local"
+  cat "$tmp/repo.peer" "$tmp/aur.peer" | sort -u >"$tmp/todo.peer"
+  sort -u "$tmp/todo.local" "$tmp/todo.peer" >"$tmp/union"
+
+  PKG_DIR="$HOME/dotfiles/linux/packages"
+  MACHINE="$(tr -d '[:space:]' < "$HOME/.config/machine-type" 2>/dev/null || echo laptop)"
+  PEER_MACHINE="${DEV_SYNC_PEER_MACHINE:-desktop}"
+  # solo-<máquina>.txt: lo que SÓLO corresponde a esa máquina (hardware, etc.)
+  excl_aqui="$PKG_DIR/solo-$MACHINE.txt"
+  excl_peer="$PKG_DIR/solo-$PEER_MACHINE.txt"
+  excepciones() { [ -f "$1" ] && sed -e 's/#.*//' -e 's/[[:space:]]//g' "$1" | grep -v '^$' || true; }
+  excepciones "$excl_peer" | sort -u >"$tmp/excl.instalar"   # no instalar aqui lo que es del peer
+  excepciones "$excl_aqui"  | sort -u >"$tmp/excl.peer"       # no instalar allá lo que es de acá
+
+  comm -23 "$tmp/union" "$tmp/todo.local" | comm -23 - "$tmp/excl.instalar" >"$tmp/faltan.aqui"
+  comm -23 "$tmp/union" "$tmp/todo.peer"  | comm -23 - "$tmp/excl.peer"     >"$tmp/faltan.peer"
+
+  echo "== $MACHINE: $(wc -l <"$tmp/todo.local") paquetes · $PEER ($PEER_MACHINE): $(wc -l <"$tmp/todo.peer")"
+  echo "== faltan aqui:      $(wc -l <"$tmp/faltan.aqui")   $(tr '\n' ' ' <"$tmp/faltan.aqui")"
+  echo "== faltan en $PEER: $(wc -l <"$tmp/faltan.peer")   $(tr '\n' ' ' <"$tmp/faltan.peer")"
+
+  # deriva de versiones entre los que están en las dos (mismo nombre)
+  join "$tmp/ver.local" "$tmp/ver.peer" 2>/dev/null | awk '$2!=$3' >"$tmp/drift"
+  echo "== versiones distintas: $(wc -l <"$tmp/drift") (se igualan actualizando: yay -Syu)"
+
+  if [ "$APLICAR" = 1 ] && [ -s "$tmp/faltan.aqui" ]; then
+    echo; echo "instalando faltantes acá…"
+    if command -v yay >/dev/null; then
+      yay -S --needed --noconfirm $(tr '\n' ' ' <"$tmp/faltan.aqui") && echo "OK" || echo "falló la instalación"
+    else
+      sudo pacman -S --needed --noconfirm $(tr '\n' ' ' <"$tmp/faltan.aqui") || echo "falló"
+    fi
+  elif [ -s "$tmp/faltan.aqui" ]; then
+    echo "(medición: usá --apps --aplicar para instalar)"
+  fi
+  log "apps: faltan aqui $(wc -l <"$tmp/faltan.aqui"), en $PEER $(wc -l <"$tmp/faltan.peer"), drift $(wc -l <"$tmp/drift")"
   exit 0
 fi
 
@@ -110,6 +139,7 @@ fi
 agente_en() {
   local repo="$1" p cwd cmd
   for p in /proc/[0-9]*; do
+    [ -r "$p/cmdline" ] || continue
     cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null) || continue
     case "$cmd" in
       *pi\ *|*/pi\ *|*claude*|*codex*|*opencode*) ;;
@@ -222,10 +252,12 @@ for root in $ROOTS; do
         saltar_pull=0
         agente_en "$repo" && saltar_pull=1
         # Con un repo recién creado el remoto está vacío: no hay nada que traer.
-        if [ "$saltar_pull" = 0 ] && [ -n "$(git -C "$repo" ls-remote --heads origin 2>/dev/null)" ]; then
+        tiene_upstream=$(git -C "$repo" rev-parse --abbrev-ref '@{u}' 2>/dev/null || true)
+        if [ "$saltar_pull" = 0 ] && [ -n "$tiene_upstream" ] \
+           && [ -n "$(git -C "$repo" ls-remote --heads origin 2>/dev/null)" ]; then
           if ! git -C "$repo" pull --rebase --autostash -q 2>>"$LOG"; then
             git -C "$repo" rebase --abort 2>/dev/null
-            errores+=("$nombre: conflicto al rebase (revisar)")
+            errores+=("$nombre: no pude integrar los cambios del remoto (revisar)")
             log "$nombre: pull --rebase falló; abortado"
             continue
           fi

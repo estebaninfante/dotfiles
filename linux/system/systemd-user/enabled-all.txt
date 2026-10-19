@@ -6,3 +6,5 @@ audio-jack-guard.service
 
 lan-mouse-sync.path
 lan-mouse-sync.service
+
+dev-sync.timer

@@ -1,0 +1,6 @@
+# Paquetes que SÓLO van en el desktop (hardware/arranque propio).
+# dev-sync --apps no instala estos en la otra máquina. Editable a mano.
+ollama-cuda             # sólo tiene sentido con GPU NVIDIA
+refind                  # gestor de arranque del desktop
+evdi-dkms               # pantallas DisplayLink
+evdi-dkms-debug

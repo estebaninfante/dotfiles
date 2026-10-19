@@ -1,0 +1,7 @@
+# Paquetes que SÓLO van en la laptop (hardware/arranque propio).
+# dev-sync --apps no instala estos en la otra máquina. Editable a mano.
+sof-firmware            # audio Intel del laptop
+vulkan-radeon           # GPU AMD integrada (el desktop es NVIDIA)
+lib32-vulkan-radeon
+herdr                   # mismo programa que herdr-bin del desktop
+localsend               # mismo programa que localsend-bin del desktop
