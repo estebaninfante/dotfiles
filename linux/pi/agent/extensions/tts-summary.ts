@@ -25,9 +25,14 @@
  * Pi (`agent_settled`) un modelo reescribe su última respuesta en una frase
  * llana y la habla. Nunca deja mudo al usuario; nunca dice tecnicismos.
  *
- * Interrupción: si el usuario corta la corrida (Escape), `agent_settled` llega
- * con `aborted: true` y NO se habla. La voz automática es sólo para corridas
- * que terminan solas; si el usuario interrumpió, ya sabe por qué.
+ * Interrupción: si el usuario corta la corrida, NO se habla. Se mira en tres
+ * lugares, porque `aborted` en `agent_settled` no siempre llega: el propio
+ * evento, el `stopReason: "aborted"` del mensaje del asistente (`message_end`
+ * / `turn_end`) y el texto que se rescata de la sesión. Un turno interrumpido
+ * además deja mudo el cierre ya en vuelo (el resumen de respaldo corre en
+ * segundo plano y podría llegar después del corte) y el silencio dura hasta el
+ * próximo pedido del usuario. La voz automática queda reservada a corridas que
+ * terminan solas.
  *
  * Interruptor: el `tts.enabled` del sistema de voz (config.toml [tts] + override
  * en state.json). El widget de barra eztvn.pi-tts lo togglea con `voice tts`.
@@ -52,7 +57,15 @@ type Message = { content?: unknown };
 type RunSummary = {
   texts: string[];
   errors: number;
+  /** Algún turno de la corrida terminó interrumpido (`stopReason: aborted`). */
+  aborted: boolean;
 };
+
+/** Interrupción del usuario: sea cual sea el nombre que use el proveedor. */
+function isInterruptedStop(reason: unknown): boolean {
+  const r = String(reason ?? "").toLowerCase();
+  return r === "aborted" || r === "interrupted" || r === "cancelled" || r === "canceled";
+}
 
 const MAX_SUMMARY = 240;
 const DEDUP_MS = 20000;
@@ -200,10 +213,16 @@ function voiceAvisar(line: string): void {
 
 let lastDelivered = "";
 let lastDeliveredAt = 0;
+/* Tras una interrupción no se habla hasta el próximo pedido del usuario. El
+   resumen de respaldo se genera en segundo plano: este cerrojo evita que el
+   cierre de una corrida ya cortada suene un rato después del corte. */
+let abortedUntilPrompt = false;
+let abortEpoch = 0;
 
 /* Dedup: evita repetir la misma frase en pocos segundos (el agente puede
    llamar a `avisar` a mitad y al final). */
 function deliver(text: string, limit = MAX_SUMMARY): void {
+  if (abortedUntilPrompt) return;
   if (!ttsEnabled()) return;
   const line = clean(text, limit);
   if (!line) return;
@@ -236,7 +255,10 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  let run: RunSummary = { texts: [], errors: 0 };
+  let run: RunSummary = { texts: [], errors: 0, aborted: false };
+  /* Marca de tiempo del arranque de la corrida: el respaldo que lee la sesión
+     nunca debe resucitar texto de turnos anteriores. */
+  let runStartedAt = 0;
   let announced = false;
   // Último aviso de la corrida: `avisar` ya no habla cada vez que lo llaman,
   // sino que se dice al cerrar (gana el último). Así el agente puede reportar
@@ -305,6 +327,24 @@ export default function (pi: ExtensionAPI) {
     syncVoiceTool();
     announced = false;
     pendingAviso = "";
+    // Pedido nuevo: vuelve a habilitarse la voz de cierre.
+    abortedUntilPrompt = false;
+    run = { texts: [], errors: 0, aborted: false };
+    runStartedAt = Date.now();
+  });
+
+  /* La interrupción no siempre llega como `aborted` en `agent_settled` (p. ej.
+     cuando el corte lo provoca algo que entra a mitad de corrida): el mensaje
+     del asistente queda igual con `stopReason: "aborted"`. Eso alcanza para
+     callar el cierre de esta corrida y el que quedó en vuelo. */
+  pi.on("message_end", (event) => {
+    const m = (event as { message?: { role?: string; stopReason?: string } }).message;
+    if (m?.role === "assistant" && isInterruptedStop(m.stopReason)) {
+      run.aborted = true;
+      abortedUntilPrompt = true;
+      abortEpoch += 1;
+      pendingAviso = "";
+    }
   });
 
   pi.on("session_start", () => {
@@ -314,10 +354,18 @@ export default function (pi: ExtensionAPI) {
     agentNameCache = undefined;
     spokenByHablar = [];
     lastDelivered = "";
+    abortedUntilPrompt = false;
+    run = { texts: [], errors: 0, aborted: false };
   });
 
   pi.on("turn_end", async (event, ctx) => {
     const message = (event as { message?: Message }).message;
+    if (isInterruptedStop((message as { stopReason?: string } | undefined)?.stopReason)) {
+      run.aborted = true;
+      abortedUntilPrompt = true;
+      abortEpoch += 1;
+      pendingAviso = "";
+    }
     for (const block of blocks(message?.content)) {
       if (block.type === "text" && typeof block.text === "string") {
         run.texts.push(block.text);
@@ -326,13 +374,21 @@ export default function (pi: ExtensionAPI) {
     const results = (event as { toolResults?: { isError?: boolean }[] }).toolResults ?? [];
     run.errors += results.filter((result) => result?.isError).length;
 
-    /* Respaldo si el evento no trae contenido: leer la ultima respuesta. */
+    /* Respaldo si el evento no trae contenido: leer la última respuesta, pero
+       sólo si es de ESTA corrida. Antes se leían los últimos ocho asientos sin
+       mirar la fecha: un turno interrumpido (sin texto) terminaba resumiendo
+       trabajo viejo ya comentado y te lo volvía a decir por voz. */
     if (!run.texts.length && ctx?.sessionManager) {
       for (const entry of ctx.sessionManager.getEntries().slice(-8)) {
-        if (entry.type === "message" && entry.message.role === "assistant") {
-          for (const block of blocks(entry.message.content)) {
-            if (block.type === "text" && typeof block.text === "string") run.texts.push(block.text);
-          }
+        if (entry.type !== "message" || entry.message.role !== "assistant") continue;
+        const when = Number((entry.message as { timestamp?: number }).timestamp ?? 0);
+        if (when && when < runStartedAt) continue;
+        if (isInterruptedStop((entry.message as { stopReason?: string }).stopReason)) {
+          run.aborted = true;
+          continue;
+        }
+        for (const block of blocks(entry.message.content)) {
+          if (block.type === "text" && typeof block.text === "string") run.texts.push(block.text);
         }
       }
     }
@@ -340,7 +396,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("agent_settled", async (event, ctx) => {
     const snapshot = run;
-    run = { texts: [], errors: 0 };
+    run = { texts: [], errors: 0, aborted: false };
     const hadAviso = announced;
     const deferred = pendingAviso;
     announced = false;
@@ -352,9 +408,14 @@ export default function (pi: ExtensionAPI) {
     const hablados = spokenByHablar;
     spokenByHablar = [];
     /* Corrida interrumpida: el usuario ya sabe que cortó; no lo llamamos por
-       voz ni le resumimos trabajo a medias. La voz automática queda reservada
-       para las corridas que terminan sin interrupción. */
-    if ((event as { aborted?: boolean }).aborted) return;
+       voz ni le resumimos trabajo a medias. Se mira el evento y también los
+       turnos de la corrida, porque `aborted` no siempre viene en el cierre. El
+       silencio sigue vigente hasta el próximo pedido (ver `deliver`). */
+    if ((event as { aborted?: boolean }).aborted === true || snapshot.aborted) {
+      abortedUntilPrompt = true;
+      abortEpoch += 1;
+      return;
+    }
     /* Voz apagada: ni cierre ni resumen de respaldo. */
     if (!ttsEnabled()) return;
     /* El agente ya habló con `hablar`: el cierre calla, haya o no `avisar`. */
@@ -379,7 +440,9 @@ export default function (pi: ExtensionAPI) {
     };
 
     /* No bloquea el asentamiento: la reescritura corre en segundo plano y
-       habla cuando termina. */
+       habla cuando termina. Si mientras tanto el usuario interrumpe, se
+       descarta: nada de cerrar una corrida que el usuario ya cortó. */
+    const epoch = abortEpoch;
     void (async () => {
       let line = "";
       if (model && registry?.complete) {
@@ -413,6 +476,7 @@ export default function (pi: ExtensionAPI) {
           line = "";
         }
       }
+      if (abortedUntilPrompt || epoch !== abortEpoch) return;
       deliver(line || fallback());
     })();
   });
