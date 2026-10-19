@@ -6,10 +6,13 @@
 #                               cambiaría en cada repo y cuánto tarda.
 #   dev-sync.sh --sync          commitea el WIP, rebasea contra el remoto y
 #                               pushea. Al final imprime el resumen medido.
+#   dev-sync.sh --auto          como --sync pero sólo si está enchufado a la
+#                               corriente Y en el wifi de casa (lo usa el timer).
 #   dev-sync.sh --publicar      da de alta el repo privado en GitHub si falta
 #                               (cuenta propia), le pone origin y sube todo.
-#   dev-sync.sh --paquetes      compara los paquetes instalados (repo + AUR)
-#                               contra la otra máquina y lista el faltante.
+#   dev-sync.sh --apps          converge aplicaciones con la otra máquina
+#                               (mide por defecto; --aplicar instala/actualiza).
+#   dev-sync.sh --paquetes      sólo lista las diferencias de paquetes.
 #
 # Regla del proyecto: todo repo de desarrollo vive en un repo PRIVADO de
 # GitHub de la cuenta propia, y los agentes trabajan contra ese origin para
@@ -40,15 +43,34 @@ mkdir -p "$STATE"
 
 MODO="medir"
 FILTRO=""
+AUTO=0
 case "${1:-}" in
   ""|--medir|--dry-run) MODO="medir" ;;
   --sync)               MODO="sync" ;;
+  --auto)               MODO="sync"; AUTO=1 ;;
   --publicar)           MODO="publicar" ;;
-  --paquetes)           MODO="paquetes" ;;
-  -h|--help)            sed -n '2,28p' "$0"; exit 0 ;;
+  --apps)               MODO="apps" ;;
+  --paquetes)           MODO="apps" ;;
+  -h|--help)            sed -n '2,32p' "$0"; exit 0 ;;
   *) echo "dev-sync: modo desconocido: $1" >&2; exit 2 ;;
 esac
 [ $# -gt 1 ] && FILTRO="$2"   # dev-sync --publicar vision-hub
+SSID="${DEV_SYNC_SSID:-Familia_Infante}"
+
+# Sólo con corriente y en el wifi de casa (lo que pidió el usuario).
+enchufado() { grep -qx 1 /sys/class/power_supply/*/online 2>/dev/null; }
+en_casa() {
+  local red
+  red=$(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null \
+        | awk -F: '$2=="802-11-wireless"{print $1; exit}')
+  [ -n "$red" ] && printf '%s' "$red" | grep -qiE "$SSID"
+}
+saltar_por_entorno() {
+  if ! enchufado; then log "auto: sin corriente, no sincronizo"; return 0; fi
+  if ! en_casa; then log "auto: fuera del wifi de casa, no sincronizo"; return 0; fi
+  return 1
+}
+if [ "$AUTO" = 1 ] && saltar_por_entorno; then exit 0; fi
 
 log() { echo "$(date '+%F %T') [$MODO] $*" >>"$LOG"; }
 ms()  { echo $(( $(date +%s%N) / 1000000 )); }
@@ -82,6 +104,22 @@ if [ "$MODO" = "paquetes" ]; then
 fi
 
 # ------------------------------------------------------------------ repos
+
+# ¿Hay un agente (pi/claude/codex/opencode) con su cwd dentro del repo?
+# Si sí, NO se toca el árbol de trabajo: se commitea/pushea y se saltea el pull.
+agente_en() {
+  local repo="$1" p cwd cmd
+  for p in /proc/[0-9]*; do
+    cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null) || continue
+    case "$cmd" in
+      *pi\ *|*/pi\ *|*claude*|*codex*|*opencode*) ;;
+      *) continue ;;
+    esac
+    cwd=$(readlink "$p/cwd" 2>/dev/null) || continue
+    case "$cwd" in "$repo"|"$repo"/*) return 0 ;; esac
+  done
+  return 1
+}
 
 en_curso() {  # true si hay una operación de git a medias en el repo
   local g="$1/.git"
@@ -178,10 +216,13 @@ for root in $ROOTS; do
           errores+=("$nombre: no pude commitear"); log "$nombre: commit falló"
         fi
       fi
-      # 3) integrar y publicar
+      # 3) integrar y publicar (el pull CAMBIA archivos: no se hace si hay un
+      #    agente trabajando en el repo, para no pisarle lo que está haciendo)
       if git -C "$repo" remote get-url origin >/dev/null 2>&1; then
+        saltar_pull=0
+        agente_en "$repo" && saltar_pull=1
         # Con un repo recién creado el remoto está vacío: no hay nada que traer.
-        if [ -n "$(git -C "$repo" ls-remote --heads origin 2>/dev/null)" ]; then
+        if [ "$saltar_pull" = 0 ] && [ -n "$(git -C "$repo" ls-remote --heads origin 2>/dev/null)" ]; then
           if ! git -C "$repo" pull --rebase --autostash -q 2>>"$LOG"; then
             git -C "$repo" rebase --abort 2>/dev/null
             errores+=("$nombre: conflicto al rebase (revisar)")
@@ -189,6 +230,7 @@ for root in $ROOTS; do
             continue
           fi
         fi
+        [ "$saltar_pull" = 1 ] && errores+=("$nombre: agente trabajando, no traje cambios")
         if ! git -C "$repo" push -q -u origin HEAD 2>>"$LOG"; then
           errores+=("$nombre: no pude pushear"); log "$nombre: push falló"
         fi
