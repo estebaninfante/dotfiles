@@ -36,11 +36,11 @@ DEFAULTS = {
     "denoise": False,
     "eq_mud_gain": -3.0,
     "eq_presence_gain": 2.0,
-    "gate_threshold_db": -50.0,
-    "gate_range_db": -14.0,
-    "comp_threshold_db": -22.0,
-    "comp_ratio": 3.0,
-    "makeup_db": 6.0,
+    "gate_threshold_db": -70.0,  # -70 = puerta apagada
+    "gate_range_db": -25.0,
+    "comp_threshold_db": -32.0,
+    "comp_ratio": 2.5,
+    "makeup_db": 12.0,
     "limiter_ceiling_db": -3.0,
 }
 
