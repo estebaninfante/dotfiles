@@ -25,6 +25,7 @@ Hay cuatro lugares distintos para "una palabra que hace algo". Elegí bien:
 | --- | --- | --- |
 | Una orden suelta que diga y haga ya | **hotword** | `~/.local/share/omar/hotwords.json` |
 | Que "Omar" te despierte | wake word | `~/.config/omar/config.json` → `wakeWord.word/words` |
+| Navegar Vimium diciendo las teclas | **modo teclas** (estado) | `src/decide/keymode.ts` |
 | Cerrar la conversación | end word | `config.json` → `conversation.endWords` |
 | Corregir una frase que el agente entendió mal | regla aprendida | `omar teach "<frase>" <accion> ...` |
 
@@ -75,6 +76,37 @@ de objetos. **Se relee en cada coincidencia: no hay que reiniciar nada.**
    fábrica, y entre ellas gana la primera que matchea.
 4. **Sin "Omar".** Se evalúan siempre, incluso con el micrófono en ambiente
    (tele, llamada, podcast). De ahí la regla siguiente.
+
+## Modo teclas (Vimium): decir la tecla y que la pulse
+
+`vimium` no es una hotword sino un **modo**, igual que `transcribe`: mientras
+está prendido, cada frase se traduce a pulsaciones y no pasa por el router ni
+por el modelo. Se apaga solo a los `keyMode.idleMs` (8 s) sin teclas o con
+`corta vimium`.
+
+```
+"vimium"        -> modo ON (sólo en el navegador, `keyMode.apps`)
+"efe"           -> pulsa F (Vimium muestra las etiquetas)
+"a ese"         -> pulsa A y S (sigue la etiqueta "AS")
+"as"            -> lo mismo: una etiqueta corta se parte en letras
+"doble uve"     -> W
+"uno"           -> 1
+"enter"         -> Enter
+"corta vimium"  -> modo OFF
+```
+
+- Acepta la letra pelada, el nombre español, los nombres de dos palabras y las
+tecas de control. El relleno ("la tecla", "por favor") se ignora.
+- Sólo escribe en el navegador: fuera de las apps de `keyMode.apps` el modo no
+se prende y, si cambiás de ventana, las frases se ignoran.
+- Seguridad: descarta bucles (`e, e, e, e`) y frases de más de 6 teclas; no se
+aplica el filtro de baja confianza porque una letra suelta es corta por
+naturaleza.
+- Si el STT no te entiende una letra, decí **"tecla + letra"** ("tecla ese"):
+el sesgo del decodificador está pensado para esa forma y para la letra pelada.
+- Es excluyente con el dictado continuo: prender teclas apaga el dictado.
+- Config: `keyMode.enabled`, `keyMode.apps`, `keyMode.idleMs`. Detalle completo
+en `features/vimium-por-voz.md` y `scripts/verify/vimium-por-voz.mjs`.
 
 ## Seguridad: las destructivas no se disparan solas
 
