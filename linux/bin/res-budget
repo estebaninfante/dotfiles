@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""res-budget — mide el core residente del OS contra un presupuesto de RAM.
+
+El presupuesto NO es "todo el sistema": es lo que debe estar siempre en
+memoria para que la máquina sea usable, por dentro del límite acordado.
+
+    core = kernel + sistema + escritorio + voz + visión
+
+Los satélites (editores, agentes, navegadores, servidores de desarrollo) no
+cuentan para el presupuesto: son de demanda y se pueden cerrar.
+
+Uso:
+    res-budget                     tabla + veredicto (exit 1 si pasa el límite)
+    res-budget --json              salida para res-reap / otros scripts
+    res-budget --explain           procesos del core, agrupados
+    res-budget --top N             N procesos más pesados (default 5)
+    res-budget --budget MB         override (default $RES_BUDGET_MB o 8192)
+
+Mide con PSS (memoria compartida repartida entre quienes la tocan), no RSS:
+RSS cuenta dos veces cada página compartida y hace que dos procesos que
+comparten los mismos pesos inflen el número.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+
+DEFAULT_BUDGET_MB = 8192
+
+# unidad systemd (o cmdline) -> bucket. El orden importa: gana el primero.
+BUCKETS: list[tuple[str, re.Pattern[str]]] = [
+    ("voz", re.compile(r"omar|whisper|kokoro|voice|speeedy|speech-dispatcher|pi-shim|tts", re.I)),
+    ("vision", re.compile(r"vision-hub|vision_gui|yolo|face_landmarker|hand_landmarker", re.I)),
+    ("escritorio", re.compile(
+        r"hyprland|quickshell|omarchy|hyprpaper|hypridle|hyprlock|swaync|"
+        r"xwayland|waybar|polkit|fcitx|bluez|blueman|networkmanager-applet", re.I)),
+    ("sistema", re.compile(
+        r"systemd|dbus|pipewire|wireplumber|networkmanager|tailscale|syncthing|"
+        r"upower|avahi|journald|resolved|oomd|udisks|gvfs|gnome-keyring|"
+        r"acpid|thermald|irq/|kworker|kthreadd|migration", re.I)),
+]
+
+CORE_BUCKETS = ("sistema", "escritorio", "voz", "vision")
+
+
+def read_meminfo() -> dict[str, int]:
+    out = {}
+    with open("/proc/meminfo", encoding="ascii") as fh:
+        for line in fh:
+            key, _, rest = line.partition(":")
+            if rest:
+                out[key] = int(rest.split()[0])
+    return out
+
+
+def unit_of(pid: str) -> str:
+    """Unidad systemd del proceso, leída del cgroup (más fiable que cmdline)."""
+    try:
+        with open(f"/proc/{pid}/cgroup", encoding="utf-8") as fh:
+            for line in fh:
+                parts = line.rsplit(":", 1)[-1].strip().split("/")
+                for part in reversed(parts):
+                    if part.endswith(".service") or part.endswith(".scope"):
+                        return part
+    except OSError:
+        pass
+    return ""
+
+
+def pss_kb(pid: str) -> int:
+    total = 0
+    try:
+        with open(f"/proc/{pid}/smaps_rollup", encoding="ascii") as fh:
+            for line in fh:
+                if line.startswith("Pss:"):
+                    total = int(line.split()[1])
+                    break
+    except OSError:
+        return 0
+    return total
+
+
+def cmdline_of(pid: str) -> str:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            return fh.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+    except OSError:
+        return ""
+
+
+def classify(unit: str, cmd: str) -> str:
+    haystack = f"{unit} {cmd}"
+    for name, pattern in BUCKETS:
+        if pattern.search(haystack):
+            return name
+    return "satelites"
+
+
+def collect() -> list[dict[str, object]]:
+    procs = []
+    me = os.getpid()
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit() or int(entry) == me:
+            continue
+        pid = entry
+        pss = pss_kb(pid)
+        if pss <= 0:
+            continue
+        cmd = cmdline_of(pid)
+        unit = unit_of(pid)
+        procs.append({
+            "pid": int(pid),
+            "pss": pss,
+            "unit": unit,
+            "cmd": cmd[:120],
+            "bucket": classify(unit, cmd),
+        })
+    return procs
+
+
+def main(argv: list[str]) -> int:
+    budget = int(os.environ.get("RES_BUDGET_MB", DEFAULT_BUDGET_MB))
+    as_json = "--json" in argv
+    explain = "--explain" in argv
+    top_n = 5
+    if "--top" in argv:
+        try:
+            top_n = int(argv[argv.index("--top") + 1])
+        except (IndexError, ValueError):
+            print("res-budget: --top necesita un número", file=sys.stderr)
+            return 2
+    if "--budget" in argv:
+        try:
+            budget = int(argv[argv.index("--budget") + 1])
+        except (IndexError, ValueError):
+            print("res-budget: --budget necesita MB", file=sys.stderr)
+            return 2
+
+    procs = collect()
+    mem = read_meminfo()
+
+    # kernel: slab + pagetables + stacks. No es parte de ningún proceso.
+    kernel_kb = mem.get("Slab", 0) + mem.get("PageTables", 0) + mem.get("KernelStack", 0)
+
+    totals: dict[str, int] = {b: 0 for b in CORE_BUCKETS + ("satelites",)}
+    for proc in procs:
+        totals[str(proc["bucket"])] += int(proc["pss"])
+
+    core_kb = sum(totals[b] for b in CORE_BUCKETS) + kernel_kb
+    core_mb = core_kb // 1024
+    over = core_mb > budget
+    used_mb = (mem.get("MemTotal", 0) - mem.get("MemAvailable", 0)) // 1024
+
+    if as_json:
+        print(json.dumps({
+            "budget_mb": budget,
+            "core_mb": core_mb,
+            "over": over,
+            "used_mb": used_mb,
+            "available_mb": mem.get("MemAvailable", 0) // 1024,
+            "buckets_mb": {b: v // 1024 for b, v in totals.items()},
+            "kernel_mb": kernel_kb // 1024,
+        }, ensure_ascii=False))
+        return 1 if over else 0
+
+    print(f"res-budget: core {core_mb} MB / presupuesto {budget} MB"
+          f"  ({'EXCEDIDO' if over else 'ok'})")
+    print(f"  sistema RAM: usada {used_mb} MB · disponible {mem.get('MemAvailable', 0) // 1024} MB")
+    print()
+    print(f"  {'kernel':<12} {kernel_kb // 1024:>7} MB   (slab+pagetables+stacks)")
+    for bucket in CORE_BUCKETS:
+        print(f"  {bucket:<12} {totals[bucket] // 1024:>7} MB")
+    print(f"  {'-' * 28}")
+    print(f"  {'CORE':<12} {core_mb:>7} MB")
+    print()
+    print(f"  {'satélites':<12} {totals['satelites'] // 1024:>7} MB  (fuera del presupuesto)")
+
+    if explain:
+        print("\n  procesos del core:")
+        for bucket in CORE_BUCKETS:
+            rows = sorted((p for p in procs if p["bucket"] == bucket),
+                          key=lambda p: -int(p["pss"]))
+            if not rows:
+                continue
+            print(f"\n  [{bucket}]")
+            for proc in rows[:top_n]:
+                label = str(proc["unit"] or proc["cmd"] or proc["pid"])[:52]
+                print(f"    {int(proc['pss']) // 1024:>6} MB  {label}")
+
+    heavy = sorted((p for p in procs if p["bucket"] == "satelites"),
+                   key=lambda p: -int(p["pss"]))[:top_n]
+    if heavy:
+        print(f"\n  satélites más pesados ({'candidatos a cerrar'}):")
+        for proc in heavy:
+            label = str(proc["unit"] or proc["cmd"] or proc["pid"])[:52]
+            print(f"    {int(proc['pss']) // 1024:>6} MB  {label}")
+
+    if over:
+        print(f"\n  ⚠ el core excede el presupuesto por {core_mb - budget} MB")
+    return 1 if over else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
