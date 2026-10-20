@@ -55,11 +55,11 @@
           "id": "eztvn.lanmouse"
         },
         {
-          "id": "services",
-          "type": "qml"
+          "id": "omarchy.agents"
         },
         {
-          "id": "omarchy.agents"
+          "id": "services",
+          "type": "qml"
         },
         {
           "id": "omarchy.keyboard-layout"
