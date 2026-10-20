@@ -3,6 +3,37 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-20 — Un espacio del escritorio por agente (`espacios`)
+
+**Qué se eligió.** Cada sesión de pi reclama un espacio de Hyprland propio
+(11..20, fuera de la rotación del usuario) y todo lo que abre —navegador, video,
+visor— nace ahí, sin foco. La pieza es la **clase de ventana**: el agente pone
+`agente-<slug>` y una única regla de Hyprland por agente
+(`hl.window_rule{name="espacios-<slug>", match={class="^agente-<slug>$"},
+workspace="<ws> silent", no_focus=true, suppress_event="activate"}`) la manda a
+su espacio. Para apps que no dejan fijar la clase, `espacios abrir` espera la
+ventana nueva, comprueba que sea del agente (clase o `PI_AGENTE` en su
+`/proc/<pid>/environ`) y la mueve, devolviendo el workspace activo si Hyprland lo
+siguió. El agente hereda un directorio de atajos en el `PATH` (`xdg-open`,
+`brave`, `kitty`, `mpv`, …) porque nadie se acuerda de usar el comando correcto.
+`oa-agent` ahora exporta `PI_AGENTE_WS` y su regla es `silent`: sus sesiones
+siguen en el espacio que ya les había asignado. El sonido queda afuera a
+propósito: avisos y voz son globales.
+
+**Por qué.** El usuario trabajo con varios agentes a la vez y cada ventana que
+abrían le robaba el foco. Los lanzadores ya existentes (`oa-agent`) sólo
+aislaban la ventana inicial, no lo que el agente abría después.
+
+**Descartado.** Un daemon que escuche el socket2 de Hyprland y atribuya ventanas
+subiendo por `/proc` hasta el agente: se rompe con apps que se daemonizan o se
+re-parentan a PID 1, con activaciones por D-Bus y con los singletons del usuario
+(Chromium reutiliza el proceso existente y nunca hereda el entorno del agente),
+y una ventana en el lugar equivocado es intermitente y difícil de depurar. Los
+lanzadores con clase cubren lo mismo sin daemon. También se descartó atribuir
+por `pid` en `hyprctl clients`: no es confiable en clientes Wayland nativos.
+Verificación: `scripts/verify/espacios.sh` (corre sin escritorio, con
+`ESPACIOS_SIN_ESC=1`).
+
 ## 2026-10-20 — "dime" avisa con la campana; la espera del micrófono estaba al revés
 
 **Contexto.** Dos mensajes sonaron sin la campana de aviso. No era el buzón: eran

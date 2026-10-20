@@ -54,6 +54,10 @@ else
   aviso "muerto libera: tucan=$c (reusó un espacio; puede pasar si el ws admite 2)"
 fi
 
+# --- 2b. respeta el espacio que fija el lanzador -------------------------
+e=$(PI_AGENTE_WS=3 "$ESPACIOS" reclamar mosca --pid $$ --json | json '["espacio"]') || e=""
+if [ "$e" = "3" ]; then ok "respeta PI_AGENTE_WS=3"; else fail "PI_AGENTE_WS: quedó en '$e'"; fi
+
 # --- 3. atajos de PATH --------------------------------------------------
 shims="$("$ESPACIOS" reclamar puma --pid $$ --json | json '["shims"]')"
 atajo="$shims/xdg-open"

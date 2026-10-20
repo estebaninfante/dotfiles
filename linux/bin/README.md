@@ -88,3 +88,24 @@ color libre entre los vivos (`voice identity --claim`); si otro agente ya lo tie
 el siguiente y lo guarda. En cada turno, `conversar.ts` revisa si quedó un color repetido
 y lo corrige sin reiniciar. Verificación: `scripts/verify/agentes.sh`, `agent-os-cli colores`,
 `agent-os-cli vivos`.
+
+## Espacios: cada agente abre sus ventanas en su propio escritorio
+
+`espacios` le da a cada sesión de pi un workspace de Hyprland propio (11..20, fuera de la
+rotación del usuario) y hace que todo lo que abra caiga ahí, en silencio y sin foco:
+
+```bash
+espacios reclamar <nombre>      # asigna espacio + regla de ventana (lo hace solo la extensión)
+espacios abrir -- <comando>     # abre un programa en mi espacio (le pone la clase agente-<slug>)
+espacios url <url>              # navega en un perfil propio, en mi espacio
+espacios mover                  # trae a mi espacio las ventanas que se me escaparon
+espacios listar | liberar
+```
+
+La extensión `linux/pi/agent/extensions/espacios.ts` reclama el espacio al arrancar la
+sesión y adelanta en el `PATH` los atajos (`xdg-open`, `brave`, `kitty`, `mpv`, `imv`, …),
+así el agente no tiene que acordarse. `oa-agent` exporta `PI_AGENTE_WS`, por lo que sus
+sesiones respetan el workspace que ya les tocó. **El sonido no se aísla**: avisos, voz y
+notificaciones son globales a propósito.
+
+Verificación: `scripts/verify/espacios.sh` (corre sin escritorio: `ESPACIOS_SIN_ESC=1`).
