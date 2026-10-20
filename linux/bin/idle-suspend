@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Suspende la máquina por inactividad (lo llama hypridle).
+#
+#   idle-suspend                  suspende siempre.
+#   idle-suspend --battery-only   suspende solo si no hay corriente.
+#
+# Respeta el toggle "Stay Awake" de Omarchy: si existe el archivo de estado,
+# no hace nada y la máquina sigue despierta.
+#
+# Ver ~/dotfiles/linux/config/hypr/hypridle.conf.
+
+set -uo pipefail
+
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/indicators/stay-awake"
+if [[ -f "$state_file" ]]; then
+  exit 0
+fi
+
+if [[ "${1:-}" == "--battery-only" ]]; then
+  for p in /sys/class/power_supply/*/online; do
+    [[ -f "$p" ]] || continue
+    [[ "$p" == */BAT* ]] && continue
+    [[ "$(cat "$p")" == "1" ]] && exit 0
+  done
+fi
+
+exec systemctl suspend
