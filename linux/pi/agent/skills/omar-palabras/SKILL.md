@@ -24,6 +24,7 @@ Hay cuatro lugares distintos para "una palabra que hace algo". Elegí bien:
 | Qué querés | Dónde | Archivo |
 | --- | --- | --- |
 | Una orden suelta que diga y haga ya | **hotword** | `~/.local/share/omar/hotwords.json` |
+| Lo mismo, con un número adentro ("espacio 3") | **hotword con hueco `{n}`** | `~/.local/share/omar/hotwords.json` |
 | Que "Omar" te despierte | wake word | `~/.config/omar/config.json` → `wakeWord.word/words` |
 | Navegar Vimium diciendo las teclas | **modo teclas** (estado) | `src/decide/keymode.ts` |
 | Cerrar la conversación | end word | `config.json` → `conversation.endWords` |
@@ -64,12 +65,39 @@ de objetos. **Se relee en cada coincidencia: no hay que reiniciar nada.**
   título **contenga** alguno de esos textos (sin distinguir mayúsculas). Sin
   `apps`, vale en todas.
 
+### Huecos: una frase que lleva un número (`{n}`)
+
+Si la frase tiene un hueco `{n}` y la acción también, la hotword se vuelve
+paramétrica. De fábrica ya existe **ir a un workspace**:
+
+```json
+{
+  "id": "ir-espacio",
+  "phrases": ["espacio {n}", "ve al espacio {n}", "workspace {n}"],
+  "actions": [{ "kind": "focus_workspace", "workspace": "{n}" }],
+  "say": ""
+}
+```
+
+- Se dice **sin "Omar"**: "espacio 3" y salta.
+- El hueco acepta dígitos (1–99) y números hablados ("tres", "uno", "diez").
+- Tolera relleno después ("llevame al espacio 4 por favor") y respeta `apps`.
+- Fuera de rango ("espacio cero", "espacio 100") no mueve el foco.
+- Las frases con hueco se evalúan **antes** que las fijas, por eso "espacio 3"
+  le gana a la hotword `espacio` que pulsa la barra espaciadora.
+- El `{n}` también se sustituye en `say` y en cualquier string de la acción.
+- Las frases con `{n}` quedan fuera del vocabulario del decodificador.
+
+Para tu propia regla paramétrica, repetí el patrón con un `id` nuevo: misma
+frase con hueco, misma acción con hueco.
+
 ## Cómo se decide qué gana
 
 1. **Exacto o por prefijo.** `"sube el volumen"` matchea `"sube el volumen un
    poco"`. Por eso una frase corta puede comerse a una larga: si `"captura"` y
    `"captura de pantalla completa"` existen, la larga tiene que ir **antes** en
-   el archivo (o en `phrases`) o nunca va a llegar.
+   el archivo (o en `phrases`) o nunca va a llegar. Las frases con hueco (`{n}`)
+   se evalúan antes que todas las fijas, sin importar el orden del archivo.
 2. **Dos pasadas**: primero las que declaran `apps`, después las generales. Una
    regla específica de una app gana sobre una general con la misma frase.
 3. **El orden importa entre las de usuario**: las de usuario van antes que las de
