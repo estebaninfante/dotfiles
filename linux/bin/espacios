@@ -26,6 +26,7 @@ Uso:
   espacios url <url> [<url>...]
   espacios mover <dirección|address:...>  mover la ventana activa a mi espacio
   espacios listar
+  espacios shims [<nombre>]             recrear los atajos de PATH
   espacios liberar [<nombre>]
 
 Entorno:
@@ -558,6 +559,14 @@ def main(argv: list[str]) -> int:
         for cliente in propias:
             mover_ventana(cliente["address"], info["espacio"])
         print(f"{len(propias)} ventana(s) del agente → espacio {info['espacio']}")
+        return 0
+
+    if cmd == "shims":
+        # Recrea los atajos sin tocar espacios ni procesos (reparación idempotente).
+        nombre = next((a for a in resto if not a.startswith("--")), "")
+        slugs = [slugify(nombre)] if nombre else sorted(leer()["agentes"])
+        for slug in slugs:
+            print(f"{slug}: {crear_shims(slug)}")
         return 0
 
     if cmd == "listar":
