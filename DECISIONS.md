@@ -3,6 +3,36 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-19 — Los mensajes suenan en campana; "dime" los lee
+
+**Contexto.** Cada mensaje de un agente se hablaba al llegar (o con un híbrido
+que igual interrumpía). El usuario quiere un Jarvis: aviso discreto, y la voz
+sólo cuando la pide. Speech-to-speech no: es caro y no hace falta.
+
+**Elegido.**
+
+- Nueva entrega `bell` (alias de `mailbox`, ahora la default): campana + mensaje
+  al buzón con autor. La campana tiene antirrebote de 8 s (una ráfaga = un
+  aviso) y espera a que el micrófono quede libre (`micguard`), igual que la voz.
+- `voice dime [N]`: lee los pendientes en orden de llegada,
+  `"<agente> dice: <mensaje>"`, con la voz/color de cada agente, tope de 5 y
+  texto recortado a 420 caracteres; si quedan, lo dice. `--quiet-empty` para la
+  hotword (silencio si no hay nada).
+- Hotword `dime` en `~/.local/share/omar/hotwords.json` con
+  `launch voice dime --quiet-empty`: cero código nuevo en Omar.
+- Se corrigió `pending_messages`: devolvía los pendientes al revés (el último
+  primero) pese a que el buzón y `play-inbox` prometen orden de llegada.
+
+**Descartado.**
+
+- Reproducir un resumen con un modelo local: proyecto aparte; la lectura
+  secuencial con tope ya resuelve el caso. Si algún día se quiere resumen, va
+  como feature separada.
+- Un estado nuevo en Omar para "hay mensajes": el buzón de `voice` ya es la
+  fuente de verdad y no hay que duplicarlo.
+- Exigir "Omar, dime": "dime" a secas es más Jarvis y con la guarda de "sólo si
+  hay pendientes" no molesta.
+
 ## 2026-10-19 — El TTS nunca habla encima de un dictado
 
 **Contexto.** Estando en dictado, el aviso hablado del cierre de un agente se

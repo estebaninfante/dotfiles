@@ -360,6 +360,15 @@ Los caminos directos del CLI (`voice repeat`, `voice inbox play`, `voice play`,
 `voice history play` y la síntesis sin daemon) esperan igual. Verificador:
 `scripts/verify/voz-dictado.sh`.
 
+**Campana y "dime" (Jarvis, sin speech-to-speech).** Los mensajes de los agentes
+ya no se hablan al llegar: con la entrega `bell` (por defecto) suena la campana
+—una sola vez por ráfaga, nunca encima de un dictado— y el mensaje queda en el
+buzón con su autor. Cuando querés, decís **"dime"** (hotword propia) o corrés
+`voice dime`: Omar lee la cola en orden, `"<agente> dice: <mensaje>"`, hasta 5
+por vez (texto recortado) y avisa "Quedan N mensajes más". Si no hay nada, la
+hotword se calla (`--quiet-empty`). Todo local (STT + TTS), nada de
+speech-to-speech. Verificador: `scripts/verify/voz-dime.sh`.
+
 **La tecla de Windows (F13).** `voice-key-listener` corre `present-remote
 toggle`; una pulsación, una acción (sin antirrebote por tiempo: el de 800 ms
 se comía la segunda pulsación rápida). La decisión es instantánea: la píldora se

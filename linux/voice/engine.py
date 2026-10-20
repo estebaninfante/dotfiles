@@ -703,11 +703,15 @@ def _is_pending(rec: dict) -> bool:
 
 
 def pending_messages(limit: int | None = None) -> list:
-    """Mensajes sin escuchar, mas antiguo primero (orden de lectura)."""
+    """Mensajes sin escuchar, mas antiguo primero (orden de lectura).
+
+    El archivo ya esta en orden de llegada (append): no hay que darlo vuelta.
+    Antes se invertia y el buzon leia al reves (el ultimo mensaje primero).
+    """
     recs = [r for r in _messages_read() if _is_pending(r)]
     if limit is not None and limit >= 0:
-        recs = recs[-limit:] if limit else []
-    return list(reversed(recs))
+        recs = recs[:limit] if limit else []
+    return recs
 
 
 def pending_count() -> int:
