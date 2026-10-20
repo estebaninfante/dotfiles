@@ -106,6 +106,10 @@ hotword.
   recuerda por frase (`fastFired`) y se olvida al cerrarla.
 - Para probar: `omar fast --file wav` (transcribe con el rápido y dice qué
   palabra clave habría disparado).
+- Presupuesto: mira sólo los primeros `maxUtteranceS` (3,5 s) de cada frase y
+  como mucho `maxPerUtterance` ticks; en ambiente va más lento
+  (`ambientIntervalMs`). Si no se usa 5 min, el modelo se descarga y devuelve la
+  VRAM (`WHISPER_FAST_IDLE_S`).
 - Efecto práctico: "espacio 3" tarda ~0,3-0,6 s, no 1-1,5 s. Detalle en
   `features/motor-rapido.md` del repo de Omar.
 
