@@ -9,6 +9,7 @@ Rectangle {
 
   required property var modelData
   property var module
+  property var motion
 
   signal activated(string svc)
 
@@ -29,8 +30,18 @@ Rectangle {
   border.width: 1
   border.color: Util.alpha(tone, hover.hovered ? 0.32 : 0.10)
 
-  Behavior on color { ColorAnimation { duration: 130; easing.type: Easing.OutCubic } }
-  Behavior on border.color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
+  Behavior on color {
+    ColorAnimation {
+      duration: row.motion ? row.motion.fast : 120
+      easing.type: row.motion ? row.motion.standard : Easing.OutCubic
+    }
+  }
+  Behavior on border.color {
+    ColorAnimation {
+      duration: row.motion ? row.motion.base : 180
+      easing.type: row.motion ? row.motion.standard : Easing.OutCubic
+    }
+  }
 
   HoverHandler { id: hover }
 
@@ -43,13 +54,13 @@ Rectangle {
     height: width
     radius: width / 2
     color: row.tone
-    Behavior on color { ColorAnimation { duration: 150 } }
+    Behavior on color { ColorAnimation { duration: row.motion ? row.motion.base : 180 } }
 
     SequentialAnimation on opacity {
-      running: row.busy
+      running: row.busy && !(row.motion && row.motion.reduced)
       loops: Animation.Infinite
-      NumberAnimation { to: 0.25; duration: 450; easing.type: Easing.OutQuad }
-      NumberAnimation { to: 1.0; duration: 450; easing.type: Easing.InOutQuad }
+      NumberAnimation { to: 0.25; duration: 450; easing.type: Easing.OutQuad } // pulso
+      NumberAnimation { to: 1.0; duration: 450; easing.type: Easing.InOutQuad } // pulso
       onRunningChanged: if (!running) led.opacity = 1
     }
   }
@@ -81,7 +92,7 @@ Rectangle {
       font.family: row.fontFamily
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
-      Behavior on color { ColorAnimation { duration: 150 } }
+      Behavior on color { ColorAnimation { duration: row.motion ? row.motion.base : 180 } }
     }
   }
 
@@ -107,7 +118,16 @@ Rectangle {
       color: hover.hovered ? row.fg : Util.alpha(row.fg, 0.55)
       font.family: row.fontFamily
       font.pixelSize: Style.font.body
-      Behavior on color { ColorAnimation { duration: 120 } }
+      // La flecha se adelanta un poco al hover: anticipa que la fila lleva a
+      // otro lado (dirección = derecha) sin mover toda la fila.
+      x: hover.hovered ? Style.space(2) : 0
+      Behavior on x {
+        NumberAnimation {
+          duration: row.motion ? row.motion.base : 180
+          easing.type: row.motion ? row.motion.standard : Easing.OutCubic
+        }
+      }
+      Behavior on color { ColorAnimation { duration: row.motion ? row.motion.fast : 120 } }
     }
   }
 

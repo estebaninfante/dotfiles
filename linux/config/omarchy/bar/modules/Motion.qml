@@ -46,7 +46,7 @@ QtObject {
   readonly property int move: Easing.InOutCubic
   readonly property int spring: Easing.OutBack
 
-  FileView {
+  property FileView stateWatcher: FileView {
     path: root.statePath
     watchChanges: true
     printErrors: false

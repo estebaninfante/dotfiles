@@ -8,6 +8,7 @@ import qs.Ui
 Column {
   id: root
   property var module
+  property var motion
   signal openRequested(string svc)
 
   readonly property color fg: module ? module.fg : Color.foreground
@@ -64,6 +65,7 @@ Column {
     delegate: ServiceRow {
       width: rows.width
       module: root.module
+      motion: root.motion
       onActivated: function(svc) { root.openRequested(svc) }
     }
 

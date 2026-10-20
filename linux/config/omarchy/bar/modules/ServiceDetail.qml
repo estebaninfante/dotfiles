@@ -9,6 +9,7 @@ ScrollView {
   id: detail
 
   property var module
+  property var motion
   signal confirmRequested(string action, string message, string second)
 
   readonly property var svc: module ? module.detailService : null

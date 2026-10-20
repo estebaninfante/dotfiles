@@ -212,6 +212,8 @@ Item {
     unitIds: root.unitIds
   }
 
+  Motion { id: motion }
+
   Timer {
     id: settleA
     interval: 500
@@ -238,7 +240,12 @@ Item {
     radius: Style.space(6)
     color: Util.alpha(root.fg, triggerMouse.pressed ? 0.18 : (triggerMouse.containsMouse || root.menuOpen ? 0.11 : 0.0))
     visible: !root.vertical
-    Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
+    Behavior on color {
+      ColorAnimation {
+        duration: motion.fast
+        easing.type: motion.standard
+      }
+    }
   }
 
   Row {
@@ -254,36 +261,45 @@ Item {
       radius: width / 2
       color: root.ledColor
       opacity: root.menuOpen || triggerMouse.containsMouse ? 1.0 : 0.92
-      Behavior on color { ColorAnimation { duration: 150 } }
-      Behavior on opacity { NumberAnimation { duration: 150 } }
-    }
+      Behavior on color { ColorAnimation { duration: motion.base } }
+      Behavior on opacity { NumberAnimation { duration: motion.base } }
 
-    Rectangle {
-      id: ledPulse
-      anchors.centerIn: led
-      width: led.width + Style.space(6)
-      height: width
-      radius: width / 2
-      color: "transparent"
-      border.width: 1
-      border.color: root.downColor
-      visible: root.anyDown && !root.settling && !root.menuOpen
-      opacity: 0.0
-      SequentialAnimation on opacity {
-        running: ledPulse.visible
-        loops: Animation.Infinite
-        NumberAnimation { to: 0.6; duration: 460; easing.type: Easing.OutQuad }
-        NumberAnimation { to: 0.0; duration: 460; easing.type: Easing.InQuad }
+      Rectangle {
+        id: ledPulse
+        anchors.centerIn: parent
+        width: led.width + Style.space(6)
+        height: width
+        radius: width / 2
+        color: "transparent"
+        border.width: 1
+        border.color: root.downColor
+        visible: root.anyDown && !root.settling && !root.menuOpen
+        opacity: 0.0
+        SequentialAnimation on opacity {
+          running: ledPulse.visible && !motion.reduced
+          loops: Animation.Infinite
+          NumberAnimation { to: 0.6; duration: 460; easing.type: Easing.OutQuad } // pulso
+          NumberAnimation { to: 0.0; duration: 460; easing.type: Easing.InQuad } // pulso
+        }
       }
     }
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
-      text: root.menuOpen ? "󰅃" : "󰅀"
+      // La flecha rota en vez de cambiar de glifo: un solo objeto que se
+      // transforma (continuidad), no dos estados que se reemplazan.
+      text: "󰅀"
+      rotation: root.menuOpen ? 180 : 0
       color: Util.alpha(root.fg, triggerMouse.containsMouse || root.menuOpen ? 0.95 : 0.55)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
-      Behavior on color { ColorAnimation { duration: 120 } }
+      Behavior on rotation {
+        NumberAnimation {
+          duration: motion.base
+          easing.type: motion.standard
+        }
+      }
+      Behavior on color { ColorAnimation { duration: motion.fast } }
     }
   }
 
@@ -311,6 +327,7 @@ Item {
       id: menuBody
       anchors.fill: parent
       module: root
+      motion: motion
     }
   }
 
