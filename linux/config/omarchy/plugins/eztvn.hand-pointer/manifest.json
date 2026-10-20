@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "eztvn",
   "license": "MIT",
-  "description": "Dibuja en tiempo real las yemas de los 5 dedos que ve vision-hub, como círculos azules translúcidos sobre la pantalla.",
+  "description": "Dibuja las yemas de los dedos, el puntero de cabeza y la diana del entrenamiento pasivo que publica vision-hub.",
   "kinds": ["overlay"],
   "keepLoaded": true,
   "entryPoints": {

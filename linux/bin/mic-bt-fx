@@ -1,0 +1,30 @@
+#!/bin/sh
+# mic-bt-fx: micrófono del audífono Bluetooth (HFP) -> cadena de efectos ->
+# fuente virtual "mic-bt-fx".
+#
+# Por qué: los audífonos Bluetooth baratos entregan el micrófono por HFP
+# (16 kHz, mono, con AGC propio del chip). Eso produce picos, bombeo y ruido
+# de fondo. Acá se limpia la señal antes de que la use cualquier app.
+#
+# Cadena: pasa-altos 90 Hz (quita retumbe) -> corte de barro en 250 Hz ->
+# un poco de presencia en 3.5 kHz -> puerta suave (mata el ruido de fondo
+# cuando no hablás) -> compresor (empareja los picos) -> limitador (techo
+# -3 dBFS, corta los picos feos sin distorsionar).
+#
+# Ajustá los números acá y reiniciá: systemctl --user restart mic-bt-fx
+set -u
+
+TARGET="${MIC_BT_TARGET:-bluez_input.50:C0:F0:00:00:D1}"
+OUT_SINK="${MIC_BT_SINK:-mic_bt_fx_sink}"
+RATE=48000
+
+FX="highpass=f=90,equalizer=f=250:width_type=q:w=1.2:g=-3,equalizer=f=3500:width_type=q:w=1:g=2,agate=threshold=0.02:ratio=2:attack=5:release=250,acompressor=threshold=0.1:ratio=3:attack=15:release=200:makeup=1,alimiter=limit=0.7:level=0"
+
+while :; do
+    pw-record --target "$TARGET" --rate "$RATE" --channels 1 --raw --format f32 --latency 20ms - 2>/dev/null \
+        | ffmpeg -hide_banner -loglevel error -fflags nobuffer -f f32le -ar "$RATE" -ac 1 -i pipe:0 \
+                 -af "$FX" -f f32le -ar "$RATE" -ac 1 pipe:1 2>/dev/null \
+        | pw-cat --playback --raw --target "$OUT_SINK" --rate "$RATE" --channels 1 --raw --format f32 --latency 20ms - 2>/dev/null
+    # El audífono se desconectó o algo falló: esperar y reintentar.
+    sleep 2
+done

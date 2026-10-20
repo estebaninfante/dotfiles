@@ -12,6 +12,9 @@ import QtQuick
 //      {"h":"Right","ok":1,"t":[[x,y],...5]}]}
 //   {"v":1,"n":13,"p":0}                  // no hay manos
 //
+// En el entrenamiento pasivo viene además `"target": [x, y]` (la diana celeste)
+// y `head` es la predicción del modelo que se está entrenando.
+//
 // El lado y las coordenadas ya vienen resueltos por el motor (espejadas para
 // la cámara frontal); acá sólo se escalan a la pantalla.
 //
