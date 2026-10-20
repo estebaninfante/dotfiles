@@ -34,6 +34,7 @@ Item {
   property bool okL: true
   property bool okR: true
   property var headTip: null         // [x, y] del puntero de cabeza, o null
+  property var targetTip: null       // [x, y] de la diana del entrenamiento, o null
   property int lastSeq: -1
   property real lastFresh: 0         // Date.now() del último `n` nuevo
 
@@ -81,7 +82,10 @@ Item {
     root.okR = !blockedRight
     root.headTip = (Array.isArray(msg.head) && msg.head.length >= 2)
       ? msg.head : null
-    root.present = left.length > 0 || right.length > 0 || root.headTip !== null
+    root.targetTip = (Array.isArray(msg.target) && msg.target.length >= 2)
+      ? msg.target : null
+    root.present = left.length > 0 || right.length > 0
+      || root.headTip !== null || root.targetTip !== null
   }
 
   // Limpia el socket de una corrida anterior y recién ahí escucha: un
@@ -163,6 +167,12 @@ Item {
 
     HeadPointer {
       tip: root.headTip
+      screenW: panel.width
+      screenH: panel.height
+    }
+
+    TargetBall {
+      tip: root.targetTip
       screenW: panel.width
       screenH: panel.height
     }
