@@ -3,6 +3,35 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-19 — El buzón de "dime" es un buffer con edad, no un archivo
+
+**Contexto.** La campana acumulaba mensajes sin límite. Si no decías "dime" en
+un rato, te encontrabas leyendo avisos de hace hora y media de tickets que ya
+estaban cerrados. Y además `mark-heard` marcaba por `ts`: dos mensajes en el
+mismo milisegundo se marcaban juntos.
+
+**Elegido.**
+
+- TTL: más viejo que `[tts] dime_max_age_min` (30 min) se **descarta solo**
+  (marcado `expired` en el registro, no se borra del historial).
+- Tope del buffer: `[tts] dime_keep` (20); al llegar uno nuevo se tiran los más
+  viejos. El buzón nunca crece sin control.
+- Tope por lectura: `[tts] dime_max` (6) para un backlog viejo;
+  `[tts] dime_max_recent` (12) si todo lo pendiente llegó hace menos de
+  `[tts] dime_fresh_min` (15 min). Así una ráfaga reciente se lee de una y un
+  backlog viejo no se vuelve un audiolibro.
+- Los mensajes nuevos llevan `id` y se marcan por `id`; `ts` queda de respaldo
+  para registros viejos.
+
+**Descartado.**
+
+- Borrar los mensajes directamente: se pierde la traza. Se marcan escuchados +
+  `expired`.
+- Una ventana fija "desde el último dime": la edad desde la llegada es más
+  simple y cubre el caso (si no lo pediste, ya no importa).
+- Un resumen con modelo local para el backlog viejo: descartado antes; acá se
+  resuelve descartando, no resumiendo.
+
 ## 2026-10-19 — Los mensajes suenan en campana; "dime" los lee
 
 **Contexto.** Cada mensaje de un agente se hablaba al llegar (o con un híbrido

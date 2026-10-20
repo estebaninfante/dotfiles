@@ -158,8 +158,15 @@ agente lleva su color. Ver `conversar.ts`.
 - **`bell` (por defecto):** los mensajes de los agentes **nunca se hablan
   solos**. Suena la campana (`[tts] chime`, una sola vez por ráfaga) y el
   mensaje queda en el buzón con su autor. Cuando querés, decís **"dime"** (o
-  `voice dime`): Omar lee la cola en orden, `"<agente> dice: <mensaje>"`, hasta
-  5 por vez y avisa si quedan más. Nada se habla encima del dictado.
+  `voice dime`): Omar lee la cola en orden, `"<agente> dice: <mensaje>"`, y avisa
+  si quedan más. Nada se habla encima del dictado.
+
+  El buzón es un **buffer acotado**, no un archivo que crece para siempre:
+  combina cantidad y tiempo. Lo más viejo que `[tts] dime_max_age_min` (30 min)
+  se descarta solo —para cuando lo escuchás, ese ticket ya se cerró—; el buffer
+  nunca guarda más de `[tts] dime_keep` (20) y tira los más viejos; y por lectura
+  lee `[tts] dime_max` (6) si el backlog es viejo, o `[tts] dime_max_recent` (12)
+  si **todo** llegó hace menos de `[tts] dime_fresh_min` (15 min).
 - **`hybrid`:** suena el aviso sutil (`[tts] chime`), espera
   `[tts] hybrid_pause` segundos (1.5) y **recién habla**. Te da un momento para
   prestar atención sin que la voz te caiga encima de golpe. No acumula nada en

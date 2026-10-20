@@ -54,7 +54,14 @@ DEFAULTS = {
             "engine_es": "chatterbox", "voice_es": "default",
             "engine_en": "chatterbox", "voice_en": "default",
             "profiles": {}, "auto_profiles": True,
-            "duck": True},
+            "duck": True,
+            # Buzón de `dime`: un buffer, no un archivo. Se combina un tope de
+            # mensajes con una edad máxima, y lo viejo se descarta solo.
+            "dime_max": 6,            # mensajes por lectura (backlog viejo)
+            "dime_max_recent": 12,    # tope si todo es reciente
+            "dime_fresh_min": 15,     # "reciente" = llegó hace menos de esto
+            "dime_max_age_min": 30,   # más viejo que esto no se lee: se descarta
+            "dime_keep": 20},         # tope del buffer (se tiran los más viejos)
     "stt": {"accelerator": "auto", "model": "whisper-medium", "lang": "es"},
     "wake": {"accelerator": "auto", "model": "", "gpu_command": ""},
     "power": {"cpu_on_battery": True, "gpu_on_ac": True},
@@ -639,8 +646,8 @@ def record_message(text: str, source: str = "", kind: str = "notify",
                 return rec
             break
 
-        rec = {"ts": now, "text": text, "kind": kind, "source": source,
-               "heard": bool(heard)}
+        rec = {"id": f"{now}-{os.urandom(4).hex()}", "ts": now, "text": text,
+               "kind": kind, "source": source, "heard": bool(heard)}
         if app:
             rec["app"] = app
         if title:
@@ -702,29 +709,68 @@ def _is_pending(rec: dict) -> bool:
     return rec.get("heard") is False
 
 
-def pending_messages(limit: int | None = None) -> list:
+def pending_messages(limit: int | None = None, max_age_min: float | None = None,
+                     now: float | None = None) -> list:
     """Mensajes sin escuchar, mas antiguo primero (orden de lectura).
 
     El archivo ya esta en orden de llegada (append): no hay que darlo vuelta.
     Antes se invertia y el buzon leia al reves (el ultimo mensaje primero).
+
+    `max_age_min` filtra por edad: un mensaje de hace hora y media ya no
+    importa (los tickets estan cerrados). `now` es la hora de referencia en ms.
     """
     recs = [r for r in _messages_read() if _is_pending(r)]
+    if max_age_min is not None and max_age_min > 0:
+        corte = int((now if now is not None else time.time() * 1000) - max_age_min * 60_000)
+        recs = [r for r in recs if int(r.get("ts", 0) or 0) >= corte]
     if limit is not None and limit >= 0:
         recs = recs[:limit] if limit else []
     return recs
 
 
-def pending_count() -> int:
-    return sum(1 for r in _messages_read() if _is_pending(r))
+def pending_count(max_age_min: float | None = None) -> int:
+    return len(pending_messages(None, max_age_min))
 
 
-def mark_heard(ts: int | None = None) -> int:
-    """Marca como escuchados todos los pendientes (ts=None) o uno solo."""
+def prune_pending(max_age_min: float | None = None, keep: int | None = None) -> int:
+    """Descarta lo que ya no se va a leer: los viejos y los que sobran.
+
+    No borra del historial: los marca como escuchados (`expired` para poder
+    auditarlos). Devuelve cuántos descartó. Así el buzón es un buffer acotado y
+    no se acumulan mensajes de hace horas.
+    """
+    ahora = time.time() * 1000
+    corte = int(ahora - max_age_min * 60_000) if max_age_min and max_age_min > 0 else None
+    with _messages_lock():
+        recs = _messages_read()
+        pendientes = [i for i, r in enumerate(recs) if _is_pending(r)]
+        viejos = [i for i in pendientes
+                  if corte is not None and int(recs[i].get("ts", 0) or 0) < corte]
+        recientes = [i for i in pendientes if i not in set(viejos)]
+        sobran = recientes[:-keep] if keep and keep > 0 else []
+        descartar = viejos + sobran
+        for i in descartar:
+            recs[i]["heard"] = True
+            recs[i]["expired"] = True
+        if descartar:
+            _messages_write(recs)
+        return len(descartar)
+
+
+def mark_heard(ts: int | None = None, rec_id: str | None = None) -> int:
+    """Marca como escuchados todos los pendientes, uno por id o uno por ts.
+
+    El id es lo correcto: dos mensajes que caen en el mismo milisegundo (una
+    ráfaga) comparten `ts` y marcar por `ts` se llevaba los dos. `ts` queda
+    como respaldo para registros viejos sin id.
+    """
     with _messages_lock():
         recs = _messages_read()
         n = 0
         for r in recs:
-            if _is_pending(r) and (ts is None or int(r.get("ts", 0)) == ts):
+            exacto = (rec_id is not None and str(r.get("id") or "") == rec_id)
+            por_ts = (rec_id is None and ts is not None and int(r.get("ts", 0)) == ts)
+            if _is_pending(r) and (rec_id is None and ts is None or exacto or por_ts):
                 r["heard"] = True
                 n += 1
         if n:
@@ -794,7 +840,18 @@ if __name__ == "__main__":
         else:
             sys.exit(1)
     elif cmd == "pending-count":
-        print(pending_count())
+        edad = None
+        if "--max-age-min" in sys.argv:
+            edad = float(sys.argv[sys.argv.index("--max-age-min") + 1])
+        print(pending_count(edad))
+    elif cmd == "prune-pending":
+        edad = None
+        keep = None
+        if "--max-age-min" in sys.argv:
+            edad = float(sys.argv[sys.argv.index("--max-age-min") + 1])
+        if "--keep" in sys.argv:
+            keep = int(sys.argv[sys.argv.index("--keep") + 1])
+        print(prune_pending(edad, keep))
     elif cmd == "pending":
         args = [a for a in sys.argv[2:] if a != "--json"]
         as_json = "--json" in sys.argv[2:]
@@ -811,9 +868,12 @@ if __name__ == "__main__":
                 print(f"{i:>3}  {stamp}  {src:<12}  {snippet}")
     elif cmd == "mark-heard":
         ts = None
+        rec_id = None
         if "--ts" in sys.argv:
             ts = int(sys.argv[sys.argv.index("--ts") + 1])
-        print(mark_heard(ts))
+        if "--id" in sys.argv:
+            rec_id = sys.argv[sys.argv.index("--id") + 1]
+        print(mark_heard(ts, rec_id))
     elif cmd == "record-message":
         args = sys.argv[2:]
         source = text = app = title = ""

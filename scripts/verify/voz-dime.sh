@@ -66,6 +66,22 @@ if rg -q 'Quedan \$restan mensajes' "$CLI" && rg -q 'pending-count' "$CLI"; then
 else
   fail "no avisa cuántos quedan"
 fi
+if rg -q 'dime_max_age_min' "$CLI" && rg -q 'prune-pending' "$CLI" \
+   && rg -q 'dime_keep' "$CLI"; then
+  ok "buffer: TTL por edad + tope de guardado"
+else
+  fail "sin TTL/tope de guardado"
+fi
+if rg -q 'dime_max_recent' "$CLI" && rg -q 'dime_fresh_min' "$CLI"; then
+  ok "tope alto si todo es reciente"
+else
+  fail "sin tope alto para mensajes recientes"
+fi
+if rg -q 'mark-heard --id' "$CLI"; then
+  ok "marca escuchado por id (no por hora)"
+else
+  fail "sigue marcando por ts"
+fi
 if rg -q 'quiet-empty' "$CLI"; then
   ok "modo silencioso si no hay nada (hotword)"
 else
@@ -112,12 +128,53 @@ if [ "$orden" = "primero segundo " ]; then
 else
   fail "orden de lectura: $orden"
 fi
-ts="$(python3 "$ENGINE" pending --json 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["ts"])')"
-python3 "$ENGINE" mark-heard --ts "$ts" >/dev/null
-if [ "$(python3 "$ENGINE" pending-count)" = "1" ]; then
-  ok "leer uno lo marca escuchado"
+# marcar por id: dos mensajes en el mismo ms no se llevan de a dos
+python3 "$ENGINE" record-message --source pi --text "tercero" --pending >/dev/null
+python3 - <<'PYEOF'
+import json, os, time
+p = os.path.join(os.environ["VOICE_HISTORY_DIR"], "messages.jsonl")
+l = [json.loads(x) for x in open(p) if x.strip()]
+ts = int(time.time() * 1000)
+for r in l:
+    r["ts"] = ts  # todos el mismo milisegundo
+open(p, "w").write("\n".join(json.dumps(r, ensure_ascii=False) for r in l) + "\n")
+PYEOF
+ident="$(python3 "$ENGINE" pending --json 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["id"])')"
+python3 "$ENGINE" mark-heard --id "$ident" >/dev/null
+if [ "$(python3 "$ENGINE" pending-count)" = "2" ]; then
+  ok "marcar por id sólo se lleva uno (aunque compartan hora)"
 else
-  fail "no marca escuchado"
+  fail "marcar por id se llevó de más"
+fi
+
+# TTL: lo viejo se descarta y no se lee
+python3 - <<'PYEOF'
+import json, os, time
+p = os.path.join(os.environ["VOICE_HISTORY_DIR"], "messages.jsonl")
+l = [json.loads(x) for x in open(p) if x.strip()]
+for r in l:
+    r["ts"] = int(time.time() * 1000) - 90 * 60 * 1000
+open(p, "w").write("\n".join(json.dumps(r, ensure_ascii=False) for r in l) + "\n")
+PYEOF
+python3 "$ENGINE" prune-pending --max-age-min 30 --keep 20 >/dev/null
+if [ "$(python3 "$ENGINE" pending-count)" = "0" ]; then
+  ok "lo de hace 90 min se descarta solo"
+else
+  fail "no descarta los mensajes viejos"
+fi
+if rg -q '"expired": true' "$VOICE_HISTORY_DIR/messages.jsonl"; then
+  ok "queda marcado como expirado (no se borra del historial)"
+else
+  fail "no marca expired"
+fi
+
+# tope de guardado: el buffer tira los más viejos
+for i in $(seq 1 5); do python3 "$ENGINE" record-message --source pi --text "b$i" --pending >/dev/null; done
+n="$(python3 "$ENGINE" prune-pending --max-age-min 30 --keep 3)"
+if [ "$n" = "2" ] && [ "$(python3 "$ENGINE" pending-count)" = "3" ]; then
+  ok "el buffer tira los más viejos al llegar al tope"
+else
+  fail "el tope del buffer no funciona (descartó $n)"
 fi
 
 if [ "$fails" -eq 0 ]; then

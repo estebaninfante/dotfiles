@@ -34,6 +34,18 @@ delivery = "bell"
 chime = true
 # Segundos de silencio entre el aviso y la voz del modo hybrid.
 hybrid_pause = 1.5
+# Buzón de "dime": es un BUFFER, no un archivo. Se combina cantidad y tiempo.
+# - Un mensaje más viejo que `dime_max_age_min` no se lee nunca: se descarta
+#   solo (para cuando lo escuchás, ese ticket probablemente ya se cerró).
+# - `dime_keep` es el tope del buffer: si se llena, se tiran los más viejos.
+# - `dime_max` es cuántos lee por vez un backlog viejo; si TODO lo pendiente
+#   llegó hace menos de `dime_fresh_min`, el tope sube a `dime_max_recent`
+#   (una ráfaga reciente se puede leer de una).
+dime_max_age_min = 30
+dime_keep = 20
+dime_max = 6
+dime_max_recent = 12
+dime_fresh_min = 15
 # Al hablar, pausa la musica/video (via playerctl) y acalla cualquier otro
 # audio que no exponga MPRIS (video del navegador, etc.) muteando sus streams
 # por PipeWire; al terminar reanuda y restaura. No baja el volumen del sink,

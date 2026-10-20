@@ -364,10 +364,18 @@ Los caminos directos del CLI (`voice repeat`, `voice inbox play`, `voice play`,
 ya no se hablan al llegar: con la entrega `bell` (por defecto) suena la campana
 —una sola vez por ráfaga, nunca encima de un dictado— y el mensaje queda en el
 buzón con su autor. Cuando querés, decís **"dime"** (hotword propia) o corrés
-`voice dime`: Omar lee la cola en orden, `"<agente> dice: <mensaje>"`, hasta 5
-por vez (texto recortado) y avisa "Quedan N mensajes más". Si no hay nada, la
-hotword se calla (`--quiet-empty`). Todo local (STT + TTS), nada de
-speech-to-speech. Verificador: `scripts/verify/voz-dime.sh`.
+`voice dime`: Omar lee la cola en orden, `"<agente> dice: <mensaje>"` (texto
+recortado) y avisa "Quedan N mensajes más". Si no hay nada, la hotword se calla
+(`--quiet-empty`).
+
+El buzón es un **buffer acotado**, no un archivo: combina cantidad y tiempo.
+Lo más viejo que `dime_max_age_min` (30 min) se descarta solo (ese ticket ya se
+cerró); el buffer guarda como mucho `dime_keep` (20) y tira los más viejos; y
+por lectura lee `dime_max` (6) si el backlog es viejo, o `dime_max_recent` (12)
+si todo llegó hace menos de `dime_fresh_min` (15 min). Los mensajes se marcan
+por `id`, no por hora: una ráfaga en el mismo milisegundo ya no se lleva de más.
+Todo local (STT + TTS), nada de speech-to-speech. Verificador:
+`scripts/verify/voz-dime.sh`.
 
 **La tecla de Windows (F13).** `voice-key-listener` corre `present-remote
 toggle`; una pulsación, una acción (sin antirrebote por tiempo: el de 800 ms

@@ -152,6 +152,16 @@ tts_volume() {
   fi
 }
 
+# Marca escuchado un mensaje por su id (o por ts en registros viejos).
+marcar_escuchado() {
+  local ident="$1"
+  [ -n "$ident" ] || return 0
+  case "$ident" in
+    ts:*) "$PY" "$VOICE_DIR/engine.py" mark-heard --ts "${ident#ts:}" >/dev/null 2>&1 ;;
+    *)    "$PY" "$VOICE_DIR/engine.py" mark-heard --id "$ident" >/dev/null 2>&1 ;;
+  esac
+}
+
 # ── dictado: la voz nunca se le encima ──────────────────────────────────
 # Mientras el usuario dicta, el TTS no habla: ni empieza ni sigue sonando.
 # El turno lo publican `omar dictate` y handy-dictado; la pregunta vive en
@@ -385,6 +395,12 @@ avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile
   delivery=$(config_val tts delivery); delivery=${delivery:-direct}
   case "$delivery" in
     bell|mailbox)
+      # El buzón es un buffer acotado: antes de sumar, se tira lo viejo/sobrante.
+      local b_age b_keep
+      b_age=$(config_val tts dime_max_age_min); b_age=${b_age:-30}
+      b_keep=$(config_val tts dime_keep);       b_keep=${b_keep:-20}
+      "$PY" "$VOICE_DIR/engine.py" prune-pending \
+        --max-age-min "$b_age" --keep "$b_keep" >/dev/null 2>&1 || true
       "$PY" "$VOICE_DIR/engine.py" record-message --source "$source" \
         --text "$P_TEXT" --pending >/dev/null 2>&1 || true
       chime
@@ -477,43 +493,84 @@ profile_cmd() {  # profile list|show|set|remove|test|auto
 # dime: lee la cola de mensajes pendientes, en orden y con el autor de cada uno.
 # Es lo que dispara la hotword "dime": los agentes dejan su mensaje en el buzon
 # (suena la campana) y vos escuchas cuando querés. Formato: "<agente> dice: …".
-# Tope por lectura para que no se vuelva un audiolibro; si quedan, lo dice.
-dime() {  # dime [N] [--quiet-empty]
-  local n=5 quiet=0
+#
+# El buzon es un BUFFER, no un archivo: combina cantidad y tiempo.
+#   - `[tts] dime_max_age_min` (30): lo más viejo se descarta solo (ese ticket
+#     ya se cerró); no se lee.
+#   - `[tts] dime_keep` (20): tope del buffer; si se llena, se tiran los más
+#     viejos.
+#   - `[tts] dime_max` (6): cuántos lee por vez un backlog viejo.
+#   - Si TODO lo pendiente es fresco (`dime_fresh_min`, 15 min), el tope sube a
+#     `dime_max_recent` (12): una ráfaga reciente se puede leer de una.
+dime() {  # dime [--quiet-empty]
+  local quiet=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --quiet-empty) quiet=1; shift ;;
-      *) n="$1"; shift ;;
+      *) shift ;;
     esac
   done
-  [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ] || n=5
-  local total; total=$("$PY" "$VOICE_DIR/engine.py" pending-count 2>/dev/null || echo 0)
+  local max maxr fresh age keep
+  max=$(config_val tts dime_max);        max=${max:-6}
+  maxr=$(config_val tts dime_max_recent); maxr=${maxr:-12}
+  fresh=$(config_val tts dime_fresh_min); fresh=${fresh:-15}
+  age=$(config_val tts dime_max_age_min); age=${age:-30}
+  keep=$(config_val tts dime_keep);       keep=${keep:-20}
+
+  # Primero se limpia: nada de leer mensajes de hace hora y media.
+  local descartados total
+  descartados=$("$PY" "$VOICE_DIR/engine.py" prune-pending \
+    --max-age-min "$age" --keep "$keep" 2>/dev/null || echo 0)
+  total=$("$PY" "$VOICE_DIR/engine.py" pending-count 2>/dev/null || echo 0)
+
   if [ "${total:-0}" -eq 0 ]; then
     [ "$quiet" = 1 ] && return 0
-    speak --source omar "No hay mensajes pendientes."
+    if [ "${descartados:-0}" -gt 0 ]; then
+      speak --source omar "No hay mensajes recientes. Descarté $descartados viejos."
+    else
+      speak --source omar "No hay mensajes pendientes."
+    fi
     return 0
   fi
+
+  # ¿Todo lo que queda es reciente? Entonces vale la pena leer más de una vez.
+  local edad
+  edad=$("$PY" - "$VOICE_DIR" <<'PYEOF'
+import os, sys, time
+sys.path.insert(0, os.path.abspath(sys.argv[1]))
+from engine import pending_messages
+recs = pending_messages()
+if not recs:
+    print(-1)
+else:
+    print(int((time.time() * 1000 - int(recs[0].get("ts", 0) or 0)) / 60000))
+PYEOF
+)
+  local n="$max"
+  if [ "${edad:--1}" -ge 0 ] && [ "${edad:--1}" -le "$fresh" ]; then n="$maxr"; fi
+
   local rows
-  rows=$("$PY" - "$VOICE_DIR" "$n" <<'PYEOF'
+  rows=$("$PY" - "$VOICE_DIR" "$n" "$age" <<'PYEOF'
 import base64, os, sys
 sys.path.insert(0, os.path.abspath(sys.argv[1]))
 from engine import pending_messages
 maxlargo = 420
-for rec in pending_messages(int(sys.argv[2])):
+for rec in pending_messages(int(sys.argv[2]), float(sys.argv[3])):
     txt = " ".join(str(rec.get("text", "")).split())
     if len(txt) > maxlargo:
         txt = txt[:maxlargo].rsplit(" ", 1)[0] + "…"
     fuente = rec.get("source") or rec.get("app") or "alguien"
-    print("%s\x1f%s\x1f%s" % (fuente, base64.b64encode(txt.encode()).decode(), rec.get("ts", "")))
+    ident = rec.get("id") or ("ts:" + str(rec.get("ts", "")))
+    print("%s\x1f%s\x1f%s" % (fuente, base64.b64encode(txt.encode()).decode(), ident))
 PYEOF
 )
   local leidos=0
-  while IFS=$'\x1f' read -r fuente b64 ts; do
+  while IFS=$'\x1f' read -r fuente b64 ident; do
     [ -n "$b64" ] || continue
     local texto; texto=$(printf '%s' "$b64" | base64 -d)
     [ -n "$texto" ] || continue
     speak --source "$fuente" "$fuente dice: $texto"
-    [ -n "$ts" ] && "$PY" "$VOICE_DIR/engine.py" mark-heard --ts "$ts" >/dev/null 2>&1
+    marcar_escuchado "$ident"
     leidos=$((leidos + 1))
   done <<<"$rows"
   local restan=$(( ${total:-0} - leidos ))
@@ -630,11 +687,11 @@ for rec in pending_messages(limit):
         rec.get("file", ""),
         rec.get("source") or rec.get("app", ""),
         base64.b64encode(rec.get("text", "").encode()).decode(),
-        rec.get("ts", "")))
+        rec.get("id") or ("ts:" + str(rec.get("ts", "")))))
 PYEOF
 )
   [ -n "$rows" ] || { echo "voice: no hay mensajes pendientes"; return 0; }
-  while IFS=$'\x1f' read -r file source b64 ts; do
+  while IFS=$'\x1f' read -r file source b64 ident; do
     [ -n "$b64" ] || continue
     local text; text=$(printf '%s' "$b64" | base64 -d)
     # Narracion: decir de quien es el mensaje (asi se identifica el autor).
@@ -655,7 +712,7 @@ PYEOF
       fi
       rm -f "$wav"
     fi
-    [ -n "$ts" ] && "$PY" "$VOICE_DIR/engine.py" mark-heard --ts "$ts" >/dev/null 2>&1
+    marcar_escuchado "$ident"
   done <<<"$rows"
 }
 
