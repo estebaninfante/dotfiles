@@ -381,3 +381,36 @@ El límite no lo rompe el core: lo rompen los satélites.
   no dice nada accionable.
 - Un umbral en `res-reap` en vez de un medidor propio: `res-reap` mide
   `MemAvailable`, que es un síntoma, no una causa.
+
+## 2026-10-19 — `shell.json` por máquina (fin del ping-pong del auto-sync)
+
+**Problema.** La pantalla de la laptop parpadeaba: pasaba un instante a escala 1
+y volvía a 2, y alguna vez quedaba chica. La causa encadenada: (1) las dos
+máquinas exportaban **el mismo** `linux/config/omarchy/shell.json`, y `jq -S`
+ordena claves pero **no arrays**, así que el orden de los widgets de la barra
+oscilaba; (2) cada oscilación generaba commit de autosync → pull en la otra
+máquina → `omarchy-sync.sh import` → `omarchy-restart-shell`; (3) al recrearse
+la barra, el plugin `better-displays-pro` corre `restore-after-reload` 3 s
+después del arranque y reaplica el layout con `hl.monitor`, o sea un mode set
+sobre eDP-2 (2880x1800@120 scale 2) que se ve como el parpadeo.
+
+**Elegido.**
+
+- Cada máquina escribe `linux/config/omarchy/shell.<machine>.json`
+  (`~/.config/machine-type`) y lo importa de ahí. `shell.json` queda solo como
+  fallback de instalación nueva: el código ya tenía el override por máquina,
+  pero el archivo nunca se creó, así que todo caía al compartido.
+- `import` calcula una huella de lo que el shell carga de verdad (`shell.json`,
+  `shell.toml`, `bar/`, `extensions/`, `plugins/`) y **no reinicia** el shell si
+  el import no la cambió. Antes reiniciaba siempre, incluso cuando el pull solo
+  traía fondos o docs.
+
+**Descartado.**
+
+- Canonicalizar el array de widgets con `jq` para que ambas máquinas exporten
+  bytes iguales: el orden de la barra es una decisión del usuario, no ruido; y
+  cualquier widget nuevo volvería a desincronizarlo.
+- Quitar `omarchy-restart-shell` del import: sin reinicio no se aplican cambios
+  reales de barra/plugins.
+- Tocar el plugin `better-displays-pro` (es plugin git, no vive en el repo): la
+  reaplicación del layout es su diseño; el problema era la frecuencia.

@@ -1,0 +1,121 @@
+{
+  "bar": {
+    "centerAnchor": "eztvn.workspaces",
+    "id": "eztvn.bar",
+    "layout": {
+      "center": [
+        {
+          "id": "omarchy.indicators"
+        },
+        {
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "id": "eztvn.clock",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "id": "eztvn.workspaces"
+        },
+        {
+          "id": "eztvn.wave"
+        },
+        {
+          "id": "eztvn.countdown",
+          "target": "2027-01-25T00:00:00"
+        },
+        {
+          "id": "io.github.keegan-sucks.flowstate",
+          "shortBreakMinutes": 10,
+          "workMinutes": 50
+        },
+        {
+          "id": "omarchy.tray"
+        }
+      ],
+      "left": [
+        {
+          "id": "eztvn.menu"
+        },
+        {
+          "id": "omarchy.system-update"
+        },
+        {
+          "id": "vm.sysmem"
+        },
+        {
+          "id": "eztvn.mic"
+        },
+        {
+          "id": "eztvn.cpu-heatmap",
+          "rows": 2
+        }
+      ],
+      "right": [
+        {
+          "id": "eztvn.lanmouse"
+        },
+        {
+          "id": "omarchy.agents"
+        },
+        {
+          "id": "services",
+          "type": "qml"
+        },
+        {
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "id": "omarchy.network"
+        },
+        {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "omarchy.microphone"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "eztvn.pi-tts"
+        },
+        {
+          "id": "eztvn.power"
+        },
+        {
+          "id": "omar.status"
+        },
+        {
+          "id": "io.github.dragosol.better-displays-pro"
+        }
+      ]
+    },
+    "position": "top",
+    "transparent": false
+  },
+  "cloneSourceRestores": [
+    "eztvn.menu",
+    "eztvn.osd"
+  ],
+  "disabledPlugins": [
+    "omarchy.menu",
+    "tomv.battery-usage",
+    "omarchy.osd"
+  ],
+  "idle": {
+    "lock": 300,
+    "screensaver": 150
+  },
+  "plugins": [
+    {
+      "id": "eztvn.hypr-outline"
+    },
+    {
+      "id": "eztvn.hand-pointer"
+    },
+    {
+      "id": "eztvn.osd"
+    }
+  ],
+  "version": 1
+}

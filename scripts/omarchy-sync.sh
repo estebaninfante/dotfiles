@@ -26,6 +26,22 @@ info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
+# Huella de lo que el shell carga de verdad (barra, plugins, extensiones). Un
+# import que solo trae fondos, hooks o docs no justifica reiniciar el shell: cada
+# reinicio recrea los widgets de barra y los plugins de pantallas reaplican su
+# layout (hl.monitor -> mode set), que se ve como un parpadeo de escala.
+shell_state_hash() {
+    local p
+    for p in "$LIVE/shell.json" "$LIVE/shell.toml" "$LIVE/bar" "$LIVE/extensions" "$LIVE/plugins"; do
+        [[ -e "$p" ]] || continue
+        if [[ -d "$p" ]]; then
+            find "$p" -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum 2>/dev/null || true
+        else
+            sha256sum "$p" 2>/dev/null || true
+        fi
+    done | sha256sum | cut -d' ' -f1
+}
+
 copy_tree() { # copy_tree <src> <dst>  (omite *.sample)
     local src="$1" dst="$2" rel
     mkdir -p "$dst"
@@ -43,9 +59,12 @@ export_config() {
     for f in "${FILES[@]}"; do
         [[ -f "$LIVE/$f" ]] || continue
         dest="$SRC/$f"
-        if [[ "$f" = "shell.json" && -f "$SRC/shell.${MACHINE}.json" ]]; then
-            dest="$SRC/shell.${MACHINE}.json"
-        fi
+        # shell.json es la barra, y su orden de widgets no es canonico: `jq -S`
+        # ordena claves, no arrays. Si las dos maquinas exportan el MISMO archivo,
+        # cada una impone su orden -> commit, pull, import y reinicio de shell en
+        # la otra, en loop. Por eso cada maquina tiene su shell.<machine>.json; el
+        # shell.json compartido queda solo como fallback de instalacion nueva.
+        [[ "$f" = "shell.json" ]] && dest="$SRC/shell.${MACHINE}.json"
         # shell.json se canoniza (claves ordenadas) para que las dos maquinas
         # exporten bytes identicos: el orden de claves no debe generar churn ni
         # conflictos de rebase. Si jq no esta o el JSON es invalido, copia tal cual.
@@ -103,21 +122,28 @@ export_config() {
 import_config() {
     [[ -d "$SRC" ]] || { warn "No existe $SRC en el repo"; return 1; }
     mkdir -p "$LIVE"
-    local f d id url
+    local f d id url shell_before
+
+    shell_before="$(shell_state_hash)"
 
     for f in "${FILES[@]}"; do
-        [[ -f "$SRC/$f" ]] || continue
+        local cand="$SRC/$f"
         if [[ "$f" = "shell.json" ]]; then
-            local cand="$SRC/$f"
-            [[ -f "$SRC/shell.${MACHINE}.json" ]] && cand="$SRC/shell.${MACHINE}.json"
+            if [[ -f "$SRC/shell.${MACHINE}.json" ]]; then
+                cand="$SRC/shell.${MACHINE}.json"
+            elif [[ -f "$SRC/$f" ]]; then
+                warn "falta shell.${MACHINE}.json; se usa shell.json compartido (la barra puede pelearse con la otra maquina)"
+            else
+                continue
+            fi
             if ! jq -e . "$cand" >/dev/null 2>&1; then
                 warn "shell.json invalido, omitido: $cand"
                 continue
             fi
-            cp -f "$cand" "$LIVE/$f"
         else
-            cp -f "$SRC/$f" "$LIVE/$f"
+            [[ -f "$cand" ]] || continue
         fi
+        cp -f "$cand" "$LIVE/$f"
     done
 
     for d in "${DIRS[@]}"; do
@@ -167,7 +193,12 @@ import_config() {
             fi
         fi
 
-        command -v omarchy-restart-shell >/dev/null 2>&1 && omarchy-restart-shell >/dev/null 2>&1 || true
+        if [[ "$(shell_state_hash)" != "$shell_before" ]]; then
+            command -v omarchy-restart-shell >/dev/null 2>&1 && omarchy-restart-shell >/dev/null 2>&1 || true
+            ok "Shell reiniciado (cambio su configuracion)"
+        else
+            info "Shell sin cambios: no se reinicia"
+        fi
     fi
 
     ok "Config Omarchy importada a ~/.config/omarchy"
