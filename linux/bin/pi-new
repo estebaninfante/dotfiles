@@ -11,13 +11,18 @@
 # Pensado para el control remoto: doble flecha derecha -> pi-new.
 set -uo pipefail
 
+# Si esto corre desde dentro de tmux (o desde un servicio que heredó $TMUX),
+# "tmux new-session" se niega a anidar y la ventana se cierra sola: por eso
+# "abre pi" no abría nada. Acá siempre queremos una terminal nueva afuera.
+unset TMUX TMUX_PANE
+
 dir="${1:-$HOME}"
 sess="${2:-}"
 term="${TERMINAL:-kitty}"
 
 # Si no hay tmux, igual abrimos pi en la terminal (sin panel).
 if ! command -v tmux >/dev/null 2>&1; then
-    setsid "$term" -d "$dir" pi >/dev/null 2>&1 &
+    setsid "$term" --directory "$dir" pi >/dev/null 2>&1 &
     exit 0
 fi
 
@@ -27,7 +32,7 @@ else
     tmux_args=(new-session pi)
 fi
 
-setsid "$term" -d "$dir" "${tmux_args[@]}" >/dev/null 2>&1 &
+setsid "$term" --directory "$dir" "${tmux_args[@]}" >/dev/null 2>&1 &
 pid=$!
 
 # Enfocar la ventana nueva (Hyprland ya suele hacerlo al abrir; esto lo asegura).
