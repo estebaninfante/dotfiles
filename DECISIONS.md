@@ -348,3 +348,36 @@ la voz seguía sonando; había que apretar de nuevo para callarla.
 - Un antirrebote más corto (100-200 ms): sigue perdiendo pulsaciones rápidas y
   no aporta nada que el flag de pulsación no resuelva.
 
+
+## 2026-10-19 — El presupuesto de RAM se mide y se verifica, no se estima
+
+**Problema.** El core residente de la máquina (sistema + escritorio + voz +
+visión) se iba a ~5,8 GB sin que nadie pudiera decir cuánto pesaba cada parte ni
+cuándo se pasaba del límite. Las discusiones sobre "Omar pesa demasiado" se
+hacían con `free -h`, que no distingue core de satélites ni memoria privada de
+compartida.
+
+**Decisión.**
+
+1. `linux/bin/res-budget` mide con **PSS** (`smaps_rollup`), no con RSS: RSS
+   cuenta dos veces cada página compartida y hace que dos procesos que comparten
+   los mismos pesos inflen el número. Clasifica por la **unidad systemd del
+   cgroup**, que es más fiable que adivinar por `cmdline`.
+2. El presupuesto aplica sólo al **core** (kernel + sistema + escritorio + voz +
+   visión). Los satélites (agentes, editores, navegadores, servidores de
+   desarrollo) son de demanda y no cuentan.
+3. `res-budget.timer` lo corre cada 15 min y avisa por notificación si el core
+   excede el límite. `RES_BUDGET_MB` lo cambia sin tocar código.
+
+**Medido la primera vez que corrió.** Core 5,8 GB de 8,2 GB: kernel 564 MB,
+escritorio 399 MB, sistema 81 MB, visión 516 MB y **voz 4,3 GB (74 % del core)**.
+El límite no lo rompe el core: lo rompen los satélites.
+
+**Descartado.**
+
+- Medir con RSS: sobrecuenta la memoria compartida y no permite comparar entre
+  configuraciones.
+- Presupuesto sobre "toda la RAM usada": mezcla core con trabajo del usuario y
+  no dice nada accionable.
+- Un umbral en `res-reap` en vez de un medidor propio: `res-reap` mide
+  `MemAvailable`, que es un síntoma, no una causa.
