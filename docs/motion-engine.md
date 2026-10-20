@@ -14,7 +14,7 @@ gesto, un presupuesto de frame y un verificador que impide volver atrás.
 | --- | --- | --- |
 | **Tokens** | una sola tabla de duraciones, curvas, escalonado, resortes y `reduced` | ✅ v1 |
 | **Reveal** | aparición/desaparición pareada: nada entra ni sale de golpe | ✅ v1 |
-| **Stagger** | un grupo entra en barrido, con dirección y con tope | ✅ v1 (en `Morph`/`Tokens.delayFor`) |
+| **Stagger** | un grupo entra en barrido, con dirección y con tope | ✅ v1 (`Stagger.qml`) |
 | **Morph** | N elementos se transforman con una sola línea de tiempo; drag + asentado | ✅ v1 |
 | **Shared** | un elemento conserva identidad entre superficies (lista→detalle, panel→ventana) | ⏳ v2, con spike previo |
 
@@ -33,6 +33,7 @@ motion/                       # ← copia vendorizada del motor
   qmldir
   Tokens.qml                  # singleton: lee motion.json y el interruptor
   Reveal.qml
+  Stagger.qml
   Morph.qml
   Frames.qml
   Motion.js
@@ -202,3 +203,50 @@ Spike de un día (criterio de corte):
 - **Cross-window postergado** hasta el spike (arriba).
 - **El verificador de timing es local, no de CI**: mide esta máquina, a este
   dpr. El gate duro es el lint + la línea de tiempo determinista.
+
+## Precisión y continuidad (cómo se logra, no cómo se ve)
+
+La sensación de "esto es software caro" no sale de una animación grande: sale
+de que nada se rompa cuando el movimiento es complejo. Los mecanismos concretos:
+
+1. **Identidad, no reaparición.** Un elemento que se transforma es el mismo
+   dato en un modelo de coordenadas; el morph interpola *la proyección*, no
+   crea un segundo objeto. `Reveal` mantiene el contenido montado; `Morph` no
+   reconstruye nada.
+2. **Una línea de tiempo por gesto.** Todos los ítems leen de la misma
+   `Morph.advance()`; el escalonado es un peso por ítem, no animaciones
+   paralelas. Diez animaciones independientes se desincronizan aunque duren lo
+   mismo; una sola no puede.
+3. **Dirección y tope.** Al abrir barre 0,1,2…; al cerrar, al revés. El delay
+   está topado: un grupo grande no se convierte en una espera.
+4. **Nada retrocede.** El reloj nunca da un paso atrás (un frame largo seguido
+   de uno corto hacía temblar el dibujo); un stall grande (suspensión) asienta
+   en vez de reproducirse en cámara lenta.
+5. **Precisión de píxel en lo que se dibuja a mano.**
+   - Canvas a píxeles de dispositivo: `width = w * dpr`, `scale = 1 / dpr`,
+     `transformOrigin: TopLeft`. Si solo agrandás el canvas, mostrás la esquina.
+   - Capas cacheadas alineadas a la grilla: `floor(v * dpr) / dpr`, para que
+     caigan en los mismos píxeles que el canvas que reemplazan.
+   - Puntos: cuadrados bajo 1.1 px, octógonos hasta 1.9, círculos solo los
+     grandes; un mismo punto no se dibuja dos veces con alfa (se ve manchado);
+     los anillos cierran su último paso o queda una muesca en las 12.
+   - Texto siempre en ítems QML, nunca `fillText`: así respeta la fuente del
+     sistema y tiene hinting/subpíxel de verdad.
+6. **Handover sin parpadeo.** En reposo las capas cacheadas solo rotan (GPU);
+   durante el morph dibuja el canvas; las capas nuevas se pintan **debajo** y
+   el canvas se desvanece recién cuando la última avisó que pintó. Sin ese
+   handshake se ve un frame de fondo en cada cambio.
+
+### Lo que falta y por qué no está
+
+- **Fusión de formas (metaballs / goo).** Requiere un *distance field* en
+  shader. En Qt 6.11 los shaders de texto ya no existen: hay que compilar un
+  `.qsb` con `qsb` y shipearlo, y acá no hay contexto GL offscreen para
+  validarlo. Además `QtQuick.Effects.MultiEffect` (blur + máscara por umbral)
+  puede lograrlo sin shader propio, pero igual necesita GPU real para medirse.
+  Antes de escribirlo: medir en pantalla y comparar contra el costo de lograr
+  el mismo gesto con resortes y continuidad (que es lo que hace un "dynamic
+  island" y suele verse mejor en UI).
+- **Persistencia entre superficies.** Ver v2 arriba.
+- **Motion blur / estelas.** No: en un shell de escritorio agrega costo y no
+  aclara nada.

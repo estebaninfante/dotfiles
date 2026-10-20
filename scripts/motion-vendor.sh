@@ -23,7 +23,7 @@ fi
 for dst in "${targets[@]}"; do
   mkdir -p "$dst"
   # Sólo lo que el motor necesita en runtime; nada de tests ni docs.
-  for f in motion.json qmldir Tokens.qml Reveal.qml Morph.qml Frames.qml Motion.js; do
+  for f in motion.json qmldir Tokens.qml Reveal.qml Stagger.qml Morph.qml Frames.qml Motion.js; do
     cp -f "$SRC/$f" "$dst/$f"
   done
   echo "ok $dst"

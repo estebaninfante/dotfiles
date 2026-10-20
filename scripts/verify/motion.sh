@@ -47,7 +47,7 @@ fi
 # 2. copias vendorizadas ----------------------------------------------------
 if [[ -d "$ENGINE" ]]; then
   while IFS= read -r dst; do
-    for f in motion.json qmldir Tokens.qml Reveal.qml Morph.qml Frames.qml Motion.js; do
+    for f in motion.json qmldir Tokens.qml Reveal.qml Stagger.qml Morph.qml Frames.qml Motion.js; do
       [[ -f "$dst/$f" ]] || { E "copia incompleta: ${dst#$HOME_DIR/}/$f"; continue; }
       cmp -s "$ENGINE/$f" "$dst/$f" || E "copia desviada: ${dst#$HOME_DIR/}/$f (corré scripts/motion-vendor.sh)"
     done
@@ -67,7 +67,7 @@ for r in "${roots[@]}"; do
   while IFS= read -r f; do files+=("$f"); done < <(
     find "$r" -name '*.qml' \
       ! -path '*/motion/*' ! -name 'Tokens.qml' ! -name 'Reveal.qml' \
-      ! -name 'Morph.qml' ! -name 'Frames.qml' 2>/dev/null)
+      ! -name 'Stagger.qml' ! -name 'Morph.qml' ! -name 'Frames.qml' 2>/dev/null)
 done
 
 backlog=0
@@ -99,7 +99,7 @@ for f in "${files[@]}"; do
     elif (( ${v:-0} <= 300 )); then sug="morph (o Tokens.page)"
     else sug="slow (o Tokens.surface)"; fi
     E "$rel:$n duración literal ($v); sugerido: Tokens.$sug"
-  done < <(grep -nE 'duration:[[:space:]]*[1-9][0-9]*([[:space:]]*[,}]|$)' "$f" 2>/dev/null)
+  done < <(grep -nE 'duration:[[:space:]]*[1-9][0-9]*([[:space:]]*[,;}]|$)' "$f" 2>/dev/null)
 
   # Azar sin semilla en código de dibujo/animación.
   while IFS= read -r l; do
