@@ -3,6 +3,30 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-20 — "dime" avisa con la campana; la espera del micrófono estaba al revés
+
+**Contexto.** Dos mensajes sonaron sin la campana de aviso. No era el buzón: eran
+mensajes reales que se leyeron con un `voice dime`. Y al arreglar la señal
+apareció otro defecto: `wait_mic_free` esperaba **mientras el micrófono estaba
+libre** (la pregunta `micguard --busy` devuelve 0 cuando está libre y el loop
+seguía con el valor invertido), así que cualquier reproducción directa podía
+quedar colgada 3 minutos.
+
+**Elegido.**
+
+- `dime` llama a `chime --now` antes de leer: primer plano y sin antirrebote, la
+  campana es la señal explícita de "te voy a leer". El aviso de llegada sigue
+  con antirrebote (una ráfaga = una campana).
+- `mic_libre()` (0 = libre) reemplaza el nombre engañoso: `wait_mic_free` usa
+  `while ! mic_libre`, y los caminos directos (sin daemon, repeat, inbox, play)
+  ya no esperan de más ni hablan con el micrófono tomado.
+
+**Descartado.**
+
+- Bajar el antirrebote del aviso de llegada: una ráfaga de agentes sonaría como
+  una alarma. El antirrebote se queda; la señal de lectura es la que suena.
+- Que `dime` lea sin campana: el usuario pidió explícitamente el aviso primero.
+
 ## 2026-10-19 — El buzón de "dime" es un buffer con edad, no un archivo
 
 **Contexto.** La campana acumulaba mensajes sin límite. Si no decías "dime" en

@@ -245,7 +245,7 @@ for fn in "__speak_direct" "repeat()" "play_inbox()"; do
     fail "CLI ${fn%.*} no espera al dictado"
   fi
 done
-if grep -q 'mic_busy() { "$PY" "$VOICE_DIR/micguard.py" --busy' "$CLI"; then
+if grep -q 'mic_libre() { "$PY" "$VOICE_DIR/micguard.py" --busy' "$CLI"; then
   ok "CLI pregunta con la misma regla (micguard)"
 else
   fail "CLI no usa micguard"

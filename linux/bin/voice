@@ -166,12 +166,14 @@ marcar_escuchado() {
 # Mientras el usuario dicta, el TTS no habla: ni empieza ni sigue sonando.
 # El turno lo publican `omar dictate` y handy-dictado; la pregunta vive en
 # linux/voice/micguard.py para que el daemon use exactamente la misma regla.
-mic_busy() { "$PY" "$VOICE_DIR/micguard.py" --busy >/dev/null 2>&1; }
+# 0 = el micrófono está libre. Ojo: `micguard --busy` devuelve 1 cuando hay
+# dictado (es la pregunta "¿está ocupado?"), por eso el nombre es `mic_libre`.
+mic_libre() { "$PY" "$VOICE_DIR/micguard.py" --busy >/dev/null 2>&1; }
 
 # Espera a que el micrófono quede libre (tope: 3 min). 0 = quedó libre.
 wait_mic_free() {
   local tope=$(( $(date +%s) + 180 )) avisado=0
-  while mic_busy; do
+  while ! mic_libre; do
     if [ "$avisado" = 0 ]; then
       [ -t 2 ] && printf 'voice: dictado en curso, espero a que termine…\n' >&2
       avisado=1

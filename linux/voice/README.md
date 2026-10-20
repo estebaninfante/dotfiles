@@ -158,8 +158,9 @@ agente lleva su color. Ver `conversar.ts`.
 - **`bell` (por defecto):** los mensajes de los agentes **nunca se hablan
   solos**. Suena la campana (`[tts] chime`, una sola vez por ráfaga) y el
   mensaje queda en el buzón con su autor. Cuando querés, decís **"dime"** (o
-  `voice dime`): Omar lee la cola en orden, `"<agente> dice: <mensaje>"`, y avisa
-  si quedan más. Nada se habla encima del dictado.
+  `voice dime`): **suena la campana** (la señal de "te lo leo") y después Omar
+  lee la cola en orden, `"<agente> dice: <mensaje>"`, y avisa si quedan más.
+  Nada se habla encima del dictado.
 
   El buzón es un **buffer acotado**, no un archivo que crece para siempre:
   combina cantidad y tiempo. Lo más viejo que `[tts] dime_max_age_min` (30 min)

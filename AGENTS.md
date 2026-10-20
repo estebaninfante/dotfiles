@@ -364,9 +364,10 @@ Los caminos directos del CLI (`voice repeat`, `voice inbox play`, `voice play`,
 ya no se hablan al llegar: con la entrega `bell` (por defecto) suena la campana
 —una sola vez por ráfaga, nunca encima de un dictado— y el mensaje queda en el
 buzón con su autor. Cuando querés, decís **"dime"** (hotword propia) o corrés
-`voice dime`: Omar lee la cola en orden, `"<agente> dice: <mensaje>"` (texto
-recortado) y avisa "Quedan N mensajes más". Si no hay nada, la hotword se calla
-(`--quiet-empty`).
+`voice dime`: **primero suena la campana** (la misma señal de "llegó algo",
+ahora de "te lo leo") y después Omar lee la cola en orden,
+`"<agente> dice: <mensaje>"` (texto recortado), y avisa "Quedan N mensajes más".
+Si no hay nada, la hotword se calla (`--quiet-empty`).
 
 El buzón es un **buffer acotado**, no un archivo: combina cantidad y tiempo.
 Lo más viejo que `dime_max_age_min` (30 min) se descarta solo (ese ticket ya se
