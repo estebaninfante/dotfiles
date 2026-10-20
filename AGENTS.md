@@ -348,6 +348,18 @@ voice engine X lang # cambiar motor (chatterbox/piper/espeak)
 sintetiza, la frase se descarta en vez de sonar después. Verificador:
 `scripts/verify/voz-corte.sh`.
 
+**La voz no habla encima de un dictado.** Mientras dictás, el TTS espera: el
+mensaje queda en la cola y sale cuando el micrófono queda libre; si el dictado
+empieza con la voz ya sonando, la corta en el acto (250 ms) y la frase vuelve a
+la cola (máx. 3 reintentos). Así lo dictado nunca sale mezclado con un aviso, y
+el dictado no transcribe la voz del agente. La regla vive en
+`linux/voice/micguard.py`: mira el turno del dictado (`mic-busy` y
+`dictate.pid`, con PID vivo y caducidad de 5 min) y, como red de seguridad, un
+captura de PipeWire de Handy/Voxtype que grabe sin pasar por `handy-dictado`.
+Los caminos directos del CLI (`voice repeat`, `voice inbox play`, `voice play`,
+`voice history play` y la síntesis sin daemon) esperan igual. Verificador:
+`scripts/verify/voz-dictado.sh`.
+
 **La tecla de Windows (F13).** `voice-key-listener` corre `present-remote
 toggle`; una pulsación, una acción (sin antirrebote por tiempo: el de 800 ms
 se comía la segunda pulsación rápida). La decisión es instantánea: la píldora se

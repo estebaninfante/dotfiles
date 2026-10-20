@@ -3,6 +3,38 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-19 — El TTS nunca habla encima de un dictado
+
+**Contexto.** Estando en dictado, el aviso hablado del cierre de un agente se
+solapó con la grabación: el micrófono captó la voz sintética y lo dictado salió
+mezclado (y, al revés, Omar podía oír su propio eco). La causa es que había dos
+relojes: Omar ya se apartaba del micrófono (`mic-busy`), pero el daemon de TTS
+no miraba ese turno y hablaba cuando llegaba el mensaje.
+
+**Elegido.**
+
+- Una sola pregunta compartida, `linux/voice/micguard.py`: ¿hay dictado? Lee el
+turno que ya publican `omar dictate` y `handy-dictado` (`mic-busy` y
+  `dictate.pid`), valida el PID (vivo, cmdline de dictado, caducidad de 5 min) y,
+  como red de seguridad, ve por PipeWire un `handy`/`voxtype` que grabe por su
+  cuenta. Se cachea 1 s para no pagar `pactl` en cada vuelta.
+- El **daemon** es el único punto de reproducción: antes de sintetizar espera (la
+  frase queda en la cola, no se pierde) y durante el `pw-play` revisa cada
+  250 ms. Si empieza un dictado, corta y reencola la frase (máx. 3 veces).
+- Anota `spoken.log` con la hora **real** del audio: si la frase esperó, el oído
+  de Omar no debe tomar su eco como voz propia.
+- Los caminos directos del CLI (sin daemon, `repeat`, `inbox play`, `play`,
+  `history play`) esperan al dictado antes de sonar.
+
+**Descartado.**
+
+- Bajar el volumen del TTS durante el dictado: sigue entrando al micrófono.
+- Descartar el mensaje si hay dictado: el aviso del agente se perdería.
+- Preguntar por “cualquier captura del micrófono” (llamadas, grabadores): es más
+  agresivo de lo pedido y obliga a mantener una lista de excepciones.
+- Duplicar la regla en cada herramienta de dictado: en cuanto aparece una nueva,
+  vuelve el bug.
+
 ## 2026-10-19 — `liberar`: cerrar lo que no arrancó con el sistema
 
 **Contexto.** Hacía falta una palabra en la terminal para soltar memoria y
