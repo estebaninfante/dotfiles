@@ -91,6 +91,24 @@ paramétrica. De fábrica ya existe **ir a un workspace**:
 Para tu propia regla paramétrica, repetí el patrón con un `id` nuevo: misma
 frase con hueco, misma acción con hueco.
 
+## Dos motores: las hotwords salen por el camino rápido
+
+Omar tiene dos modelos de transcripción en el mismo sidecar. El **rápido**
+(whisper-small, `stt.fast`) mira la cola de audio cada ~350 ms mientras hablás y
+pasa su texto por `matchHotword()`: si la frase ya es una palabra clave, la
+ejecuta sin esperar el cierre por silencio. El **de precisión** (large-v3-turbo)
+sigue transcribiendo el texto final del dictado y los comandos que no son
+hotword.
+
+- Modos en `stt.fast.mode`: `off`, `shadow` (sólo registra "ejecutaría X") y `on`.
+- Las destructivas siguen exigiendo conversación abierta.
+- Una acción disparada por el rápido no se repite cuando llega el final: se
+  recuerda por frase (`fastFired`) y se olvida al cerrarla.
+- Para probar: `omar fast --file wav` (transcribe con el rápido y dice qué
+  palabra clave habría disparado).
+- Efecto práctico: "espacio 3" tarda ~0,3-0,6 s, no 1-1,5 s. Detalle en
+  `features/motor-rapido.md` del repo de Omar.
+
 ## Cómo se decide qué gana
 
 1. **Exacto o por prefijo.** `"sube el volumen"` matchea `"sube el volumen un
