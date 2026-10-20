@@ -597,3 +597,40 @@ rebase. Dos causas concretas:
   900 s de `pi` por un corte de red).
 - Reintentar el `pull` completo con HTTP/1.1: vuelve a descargar lo que ya está
   en `origin/$BRANCH`.
+
+## Motor de movimiento: una fuente de tokens, tres primitivas y un laboratorio
+
+**Contexto.** Cada widget animaba a mano: duraciones literales, apariciones y
+desapariciones con `visible: false`, ningún vocabulario común entre la barra,
+los plugins y las apps. El objetivo es calidad de software de alto nivel
+(morphs, persistencia, nada que se corte de golpe) sin reimplementarla en cada
+widget.
+
+**Elegido.**
+
+- `motion.json` como única fuente de duraciones, curvas, escalonado y resortes.
+  Lo lee `Tokens.qml` (singleton) y lo lee cualquier app futura; sin codegen y
+  sin build step.
+- Tres primitivas v1: **Reveal** (entrada/salida pareadas, contenido montado),
+  **Morph** (una línea de tiempo con escalonado y barrido direccional, drag y
+  asentado) y **Frames** (frames parejos al display para canvas). **Shared**
+  (persistencia entre superficies) queda para v2.
+- `Morph.advance(ms)` es línea de tiempo pura: el `FrameAnimation` la alimenta
+  con el tiempo real y los tests la llaman a mano. El verificador de movimiento
+  es determinista y no depende del render.
+- El motor se **vendoriza** como subdirectorio del consumidor porque Quickshell
+  rechaza imports que suben de directorio (`Reveal is not a type`). Un script
+  único copia y el verificador falla si una copia se desvía.
+- El laboratorio (`eztvn.motion`) es el criterio de aceptación visual. El
+  interruptor maestro se prueba ahí de verdad, con `hyprctl` incluido.
+
+**Descartado.**
+
+- Codegen de tokens a QML/CSS: un archivo JSON leído al inicio alcanza.
+- Un reloj global: cada morph tiene su línea de tiempo; un reloj compartido
+  termina animando cosas que no lo pidieron.
+- Empezar por la persistencia cross-window: en Wayland depende de un overlay
+  `layer-shell` exacto sobre otras superficies y pelea con las animaciones del
+  compositor. Antes va un spike de un día con criterio de corte explícito.
+- Migrar los 38 lugares con duraciones literales de una vez: se migran por
+  impacto visual y cada carpeta tocada pasa el verificador.

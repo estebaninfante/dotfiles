@@ -54,14 +54,15 @@ case "${1:-}" in
   mover|ir)
     shift
     etiqueta=""
+    pos=()
     while [ $# -gt 0 ]; do
       case "$1" in
         --etiqueta) etiqueta="${2:-}"; shift 2 ;;
         --etiqueta=*) etiqueta="${1#*=}"; shift ;;
-        *) break ;;
+        *) pos+=("$1"); shift ;;
       esac
     done
-    x="${1:-}"; y="${2:-}"
+    x="${pos[0]:-}"; y="${pos[1]:-}"
     [ -n "$x" ] && [ -n "$y" ] || uso 2
     cuerpo=$(python3 -c '
 import json, sys
@@ -82,7 +83,7 @@ print(json.dumps({"agente": agente, "color": color,
     curl -fsS -m 3 "$BASE/api/presencia" | python3 -c '
 import json, sys
 for a in json.load(sys.stdin).get("agentes", []):
-    print(f"{a[\"agente\"]:<20} {a[\"color\"]:<8} ({a[\"x\"]:.2f}, {a[\"y\"]:.2f}) {a[\"etiqueta\"]}")
+    print("%-20s %-8s (%0.2f, %0.2f) %s" % (a["agente"], a["color"], a["x"], a["y"], a["etiqueta"]))
 ' || echo "presencia: no pude hablar con openagents en $BASE" >&2
     ;;
   -h|--help|ayuda|"") uso 0 ;;

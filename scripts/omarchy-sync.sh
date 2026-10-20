@@ -18,7 +18,7 @@ SRC="$REPO/linux/config/omarchy"
 MACHINE="$(cat "${HOME}/.config/machine-type" 2>/dev/null || echo desktop)"
 
 FILES=(shell.json shell.toml)
-DIRS=(bar branding extensions backgrounds hooks)
+DIRS=(bar branding extensions backgrounds hooks motion)
 EXCLUDE_HOOK="theme-set.d/sync-wallpaper.sh"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'

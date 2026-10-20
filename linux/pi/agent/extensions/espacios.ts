@@ -133,7 +133,11 @@ Excepción: **el sonido es global**. Avisos, voz y notificaciones (\`hablar\`,
 tiene que oír.
 
 El estado vive en \`~/.local/share/espacios/agentes.json\`; \`espacios listar\` muestra
-quién ocupa qué espacio.`;
+quién ocupa qué espacio.
+
+Si mientras explicás querés **señalar** algo en la pantalla de openagents (la app
+que ve el usuario), mové tu cursor con \`presencia mover <x> <y> --etiqueta "..."\`
+(coordenadas 0..1) y retiralo con \`presencia retirar\` al terminar.`;
 
 export default function (pi: ExtensionAPI) {
   pi.on("session_start", async () => {
