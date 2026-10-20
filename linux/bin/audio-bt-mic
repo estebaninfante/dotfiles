@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# audio-bt-mic — usar el micrófono de los auriculares Bluetooth y escuchar por
+# el jack de cable (o por los parlantes, si no hay nada enchufado).
+#
+# En PipeWire la salida y la entrada son independientes: se puede dejar el
+# sink en la placa analógica y la source en el manos libres Bluetooth a la vez.
+# El único requisito es que el auricular esté en un perfil HFP/HSP
+# (headset-head-unit), porque A2DP es solo salida y no expone micrófono.
+#
+# Modos:
+#   on       micrófono Bluetooth + salida por cable (guarda el estado previo)
+#   off      vuelve al estado guardado (normalmente: todo por Bluetooth/A2DP)
+#   toggle   alterna entre on y off
+#   status   muestra qué está sonando y qué está grabando
+#
+# Si no se pide modo, hace toggle. Pensado para un atajo de teclado.
+
+set -u
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/audio-bt-mic"
+STATE_FILE="$STATE_DIR/previo"
+
+notify() {  # notify <texto> [urgencia]
+  command -v notify-send >/dev/null 2>&1 || return 0
+  notify-send -a "Audio" -i audio-headset-bluetooth -u "${2:-low}" "Audio" "$1" \
+    >/dev/null 2>&1 || true
+}
+
+die() { echo "audio-bt-mic: $*" >&2; notify "$*" normal; exit 1; }
+
+# --- detección -------------------------------------------------------------
+
+bt_card() {
+  pactl list cards short 2>/dev/null \
+    | awk '$2 ~ /^bluez_card\./ {print $2; exit}'
+}
+
+# Source del manos libres (no el .monitor de la salida).
+bt_source() {
+  pactl list short sources 2>/dev/null \
+    | awk '$2 ~ /^bluez_input/ {print $2; exit}'
+}
+
+analog_sink() {
+  pactl list short sinks 2>/dev/null \
+    | awk '$2 ~ /analog-stereo/ {print $2; exit}'
+}
+
+analog_card() {
+  pactl list cards short 2>/dev/null \
+    | awk '$2 ~ /^alsa_card\./ {print $2}' \
+    | while read -r c; do
+        pactl list cards 2>/dev/null \
+          | sed -n '/Name: '"$c"'$/,/^$/p' \
+          | grep -q 'analog-output-headphones' && { printf '%s\n' "$c"; break; }
+      done
+}
+
+jack_plugged() {  # sí|no según el codec ALSA
+  local c
+  for c in 0 1 2 3 4 5; do
+    if amixer -c "$c" cget "iface=CARD,name=Headphone Jack" >/dev/null 2>&1; then
+      amixer -c "$c" cget "iface=CARD,name=Headphone Jack" 2>/dev/null \
+        | sed -n 's/.*values=\(on\|off\).*/\1/p' | tail -1
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Perfil HFP disponible en la placa BT (preferimos mSBC sobre CVSD).
+hfp_profile() {
+  local card profiles
+  card="$(bt_card)"
+  profiles="$(pactl list cards 2>/dev/null | sed -n '/Name: '"$card"'$/,/^$/p' | grep -oE 'headset-head-unit[a-z-]*' | sort -u)"
+  for p in headset-head-unit headset-head-unit-cvsd; do
+    printf '%s\n' "$profiles" | grep -qx "$p" && { printf '%s' "$p"; return 0; }
+  done
+  return 1
+}
+
+# --- estado ----------------------------------------------------------------
+
+save_state() {
+  [ -f "$STATE_FILE" ] && return 0          # no pisar el estado original
+  mkdir -p "$STATE_DIR"
+  {
+    echo "sink=$(pactl get-default-sink 2>/dev/null)"
+    echo "source=$(pactl get-default-source 2>/dev/null)"
+    echo "perfil_bt=$(pactl list cards 2>/dev/null | sed -n '/Name: '"$(bt_card)"'$/,/^$/p' | sed -n 's/^[[:space:]]*Active Profile: //p' | head -1)"
+  } >"$STATE_FILE"
+}
+
+read_state() {  # read_state <clave>
+  [ -f "$STATE_FILE" ] || return 1
+  sed -n "s/^$1=//p" "$STATE_FILE" | head -1
+}
+
+# Mueve los streams vivos al destino pedido (PipeWire no los mueve solo al
+# cambiar el default).
+move_playback() {  # move_playback <sink>
+  local id
+  for id in $(pactl list short sink-inputs 2>/dev/null | cut -f1); do
+    pactl move-sink-input "$id" "$1" >/dev/null 2>&1 || true
+  done
+}
+
+move_record() {  # move_record <source>
+  local id
+  for id in $(pactl list short source-outputs 2>/dev/null | cut -f1); do
+    pactl move-source-output "$id" "$1" >/dev/null 2>&1 || true
+  done
+}
+
+# --- acciones --------------------------------------------------------------
+
+activar() {
+  local card src sink hfp card_a
+  card="$(bt_card)"    || true
+  src="$(bt_source)"   || true
+  sink="$(analog_sink)" || true
+
+  [ -n "$card" ] || die "no hay ningún Bluetooth conectado."
+
+  save_state
+
+  # 1. Perfil HFP: sin esto el auricular no expone micrófono.
+  hfp="$(hfp_profile)" || true
+  [ -n "$hfp" ] || die "los auriculares no ofrecen perfil de manos libres (micrófono)."
+  pactl set-card-profile "$card" "$hfp" >/dev/null 2>&1 \
+    || die "no pude activar el perfil de manos libres."
+
+  # El cambio de perfil puede tardar un instante en crear la source.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    src="$(bt_source)" || true
+    [ -n "$src" ] && break
+    sleep 0.2
+  done
+  [ -n "$src" ] || die "el micrófono Bluetooth no apareció."
+
+  # 2. Salida por la placa analógica (auriculares de cable).
+  card_a="$(analog_card)" || true
+  [ -n "$sink" ] || die "no encuentro la salida analógica."
+  if [ -n "$card_a" ]; then
+    pactl set-card-profile "$card_a" output:analog-stereo+input:analog-stereo >/dev/null 2>&1 \
+      || pactl set-card-profile "$card_a" output:analog-stereo >/dev/null 2>&1 || true
+  fi
+  pactl set-default-sink "$sink" >/dev/null 2>&1 || true
+  if [ "$(jack_plugged)" = on ]; then
+    pactl set-sink-port "$sink" analog-output-headphones >/dev/null 2>&1 || true
+  fi
+
+  # 3. Entrada por el micrófono Bluetooth.
+  pactl set-default-source "$src" >/dev/null 2>&1 || true
+
+  # 4. Mover lo que ya está sonando/grabando.
+  move_playback "$sink"
+  move_record "$src"
+
+  if [ "$(jack_plugged)" = on ]; then
+    notify "Micrófono Bluetooth, audio por los auriculares de cable."
+  else
+    notify "Micrófono Bluetooth, audio por los parlantes (jack vacío)." normal
+  fi
+}
+
+desactivar() {
+  local sink src perfil card
+  card="$(bt_card)" || true
+  sink="$(read_state sink)"   || true
+  src="$(read_state source)"  || true
+  perfil="$(read_state perfil_bt)" || true
+
+  # Si ya no está el estado, caemos a algo razonable.
+  [ -n "$sink" ] || sink="$(pactl get-default-sink 2>/dev/null)"
+  [ -n "$src" ]  || src="$(pactl get-default-source 2>/dev/null)"
+
+  # Volver el auricular a su perfil de música (A2DP) si corresponde.
+  case "${perfil:-}" in
+    a2dp*)
+      if [ -n "$card" ]; then
+        pactl set-card-profile "$card" "$perfil" >/dev/null 2>&1 || true
+        # Con el perfil nuevo cambian los nombres de los nodos: re-detectar.
+        sink="$(pactl list short sinks 2>/dev/null | awk '$2 ~ /^bluez_output/ {print $2; exit}')"
+        src="$(pactl list short sources 2>/dev/null | awk '$2 ~ /^bluez_input/ {print $2; exit}')"
+        [ -n "$sink" ] || sink="$(pactl get-default-sink 2>/dev/null)"
+        [ -n "$src" ]  || src="$(pactl list short sources 2>/dev/null | awk '$2 !~ /monitor$/ {print $2; exit}')"
+      fi
+      ;;
+  esac
+
+  [ -n "$sink" ] && pactl set-default-sink "$sink" >/dev/null 2>&1 || true
+  [ -n "$src" ]  && pactl set-default-source "$src" >/dev/null 2>&1 || true
+  [ -n "$sink" ] && move_playback "$sink"
+  [ -n "$src" ]  && move_record "$src"
+
+  rm -f "$STATE_FILE"
+  notify "Audio de vuelta al estado normal."
+}
+
+status() {
+  echo "sink default:    $(pactl get-default-sink 2>/dev/null)"
+  echo "source default:  $(pactl get-default-source 2>/dev/null)"
+  echo "jack auriculares: $(jack_plugged || echo 'sin jack')"
+  echo "perfil Bluetooth: $(pactl list cards 2>/dev/null | sed -n '/Name: '"$(bt_card)"'$/,/^$/p' | sed -n 's/^[[:space:]]*Active Profile: //p' | head -1)"
+  [ -f "$STATE_FILE" ] && echo "modo split: ACTIVO" || echo "modo split: inactivo"
+}
+
+case "${1:-toggle}" in
+  on)     activar ;;
+  off)    desactivar ;;
+  toggle)
+    [ -f "$STATE_FILE" ] && desactivar || activar
+    ;;
+  status) status ;;
+  *) echo "uso: audio-bt-mic [on|off|toggle|status]" >&2; exit 2 ;;
+esac

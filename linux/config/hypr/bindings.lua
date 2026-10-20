@@ -60,6 +60,10 @@ hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("omarchy audio output volume +3"
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("omarchy audio output volume -3"), { repeating = true })
 hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("omarchy audio output volume mute-toggle"))
 
+-- Micrófono del Bluetooth + audio por los auriculares de cable.
+-- Alterna entre esa combinación y el estado anterior (todo por Bluetooth).
+hl.bind(main_mod .. " + ALT + M", hl.dsp.exec_cmd("~/.local/bin/audio-bt-mic toggle"), { description = "Audio: mic Bluetooth + salida por cable" })
+
 hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl pause"), { locked = true })
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })
