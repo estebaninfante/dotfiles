@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# presencia — el cursor de un agente en la pantalla de openagents.
+#
+# Las apps colaborativas muestran el cursor y el nombre de cada persona. Acá lo
+# mismo, pero para agentes: cada uno tiene su color (el mismo de la voz, la barra
+# y la grilla) y puede señalar un punto de la pantalla mientras explica algo.
+#
+#   presencia mover <x> <y> [--etiqueta "lo que estoy mirando"]
+#   presencia retirar              # saca mi cursor
+#   presencia listar               # quién está señalando dónde
+#
+# Coordenadas relativas: 0,0 es la esquina de arriba a la izquierda y 1,1 la de
+# abajo a la derecha; así el cursor cae en el mismo lugar sin importar el tamaño
+# de la ventana. La pantalla tiene que estar abierta (openagents, puerto 7717).
+#
+# Uso desde un agente de pi: la identidad sale de PI_AGENTE / PI_AGENTE_COLOR
+# (los pone la extensión `espacios`), así el cursor ya sale con su nombre y su
+# color sin pasar nada.
+set -uo pipefail
+
+PUERTO="${PI_DESKTOP_PORT:-7717}"
+BASE="http://127.0.0.1:$PUERTO"
+
+uso() {
+  sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+agente() {
+  if [ -n "${PI_AGENTE:-}" ]; then printf '%s' "$PI_AGENTE"; return; fi
+  if [ -n "${PI_VOICE_AGENT:-}" ]; then printf '%s' "$PI_VOICE_AGENT"; return; fi
+  if [ -n "${TMUX_PANE:-}" ] && command -v tmux >/dev/null 2>&1; then
+    local n
+    n=$(tmux display-message -p -t "$TMUX_PANE" '#{@agent_name}' 2>/dev/null)
+    [ -n "$n" ] && { printf '%s' "$n"; return; }
+  fi
+  printf 'agente-%s' "$$"
+}
+
+color() {
+  if [ -n "${PI_AGENTE_COLOR:-}" ]; then printf '%s' "$PI_AGENTE_COLOR"; return; fi
+  local c
+  c=$(voice identity "$(agente)" --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("color",""))' 2>/dev/null)
+  [ -n "$c" ] && { printf '%s' "$c"; return; }
+  printf '#7dcfff'
+}
+
+post() { # json
+  command -v curl >/dev/null 2>&1 || { echo "presencia: falta curl" >&2; return 1; }
+  curl -fsS -m 3 -X POST "$BASE/api/presencia" -H 'Content-Type: application/json' -d "$1" >/dev/null
+}
+
+case "${1:-}" in
+  mover|ir)
+    shift
+    etiqueta=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --etiqueta) etiqueta="${2:-}"; shift 2 ;;
+        --etiqueta=*) etiqueta="${1#*=}"; shift ;;
+        *) break ;;
+      esac
+    done
+    x="${1:-}"; y="${2:-}"
+    [ -n "$x" ] && [ -n "$y" ] || uso 2
+    cuerpo=$(python3 -c '
+import json, sys
+x, y, etiqueta, agente, color = sys.argv[1:6]
+print(json.dumps({"agente": agente, "color": color,
+                  "x": max(0.0, min(1.0, float(x))),
+                  "y": max(0.0, min(1.0, float(y))),
+                  "etiqueta": etiqueta}))
+' "$x" "$y" "$etiqueta" "$(agente)" "$(color)")
+    if post "$cuerpo"; then echo "cursor de $(agente) en ($x, $y)"; else
+      echo "presencia: no pude hablar con openagents en $BASE" >&2; exit 1
+    fi
+    ;;
+  retirar)
+    curl -fsS -m 3 -X DELETE "$BASE/api/presencia?agente=$(agente)" >/dev/null && echo "cursor retirado"
+    ;;
+  listar)
+    curl -fsS -m 3 "$BASE/api/presencia" | python3 -c '
+import json, sys
+for a in json.load(sys.stdin).get("agentes", []):
+    print(f"{a[\"agente\"]:<20} {a[\"color\"]:<8} ({a[\"x\"]:.2f}, {a[\"y\"]:.2f}) {a[\"etiqueta\"]}")
+' || echo "presencia: no pude hablar con openagents en $BASE" >&2
+    ;;
+  -h|--help|ayuda|"") uso 0 ;;
+  *) echo "presencia: no conozco «$1»" >&2; uso 2 ;;
+esac
