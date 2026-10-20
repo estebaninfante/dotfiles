@@ -1,6 +1,6 @@
 ---
 name: revision-humana
-description: Registrar y revisar artefactos que necesitan ojo humano (skills, agentes, extensiones). Usala siempre que crees una skill o un agente, o cuando el usuario pida ver qué quedó pendiente de revisar. Triggers: revisión, revisar, pendiente, aprobar, skill nueva, agente nuevo, cola de revisión.
+description: "Registrar y revisar artefactos que necesitan ojo humano (skills, agentes, extensiones). Usala siempre que crees una skill o un agente, o cuando el usuario pida ver qué quedó pendiente de revisar. Triggers: revisión, revisar, pendiente, aprobar, skill nueva, agente nuevo, cola de revisión."
 ---
 
 # Revisión humana

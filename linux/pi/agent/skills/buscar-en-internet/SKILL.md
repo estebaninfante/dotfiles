@@ -1,6 +1,6 @@
 ---
 name: buscar-en-internet
-description: Buscar en internet y leer páginas antes de responder. Usala cuando no estés seguro, cuando el usuario explique algo que no entendés, o cuando el dato pueda haber cambiado (versiones, precios, noticias, lanzamientos, APIs, personas, eventos). Triggers: buscar, internet, web, noticias, última versión, precio, documentación actualizada, verificar, no estoy seguro, no entiendo.
+description: "Buscar en internet y leer páginas antes de responder. Usala cuando no estés seguro, cuando el usuario explique algo que no entendés, o cuando el dato pueda haber cambiado (versiones, precios, noticias, lanzamientos, APIs, personas, eventos). Triggers: buscar, internet, web, noticias, última versión, precio, documentación actualizada, verificar, no estoy seguro, no entiendo."
 ---
 
 # Buscar en internet

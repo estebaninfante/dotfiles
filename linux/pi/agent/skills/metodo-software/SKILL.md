@@ -1,6 +1,6 @@
 ---
 name: metodo-software
-description: Método de trabajo para construir y cambiar software pensando en agentes. Usala en cualquier tarea de software (features, bugs, refactors, apps) y cuando haya que optimizar o bajar el consumo. Triggers: implementar, feature, bug, refactor, app, verificar, test, arquitectura, escalar, agentes, rendimiento, optimizar, lento, presupuesto colibrí.
+description: "Método de trabajo para construir y cambiar software pensando en agentes. Usala en cualquier tarea de software (features, bugs, refactors, apps) y cuando haya que optimizar o bajar el consumo. Triggers: implementar, feature, bug, refactor, app, verificar, test, arquitectura, escalar, agentes, rendimiento, optimizar, lento, presupuesto colibrí."
 ---
 
 # Método de software (pensado para agentes)

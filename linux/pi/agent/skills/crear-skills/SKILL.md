@@ -1,6 +1,6 @@
 ---
 name: crear-skills
-description: Crear y mantener skills de IA simples, modulares y versionadas. Usala cuando haya que crear una skill, convertir un aprendizaje o un procedimiento repetido en skill, actualizar o recortar una skill existente, o decidir si algo va en una skill, en AGENTS.md o en un asset. Triggers: crear skill, nueva skill, guardar aprendizaje, convertir en skill, mejorar skill, gestión de skills.
+description: "Crear y mantener skills de IA simples, modulares y versionadas. Usala cuando haya que crear una skill, convertir un aprendizaje o un procedimiento repetido en skill, actualizar o recortar una skill existente, o decidir si algo va en una skill, en AGENTS.md o en un asset. Triggers: crear skill, nueva skill, guardar aprendizaje, convertir en skill, mejorar skill, gestión de skills."
 ---
 
 # Crear y gestionar skills
