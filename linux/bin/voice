@@ -360,10 +360,14 @@ hybrid_pause() {
 #   es un solo aviso).
 # - Nunca encima de un dictado: espera a que el microfono quede libre.
 chime() {
+  # --now: en primer plano y sin antirrebote. Es la señal explícita de "te voy a
+  # leer": tiene que sonar sí o sí, justo antes de la voz (lo usa `dime`).
+  local esperar=0
+  [ "${1:-}" = "--now" ] && esperar=1
   [ "$(config_val tts chime)" = "false" ] && return 0
   local marca="$CACHE_DIR/chime.last"
   mkdir -p "$CACHE_DIR"
-  if [ -f "$marca" ]; then
+  if [ "$esperar" = 0 ] && [ -f "$marca" ]; then
     local hace; hace=$(( $(date +%s) - $(stat -c %Y "$marca" 2>/dev/null || echo 0) ))
     [ "$hace" -lt 8 ] && return 0
   fi
@@ -376,7 +380,11 @@ chime() {
     rm -f "$CACHE_DIR/chime1.wav" "$CACHE_DIR/chime2.wav"
   fi
   [ -f "$f" ] || return 0
-  ( wait_mic_free; pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1 ) &
+  if [ "$esperar" = 1 ]; then
+    wait_mic_free && pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1
+  else
+    ( wait_mic_free; pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1 ) &
+  fi
 }
 
 # avisar: entrega un mensaje al usuario. Segun `[tts] delivery`:
@@ -532,6 +540,9 @@ dime() {  # dime [--quiet-empty]
     fi
     return 0
   fi
+
+  # Campana primero: la misma señal de "llegó algo", ahora de "te lo leo".
+  chime --now || true
 
   # ¿Todo lo que queda es reciente? Entonces vale la pena leer más de una vez.
   local edad

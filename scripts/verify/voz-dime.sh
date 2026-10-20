@@ -82,6 +82,16 @@ if rg -q 'mark-heard --id' "$CLI"; then
 else
   fail "sigue marcando por ts"
 fi
+if awk '/^dime\(\)/{f=1} f&&/chime --now/{c=1} f&&/^}/{exit} END{exit !c}' "$CLI"; then
+  ok "la campana suena antes de leer"
+else
+  fail "dime no avisa con la campana antes de leer"
+fi
+if rg -q 'esperar=0' "$CLI" && rg -q 'wait_mic_free && pw-play' "$CLI"; then
+  ok "campana --now: primer plano, sin antirrebote"
+else
+  fail "campana --now incompleta"
+fi
 if rg -q 'quiet-empty' "$CLI"; then
   ok "modo silencioso si no hay nada (hotword)"
 else
