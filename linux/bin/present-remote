@@ -343,7 +343,13 @@ def external_mic_owner():
         props = info.get("props") or {}
         if props.get("media.class") != "Stream/Input/Audio":
             continue
-        if (props.get("node.state") or info.get("state")) == "suspended":
+        # Sólo cuenta una captura que está FLUYENDO. Los nodos del grafo propio
+        # de PipeWire (`input.mic-bt-fx`, `input.phone-mic`) existen siempre y
+        # quedan "idle" cuando nadie los usa; tomarlos por "otra app hablando"
+        # trababa la tecla ("no prendo Omar — el micrófono lo usa input.mic-bt-fx").
+        if (props.get("node.state") or info.get("state")) in (
+            "suspended", "idle", "error",
+        ):
             continue
         names = {
             str(props.get(key) or "").lower()
@@ -352,6 +358,10 @@ def external_mic_owner():
             )
         }
         if names & MIC_BENIGN:
+            continue
+        # Nodos virtuales de la cadena de micrófono propia (mic-bt-fx/mic-gain):
+        # son fuente de Omar, no una conversación ajena.
+        if any(name.startswith("input.") for name in names):
             continue
         return (
             props.get("application.name")
