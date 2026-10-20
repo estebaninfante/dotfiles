@@ -83,7 +83,22 @@ for f in "${files[@]}"; do
   # Duración literal: 120, 260… salvo 0 (apagado) y las que salen de Tokens.
   while IFS= read -r l; do
     n=${l%%:*}
-    E "$rel:$n duración literal; usá Tokens.fast/base/morph/slow o Tokens.dur(\"…\")"
+    # `property int duration: 1200` no es una animación: es un tiempo de vida.
+    # Se pide renombrarlo para que el verificador no lo confunda con movimiento.
+    if grep -qE 'property [a-z]+ duration:' <<<"$l"; then
+      W "$rel:$n 'duration' como tiempo de vida, no de animación; renombralo (visibleFor/holdFor)"
+      continue
+    fi
+    v=$(grep -oE 'duration:[[:space:]]*[0-9]+' <<<"$l" | grep -oE '[0-9]+' | head -1)
+    if (( ${v:-0} <= 140 )); then sug=fast
+    elif (( ${v:-0} <= 220 )); then sug=base
+    elif (( ${v:-0} <= 300 )); then sug=morph
+    else sug=slow; fi
+    if (( ${v:-0} <= 140 )); then sug="fast (o Tokens.hover si es hover/presión)"
+    elif (( ${v:-0} <= 220 )); then sug="base (o Tokens.state)"
+    elif (( ${v:-0} <= 300 )); then sug="morph (o Tokens.page)"
+    else sug="slow (o Tokens.surface)"; fi
+    E "$rel:$n duración literal ($v); sugerido: Tokens.$sug"
   done < <(grep -nE 'duration:[[:space:]]*[1-9][0-9]*([[:space:]]*[,}]|$)' "$f" 2>/dev/null)
 
   # Azar sin semilla en código de dibujo/animación.

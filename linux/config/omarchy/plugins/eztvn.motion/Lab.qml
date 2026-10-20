@@ -177,15 +177,17 @@ Item {
           title: "Stagger"
           hint: "una entrada, un barrido · la dirección sigue al gesto"
           onPlay: {
-            backward = !backward
-            shown = !shown
-            if (!shown) staggerBack.restart()
+            stagger.toggle()
+            if (!stagger.shown) staggerBack.restart()
           }
 
-          property bool shown: true
-          property bool backward: false
-          property int count: 14
-          Timer { id: staggerBack; interval: 1600; onTriggered: staggerTile.shown = true }
+          Stagger {
+            id: stagger
+            count: 14
+            step: Math.round(Tokens.staggerStep * lab.timeScale)
+            duration: Math.round(Tokens.base * lab.timeScale)
+          }
+          Timer { id: staggerBack; interval: 1600; onTriggered: stagger.shown = true }
 
           Row {
             anchors.centerIn: parent
@@ -196,9 +198,9 @@ Item {
                 required property int index
                 width: Math.max(3, Math.round(lab.unit * 0.55))
                 height: Math.round(lab.unit * (1.2 + 2.6 * Math.abs(Math.sin(index * 1.7))))
-                shown: staggerTile.shown
-                delay: Math.round(Tokens.delayFor(staggerTile.backward ? staggerTile.count - 1 - index : index) * lab.timeScale)
-                duration: Math.round(Tokens.base * lab.timeScale)
+                shown: stagger.shown
+                delay: stagger.delay(index)
+                duration: stagger.duration
                 rise: 8
                 Rectangle {
                   anchors.fill: parent

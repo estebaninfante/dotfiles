@@ -12,6 +12,12 @@ ShellRoot {
     if (!cond) { fails++; console.log("FAIL " + name) }
   }
 
+  Stagger {
+    id: st
+    count: 40
+    step: 28
+  }
+
   Morph {
     id: m
     count: 4
@@ -52,6 +58,17 @@ ShellRoot {
       root.ok(m.running && m.fast, "suelta y asienta")
       for (var w = 0; w < 30; w++) m.advance(16)
       root.ok(m.progress === 1 && !m.running, "asienta en la más cercana")
+
+      // Stagger: barrido, tope e inversión.
+      st.count = 40; st.step = 28; st.backward = false
+      root.ok(st.delay(0) === 0, "stagger arranca en 0")
+      root.ok(st.delay(3) === 84, "stagger paso a paso")
+      root.ok(st.delay(39) === st.maxStep * 28, "stagger topado")
+      st.backward = true
+      root.ok(st.delay(39) === 0 && st.delay(0) === st.maxStep * 28, "stagger inverso")
+      st.backward = false
+      st.shown = false; st.autoReverse = true; st.open()
+      root.ok(st.shown && st.backward, "abrir invierte el próximo barrido")
 
       console.log(root.fails === 0 ? "MOTION_TEST_OK" : "MOTION_TEST_FAIL " + root.fails)
       Qt.quit()

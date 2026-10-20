@@ -61,6 +61,15 @@ QtObject {
   }
   function durRaw(key) { return num("duration", key, 180) }
 
+  // ---------------------------------------------------------------- por intención
+  // Elegí por lo que pasa, no por un número. Son alias de los tokens de arriba:
+  // si mañana cambia la escala, los consumidores no se tocan.
+  readonly property int hover: fast          // puntero encima, presión, foco
+  readonly property int press: fast          // el dedo/tecla ya actuó
+  readonly property int state: base          // cambia un estado chico (fila, check)
+  readonly property int page: morph          // se releva una página o contenedor
+  readonly property int surface: slow        // aparece una superficie completa
+
   readonly property int instant: dur("instant")
   readonly property int fast: dur("fast")
   readonly property int base: dur("base")
