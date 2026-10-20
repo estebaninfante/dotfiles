@@ -42,6 +42,13 @@ from engine import (
     tts_volume,
 )
 
+# El dictado tiene prioridad sobre la voz: si el usuario está dictando, el TTS
+# espera (nunca habla encima, ni arranca a mitad del dictado).
+try:
+    import micguard
+except Exception:  # pragma: no cover - sin el módulo, se sigue como antes
+    micguard = None
+
 # Identidad del agente (nombre/rol/color) para publicarla junto a lo que se
 # dice: los subtítulos y la barra pintan con el color del que habla. Es
 # opcional: si el módulo no está, el sistema sigue funcionando igual.
@@ -306,6 +313,16 @@ def synth_and_play(req: dict) -> bool:
         if played == "ok":
             ok = True
             played_engine = eng
+            break
+        if played == "dictated":
+            # Empezó un dictado mientras sonaba: no se habla encima. La frase
+            # vuelve a la cola y sale cuando el micrófono quede libre.
+            reintentos = int(req.get("_dictado_retries") or 0)
+            if reintentos < 3:
+                otra = dict(req)
+                otra["_dictado_retries"] = reintentos + 1
+                _queue.insert(0, otra)
+                log("dictado en curso: la frase vuelve a la cola")
             break
         if played == "cancelled":
             # El usuario cortó: callarse, sin degradar a otro motor.
@@ -696,12 +713,38 @@ def _clear_speaking() -> None:
         pass
 
 
+def _dictation_active() -> bool:
+    """¿El usuario está dictando ahora mismo? (ver micguard.py)."""
+    try:
+        return bool(micguard and micguard.busy())
+    except Exception:
+        return False
+
+
+def _annotate_spoken(text: str) -> None:
+    """Anota en spoken.log el momento REAL en que empieza a sonar una frase.
+
+    `voice speak` ya anota al encolar. Cuando la frase esperó a que termine un
+    dictado, esa hora queda vieja y el oído de Omar podría tomar su propio eco
+    como voz del usuario: esta segunda anotación llega con la hora correcta.
+    """
+    ruta = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "omar", "spoken.log")
+    try:
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        with open(ruta, "a", encoding="utf-8") as fh:
+            fh.write("%d\t%s\n" % (int(time.time() * 1000), " ".join(text.split())))
+    except OSError:
+        pass
+
+
 def _play(wav: str, text: str | None = None, source: str = "",
           engine: str = "", voice: str = "") -> str:
-    """Reproduce el WAV. Devuelve "ok", "error" o "cancelled".
+    """Reproduce el WAV. Devuelve "ok", "error", "cancelled" o "dictated".
 
     "cancelled" = alguien pidió cortar (`voice stop`) mientras sonaba. Es
     distinto de un fallo real del motor: no hay que degradar a piper/espeak.
+    "dictated" = el usuario empezó a dictar mientras sonaba: se corta y la
+    frase vuelve a la cola (nunca se habla encima de un dictado).
     """
     global _current_play
     if not os.path.isfile(wav):
@@ -733,16 +776,31 @@ def _play(wav: str, text: str | None = None, source: str = "",
         if text:
             _publish_speaking(text, wav, source, engine, voice)
             published = True
+            _annotate_spoken(text)
         proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
         _current_play = proc
-        try:
-            rc = proc.wait(timeout=900)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-            log("play timeout (900s): corto la voz")
-            return "error"
+        # Corte por dictado: se mira cada 250 ms. Si el usuario empieza a
+        # dictar con la voz sonando, el micrófono la capturaría y el dictado
+        # saldría con la voz adentro: mejor callarse en el acto.
+        limite = time.time() + 900
+        while True:
+            try:
+                rc = proc.wait(timeout=0.25)
+                break
+            except subprocess.TimeoutExpired:
+                if _play_epoch != epoch:
+                    rc = proc.poll()
+                    break
+                if _dictation_active():
+                    log("dictado en curso: corto la voz para no pisarlo")
+                    _stop_playback()
+                    return "dictated"
+                if time.time() > limite:
+                    proc.kill()
+                    proc.wait()
+                    log("play timeout (900s): corto la voz")
+                    return "error"
         if rc == 0:
             return "ok"
         if _play_epoch != epoch:
@@ -786,12 +844,25 @@ def enqueue(req: dict) -> None:
 
 def worker() -> None:
     global _stop
+    esperando_dictado = False
     while True:
         if _stop:
             return
         if not _queue:
+            esperando_dictado = False
             time.sleep(0.2)
             continue
+        if _dictation_active():
+            # El usuario está dictando: la voz no empieza. La frase espera en
+            # la cola (no se pierde) y sale cuando el micrófono quede libre.
+            if not esperando_dictado:
+                log("en espera: dictado en curso (la voz no habla encima)")
+                esperando_dictado = True
+            time.sleep(0.4)
+            continue
+        if esperando_dictado:
+            log("dictado terminado: sigue la cola de voz")
+            esperando_dictado = False
         req = _queue.pop(0)
         synth_and_play(req)
 

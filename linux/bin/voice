@@ -151,6 +151,26 @@ tts_volume() {
   fi
 }
 
+# ── dictado: la voz nunca se le encima ──────────────────────────────────
+# Mientras el usuario dicta, el TTS no habla: ni empieza ni sigue sonando.
+# El turno lo publican `omar dictate` y handy-dictado; la pregunta vive en
+# linux/voice/micguard.py para que el daemon use exactamente la misma regla.
+mic_busy() { "$PY" "$VOICE_DIR/micguard.py" --busy >/dev/null 2>&1; }
+
+# Espera a que el micrófono quede libre (tope: 3 min). 0 = quedó libre.
+wait_mic_free() {
+  local tope=$(( $(date +%s) + 180 )) avisado=0
+  while mic_busy; do
+    if [ "$avisado" = 0 ]; then
+      [ -t 2 ] && printf 'voice: dictado en curso, espero a que termine…\n' >&2
+      avisado=1
+    fi
+    [ "$(date +%s)" -ge "$tope" ] && return 1
+    sleep 0.5
+  done
+  return 0
+}
+
 # ── comandos ────────────────────────────────────────────────────────────
 # Parser comun de opciones de sintesis. Deja el resultado en las variables
 # P_* del llamador (scope dinamico de bash). Acepta ademas texto por stdin.
@@ -266,6 +286,9 @@ speak() {  # speak [--profile P] [--voice V] [--engine E] [--lang L] [--source S
 
 __speak_direct() {
   local text="$*"
+  # Sin daemon también se respeta el dictado: si el micrófono está tomado, se
+  # espera en vez de hablar encima (esto corre en background, no bloquea).
+  wait_mic_free || return 0
   local voice engine lang
   lang="${VOICE_OVERRIDE_LANG:-$(config_val tts lang)}"; lang="${lang:-es}"
   voice="${VOICE_OVERRIDE_VOICE:-$(config_val tts "voice_$lang")}"
@@ -514,11 +537,13 @@ PYEOF
     [ -n "$b64" ] || continue
     local text; text=$(printf '%s' "$b64" | base64 -d)
     if [ -n "$file" ] && [ -f "$file" ]; then
+      wait_mic_free || return 0
       pw-play --volume="$(tts_volume)" "$file" >/dev/null 2>&1
       continue
     fi
     local wav; wav=$(mktemp /tmp/voice-repeat-XXXXXX.wav)
     if daemon_alive && synth --source "$source" "$text" "$wav" >/dev/null 2>&1 && [ -s "$wav" ]; then
+      wait_mic_free || return 0
       pw-play --volume="$(tts_volume)" "$wav" >/dev/null 2>&1
     else
       __speak_direct "$text"
@@ -561,10 +586,12 @@ PYEOF
       spoken="Mensaje de $source. $text"
     fi
     if [ -n "$file" ] && [ -f "$file" ]; then
+      wait_mic_free || return 0
       pw-play --volume="$(tts_volume)" "$file" >/dev/null 2>&1
     else
       local wav; wav=$(mktemp /tmp/voice-inbox-XXXXXX.wav)
       if daemon_alive && synth --source "$source" "$spoken" "$wav" >/dev/null 2>&1 && [ -s "$wav" ]; then
+        wait_mic_free || return 0
         pw-play --volume="$(tts_volume)" "$wav" >/dev/null 2>&1
       else
         __speak_direct "$spoken"
@@ -895,6 +922,7 @@ PYEOF
         n="${2:-1}"
         wav=$("$PY" "$VOICE_DIR/engine.py" history-wav "$n" 2>/dev/null) || {
           echo "voice: no existe la entrada $n del historial" >&2; exit 1; }
+        wait_mic_free || exit 0
         pw-play --volume="$(tts_volume)" "$wav" >/dev/null 2>&1 &
         echo "voice: reproduciendo entrada $n"
         ;;
@@ -917,6 +945,7 @@ PYEOF
       *) echo "voice: solo reproduzco audios del historial ($_dir)" >&2; exit 2 ;;
     esac
     [ -f "$_want" ] || { echo "voice: no existe $_want" >&2; exit 1; }
+    wait_mic_free || exit 0
     pw-play --volume="$(tts_volume)" "$_want" >/dev/null 2>&1 &
     echo "voice: reproduciendo $(basename "$_want")"
     ;;
