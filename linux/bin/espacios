@@ -1,0 +1,577 @@
+#!/usr/bin/env python3
+"""espacios — un espacio del escritorio por agente.
+
+El problema: varios agentes trabajan a la vez en la misma sesión gráfica. Si un
+agente abre un navegador, un video o cualquier ventana, aparece encima de lo que
+el usuario está haciendo. Este comando le da a cada agente **su propio espacio**
+(un workspace de Hyprland fuera de la rotación normal), sin foco, y hace que
+todo lo que abra caiga ahí.
+
+La pieza clave no es un daemon: es la **clase de ventana**. La ventana de un
+agente se llama `agente-<slug>` y hay una regla de Hyprland (una sola, creada al
+reclamar el espacio) que la manda al espacio del agente, en silencio y sin foco.
+Así no hace falta adivinar el dueño de una ventana mirando procesos: la ventana
+ya dice de quién es. Para apps que no dejan fijar la clase, `abrir` lanza el
+programa, espera la ventana nueva y la mueve (mejor esfuerzo, nunca cambia el
+workspace activo del usuario).
+
+Lo que NO se toca: sonido. Avisos, voz y notificaciones son globales a propósito:
+el usuario los tiene que oír esté donde esté.
+
+Uso:
+  espacios reclamar <nombre> [--color #hex] [--json]
+  espacios info [<nombre>] [--json]     espacio, color y clase del agente
+  espacios ws [<nombre>]                número de espacio (para scripts)
+  espacios abrir [--bin RUTA] -- <cmd> [args...]
+  espacios url <url> [<url>...]
+  espacios mover <dirección|address:...>  mover la ventana activa a mi espacio
+  espacios listar
+  espacios liberar [<nombre>]
+
+Entorno:
+  PI_AGENTE, PI_AGENTE_WS, PI_AGENTE_COLOR, PI_AGENTE_CLASE, PI_AGENTE_SHIMS
+  ESPACIOS_DIR            estado (default ~/.local/share/espacios)
+  ESPACIOS_ESPACIOS       espacios candidatos (default 11..20)
+  ESPACIOS_MAX_POR_ESPACIO (default 1)
+  ESPACIOS_SIN_ESC=1      no habla con Hyprland (tests / sin escritorio)
+  ESPACIOS_NAVEGADOR      navegador preferido (default brave > chromium)
+  ESPACIOS_MOVIMIENTO     "1"/"0" mover ventanas nuevas (default 1)
+
+Estado en `$ESPACIOS_DIR/agentes.json`. Sin dependencias fuera de python3,
+hyprctl y las apps que el usuario tenga.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+HOME = Path.home()
+BASE = Path(os.environ.get("ESPACIOS_DIR") or HOME / ".local" / "share" / "espacios")
+REG = BASE / "agentes.json"
+SHIMS = BASE / "shims"
+NAVEGADORES = BASE / "navegador"
+LOG = BASE / "espacios.log"
+
+CANDIDATOS = [int(n) for n in os.environ.get("ESPACIOS_ESPACIOS", "11 12 13 14 15 16 17 18 19 20").split()]
+MAX_POR_ESPACIO = int(os.environ.get("ESPACIOS_MAX_POR_ESPACIO", "1"))
+
+
+def sin_escritorio() -> bool:
+    valor = os.environ.get("ESPACIOS_SIN_ESC", "auto")
+    if valor == "1":
+        return True
+    if valor == "0":
+        return False
+    return not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+
+
+def log(msg: str) -> None:
+    if os.environ.get("ESPACIOS_LOG") != "1":
+        return
+    try:
+        BASE.mkdir(parents=True, exist_ok=True)
+        with LOG.open("a", encoding="utf8") as f:
+            f.write(f"{datetime.now().isoformat(timespec='seconds')} {msg}\n")
+    except OSError:
+        pass
+
+
+# ----------------------------------------------------------------- utilidades
+
+
+def slugify(nombre: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", str(nombre).lower())
+    s = re.sub(r"[^a-z0-9]+", "-", s.encode("ascii", "ignore").decode()).strip("-")
+    return s[:28] or "agente"
+
+
+def correr(cmd: list[str], **kw) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=5, **kw)
+
+
+def hyprctl(*args: str) -> str:
+    if sin_escritorio():
+        return ""
+    try:
+        return correr(["hyprctl", *args]).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def hypr_eval(code: str) -> None:
+    if sin_escritorio():
+        return
+    hyprctl("eval", code)
+
+
+def ws_activo() -> int:
+    try:
+        return int(json.loads(hyprctl("activeworkspace", "-j"))["id"])
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return -1
+
+
+# ------------------------------------------------------------------- registro
+
+
+def leer() -> dict:
+    try:
+        data = json.loads(REG.read_text(encoding="utf8"))
+        if isinstance(data, dict) and isinstance(data.get("agentes"), dict):
+            return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {"agentes": {}}
+
+
+def guardar(data: dict) -> None:
+    BASE.mkdir(parents=True, exist_ok=True)
+    tmp = REG.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf8")
+    tmp.replace(REG)
+
+
+def con_bloqueo(fn):
+    """Corre fn con un lock exclusivo para que dos agentes no elijan el mismo espacio."""
+    import fcntl
+
+    BASE.mkdir(parents=True, exist_ok=True)
+    with (BASE / ".lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            return fn()
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def color_de(nombre: str, pedido: str = "") -> str:
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", pedido or ""):
+        return pedido.lower()
+    try:
+        voz = os.environ.get("PI_TTS_VOICE_BIN") or shutil.which("voice") or str(HOME / ".local/bin/voice")
+        out = correr([voz, "identity", nombre, "--json"]).stdout
+        color = json.loads(out).get("color", "")
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            return color.lower()
+    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        pass
+    # Respaldo: mismo criterio que la voz, un color estable por nombre.
+    paleta = ["#7aa2f7", "#9ece6a", "#ff9e64", "#f7768e", "#bb9af7", "#7dcfff",
+              "#e0af68", "#73daca", "#a6e3a1", "#89dceb", "#b4befe", "#c6a0f6"]
+    return paleta[sum(ord(c) for c in nombre) % len(paleta)]
+
+
+def vivo(info: dict) -> bool:
+    """Un espacio sigue ocupado si el proceso que lo reclamó sigue vivo.
+    Así un agente que se cerró de golpe no deja el espacio reservado para siempre."""
+    if not info.get("vivo", True):
+        return False
+    pid = info.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def elegir_espacio(agentes: dict, slug: str) -> int:
+    ocupados: dict[int, int] = {}
+    for nombre, info in agentes.items():
+        if nombre == slug or not vivo(info):
+            continue
+        ws = info.get("espacio")
+        if isinstance(ws, int):
+            ocupados[ws] = ocupados.get(ws, 0) + 1
+    activo = ws_activo()
+    for ws in CANDIDATOS:
+        if ws != activo and ocupados.get(ws, 0) < MAX_POR_ESPACIO:
+            return ws
+    libres = [ws for ws in CANDIDATOS if ws != activo]
+    if not libres:
+        raise SystemExit("espacios: no hay espacio libre (¿se llenaron todos?)")
+    return min(libres, key=lambda ws: ocupados.get(ws, 0))
+
+
+def clase(slug: str) -> str:
+    return f"agente-{slug}"
+
+
+def regla(slug: str, ws: int, activa: bool = True) -> None:
+    nombre = f"espacios-{slug}"
+    if not activa:
+        hypr_eval(f'hl.window_rule({{ name="{nombre}", match={{ class="^{clase(slug)}$" }}, enabled=false }})')
+        return
+    hypr_eval(
+        f'hl.window_rule({{ name="{nombre}", match={{ class="^{clase(slug)}$" }}, '
+        f'workspace="{ws} silent", no_focus=true, suppress_event="activate" }})'
+    )
+
+
+# ------------------------------------------------------------------- shims
+
+
+def binario(nombre: str) -> str:
+    # `shutil.which` respetaría el PATH del agente, donde ya están los shims de
+    # otros agentes: buscamos primero en los directorios del sistema.
+    for carpeta in ("/usr/bin", "/usr/local/bin", "/bin", "/opt/brave-bin"):
+        ruta = Path(carpeta) / nombre
+        if ruta.is_file() and os.access(ruta, os.X_OK):
+            return str(ruta)
+    return shutil.which(nombre) or ""
+
+
+def crear_shims(slug: str) -> str:
+    """Un directorio de atajos que se antepone al PATH del agente: así `xdg-open`
+    y los navegadores van a su espacio sin que el agente tenga que acordarse."""
+    carpeta = SHIMS / slug / "bin"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    self = str(Path(__file__).resolve())
+    for nombre in ("xdg-open", "brave", "brave-browser", "chromium", "firefox",
+                   "kitty", "foot", "mpv", "imv", "gio"):
+        real = binario(nombre)
+        if not real:
+            continue
+        atajo = carpeta / nombre
+        atajo.write_text(f'#!/bin/sh\nexec "{self}" abrir --bin "{real}" -- "$@"\n', encoding="utf8")
+        atajo.chmod(0o755)
+    return str(carpeta)
+
+
+# ------------------------------------------------------------------ comandos
+
+
+def reclamar(nombre: str, color: str = "", pid: int | None = None) -> dict:
+    slug = slugify(nombre)
+    pid = pid or os.getppid()
+
+    def hacer() -> dict:
+        data = leer()
+        agentes = data["agentes"]
+        info = agentes.get(slug)
+        if info and vivo(info) and info.get("espacio") in CANDIDATOS:
+            info.update({"pid": pid, "cwd": os.getcwd(), "visto": ahora()})
+        else:
+            info = {
+                "nombre": nombre,
+                "espacio": elegir_espacio(agentes, slug),
+                "color": color or (info or {}).get("color") or color_de(nombre),
+                "pid": pid,
+                "cwd": os.getcwd(),
+                "desde": (info or {}).get("desde") or ahora(),
+                "visto": ahora(),
+                "vivo": True,
+            }
+            agentes[slug] = info
+        guardar(data)
+        return {"slug": slug, **info, "clase": clase(slug)}
+
+    info = con_bloqueo(hacer)
+    regla(slug, info["espacio"], True)
+    info["shims"] = crear_shims(slug)
+    log(f"reclamar {slug} ws={info['espacio']}")
+    return info
+
+
+def ahora() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def buscar(nombre: str = "") -> dict | None:
+    slug = slugify(nombre or os.environ.get("PI_AGENTE", ""))
+    if not slug:
+        return None
+    info = leer()["agentes"].get(slug)
+    return {**info, "slug": slug} if info else None
+
+
+def agente_env() -> dict | None:
+    """El agente de esta sesión, según el entorno. Sin agente, None."""
+    if not os.environ.get("PI_AGENTE"):
+        return None
+    info = buscar()
+    if info:
+        return info
+    # Sin registro (p. ej. el shim se usó fuera de pi): se reclama al vuelo.
+    return reclamar(os.environ["PI_AGENTE"], os.environ.get("PI_AGENTE_COLOR", ""))
+
+
+def es_url(texto: str) -> bool:
+    return bool(re.match(r"^(https?|file|mailto|magnet):", texto, re.I)) or bool(
+        re.match(r"^[\w.-]+\.[a-z]{2,}(/|$)", texto, re.I)
+    )
+
+
+def navegador() -> list[str]:
+    pedido = os.environ.get("ESPACIOS_NAVEGADOR", "")
+    if pedido:
+        return [pedido]
+    for nombre in ("brave", "brave-browser", "chromium", "google-chrome-stable", "firefox"):
+        real = binario(nombre)
+        if real:
+            return [real]
+    return []
+
+
+def comando_url(slug: str, urls: list[str]) -> list[str]:
+    nav = navegador()
+    if not nav:
+        raise SystemExit("espacios: no encontré navegador (probá ESPACIOS_NAVEGADOR=…)")
+    base = Path(nav[0]).name
+    if "firefox" in base:
+        # Perfil aparte: no abre pestañas en el navegador del usuario ni le roba
+        # la ventana. `--new-instance` fuerza un proceso propio (y por lo tanto
+        # una ventana con nuestra clase).
+        perfil = NAVEGADORES / f"{slug}-firefox"
+        perfil.mkdir(parents=True, exist_ok=True)
+        return [nav[0], f"--class={clase(slug)}", "--new-instance", "--profile", str(perfil), *urls]
+    perfil = NAVEGADORES / slug
+    perfil.mkdir(parents=True, exist_ok=True)
+    return [
+        nav[0],
+        f"--class={clase(slug)}",
+        f"--user-data-dir={perfil}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        *urls,
+    ]
+
+
+CLASE_POR_APP = {
+    "kitty": ("--class", "="),
+    "foot": ("--app-id", "="),
+    "mpv": ("--wayland-app-id", "="),
+    "imv": (),
+}
+
+
+def comando_para(slug: str, prog: str, args: list[str]) -> list[str]:
+    base = Path(prog).name
+    if base in ("xdg-open", "gio", "open") and args and es_url(args[-1]):
+        return comando_url(slug, [args[-1]])
+    if base in ("brave", "brave-browser", "chromium", "google-chrome", "google-chrome-stable", "firefox"):
+        if "firefox" in base:
+            return comando_url(slug, [a for a in args if es_url(a)] or ["about:blank"])
+        perfil = NAVEGADORES / slug
+        perfil.mkdir(parents=True, exist_ok=True)
+        ya = [a for a in args if a.startswith("--user-data-dir") or a.startswith("--class")]
+        flags = [] if ya else [f"--class={clase(slug)}", f"--user-data-dir={perfil}"]
+        return [prog, *flags, *args]
+    opcion = CLASE_POR_APP.get(base)
+    if opcion:
+        flag, sep = opcion
+        return [prog, f"{flag}{sep}{clase(slug)}", *args] if flag else [prog, *args]
+    return [prog, *args]
+
+
+def clientes() -> list[dict]:
+    try:
+        return json.loads(hyprctl("clients", "-j") or "[]")
+    except json.JSONDecodeError:
+        return []
+
+
+def es_del_agente(cliente: dict, slug: str) -> bool | None:
+    """True si la ventana es del agente, False si no, None si no se puede saber.
+    Mira la clase que le pusimos y, si la app no acepta clase, el entorno del
+    proceso dueño de la ventana (que heredó PI_AGENTE del agente)."""
+    if cliente.get("class") == clase(slug):
+        return True
+    pid = cliente.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    try:
+        entorno = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return None
+    marca = f"PI_AGENTE={slug}".encode()
+    return marca in entorno.split(b"\0")
+
+
+def mover_ventana(address: str, ws: int) -> None:
+    activo = ws_activo()
+    hypr_eval(f'hl.dispatch(hl.dsp.window.move({{ window = "address:{address}", workspace = {ws}, silent = true }}))')
+    # Hyprland puede seguir a la ventana cuando el espacio queda vacío: volvemos.
+    time.sleep(0.12)
+    if activo > 0 and ws_activo() != activo:
+        hypr_eval(f"hl.dispatch(hl.dsp.focus({{ workspace = {activo} }}))")
+
+
+def adoptar(slug: str, ws: int, antes: set[str], segundos: float = 2.5) -> list[str]:
+    """Mueve al espacio del agente las ventanas que aparecieron al lanzarlo."""
+    if sin_escritorio() or os.environ.get("ESPACIOS_MOVIMIENTO", "1") == "0":
+        return []
+    movidas: list[str] = []
+    limite = time.time() + segundos
+    while time.time() < limite:
+        nuevas = [c for c in clientes() if c.get("address") not in antes]
+        for cliente in nuevas:
+            antes.add(cliente["address"])
+            dueno = es_del_agente(cliente, slug)
+            if dueno is False:
+                continue
+            if dueno is None and len(nuevas) > 1:
+                # Varias ventanas nuevas y ninguna dice de quién es: no adivinamos.
+                continue
+            mover_ventana(cliente["address"], ws)
+            movidas.append(f"{cliente.get('class')} [{cliente.get('title', '')[:40]}]")
+        if movidas:
+            break
+        time.sleep(0.2)
+    return movidas
+
+
+def abrir(argv: list[str]) -> int:
+    info = agente_env()
+    if not info:
+        # Sin agente: pasamanos. El shim no debe romperle nada al usuario.
+        if not argv:
+            raise SystemExit("espacios abrir: falta el comando")
+        os.execvp(argv[0], argv)
+    prog = argv[0]
+    if not os.path.isabs(prog):
+        prog = binario(prog) or prog
+    linea = comando_para(info["slug"], prog, argv[1:])
+    entorno = dict(os.environ, PI_AGENTE=info["slug"], PI_AGENTE_WS=str(info["espacio"]),
+                   PI_AGENTE_COLOR=info["color"], PI_AGENTE_CLASE=clase(info["slug"]))
+    antes = {c.get("address") for c in clientes()}
+    log(f"abrir {info['slug']} ws={info['espacio']}: {' '.join(linea[:3])}")
+    try:
+        subprocess.Popen(linea, env=entorno, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True, cwd=os.getcwd())
+    except OSError as e:
+        print(f"espacios: no pude abrir {linea[0]}: {e}", file=sys.stderr)
+        return 1
+    for ventana in adoptar(info["slug"], info["espacio"], antes):
+        print(f"espacios: ventana en el espacio {info['espacio']}: {ventana}")
+    return 0
+
+
+def info_texto(info: dict) -> str:
+    return (f"{info['slug']}: espacio {info['espacio']} · color {info['color']} · "
+            f"clase {clase(info['slug'])} · {info.get('cwd', '')}")
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help", "ayuda"):
+        print(__doc__.strip())
+        return 0
+    cmd, resto = argv[0], argv[1:]
+
+    if cmd == "reclamar":
+        nombre = next((a for a in resto if not a.startswith("--")), os.environ.get("PI_AGENTE", ""))
+        if not nombre:
+            raise SystemExit("espacios reclamar: falta el nombre del agente")
+        color = ""
+        if "--color" in resto:
+            color = resto[resto.index("--color") + 1]
+        pid = None
+        if "--pid" in resto:
+            try:
+                pid = int(resto[resto.index("--pid") + 1])
+            except (ValueError, IndexError):
+                pid = None
+        info = reclamar(nombre, color, pid)
+        print(json.dumps(info, ensure_ascii=False) if "--json" in resto else info_texto(info))
+        return 0
+
+    if cmd == "info":
+        nombre = next((a for a in resto if not a.startswith("--")), "")
+        info = buscar(nombre) or agente_env()
+        if not info:
+            print("espacios: sin agente (usá reclamar o PI_AGENTE)", file=sys.stderr)
+            return 1
+        print(json.dumps(info, ensure_ascii=False) if "--json" in resto else info_texto(info))
+        return 0
+
+    if cmd == "ws":
+        info = buscar(next((a for a in resto if not a.startswith("--")), "")) or agente_env()
+        if not info:
+            return 1
+        print(info["espacio"])
+        return 0
+
+    if cmd == "abrir":
+        prog = ""
+        tokens: list[str] = []
+        i = 0
+        while i < len(resto):
+            if resto[i] == "--bin" and i + 1 < len(resto):
+                prog = resto[i + 1]
+                i += 2
+                continue
+            tokens.append(resto[i])
+            i += 1
+        if tokens and tokens[0] == "--":
+            tokens = tokens[1:]
+        return abrir(([prog] if prog else []) + tokens)
+
+    if cmd == "url":
+        urls = [a for a in resto if a and not a.startswith("--")]
+        info = agente_env()
+        if not info:
+            for u in urls:
+                subprocess.Popen(["xdg-open", u], start_new_session=True)
+            return 0
+        if not urls:
+            raise SystemExit("espacios url: falta la URL")
+        return abrir(comando_url(info["slug"], urls))
+
+    if cmd == "mover":
+        info = agente_env()
+        if not info:
+            print("espacios mover: no hay agente en el entorno", file=sys.stderr)
+            return 1
+        destino = resto[0] if resto else ""
+        if destino.startswith("address:"):
+            mover_ventana(destino.split(":", 1)[1], info["espacio"])
+            print(f"ventana → espacio {info['espacio']}")
+            return 0
+        # Sin dirección: todas las ventanas de este agente que quedaron en otro lado.
+        propias = [c for c in clientes() if es_del_agente(c, info["slug"]) is True]
+        for cliente in propias:
+            mover_ventana(cliente["address"], info["espacio"])
+        print(f"{len(propias)} ventana(s) del agente → espacio {info['espacio']}")
+        return 0
+
+    if cmd == "listar":
+        agentes = leer()["agentes"]
+        if not agentes:
+            print("espacios: ninguno")
+            return 0
+        for slug, info in sorted(agentes.items(), key=lambda kv: kv[1].get("espacio", 0)):
+            estado = "vivo" if vivo(info) else "libre"
+            print(f"{info.get('espacio', '?'):>3}  {slug:<24} {info.get('color', ''):<8} {estado:<6} {info.get('cwd', '')}")
+        return 0
+
+    if cmd == "liberar":
+        nombre = next((a for a in resto if not a.startswith("--")), os.environ.get("PI_AGENTE", ""))
+        slug = slugify(nombre)
+        datos = leer()
+        info = datos["agentes"].get(slug)
+        if not info:
+            return 0
+        info["vivo"] = False
+        guardar(datos)
+        regla(slug, info.get("espacio", 0), False)
+        shutil.rmtree(SHIMS / slug, ignore_errors=True)
+        log(f"liberar {slug}")
+        print(f"espacio {info.get('espacio')} liberado ({slug})")
+        return 0
+
+    raise SystemExit(f"espacios: no conozco «{cmd}» (probá espacios --help)")
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
