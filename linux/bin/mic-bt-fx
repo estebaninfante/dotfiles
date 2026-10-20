@@ -1,30 +1,186 @@
-#!/bin/sh
-# mic-bt-fx: micrófono del audífono Bluetooth (HFP) -> cadena de efectos ->
-# fuente virtual "mic-bt-fx".
-#
-# Por qué: los audífonos Bluetooth baratos entregan el micrófono por HFP
-# (16 kHz, mono, con AGC propio del chip). Eso produce picos, bombeo y ruido
-# de fondo. Acá se limpia la señal antes de que la use cualquier app.
-#
-# Cadena: pasa-altos 90 Hz (quita retumbe) -> corte de barro en 250 Hz ->
-# un poco de presencia en 3.5 kHz -> puerta suave (mata el ruido de fondo
-# cuando no hablás) -> compresor (empareja los picos) -> limitador (techo
-# -3 dBFS, corta los picos feos sin distorsionar).
-#
-# Ajustá los números acá y reiniciá: systemctl --user restart mic-bt-fx
-set -u
+#!/usr/bin/env python3
+"""mic-bt-fx: micrófono del audífono Bluetooth -> efectos -> fuente "mic-bt-fx".
 
-TARGET="${MIC_BT_TARGET:-bluez_input.50:C0:F0:00:00:D1}"
-OUT_SINK="${MIC_BT_SINK:-mic_bt_fx_sink}"
-RATE=48000
+Por qué existe: los audífonos Bluetooth baratos entregan el micrófono por HFP
+(16 kHz mono, con el AGC del chip). Eso da picos, bombeo y ruido. Acá se limpia
+la señal antes de que la use cualquier app, y se expone como una fuente normal
+que pueden elegir Zoom, Meet, el navegador o mic-lab.
 
-FX="highpass=f=90,equalizer=f=250:width_type=q:w=1.2:g=-3,equalizer=f=3500:width_type=q:w=1:g=2,agate=threshold=0.02:ratio=2:attack=5:release=250,acompressor=threshold=0.1:ratio=3:attack=15:release=200:makeup=1,alimiter=limit=0.7:level=0"
+Se activa solo cuando alguna app está leyendo "mic-bt-fx": mientras nadie lo
+usa, suelta el audífono para que vuelva a sonar en alta calidad (A2DP).
 
-while :; do
-    pw-record --target "$TARGET" --rate "$RATE" --channels 1 --raw --format f32 --latency 20ms - 2>/dev/null \
-        | ffmpeg -hide_banner -loglevel error -fflags nobuffer -f f32le -ar "$RATE" -ac 1 -i pipe:0 \
-                 -af "$FX" -f f32le -ar "$RATE" -ac 1 pipe:1 2>/dev/null \
-        | pw-cat --playback --raw --target "$OUT_SINK" --rate "$RATE" --channels 1 --raw --format f32 --latency 20ms - 2>/dev/null
-    # El audífono se desconectó o algo falló: esperar y reintentar.
-    sleep 2
-done
+Ajustar los parámetros -> ~/.config/mic-lab/fx.json (o desde mic-lab) y
+reiniciar: systemctl --user restart mic-bt-fx
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+RATE = 48000
+MAC = os.environ.get("MIC_BT_MAC", "50:C0:F0:00:00:D1")
+SRC = os.environ.get("MIC_BT_TARGET", f"bluez_input.{MAC}")
+OUT_SINK = os.environ.get("MIC_BT_SINK", "mic_bt_fx_sink")
+VIRTUAL = "mic-bt-fx"
+CARD = "bluez_card." + MAC.replace(":", "_")
+
+CONF_DIR = Path(os.environ.get("MIC_LAB_CONF", Path.home() / ".config" / "mic-lab"))
+CONF = CONF_DIR / "fx.json"
+
+DEFAULTS = {
+    "hp_freq": 90.0,
+    "denoise": False,
+    "eq_mud_gain": -3.0,
+    "eq_presence_gain": 2.0,
+    "gate_threshold_db": -50.0,
+    "gate_range_db": -14.0,
+    "comp_threshold_db": -22.0,
+    "comp_ratio": 3.0,
+    "makeup_db": 6.0,
+    "limiter_ceiling_db": -3.0,
+}
+
+
+def lin(db: float) -> float:
+    return 10 ** (db / 20.0)
+
+
+def load_conf() -> dict:
+    cfg = dict(DEFAULTS)
+    try:
+        cfg.update(json.loads(CONF.read_text()))
+    except Exception:
+        pass
+    return cfg
+
+
+def build_filter(cfg: dict) -> str:
+    p = []
+    if cfg["hp_freq"] > 20:
+        p.append(f"highpass=f={cfg['hp_freq']:.0f},highpass=f={cfg['hp_freq']:.0f}")
+    if cfg["denoise"]:
+        p.append("afftdn=nr=10:nf=-55:tn=1")
+    if abs(cfg["eq_mud_gain"]) >= 0.5:
+        p.append(f"equalizer=f=250:width_type=q:w=1.2:g={cfg['eq_mud_gain']:.1f}")
+    if abs(cfg["eq_presence_gain"]) >= 0.5:
+        p.append(f"equalizer=f=3500:width_type=q:w=1:g={cfg['eq_presence_gain']:.1f}")
+    if cfg["gate_threshold_db"] > -70:
+        p.append(
+            "agate="
+            f"threshold={lin(cfg['gate_threshold_db']):.6f}:"
+            f"range={lin(cfg['gate_range_db']):.6f}:ratio=2:attack=5:release=250"
+        )
+    if cfg["comp_ratio"] >= 1.2:
+        p.append(
+            "acompressor="
+            f"threshold={lin(cfg['comp_threshold_db']):.6f}:"
+            f"ratio={cfg['comp_ratio']:.1f}:attack=12:release=180:"
+            f"makeup={lin(cfg['makeup_db']):.3f}"
+        )
+    p.append(f"alimiter=limit={lin(cfg['limiter_ceiling_db']):.4f}:level=0")
+    return ",".join(p)
+
+
+def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+
+
+def virtual_in_use() -> bool:
+    out = run(["pactl", "list", "short", "sources"]).stdout
+    idx = None
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) > 1 and parts[1] == VIRTUAL:
+            idx = parts[0]
+    if idx is None:
+        return False
+    outs = run(["pactl", "list", "short", "source-outputs"]).stdout
+    for line in outs.splitlines():
+        parts = line.split("\t")
+        if len(parts) > 1 and parts[1] == idx:
+            return True
+    return False
+
+
+def device_connected() -> bool:
+    out = run(["bluetoothctl", "info", MAC], timeout=5).stdout
+    return "Connected: yes" in out
+
+
+def ensure_headset_profile() -> None:
+    run(["pactl", "set-card-profile", CARD, "headset-head-unit"])
+
+
+def pipeline() -> subprocess.Popen:
+    fx = build_filter(load_conf())
+    cap = (
+        f"pw-record --target {SRC} --rate {RATE} --channels 1 --raw "
+        f"--format f32 --latency 20ms -"
+    )
+    ff = (
+        f"ffmpeg -hide_banner -loglevel error -fflags nobuffer "
+        f"-f f32le -ar {RATE} -ac 1 -i pipe:0 -af '{fx}' "
+        f"-f f32le -ar {RATE} -ac 1 pipe:1"
+    )
+    play = (
+        f"pw-cat --playback --raw --target {OUT_SINK} --rate {RATE} "
+        f"--channels 1 --format f32 --latency 20ms -"
+    )
+    # Un solo sh para poder cerrar toda la tubería de una.
+    return subprocess.Popen(
+        ["/bin/sh", "-c", f"{cap} | {ff} | {play}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def stop(proc: subprocess.Popen | None) -> None:
+    if proc is None:
+        return
+    try:
+        os.killpg(proc.pid, 15)
+    except Exception:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=2)
+    except Exception:
+        pass
+
+
+def main() -> int:
+    if not CONF.exists():
+        CONF_DIR.mkdir(parents=True, exist_ok=True)
+        CONF.write_text(json.dumps(DEFAULTS, indent=2))
+    proc = None
+    active = False
+    while True:
+        want = virtual_in_use()
+        if want and not active:
+            if not device_connected():
+                time.sleep(3)
+                continue
+            ensure_headset_profile()
+            time.sleep(0.4)
+            proc = pipeline()
+            active = True
+        elif not want and active:
+            stop(proc)
+            proc, active = None, False
+        elif active and proc and proc.poll() is not None:
+            # Se cortó el audífono o cambió el perfil: reintentar.
+            stop(proc)
+            proc, active = None, False
+            time.sleep(1.5)
+        time.sleep(1.0)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
