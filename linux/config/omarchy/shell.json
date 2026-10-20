@@ -68,6 +68,9 @@
           "id": "omarchy.network"
         },
         {
+          "id": "omarchy.bluetooth"
+        },
+        {
           "id": "omarchy.microphone"
         },
         {
