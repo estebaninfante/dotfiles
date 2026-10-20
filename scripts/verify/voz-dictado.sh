@@ -141,6 +141,7 @@ d._synth = lambda *a, **k: (sintetizadas.append(a), True)[1]
 
 # worker: con dictado activo no arranca (la frase espera en la cola)
 pedidos = []
+synth_real = d.synth_and_play
 d.synth_and_play = lambda req: pedidos.append(req)
 d._queue.append({"text": "aviso de prueba"})
 hilo = threading.Thread(target=d.worker, daemon=True)
@@ -166,12 +167,17 @@ hilo.join(timeout=2)
 class FalsoProceso:
     def __init__(self):
         self.terminado = False
+        self.esperas = 0
 
     def wait(self, timeout=None):
-        if not self.terminado:
-            time.sleep(0.05)
-            raise subprocess.TimeoutExpired("pw-play", timeout)
-        return 0
+        self.esperas += 1
+        if self.terminado:
+            return 0
+        if self.esperas > 4:  # el audio "termina" solo
+            self.terminado = True
+            return 0
+        time.sleep(0.05)
+        raise subprocess.TimeoutExpired("pw-play", timeout)
 
     def poll(self):
         return None if not self.terminado else 0
@@ -201,6 +207,7 @@ check("y se anota la hora real del audio", bool(anotado))
 os.remove(turno)
 d._stop_playback = lambda: None
 falso_proc.terminado = False
+falso_proc.esperas = 0
 r = d._play(wav, text="hola", source="prueba")
 check("sin dictado reproduce", r == "ok")
 
@@ -211,7 +218,7 @@ with open(turno, "w") as fh:
 d._queue.clear()
 original = d._play
 d._play = lambda *a, **k: "dictated"
-d.synth_and_play({"text": "frase cortada"})
+synth_real({"text": "frase cortada"})
 d._play = original
 check("lo cortado por dictado vuelve a la cola",
       [q.get("text") for q in d._queue] == ["frase cortada"])

@@ -12,6 +12,11 @@ Las dos anotaciones llevan el PID del que graba. Si ese proceso ya no está, la
 anotación es basura de una salida bruta y no cuenta; si tiene más de
 MAX_AGE_MS, tampoco (un dictado no dura eso).
 
+Red de seguridad: si Handy o Voxtype graban por su cuenta (sin pasar por
+`handy-dictado`, que es quien anota `mic-busy`), se los ve igual por PipeWire:
+un stream de captura cuyo proceso es `handy`/`voxtype` también es dictado. Se
+consulta como mucho una vez por segundo para no pagar `pactl` en cada vuelta.
+
 Uso:
     python3 micguard.py --busy   # 0 = micrófono libre, 1 = hay dictado
     python3 micguard.py --json   # {"busy": bool, "reason": str, "pid": N}
@@ -19,11 +24,18 @@ Uso:
 
 import json
 import os
+import subprocess
 import sys
 import time
 
 # Mismo tope que usan `mic-busy` y el turno del dictado en Omar.
 MAX_AGE_MS = 5 * 60 * 1000
+
+# Dictados que no siempre pasan por `handy-dictado`: si están capturando el
+# micrófono, también hay que callarse.
+_DICTATION_BINS = ("handy", "voxtype")
+_CACHE_MS = 1000
+_cache: dict = {"at": 0.0, "owner": (None, None)}
 
 
 def _omar_dir() -> str:
@@ -63,6 +75,30 @@ def _cmdline(pid: int) -> str:
         return ""
 
 
+def _pipewire_dictation() -> tuple[str | None, int | None]:
+    """Dictado que graba por su cuenta (Handy/Voxtype), visto en PipeWire."""
+    try:
+        salida = subprocess.run(
+            ["pactl", "-f", "json", "list", "source-outputs"],
+            capture_output=True, text=True, timeout=2,
+        ).stdout
+        streams = json.loads(salida or "[]")
+    except Exception:
+        return (None, None)
+    for stream in streams:
+        crudo = (stream.get("properties") or {}).get("application.process.id")
+        try:
+            pid = int(crudo)
+        except (TypeError, ValueError):
+            continue
+        cmd = _cmdline(pid)
+        bajo = cmd.lower()
+        if any(binario in bajo for binario in _DICTATION_BINS):
+            nombre = (cmd.split() or ["dictado"])[0].rsplit("/", 1)[-1]
+            return (f"dictado en curso ({nombre}, pid {pid})", pid)
+    return (None, None)
+
+
 def owner() -> tuple[str | None, int | None]:
     """(motivo, pid) del dictado en curso, o (None, None) si el mic está libre."""
     folder = _omar_dir()
@@ -75,7 +111,11 @@ def owner() -> tuple[str | None, int | None]:
         if cmd and "dictate" not in cmd and "handy" not in cmd:
             continue
         return (f"dictado en curso ({nombre}, pid {pid})", pid)
-    return (None, None)
+    ahora = time.time() * 1000
+    if ahora - _cache["at"] >= _CACHE_MS:
+        _cache["at"] = ahora
+        _cache["owner"] = _pipewire_dictation()
+    return _cache["owner"]
 
 
 def busy() -> bool:
