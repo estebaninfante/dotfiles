@@ -39,10 +39,38 @@ log() { echo "$(date '+%F %T') $*" >>"$LOG"; }
 # git_net <args...>: git contra el remoto con reintento. En esta red el HTTP/2
 # se cae solo ("Error in the HTTP2 framing layer") y tumbaba fetch/push, que
 # escalaban a un agente sin necesidad. Un reintento por HTTP/1.1 lo resuelve.
+# Deja el ultimo error en GIT_NET_ERR para que el llamador distinga red de
+# contenido (un corte de red no es un conflicto).
+GIT_NET_ERR=""
 git_net() {
-    git "$@" 2>>"$LOG" && return 0
+    local err
+    if err=$(git "$@" 2>&1); then
+        [[ -z "$err" ]] || printf '%s\n' "$err" >>"$LOG"
+        return 0
+    fi
+    printf '%s\n' "$err" >>"$LOG"
     log "net: fallo de red, reintento con HTTP/1.1 ($*)"
-    git -c http.version=HTTP/1.1 "$@" 2>>"$LOG"
+    if err=$(git -c http.version=HTTP/1.1 "$@" 2>&1); then
+        [[ -z "$err" ]] || printf '%s\n' "$err" >>"$LOG"
+        return 0
+    fi
+    printf '%s\n' "$err" >>"$LOG"
+    GIT_NET_ERR="$err"
+    return 1
+}
+
+# net_error <texto>: el fallo es de transporte, no de contenido. No hay nada
+# que un agente pueda resolver: se reintenta solo en el proximo ciclo.
+net_error() {
+    [[ "${1:-}" =~ unable\ to\ access|Could\ not\ connect|Connection\ (reset|refused|timed\ out)|HTTP2\ framing|TLS\ connect|Recv\ failure|gnutls|SSL|Temporary\ failure\ in\ name\ resolution|timed\ out|Operation\ timed\ out ]]
+}
+
+# conflicto_real: hay archivos sin fusionar o un rebase a medio hacer.
+conflicto_real() {
+    local gitdir
+    gitdir=$(git rev-parse --git-dir 2>/dev/null) || return 1
+    [[ -n "$(git ls-files -u 2>/dev/null)" ]] && return 0
+    [[ -d "$gitdir/rebase-merge" || -d "$gitdir/rebase-apply" ]]
 }
 
 # spawn_resolver <motivo>: deja el repo en manos de un agente Pi headless que
@@ -171,14 +199,25 @@ pull_changed_omarchy=0
 if [[ "$LOCAL" != "$REMOTE" ]]; then
     pause_hypr_autoreload
     before=$(git rev-parse HEAD)
-    if ! git pull --rebase=merges --autostash --quiet origin "$BRANCH" 2>>"$LOG"; then
+    # Rebase contra el ref que ACABAMOS de descargar, sin volver a la red:
+    # `git pull` repite el fetch y un corte de red ahi se clasificaba como
+    # "conflicto de rebase" (aviso critico + agente headless que no tenia nada
+    # que resolver). Sin red en este paso, un fallo es contenido de verdad.
+    if ! pull_out=$(git rebase --rebase-merges --autostash "origin/$BRANCH" 2>&1); then
+        printf '%s\n' "$pull_out" >>"$LOG"
+        if conflicto_real; then
+            git rebase --abort >/dev/null 2>&1 || true
+            resume_hypr_autoreload
+            log "ERROR conflicto de rebase real — llamado al resolutor"
+            notify -u critical --app-name dotfiles -g "󰅚" "Dotfiles: conflicto de sync" \
+                "Un agente headless va a intentar resolverlo" 2>/dev/null
+            spawn_resolver "conflicto de rebase al integrar origin/$BRANCH"
+            exit 1
+        fi
         git rebase --abort >/dev/null 2>&1 || true
         resume_hypr_autoreload
-        log "ERROR conflicto de rebase — llamado al resolutor"
-        notify -u critical --app-name dotfiles -g "󰅚" "Dotfiles: conflicto de sync" \
-            "Un agente headless va a intentar resolverlo" 2>/dev/null
-        spawn_resolver "conflicto de rebase al integrar origin/$BRANCH"
-        exit 1
+        log "WARN rebase fallo sin conflicto — se reintenta el proximo ciclo"
+        exit 0
     fi
     resume_hypr_autoreload
     changed=$(git diff --name-only "$before" HEAD 2>/dev/null || true)
@@ -248,11 +287,16 @@ fi
 
 # 5) Subir.
 if [[ "$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo 0)" -gt 0 ]]; then
-    if git_net push --quiet origin "$BRANCH" >>"$LOG"; then
+    if git_net push --quiet origin "$BRANCH"; then
         log "OK push"
+    elif net_error "${GIT_NET_ERR:-}"; then
+        # Sin red no hay nada que un agente resuelva: el commit queda local y
+        # sube solo en el proximo ciclo del timer.
+        log "WARN push sin red — queda local, se reintenta el proximo ciclo"
+        exit 0
     else
-        log "WARN push fallido — llamado al resolutor"
-        spawn_resolver "git push fallido (¿credenciales? ¿divergencia?)"
+        log "WARN push rechazado — llamado al resolutor"
+        spawn_resolver "git push rechazado: ${GIT_NET_ERR:-sin detalle}"
         exit 1
     fi
 fi
