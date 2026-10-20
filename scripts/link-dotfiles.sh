@@ -51,6 +51,11 @@ VSCODE_DST="${HOME}/.config/Code/User"
 
 LINKED=0; SKIPPED=0; BACKED=0
 
+# Los backups NO van al lado del destino: una copia hermana de una skill o de un
+# agente (p.ej. ~/.pi/agent/skills/x.pre-dotfiles.2026...) se lee como otra skill
+# con el mismo nombre y tapa a la buena. Van todos a un directorio de estado.
+BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-backups"
+
 # link_path <src> <dst> <clobber:true|false>
 link_path() {
     local src="$1" dst="$2" clobber="${3:-true}"
@@ -68,8 +73,10 @@ link_path() {
     fi
     if [ -e "$dst" ]; then
         if [ "$clobber" = true ]; then
-            local bak="${dst}.pre-dotfiles.$(date +%Y%m%d%H%M%S)"
+            local rel="${dst#${HOME}/}"
+            local bak="${BACKUP_DIR}/${rel//\//__}.pre-dotfiles.$(date +%Y%m%d%H%M%S)"
             $DRY && { info "(dry) backup $dst -> $bak + symlink"; BACKED=$((BACKED+1)); return; }
+            mkdir -p "$(dirname "$bak")"
             mv "$dst" "$bak"; ln -s "$src" "$dst"
             warn "backup $dst -> $(basename "$bak"); symlink creado"; LINKED=$((LINKED+1)); BACKED=$((BACKED+1)); return
         fi

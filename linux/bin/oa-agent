@@ -57,8 +57,10 @@ abrir_ventana() { # slug ws worktree
   # La ventana nace ya en su workspace y sin foco: la sesión de tmux se crea
   # dentro de la propia kitty (una sesión tmux suelta y sin cliente no arranca
   # bien la TUI de pi).
-  hyprctl eval "hl.window_rule({ name=\"oa-$slug\", match={ title=\"^oa-$slug\$\" }, workspace=\"$ws\", no_focus=true, suppress_event=\"activate\" })" >/dev/null
-  hyprctl dispatch "hl.dsp.exec_cmd(\"kitty --title oa-$slug tmux new-session -A -s oa-$slug -c $wt 'pi --name $slug'\")" >/dev/null
+  # `silent`: la ventana nace en su workspace SIN que el escritorio salte a él.
+  hyprctl eval "hl.window_rule({ name=\"oa-$slug\", match={ title=\"^oa-$slug\$\" }, workspace=\"$ws silent\", no_focus=true, suppress_event=\"activate\" })" >/dev/null
+  # El agente hereda su espacio: lo que abra (navegador, video) cae ahí mismo.
+  hyprctl dispatch "hl.dsp.exec_cmd(\"kitty --title oa-$slug tmux new-session -A -s oa-$slug -c $wt 'env PI_AGENTE_WS=$ws PI_VOICE_AGENT=$slug pi --name $slug'\")" >/dev/null
 }
 
 cmd_nuevo() { # slug tema

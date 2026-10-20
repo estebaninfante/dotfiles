@@ -1,9 +1,12 @@
 ---
 name: <slug-en-minusculas>
-description: <Qué hace y cuándo usarla, con triggers concretos. Si es solo para el humano: disable-model-invocation: true.>
+description: "<Qué hace y cuándo usarla. Triggers: frase uno, frase dos, frase tres.>"
 ---
 
 # <Título>
+
+<!-- Si la skill la llama solo el humano: agregá `disable-model-invocation: true`
+     al frontmatter y dejá la description en una línea. -->
 
 <Una línea: qué problema resuelve.>
 

@@ -251,20 +251,27 @@ def crear_shims(slug: str) -> str:
 # ------------------------------------------------------------------ comandos
 
 
-def reclamar(nombre: str, color: str = "", pid: int | None = None) -> dict:
+def reclamar(nombre: str, color: str = "", pid: int | None = None, espacio: int | None = None) -> dict:
     slug = slugify(nombre)
     pid = pid or os.getppid()
+    # Un lanzador puede venir con el espacio ya decidido (oa-agent asigna 1/3/8/10):
+    # respetarlo mantiene la misma sesión junta en un solo lugar.
+    if espacio is None:
+        try:
+            espacio = int(os.environ.get("PI_AGENTE_WS", "") or 0) or None
+        except ValueError:
+            espacio = None
 
     def hacer() -> dict:
         data = leer()
         agentes = data["agentes"]
         info = agentes.get(slug)
-        if info and vivo(info) and info.get("espacio") in CANDIDATOS:
+        if info and vivo(info) and isinstance(info.get("espacio"), int):
             info.update({"pid": pid, "cwd": os.getcwd(), "visto": ahora()})
         else:
             info = {
                 "nombre": nombre,
-                "espacio": elegir_espacio(agentes, slug),
+                "espacio": espacio if espacio else elegir_espacio(agentes, slug),
                 "color": color or (info or {}).get("color") or color_de(nombre),
                 "pid": pid,
                 "cwd": os.getcwd(),
@@ -482,7 +489,13 @@ def main(argv: list[str]) -> int:
                 pid = int(resto[resto.index("--pid") + 1])
             except (ValueError, IndexError):
                 pid = None
-        info = reclamar(nombre, color, pid)
+        espacio = None
+        if "--espacio" in resto:
+            try:
+                espacio = int(resto[resto.index("--espacio") + 1])
+            except (ValueError, IndexError):
+                espacio = None
+        info = reclamar(nombre, color, pid, espacio)
         print(json.dumps(info, ensure_ascii=False) if "--json" in resto else info_texto(info))
         return 0
 

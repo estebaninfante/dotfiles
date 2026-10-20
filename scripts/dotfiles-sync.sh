@@ -179,6 +179,16 @@ if [[ -x "$REPO/scripts/omarchy-sync.sh" ]]; then
 fi
 
 # 2) Commit automatico de todo cambio (WIP incluido). Sin cambios, no commitea.
+# Antes, chequeo barato: una skill con el frontmatter roto no carga y el
+# sintoma aparece recien cuando el agente no la usa. Solo avisa (puede haber
+# una skill a medio crear en otra sesion); no frena el sync.
+if [[ -x "$REPO/scripts/verify/skills.sh" ]]; then
+    if ! out=$("$REPO/scripts/verify/skills.sh" --quiet 2>&1); then
+        printf '%s\n' "$out" | while IFS= read -r l; do log "WARN skills: $l"; done
+        echo "AVISO: hay skills que no cargan — corré ~/dotfiles/scripts/verify/skills.sh" >&2
+    fi
+fi
+
 if [[ -n "$(git status --porcelain)" ]]; then
     git add -A >>"$LOG" 2>&1
     if git commit -m "autosync($HOST): $(date '+%F %T')" >>"$LOG" 2>&1; then

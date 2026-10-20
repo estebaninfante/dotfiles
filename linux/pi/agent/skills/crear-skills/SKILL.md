@@ -27,6 +27,10 @@ agente ya hace por defecto.
 3. **Escribí `SKILL.md`** con: frontmatter, una línea de qué resuelve, pasos
    numerados, restricciones y verificación. Cada paso termina en un criterio
    observable ("existe X y pasa Y"), no en "entender".
+   **La `description` va siempre entre comillas dobles.** Los triggers llevan
+   `: ` adentro (`Triggers: …`) y en YAML eso convierte el valor en un mapa
+   anidado: el archivo no parsea y la skill se descarta en silencio. Si la
+   descripción tiene comillas adentro, escapalas con `\"`.
 4. **Nombrá la herramienta exacta** de cada paso (comando, tool, ruta). Si la
    skill recibe datos, decí al inicio dónde entran (URL, ruta, parámetro).
 5. **Si hay plantillas o formatos estables**, van a `assets/` y se referencian
@@ -36,10 +40,14 @@ agente ya hace por defecto.
    `ln -s ~/dotfiles/linux/pi/agent/skills/<nombre> ~/.pi/agent/skills/<nombre>`.
    Nunca crearla solo bajo `~/.pi`.
 7. **Publicá**: `~/dotfiles/scripts/dotfiles-sync.sh --force`.
-8. **Pedí revisión humana** con la tool `pedir_revision_humana` (tipo, nombre,
+8. **Verificá que carga**: `~/dotfiles/scripts/verify/skills.sh`. Revisa
+   frontmatter YAML, que `name` coincida con la carpeta y que no haya dos
+   carpetas con el mismo nombre. Sin esto, una skill mal escrita queda
+   invisible y nadie se entera.
+9. **Pedí revisión humana** con la tool `pedir_revision_humana` (tipo, nombre,
    ruta, qué mirar) y avisá al usuario.
-9. **Probá el disparador**: pedí la tarea sin nombrar la skill y mirá si se
-   invoca sola.
+10. **Probá el disparador**: pedí la tarea sin nombrar la skill y mirá si se
+    invoca sola.
 
 ## Reglas
 
@@ -53,12 +61,20 @@ agente ya hace por defecto.
 
 ## Verificación
 
-- [ ] `name` y `description` existen y los triggers son frases reales.
+- [ ] `name` == nombre de la carpeta y `description` entre comillas.
+- [ ] `~/dotfiles/scripts/verify/skills.sh` pasa sin FALLA.
 - [ ] El symlink está creado y la skill aparece en la lista.
 - [ ] Se invoca con una frase de todos los días.
 - [ ] `dotfiles-sync.sh --force` terminó y el repo quedó limpio.
 
 ## Lecciones
+
+- Un `description` sin comillas con `: ` adentro rompe el YAML y la skill **no
+  carga, sin aviso**. Ya pasó con siete skills a la vez: por eso el template
+  usa comillas y existe `scripts/verify/skills.sh`.
+- Los backups de `link-dotfiles.sh` no van al lado del destino: una copia
+  hermana de una skill gana por orden alfabético y tapa a la buena. Van a
+  `~/.local/state/dotfiles-backups/`.
 
 - Verificá **lo que el usuario ve**, no solo la fuente: si hay build o
   instalación de por medio, reconstruí, instalá y mirá el artefacto final.
