@@ -21,18 +21,26 @@ sess="${2:-}"
 term="${TERMINAL:-kitty}"
 
 # Si no hay tmux, igual abrimos pi en la terminal (sin panel).
+# El terminal puede ser kitty, foot, alacritty, ghostty o xdg-terminal-exec:
+# no todos entienden el mismo flag de "directorio". Por eso siempre se arranca
+# un sh que hace cd y después ejecuta lo pedido.
+run_in_term() {
+    setsid "$term" sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$dir" "$@" \
+        >/dev/null 2>&1 &
+}
+
 if ! command -v tmux >/dev/null 2>&1; then
-    setsid "$term" --directory "$dir" pi >/dev/null 2>&1 &
+    run_in_term pi
     exit 0
 fi
 
 if [ -n "$sess" ]; then
-    tmux_args=(new-session -s "$sess" pi)
+    tmux_args=(tmux new-session -s "$sess" pi)
 else
-    tmux_args=(new-session pi)
+    tmux_args=(tmux new-session pi)
 fi
 
-setsid "$term" --directory "$dir" "${tmux_args[@]}" >/dev/null 2>&1 &
+run_in_term "${tmux_args[@]}"
 pid=$!
 
 # Enfocar la ventana nueva (Hyprland ya suele hacerlo al abrir; esto lo asegura).
