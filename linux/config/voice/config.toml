@@ -24,10 +24,12 @@ auto_profiles = true
 #   mailbox = los acumula en el buzon y solo suena un aviso sutil; los escuchas
 #             cuando quieras con `voice play-inbox`. El mensaje se guarda con
 #             su autor, asi al leerlo dice de quien es y usa su voz.
+#   bell    = campana + al buzon (igual que mailbox): NUNCA habla solo. Decis
+#             "dime" y ahi Omar lee la cola: "<agente> dice: <mensaje>".
 #   hybrid  = aviso sutil, pausa breve y recien habla. Te da un momento para
 #             prestar atencion sin acumular nada en el buzon. Si la voz esta
 #             apagada cae al buzon para no perder el mensaje.
-delivery = "hybrid"
+delivery = "bell"
 # Aviso sonoro sutil al llegar un mensaje (dos notas, bajo volumen).
 chime = true
 # Segundos de silencio entre el aviso y la voz del modo hybrid.

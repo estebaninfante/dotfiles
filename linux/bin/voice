@@ -8,6 +8,7 @@
 #   voice avisar [--source S] "texto"    mensaje al usuario (direct/mailbox/hybrid)
 #   voice notify [--app A] [--title T] "texto"  notificacion sola (queda en el registro)
 #   voice inbox [list|count|clear|play]   buzon de voz: mensajes pendientes de escuchar
+#   voice dime [N]                       lee los pendientes: "<agente> dice: <mensaje>"
 #   voice play-inbox [N|--all]           reproduce los pendientes y los marca escuchados
 #   voice think "texto"                  cerebro Pi headless: entiende y actúa, y responde
 #   voice ptt                            push-to-talk: habla y te responde (Pi, sin nube)
@@ -345,18 +346,27 @@ hybrid_pause() {
 
 # Tono sutil de "llego un mensaje": corto, dos notas, a bajo volumen.
 # Se genera una vez y se cachea. Config: [tts] chime.
+# - Debounce: si ya sono hace poco, no vuelve a sonar (una rafaga de mensajes
+#   es un solo aviso).
+# - Nunca encima de un dictado: espera a que el microfono quede libre.
 chime() {
   [ "$(config_val tts chime)" = "false" ] && return 0
+  local marca="$CACHE_DIR/chime.last"
+  mkdir -p "$CACHE_DIR"
+  if [ -f "$marca" ]; then
+    local hace; hace=$(( $(date +%s) - $(stat -c %Y "$marca" 2>/dev/null || echo 0) ))
+    [ "$hace" -lt 8 ] && return 0
+  fi
+  : > "$marca" 2>/dev/null || true
   local f="$CACHE_DIR/chime.wav"
   if [ ! -f "$f" ]; then
-    mkdir -p "$CACHE_DIR"
     sox -n "$CACHE_DIR/chime1.wav" synth 0.12 sine 880  vol 0.30 fade 0.01 0.12 0.05 2>/dev/null || return 0
     sox -n "$CACHE_DIR/chime2.wav" synth 0.22 sine 1318 vol 0.26 fade 0.01 0.22 0.10 2>/dev/null || return 0
     sox "$CACHE_DIR/chime1.wav" "$CACHE_DIR/chime2.wav" "$f" 2>/dev/null || return 0
     rm -f "$CACHE_DIR/chime1.wav" "$CACHE_DIR/chime2.wav"
   fi
   [ -f "$f" ] || return 0
-  pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1 &
+  ( wait_mic_free; pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1 ) &
 }
 
 # avisar: entrega un mensaje al usuario. Segun `[tts] delivery`:
@@ -374,7 +384,7 @@ avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile
   local source="${P_SOURCE:-voice}" delivery
   delivery=$(config_val tts delivery); delivery=${delivery:-direct}
   case "$delivery" in
-    mailbox)
+    bell|mailbox)
       "$PY" "$VOICE_DIR/engine.py" record-message --source "$source" \
         --text "$P_TEXT" --pending >/dev/null 2>&1 || true
       chime
@@ -462,6 +472,53 @@ profile_cmd() {  # profile list|show|set|remove|test|auto
     *)
       echo "uso: voice profile list|show|set|remove|test|auto" >&2; return 2 ;;
   esac
+}
+
+# dime: lee la cola de mensajes pendientes, en orden y con el autor de cada uno.
+# Es lo que dispara la hotword "dime": los agentes dejan su mensaje en el buzon
+# (suena la campana) y vos escuchas cuando querés. Formato: "<agente> dice: …".
+# Tope por lectura para que no se vuelva un audiolibro; si quedan, lo dice.
+dime() {  # dime [N] [--quiet-empty]
+  local n=5 quiet=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --quiet-empty) quiet=1; shift ;;
+      *) n="$1"; shift ;;
+    esac
+  done
+  [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ] || n=5
+  local total; total=$("$PY" "$VOICE_DIR/engine.py" pending-count 2>/dev/null || echo 0)
+  if [ "${total:-0}" -eq 0 ]; then
+    [ "$quiet" = 1 ] && return 0
+    speak --source omar "No hay mensajes pendientes."
+    return 0
+  fi
+  local rows
+  rows=$("$PY" - "$VOICE_DIR" "$n" <<'PYEOF'
+import base64, os, sys
+sys.path.insert(0, os.path.abspath(sys.argv[1]))
+from engine import pending_messages
+maxlargo = 420
+for rec in pending_messages(int(sys.argv[2])):
+    txt = " ".join(str(rec.get("text", "")).split())
+    if len(txt) > maxlargo:
+        txt = txt[:maxlargo].rsplit(" ", 1)[0] + "…"
+    fuente = rec.get("source") or rec.get("app") or "alguien"
+    print("%s\x1f%s\x1f%s" % (fuente, base64.b64encode(txt.encode()).decode(), rec.get("ts", "")))
+PYEOF
+)
+  local leidos=0
+  while IFS=$'\x1f' read -r fuente b64 ts; do
+    [ -n "$b64" ] || continue
+    local texto; texto=$(printf '%s' "$b64" | base64 -d)
+    [ -n "$texto" ] || continue
+    speak --source "$fuente" "$fuente dice: $texto"
+    [ -n "$ts" ] && "$PY" "$VOICE_DIR/engine.py" mark-heard --ts "$ts" >/dev/null 2>&1
+    leidos=$((leidos + 1))
+  done <<<"$rows"
+  local restan=$(( ${total:-0} - leidos ))
+  [ "$restan" -gt 0 ] && speak --source omar "Quedan $restan mensajes más."
+  return 0
 }
 
 # repeat: vuelve a leer los ultimos mensajes. Reutiliza el WAV si lo hay y, si
@@ -808,6 +865,7 @@ case "${1:-status}" in
   identity-selftest|selftest-colores) shift; identity_cmd selftest "$@" ;;
   profile) shift; profile_cmd "$@" ;;
   repeat) shift; repeat "$@" ;;
+  dime) shift; dime "$@" ;;
   resolve) shift; "$PY" "$VOICE_DIR/engine.py" resolve "$@" ;;
   synth) shift; synth "$@" ;;
   subtitle|show) shift; subtitle "$@" ;;
@@ -889,8 +947,8 @@ PYEOF
     # o hybrid (aviso + pausa + voz).
     if [ "$#" -ge 2 ]; then
       case "$2" in
-        direct|mailbox|hybrid) get_set tts delivery "$2"; echo "entrega: $2" ;;
-        *) echo "voice: delivery direct|mailbox|hybrid" >&2; exit 2 ;;
+        bell|mailbox|hybrid|direct) get_set tts delivery "$2"; echo "entrega: $2" ;;
+        *) echo "voice: delivery bell|mailbox|hybrid|direct" >&2; exit 2 ;;
       esac
     else echo "entrega: $(config_val tts delivery)"; fi
     ;;

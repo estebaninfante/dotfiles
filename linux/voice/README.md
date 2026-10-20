@@ -155,7 +155,12 @@ agente lleva su color. Ver `conversar.ts`.
 
 `[tts] delivery` decide cómo entrega `avisar` el mensaje de un agente:
 
-- **`hybrid` (por defecto):** suena el aviso sutil (`[tts] chime`), espera
+- **`bell` (por defecto):** los mensajes de los agentes **nunca se hablan
+  solos**. Suena la campana (`[tts] chime`, una sola vez por ráfaga) y el
+  mensaje queda en el buzón con su autor. Cuando querés, decís **"dime"** (o
+  `voice dime`): Omar lee la cola en orden, `"<agente> dice: <mensaje>"`, hasta
+  5 por vez y avisa si quedan más. Nada se habla encima del dictado.
+- **`hybrid`:** suena el aviso sutil (`[tts] chime`), espera
   `[tts] hybrid_pause` segundos (1.5) y **recién habla**. Te da un momento para
   prestar atención sin que la voz te caiga encima de golpe. No acumula nada en
   el buzón: el mensaje igual queda en el registro. Si la voz está apagada cae
@@ -164,8 +169,8 @@ agente lleva su color. Ver `conversar.ts`.
   `playerctl` no maneje (video del navegador, apps sin MPRIS) muteando sus
   streams por PipeWire; al terminar reanuda y restaura todo. No baja el volumen
   del sink, así la voz no se opaca.
-- **`mailbox`:** no lo habla en el momento (interrumpir molesta y encima no se
-  escucha). Lo deja en el **buzón** con su autor y suena solo el aviso sutil. El
+- **`mailbox`:** igual que `bell` (alias): no lo habla en el momento
+  (interrumpir molesta y encima no se escucha). Lo deja en el **buzón** con su autor y suena solo el aviso sutil. El
   contador aparece en la barra; escuchás cuando querés, en orden, y cada mensaje
   queda marcado como escuchado. Al leerlo dice de quién es (`Mensaje de Pi. …`) y
   usa la voz de ese agente.
