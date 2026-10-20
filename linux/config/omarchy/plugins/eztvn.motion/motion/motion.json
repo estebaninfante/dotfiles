@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "duration": {
+    "instant": 0,
+    "fast": 120,
+    "base": 180,
+    "morph": 260,
+    "slow": 340,
+    "draw": 820
+  },
+  "stagger": {
+    "step": 28,
+    "stepMorph": 40,
+    "max": 14
+  },
+  "curve": {
+    "standard": "OutCubic",
+    "enter": "OutQuint",
+    "exit": "InCubic",
+    "move": "InOutCubic",
+    "spring": "OutBack",
+    "draw": "InOutCubic"
+  },
+  "spring": {
+    "damping": 0.72,
+    "mass": 1.0,
+    "stiffness": 4.2,
+    "epsilon": 0.01
+  },
+  "reveal": {
+    "rise": 6,
+    "fromScale": 0.97
+  },
+  "drift": 18
+}

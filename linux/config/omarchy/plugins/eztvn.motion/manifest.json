@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.motion",
+  "name": "Motion Lab",
+  "version": "0.1.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "El motor de movimiento del escritorio, en vivo: aparición pareada, entradas escalonadas, morph de una forma a otra y resortes. Es también el criterio de aceptación visual.",
+  "kinds": ["overlay"],
+  "entryPoints": { "overlay": "MotionLab.qml" },
+  "keepLoaded": true
+}
