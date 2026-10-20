@@ -194,12 +194,12 @@ def elegir_espacio(agentes: dict, slug: str) -> int:
         if isinstance(ws, int):
             ocupados[ws] = ocupados.get(ws, 0) + 1
     activo = ws_activo()
-    for ws in CANDIDATOS:
-        if ws != activo and ocupados.get(ws, 0) < MAX_POR_ESPACIO:
+    libres = [ws for ws in CANDIDATOS if ws != activo] or CANDIDATOS
+    for ws in libres:
+        if ocupados.get(ws, 0) < MAX_POR_ESPACIO:
             return ws
-    libres = [ws for ws in CANDIDATOS if ws != activo]
-    if not libres:
-        raise SystemExit("espacios: no hay espacio libre (¿se llenaron todos?)")
+    # Más agentes que espacios: se comparte el menos ocupado. Nunca se niega un
+    # espacio: quedarse sin aislar sería peor que compartir.
     return min(libres, key=lambda ws: ocupados.get(ws, 0))
 
 
@@ -237,8 +237,10 @@ def crear_shims(slug: str) -> str:
     carpeta = SHIMS / slug / "bin"
     carpeta.mkdir(parents=True, exist_ok=True)
     self = str(Path(__file__).resolve())
+    # `gio` no va: se usa para mucho más que abrir (borrar a la papelera, montar)
+    # y lanzarlo en segundo plano cambiaría su comportamiento.
     for nombre in ("xdg-open", "brave", "brave-browser", "chromium", "firefox",
-                   "kitty", "foot", "mpv", "imv", "gio"):
+                   "kitty", "foot", "mpv", "imv"):
         real = binario(nombre)
         if not real:
             continue
