@@ -446,3 +446,40 @@ sobre eDP-2 (2880x1800@120 scale 2) que se ve como el parpadeo.
   reales de barra/plugins.
 - Tocar el plugin `better-displays-pro` (es plugin git, no vive en el repo): la
   reaplicación del layout es su diseño; el problema era la frecuencia.
+
+## 2026-10-20 — El auto-sync distingue red de conflicto (no más agentes inútiles)
+
+**Problema.** Cada tanto aparecía el aviso crítico "Dotfiles: conflicto de
+sync — Un agente headless va a intentar resolverlo" y despertaba un agente Pi
+completo. En el log no había conflictos: `git pull` moría con `Recv failure:
+Connection reset by peer`, `Error in the HTTP2 framing layer` o `TLS connect
+error`. El script trataba **cualquier** fallo del `pull` como conflicto de
+rebase. Dos causas concretas:
+
+1. Se usaba `git pull`, que **vuelve a hacer fetch** justo después de que el
+   `git fetch` ya había funcionado. La red entraba de nuevo en el camino
+   crítico, y su fallo se confundía con contenido en conflicto.
+2. `git_net` (el reintento por HTTP/1.1) se usaba en `fetch` y `push`, pero no
+   en el `pull`; y el `push` también escalaba al resolutor cuando fallaba por
+   red, aunque el commit ya estuviera hecho.
+
+**Elegido.**
+
+- El paso de integración es un `git rebase --rebase-merges --autostash`
+  contra `origin/$BRANCH`, el ref que se acaba de descargar: sin red no hay
+  fallo de red posible.
+- Si el rebase falla, se distingue: `conflicto_real` (archivos sin fusionar o
+  rebase a medio hacer) escala al resolutor con aviso crítico; cualquier otra
+  cosa se registra como WARN y se reintenta en el ciclo siguiente.
+- `git_net` guarda el último error en `GIT_NET_ERR` y `net_error` lo clasifica.
+  Un `push` que falla por red deja el commit local y no despierta a nadie.
+
+**Descartado.**
+
+- Mirar el texto del error del `pull` para detectar red: con `git pull` el
+  error puede venir del fetch, del rebase o del autostash, y el mensaje es
+  ambiguo. Quitando la red del paso desaparece la ambigüedad.
+- Silenciar solo la notificación: el agente headless se seguía lanzando (hasta
+  900 s de `pi` por un corte de red).
+- Reintentar el `pull` completo con HTTP/1.1: vuelve a descargar lo que ya está
+  en `origin/$BRANCH`.
