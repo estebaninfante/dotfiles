@@ -209,6 +209,85 @@ function listarWorktrees(dir: string): string {
   return git(actual.datos.principal, ["worktree", "list"]);
 }
 
+interface ResultadoGate {
+  ok: boolean;
+  resumen: string;
+  mensaje: string;
+}
+
+/**
+ * Corre la puerta de merge del repo, si declara una. Sin puerta declarada no hay
+ * nada que verificar y el merge sigue como antes (repos chicos o de configs).
+ *
+ * El repo puede declarar el comando en `.pi/merge-gate` (ejecutable o con
+ * shebang) o, si no, se usan las convenciones de siempre: `scripts/check.sh`,
+ * `scripts/merge-gate.sh` o el target `check` del Makefile.
+ *
+ * Escapes: `PI_SIN_GATE=1` (explícito y avisado) y `PI_GATE_CMD` para forzar un
+ * comando concreto.
+ */
+function correrGate(ruta: string): ResultadoGate {
+  if (process.env.PI_SIN_GATE === "1") {
+    return { ok: true, resumen: "puerta de merge salteada (PI_SIN_GATE=1)", mensaje: "" };
+  }
+  const comando = comandoGate(ruta);
+  if (!comando) {
+    return { ok: true, resumen: "sin puerta de merge declarada", mensaje: "" };
+  }
+  const limite = Number(process.env.PI_GATE_TIMEOUT ?? 2400) || 2400;
+  try {
+    const salida = execFileSync("bash", ["-lc", comando], {
+      cwd: ruta,
+      encoding: "utf8",
+      timeout: limite * 1000,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+    const fin = ultimaLineaUtil(salida) ?? "verificación en verde";
+    return { ok: true, resumen: `puerta de merge OK: ${fin}`, mensaje: "" };
+  } catch (error) {
+    const e = error as { stdout?: string; stderr?: string; message?: string };
+    const texto = `${e.stdout ?? ""}${e.stderr ?? ""}` || e.message || "falló";
+    return {
+      ok: false,
+      resumen: "puerta de merge en rojo: no se mergeó",
+      mensaje:
+        `la verificación del repo falló (${comando}); la rama NO se mergeó y el worktree quedó intacto.\n` +
+        `Arreglá lo que falla y volvé a cerrar. Si el gate está roto por el entorno y querés saltearlo igual: PI_SIN_GATE=1.\n` +
+        `── final de la salida ──\n${colita(texto, 40)}`,
+    };
+  }
+}
+
+/** El comando de verificación que declara el repo, o `null` si no hay. */
+function comandoGate(ruta: string): string | null {
+  const forzado = process.env.PI_GATE_CMD?.trim();
+  if (forzado) return forzado;
+  if (existsSync(join(ruta, ".pi", "merge-gate"))) return "bash .pi/merge-gate";
+  if (existsSync(join(ruta, "scripts", "merge-gate.sh"))) return "bash scripts/merge-gate.sh";
+  if (existsSync(join(ruta, "scripts", "check.sh"))) return "bash scripts/check.sh";
+  try {
+    const makefile = readFileSync(join(ruta, "Makefile"), "utf8");
+    if (/^check:/m.test(makefile)) return "make check";
+  } catch {
+    // sin Makefile: no hay gate
+  }
+  return null;
+}
+
+function ultimaLineaUtil(salida: string): string | undefined {
+  return salida
+    .split("\n")
+    .map((l) => l.replace(/\u001b\[[0-9;]*m/g, "").trim())
+    .filter(Boolean)
+    .at(-1);
+}
+
+function colita(texto: string, lineas: number): string {
+  const limpias = texto.split("\n").map((l) => l.replace(/\u001b\[[0-9;]*m/g, ""));
+  return limpias.slice(-lineas).join("\n");
+}
+
 function commitsAdelante(ruta: string, base: string): number {
   const salida = tal(ruta, ["rev-list", "--count", `${base}..HEAD`]);
   return Number(salida ?? 0) || 0;
@@ -239,6 +318,12 @@ function cerrarWorktree(ruta: string, opciones: { borrarRama?: boolean; base?: s
   const lineas: string[] = [];
   const adelante = commitsAdelante(datos.raiz, base);
   if (adelante > 0) {
+    // Nada entra a la base sin la verificación del repo en verde. Antes el merge
+    // era ciego: entró código con un verificador en rojo y el binario de `main`
+    // quedó viejo; el usuario lo vio como «no cambió nada».
+    const gate = correrGate(datos.raiz);
+    lineas.push(gate.resumen);
+    if (!gate.ok) throw new Error(gate.mensaje);
     try {
       git(datos.principal, ["merge", "--no-ff", "-m", `merge(${base}): ${rama}`, rama]);
       lineas.push(`mergeado ${rama} -> ${base} (${adelante} commit(s))`);
@@ -319,7 +404,9 @@ function textoPolitica(datos: Datos | null, politica: Politica): string {
     `2. Editá y corré comandos con esa ruta (cada \`bash\` empieza en el cwd original: usá \`cd\` a la ruta del worktree).`,
     `3. Commiteá en la rama del worktree.`,
     `4. Verificá (tests / verificadores del repo) y recién ahí cerrá: \`{accion:"cerrar", ruta}\`.`,
-    `   Eso mergea a ${base}, borra el worktree y la rama.`,
+    `   Eso corre la puerta de merge del repo: si la verificación falla, NO se mergea`,
+    `   (el worktree queda intacto para arreglarlo). En verde: mergea a ${base}, borra el`,
+    `   worktree y la rama.`,
     ``,
     `Los subagentes reciben su worktree automáticamente. Para tocar la copia principal a propósito: \`/worktrees libre\`.`,
   ].join("\n");
@@ -478,7 +565,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Abre, lista o cierra el worktree (carpeta + rama propias) de este agente. " +
       'abrir: {accion:"abrir", id:"slug"} devuelve ruta y rama. ' +
-      'cerrar: {accion:"cerrar", ruta} mergea la rama a la base y borra el worktree (pide los cambios ya commiteados).',
+      'cerrar: {accion:"cerrar", ruta} corre la verificación del repo (puerta de merge) y, solo si está en verde, mergea la rama a la base y borra el worktree (pide los cambios ya commiteados).',
     promptSnippet: "Trabajar en un worktree propio en vez de la copia principal",
     promptGuidelines: [
       "Antes de tocar código en un repo con flujo main/developing, abrí un worktree con la tool " +
