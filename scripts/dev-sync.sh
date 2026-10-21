@@ -58,20 +58,29 @@ esac
 [ $# -gt 1 ] && FILTRO="$2"   # dev-sync --publicar vision-hub
 SSID="${DEV_SYNC_SSID:-Familia_Infante}"
 
-# Sólo con corriente y en el wifi de casa (lo que pidió el usuario).
-enchufado() { grep -qx 1 /sys/class/power_supply/*/online 2>/dev/null; }
+# Sólo con corriente y en la red de casa (lo que pidió el usuario).
+enchufado() {
+  # En un desktop no existe /sys/class/power_supply/*/online: no hay batería
+  # que consultar, así que se asume corriente (si no, el timer nunca sincroniza).
+  local fuentes=(/sys/class/power_supply/*/online)
+  [ -e "${fuentes[0]}" ] || return 0
+  grep -qx 1 "${fuentes[@]}" 2>/dev/null
+}
 en_casa() {
-  local red
-  red=$(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null \
+  local redes inalambrica
+  redes=$(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null)
+  # El desktop va por cable: una conexión ethernet activa cuenta como casa.
+  printf '%s\n' "$redes" | grep -q ':802-3-ethernet$' && return 0
+  inalambrica=$(printf '%s\n' "$redes" \
         | awk -F: '$2=="802-11-wireless"{print $1; exit}')
-  [ -n "$red" ] && printf '%s' "$red" | grep -qiE "$SSID"
+  [ -n "$inalambrica" ] && printf '%s' "$inalambrica" | grep -qiE "$SSID"
 }
 log() { echo "$(date '+%F %T') [$MODO] $*" >>"$LOG"; }
 ms()  { echo $(( $(date +%s%N) / 1000000 )); }
 
 saltar_por_entorno() {
   if ! enchufado; then log "auto: sin corriente, no sincronizo"; return 0; fi
-  if ! en_casa; then log "auto: fuera del wifi de casa, no sincronizo"; return 0; fi
+  if ! en_casa; then log "auto: fuera de la red de casa, no sincronizo"; return 0; fi
   return 1
 }
 if [ "$AUTO" = 1 ] && saltar_por_entorno; then exit 0; fi
