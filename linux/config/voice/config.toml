@@ -32,8 +32,9 @@ auto_profiles = true
 delivery = "direct"
 # Cuánto comenta el agente mientras trabaja (independiente de `delivery`):
 #   fluido        = puede narrar avances con `hablar`; se siente acompañado.
-#   concentracion = no narra: sólo el resumen de puntos clave al cerrar
-#                   (`avisar`). Menos ruido cuando querés foco.
+#   concentracion = no narra y NO suena: los mensajes (sólo puntos clave al
+#                   cerrar) quedan en el buzón y los escuchás con "dime".
+#                   El indicador de la barra muestra el modo y los pendientes.
 # El modo se cambia junto con la entrega: `voice modo fluido|concentracion|campana`
 # (o por voz: "modo fluido", "modo concentración", "modo campana").
 chatiness = "fluido"

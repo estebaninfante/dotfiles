@@ -49,8 +49,9 @@ Panel {
   property int playingIndex: -1
   // Mensajes pendientes de escuchar (buzon).
   property int pending: 0
-  // Como entrega los mensajes de los agentes: "bell" (campana + buzon) o
-  // "direct" (habla al instante). Lo controla el selector del panel.
+  // Como entrega los mensajes de los agentes: "bell" (campana + buzon),
+  // "silent" (buzon sin sonido) o "direct" (habla al instante). Lo controla
+  // el selector del panel.
   property string delivery: "direct"
 
   readonly property string glyph: root.pending > 0 ? "󰂚" : (root.ttsEnabled ? "󰕾" : "󰖁")
@@ -63,7 +64,11 @@ Panel {
   readonly property int historyCount: root.history ? root.history.length : 0
   readonly property string tooltipText: "Voz TTS · " + root.stateLabel + " · " +
     Math.round(root.volume * 100) + "%" +
-    (root.delivery === "bell" ? " · campana" : " · habla al instante") +
+    (root.delivery === "bell"
+      ? " · campana"
+      : root.delivery === "silent"
+        ? " · silencio (buzón)"
+        : " · habla al instante") +
     (root.pending > 0 ? " · " + root.pending + " pendientes" : "") +
     (root.speaking && root.speakSource ? " · habla " + root.speakSource : "") +
     " · clic derecho: activar/desactivar"
@@ -111,7 +116,7 @@ Panel {
 
   // Como llega un mensaje de agente: campana al buzon o voz inmediata.
   function setDelivery(mode) {
-    if (mode !== "bell" && mode !== "direct") return
+    if (mode !== "bell" && mode !== "direct" && mode !== "silent") return
     if (root.delivery === mode) return
     root.delivery = mode
     deliveryProc.cmd = [root.scriptPath, "delivery-set", mode]
@@ -339,7 +344,7 @@ Panel {
         if (text === " " || text === "t" || text === "T") root.toggleEnabled()
         else if (text === "b" || text === "B") root.playInbox()
         else if (text === "l" || text === "L") root.repeatLast()
-        else if (text === "v" || text === "V") root.setDelivery(root.delivery === "bell" ? "direct" : "bell")
+        else if (text === "v" || text === "V") root.setDelivery(root.delivery === "bell" ? "direct" : root.delivery === "silent" ? "bell" : "silent")
         else if (text === "r" || text === "R") { root.refresh(); root.refreshHistory() }
         else if (text === "+" || text === "=") root.setVolume(root.volume + 0.05)
         else if (text === "-" || text === "_") root.setVolume(root.volume - 0.05)
@@ -553,6 +558,17 @@ Panel {
                 fontSize: Style.font.bodySmall
                 onClicked: root.setDelivery("direct")
               }
+
+              Button {
+                text: "Silencio"
+                bordered: true
+                selected: root.delivery === "silent"
+                enabled: !root.busy
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.setDelivery("silent")
+              }
             }
 
             Text {
@@ -560,7 +576,9 @@ Panel {
               textFormat: Text.PlainText
               text: root.delivery === "bell"
                 ? "Suena la campana y guarda el mensaje en el buzón; lo escuchás cuando decís «dime»."
-                : "Habla el mensaje apenas llega, sin pasar por el buzón."
+                : root.delivery === "silent"
+                  ? "No suena nada: guarda el mensaje en el buzón y el indicador de modo te avisa. Lo escuchás con «dime»."
+                  : "Habla el mensaje apenas llega, sin pasar por el buzón."
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption

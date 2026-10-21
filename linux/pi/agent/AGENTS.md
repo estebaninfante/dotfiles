@@ -15,7 +15,7 @@
 
 - El usuario cambia el ritmo por voz: **"modo fluido"**, **"modo concentración"** o **"modo campana"** (también `voice modo fluido|concentracion|campana`).
 - **Modo fluido**: podés narrar avances con `hablar` mientras trabajás; el cierre sigue con `avisar`.
-- **Modo concentración**: no narres. Guardá lo importante para el cierre con `avisar`, en puntos clave (una o dos frases). `hablar` no está disponible.
+- **Modo concentración**: no narres y no suene. Guardá lo importante para el cierre con `avisar`, en puntos clave (una o dos frases); el mensaje queda en el buzón y el usuario lo escucha con "dime". `hablar` no está disponible. El indicador de la barra muestra el modo y los pendientes.
 - **Modo campana**: no se habla; el mensaje queda en el buzón y el usuario lo escucha con "dime". Igual escribí todo en la respuesta.
 - Los **subagentes no hablan al usuario**: reportan sólo al agente que los lanzó, y ése decide qué contarle. No los presentes como voces propias.
 

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.modo-voz",
+  "name": "Modo de voz",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Indicador minimalista del ritmo de los agentes (fluido, concentración o campana), con la cuenta del buzón y cambio con un clic.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Modo de voz",
+    "description": "Muestra si los agentes hablan (fluido), guardan silencio en el buzón (foco) o avisan con campana; un clic cambia el modo.",
+    "category": "Assistant",
+    "aliases": ["modo", "voz", "fluido", "concentracion", "concentración", "campana", "foco", "silencio", "buzon", "buzón"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalMs": 2000
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalMs",
+        "type": "integer",
+        "label": "Refresh interval (ms)",
+        "description": "Cada cuánto se relee el modo y la cuenta del buzón.",
+        "min": 500,
+        "max": 10000,
+        "step": 500,
+        "defaultValue": 2000
+      }
+    ]
+  }
+}

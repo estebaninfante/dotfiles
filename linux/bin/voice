@@ -12,7 +12,7 @@
 #   voice play-inbox [N|--all]           reproduce los pendientes y los marca escuchados
 #   voice think "texto"                  cerebro Pi headless: entiende y actúa, y responde
 #   voice ptt                            push-to-talk: habla y te responde (Pi, sin nube)
-#   voice delivery [direct|mailbox|hybrid|bell]  inmediato, buzon, aviso+pausa+voz, o solo campana
+#   voice delivery [direct|mailbox|hybrid|bell|silent]  inmediato, buzon, aviso+pausa+voz, campana, o buzon sin sonido
 #   voice modo [fluido|concentracion|campana]   ritmo de los agentes (entrega + comentarios)
 #   voice messages [--json] [N]          registro unificado (voz + notificaciones)
 #   voice repeat [N] | --index M         repetir los ultimos mensajes
@@ -392,6 +392,7 @@ chime() {
 
 # avisar: entrega un mensaje al usuario. Segun `[tts] delivery`:
 #   direct  → notificacion + voz + registro (inmediato)
+#   silent  → lo deja PENDIENTE en el buzon, SIN sonido (modo concentracion)
 #   mailbox → lo deja PENDIENTE en el buzon y suena un aviso sutil (no habla)
 #   hybrid  → aviso sutil, pausa (para prestar atencion) y voz; si la voz esta
 #             apagada cae al buzon para no perder el mensaje
@@ -405,7 +406,7 @@ avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile
   local source="${P_SOURCE:-voice}" delivery
   delivery=$(config_val tts delivery); delivery=${delivery:-direct}
   case "$delivery" in
-    bell|mailbox)
+    bell|mailbox|silent)
       # El buzón es un buffer acotado: antes de sumar, se tira lo viejo/sobrante.
       local b_age b_keep
       b_age=$(config_val tts dime_max_age_min); b_age=${b_age:-30}
@@ -414,10 +415,9 @@ avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile
         --max-age-min "$b_age" --keep "$b_keep" >/dev/null 2>&1 || true
       "$PY" "$VOICE_DIR/engine.py" record-message --source "$source" \
         --text "$P_TEXT" --pending >/dev/null 2>&1 || true
-      # --now: la campana de un mensaje de agente suena SIEMPRE (sin el
-      # antirrebote de 8 s, que la hacía sonar "a ratos" cuando varios
-      # agentes terminaban seguidos).
-      chime --now
+      # `silent` es el buzón sin sonido (modo concentración): no suena nada,
+      # el indicador de la barra muestra que hay pendientes.
+      [ "$delivery" = "silent" ] || chime --now
       return 0
       ;;
     hybrid)
@@ -1050,8 +1050,8 @@ PYEOF
           get_set tts delivery direct; get_set tts chatiness fluido
           echo "modo: fluido (habla al instante y comenta avances)" ;;
         concentracion|concentración|concentrado)
-          get_set tts delivery direct; get_set tts chatiness concentracion
-          echo "modo: concentracion (sólo puntos clave al cerrar)" ;;
+          get_set tts delivery silent; get_set tts chatiness concentracion
+          echo "modo: concentracion (silencio: puntos clave al buzón)" ;;
         campana|bell|buzon|buzón)
           get_set tts delivery bell; get_set tts chatiness concentracion
           echo "modo: campana (silencio; el mensaje queda en el buzon)" ;;
@@ -1066,8 +1066,8 @@ PYEOF
     # o hybrid (aviso + pausa + voz).
     if [ "$#" -ge 2 ]; then
       case "$2" in
-        bell|mailbox|hybrid|direct) get_set tts delivery "$2"; echo "entrega: $2" ;;
-        *) echo "voice: delivery bell|mailbox|hybrid|direct" >&2; exit 2 ;;
+        bell|mailbox|hybrid|direct|silent) get_set tts delivery "$2"; echo "entrega: $2" ;;
+        *) echo "voice: delivery bell|mailbox|hybrid|direct|silent" >&2; exit 2 ;;
       esac
     else echo "entrega: $(config_val tts delivery)"; fi
     ;;

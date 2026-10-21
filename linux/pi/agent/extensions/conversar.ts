@@ -100,7 +100,7 @@ const VOICE_BIN = process.env.PI_VOICE_BIN ?? `${HOME}/.local/bin/voice`;
 const VOICE_STATE = `${HOME}/.local/state/voice/state.json`;
 const VOICE_CONFIG = `${HOME}/.config/voice/config.toml`;
 
-type Delivery = "direct" | "bell" | "mailbox" | "hybrid";
+type Delivery = "direct" | "bell" | "mailbox" | "hybrid" | "silent";
 
 /** Cómo quiere el usuario que lleguen los mensajes de los agentes. `bell`
  *  (campana + buzón) y `direct` (habla ya) se eligen desde el widget de la
@@ -112,14 +112,16 @@ function deliveryMode(): Delivery {
       tts?: { delivery?: unknown };
     };
     const d = j?.tts?.delivery;
-    if (d === "direct" || d === "bell" || d === "mailbox" || d === "hybrid") return d;
+    if (d === "direct" || d === "bell" || d === "mailbox" || d === "hybrid" || d === "silent")
+      return d;
   } catch {
     /* sin estado legible: probamos config.toml */
   }
   try {
     const m = readFileSync(VOICE_CONFIG, "utf8").match(/^\s*delivery\s*=\s*"([^"]+)"/m);
     const d = m?.[1];
-    if (d === "direct" || d === "bell" || d === "mailbox" || d === "hybrid") return d;
+    if (d === "direct" || d === "bell" || d === "mailbox" || d === "hybrid" || d === "silent")
+      return d;
   } catch {
     /* sin config legible: hablamos ya */
   }
@@ -1192,7 +1194,7 @@ export default function (pi: ExtensionAPI) {
         // Con «campana» el mensaje va al buzón: suena el aviso y el usuario lo
         // escucha cuando quiere con «dime». Se anuncia como hablado para que el
         // cierre (`avisar`) no repita lo mismo.
-        if (delivery === "bell" || delivery === "mailbox") {
+        if (delivery === "bell" || delivery === "mailbox" || delivery === "silent") {
           const aviso = await execCapture(
             [VOICE_BIN, "avisar", "--source", agentName(), "--", mensaje],
             15000,
