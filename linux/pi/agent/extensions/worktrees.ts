@@ -263,7 +263,7 @@ function correrGate(ruta: string): ResultadoGate {
       ok: false,
       resumen: `puerta de merge en rojo${resumenFallas ? `: ${resumenFallas}` : e.code ? ` (${e.code})` : ""}`,
       mensaje:
-        `la verificación del repo falló (${comando}); la rama NO se mergeó y el worktree quedó intacto.\n` +
+        `la verificación del repo falló (${comando}); la rama no se mergeó y el worktree quedó intacto.\n` +
         detalle +
         fallas(texto) +
         `Arreglá lo que falla y volvé a cerrar. Si el gate está roto por el entorno y querés saltearlo igual: PI_SIN_GATE=1.\n` +
