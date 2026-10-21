@@ -35,6 +35,12 @@ hl.bind(main_mod .. " + P", hl.dsp.exec_cmd("beckon"))
 hl.bind(main_mod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
 hl.bind(main_mod .. " + SHIFT + X", hl.dsp.exit())
 
+-- Caps Lock: SUPER (la tecla fisica de Caps Lock) + Esc alterna el estado.
+-- El estado real lo cambia Hyprland via XKB, por eso se inyecta KEY_CAPSLOCK con
+-- ydotool (ydotoold corre como servicio de usuario; su device esta excluido en
+-- keyd para que no se re-mapee). Requiere input:kb_options sin "caps:none".
+hl.bind(main_mod .. " + ESCAPE", hl.dsp.exec_cmd("ydotool key 58:1 58:0"), { description = "Caps Lock: alternar" })
+
 -- Voz del sistema: repetir los últimos mensajes (voz + notificaciones).
 hl.bind(main_mod .. " + ALT + V", hl.dsp.exec_cmd("~/.local/bin/voice repeat"))
 hl.bind(main_mod .. " + ALT + SHIFT + V", hl.dsp.exec_cmd("~/.local/bin/voice repeat 3"))

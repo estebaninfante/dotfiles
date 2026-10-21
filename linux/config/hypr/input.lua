@@ -7,7 +7,10 @@ hl.config({
     input = {
         kb_layout = "dvk_prog,es,us",
         kb_variant = "basic,,",
-        kb_options = "caps:none",
+        -- Sin "caps:none": la Caps Lock fisica ya la remapea keyd a Super
+        -- (/etc/keyd/default.conf), asi que aca hace falta que Caps_Lock siga
+        -- siendo una tecla real para poder alternar el estado con SUPER+ESCAPE.
+        kb_options = "",
         follow_mouse = 1,
         mouse_refocus = true,
         sensitivity = 0
