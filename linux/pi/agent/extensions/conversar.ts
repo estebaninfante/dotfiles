@@ -96,7 +96,35 @@ import {
 
 const HOME = process.env.HOME ?? "";
 const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/agente`;
+const VOICE_BIN = process.env.PI_VOICE_BIN ?? `${HOME}/.local/bin/voice`;
 const VOICE_STATE = `${HOME}/.local/state/voice/state.json`;
+const VOICE_CONFIG = `${HOME}/.config/voice/config.toml`;
+
+type Delivery = "direct" | "bell" | "mailbox" | "hybrid";
+
+/** Cómo quiere el usuario que lleguen los mensajes de los agentes. `bell`
+ *  (campana + buzón) y `direct` (habla ya) se eligen desde el widget de la
+ *  barra. Con `hybrid` se trata como inmediato para no meter una espera en
+ *  cada `hablar`; el cierre (`avisar`) sí respeta el híbrido. */
+function deliveryMode(): Delivery {
+  try {
+    const j = JSON.parse(readFileSync(VOICE_STATE, "utf8")) as {
+      tts?: { delivery?: unknown };
+    };
+    const d = j?.tts?.delivery;
+    if (d === "direct" || d === "bell" || d === "mailbox" || d === "hybrid") return d;
+  } catch {
+    /* sin estado legible: probamos config.toml */
+  }
+  try {
+    const m = readFileSync(VOICE_CONFIG, "utf8").match(/^\s*delivery\s*=\s*"([^"]+)"/m);
+    const d = m?.[1];
+    if (d === "direct" || d === "bell" || d === "mailbox" || d === "hybrid") return d;
+  } catch {
+    /* sin config legible: hablamos ya */
+  }
+  return "direct";
+}
 
 /** Interruptor maestro de voz: `tts.enabled` del sistema de voz (state.json
  *  pisa a config.toml). Si está apagado no se habla, no se espera respuesta y
@@ -1053,7 +1081,9 @@ export default function (pi: ExtensionAPI) {
       "contexto o una explicación. Si `esperar` es true, además ESPERA su " +
       "respuesta hablada y la devuelve como resultado. Es la vía general para " +
       "comunicarte con el usuario por voz. Si el usuario se perdió o pide " +
-      "contexto, contale el contexto en `mensaje`; no te limites a preguntar.",
+      "contexto, contale el contexto en `mensaje`; no te limites a preguntar. " +
+      "Si el usuario eligió «campana», el mensaje queda en su buzón y solo suena " +
+      "el aviso; si eligió «al instante», se dice en el momento.",
     promptSnippet:
       "Hablar al usuario por voz; con `esperar` escucha su respuesta sin bloquear el turno",
     promptGuidelines: [
@@ -1097,6 +1127,24 @@ export default function (pi: ExtensionAPI) {
         };
       }
       if (params.esperar !== true) {
+        const delivery = deliveryMode();
+        // Con «campana» el mensaje va al buzón: suena el aviso y el usuario lo
+        // escucha cuando quiere con «dime». Se anuncia como hablado para que el
+        // cierre (`avisar`) no repita lo mismo.
+        if (delivery === "bell" || delivery === "mailbox") {
+          const aviso = await execCapture(
+            [VOICE_BIN, "avisar", "--source", agentName(), "--", mensaje],
+            15000,
+            signal,
+          );
+          if (aviso.code === 0) announceSpoken(mensaje);
+          return {
+            content: [
+              { type: "text", text: `Quedó en el buzón con campana: "${mensaje}"` },
+            ],
+            details: undefined,
+          };
+        }
         const dicho = await execCapture(["hablar", agentName(), mensaje], 15000, signal);
         if (dicho.code === 0) announceSpoken(mensaje);
         return {
@@ -1104,8 +1152,8 @@ export default function (pi: ExtensionAPI) {
           details: undefined,
         };
       }
-      // Pregunta SIN bloquear: se dice ahora y el turno sigue. La respuesta,
-      // si llega por voz, entra después como mensaje del usuario.
+      // Una pregunta SIEMPRE se dice: el usuario tiene que oírla para responder,
+      // aunque el modo sea campana. La respuesta llega como mensaje nuevo.
       const segundos = Math.max(10, Number(params.segundos ?? 300) || 300);
       await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
       watchVoiceAnswer(segundos);
