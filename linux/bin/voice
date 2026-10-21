@@ -1042,7 +1042,7 @@ PYEOF
   modo)
     # Ritmo de los agentes en un solo gesto: entrega + cuánto comentan.
     #   fluido        -> habla al instante y puede narrar avances
-    #   concentracion -> habla al instante, sólo resumen de puntos clave
+    #   concentracion -> no suena: sólo puntos clave al buzon (lo oís con "dime")
     #   campana       -> no habla: campana + buzon (lo oís con "dime")
     if [ "$#" -ge 2 ]; then
       case "$2" in
@@ -1062,8 +1062,8 @@ PYEOF
     fi
     ;;
   delivery)
-    # Como entrega `avisar`: direct (habla ya), mailbox (acumula en el buzon)
-    # o hybrid (aviso + pausa + voz).
+    # Como entrega `avisar`: direct (habla ya), mailbox (acumula en el buzon),
+    # silent (buzon sin sonido) o hybrid (aviso + pausa + voz).
     if [ "$#" -ge 2 ]; then
       case "$2" in
         bell|mailbox|hybrid|direct|silent) get_set tts delivery "$2"; echo "entrega: $2" ;;
