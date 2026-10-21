@@ -10,3 +10,14 @@
 - Lo que digas por voz tiene que estar también en la respuesta escrita. Si el usuario solo leyera el texto, tiene que entender lo mismo; nada de dejar el contenido principal únicamente en la voz.
 - La versión hablada es un resumen fiel en una o dos frases llanas: sin tecnicismos, rutas ni nombres de herramientas, y sin datos que no estén en el texto.
 - Si la voz está apagada o falla, no la inventes: seguí por texto y avisá que no se pudo hablar.
+
+## Modo velocidad
+
+- El usuario elige un nivel de **Velocidad**: Turbo, Rápido, Normal o Cuidadoso.
+  Si no lo dice, Normal.
+- Turbo: razonamiento mínimo, **sin verificadores ni revisión automática**;
+  la revisión es del usuario. Se prioriza desplegar.
+- Rápido: compilar y verificar solo la feature tocada.
+- Normal: verificadores de lo que cambió.
+- Cuidadoso: suite completa y revisión.
+- Anotalo en el encargo de cada agente: `MODO VELOCIDAD: <nivel>`.
