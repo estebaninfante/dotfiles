@@ -68,6 +68,27 @@ const DEDUP_MS = 20000;
 const HOME = process.env.HOME ?? "";
 const VOICE_STATE = `${HOME}/.local/state/voice/state.json`;
 
+/** Cuánto comenta el agente (`tts.chatiness`). En `concentracion` el resumen
+ *  de respaldo va como puntos clave en vez de una frase narrativa. */
+function chatiness(): "fluido" | "concentracion" {
+  try {
+    const j = JSON.parse(readFileSync(VOICE_STATE, "utf8")) as {
+      tts?: { chatiness?: unknown };
+    };
+    if (j?.tts?.chatiness === "concentracion") return "concentracion";
+    if (j?.tts?.chatiness === "fluido") return "fluido";
+  } catch {
+    /* sin estado legible: probamos config.toml */
+  }
+  try {
+    const cfg = readFileSync(`${HOME}/.config/voice/config.toml`, "utf8");
+    if (/^\s*chatiness\s*=\s*"concentracion"/m.test(cfg)) return "concentracion";
+  } catch {
+    /* sin config: default */
+  }
+  return "fluido";
+}
+
 /** Interruptor maestro de voz (`tts.enabled`). Sin estado legible se asume
  *  encendido, como el default de config.toml. */
 function ttsEnabled(): boolean {
@@ -130,6 +151,17 @@ const SYSTEM_PROMPT = [
   "Sin listas, sin markdown, sin comillas. Si algo falló, dilo llanamente.",
   "No uses apelativos ni digas 'jefe'. No empieces con 'El agente' ni 'Yo':",
   "habla directo. Máximo 160 caracteres.",
+].join(" ");
+
+const SYSTEM_PROMPT_CONCENTRACION = [
+  "Recibes el reporte técnico de un agente que acaba de trabajar.",
+  "El usuario pidió modo concentración: devolvé SOLO los puntos clave, en",
+  "español natural y sencillo, en una o dos frases muy cortas separadas por",
+  "punto y coma. Nada de narrar el proceso ni de contar detalles.",
+  "Prohibido: nombres de herramientas o funciones, comandos, rutas o nombres de",
+  "archivos, siglas y tecnicismos. Habla de resultados, no de cómo se hizo.",
+  "Sin listas, sin markdown, sin comillas. Si algo falló, dilo llanamente.",
+  "No uses apelativos ni digas 'jefe'. Máximo 180 caracteres.",
 ].join(" ");
 
 const AVISAR_PARAMS = Type.Object({
@@ -457,7 +489,10 @@ export default function (pi: ExtensionAPI) {
           const response = await registry.complete(
             model,
             {
-              systemPrompt: SYSTEM_PROMPT,
+              systemPrompt:
+                chatiness() === "concentracion"
+                  ? SYSTEM_PROMPT_CONCENTRACION
+                  : SYSTEM_PROMPT,
               messages: [
                 {
                   role: "user" as const,

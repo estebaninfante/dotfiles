@@ -126,6 +126,34 @@ function deliveryMode(): Delivery {
   return "direct";
 }
 
+type Chatiness = "fluido" | "concentracion";
+
+/** Cuánto puede comentar el agente mientras trabaja (`tts.chatiness`).
+ *  - fluido: puede narrar avances con `hablar`.
+ *  - concentracion: no narra; sólo el resumen de puntos clave al cerrar.
+ *  Se elige con `voice modo` y se puede cambiar por voz ("modo fluido" /
+ *  "modo concentración"). state.json pisa a config.toml. */
+function chatiness(): Chatiness {
+  try {
+    const j = JSON.parse(readFileSync(VOICE_STATE, "utf8")) as {
+      tts?: { chatiness?: unknown };
+    };
+    if (j?.tts?.chatiness === "concentracion") return "concentracion";
+    if (j?.tts?.chatiness === "fluido") return "fluido";
+  } catch {
+    /* sin estado legible: probamos config.toml */
+  }
+  try {
+    const m = readFileSync(VOICE_CONFIG, "utf8").match(
+      /^\s*chatiness\s*=\s*"([^"]+)"/m,
+    );
+    if (m?.[1] === "concentracion") return "concentracion";
+  } catch {
+    /* sin config legible: hablamos con el default */
+  }
+  return "fluido";
+}
+
 /** Interruptor maestro de voz: `tts.enabled` del sistema de voz (state.json
  *  pisa a config.toml). Si está apagado no se habla, no se espera respuesta y
  *  la tool no se le ofrece al modelo. Sin archivo de estado se asume encendido
@@ -1067,7 +1095,10 @@ export default function (pi: ExtensionAPI) {
     try {
       const activas = pi.getActiveTools();
       const tiene = activas.includes("hablar");
-      if (ttsEnabled() && !SUBAGENTE) {
+      // En concentración no se ofrece `hablar`: el agente no narra avances,
+      // sólo cierra con `avisar` (puntos clave).
+      const disponible = ttsEnabled() && !SUBAGENTE && chatiness() === "fluido";
+      if (disponible) {
         if (!tiene) pi.setActiveTools([...activas, "hablar"]);
       } else if (tiene) {
         pi.setActiveTools(activas.filter((n) => n !== "hablar"));
@@ -1123,6 +1154,19 @@ export default function (pi: ExtensionAPI) {
               text:
                 "Sos un subagente: no tenés voz propia. Devolvé el informe en tu " +
                 "respuesta final; el agente que te lanzó decide qué contarle al usuario.",
+            },
+          ],
+          details: undefined,
+        };
+      }
+      if (chatiness() === "concentracion") {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "Estás en modo concentración: no narres avances. Guardá lo importante " +
+                "para el cierre con `avisar`, en puntos clave.",
             },
           ],
           details: undefined,

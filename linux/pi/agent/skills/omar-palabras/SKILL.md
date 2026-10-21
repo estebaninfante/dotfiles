@@ -246,6 +246,12 @@ Si cambiás el código (no sólo el JSON), además: documentá la feature en
   `"corta"`.
 - **Esperar que funcione con un solo gesto**: si el micrófono está ocupado por un
   dictado (`dictate.pid`), el loop se aparta y no evalúa nada.
+- **Agregar palabras sin mirar el vocabulario del decodificador.** El sesgo del
+  STT tiene un tope medido de 32 frases (las primeras son wake words, apps y
+  hotwords de usuario; las builtins del final quedan afuera). Si una palabra
+  nueva no se reconoce, probá `omar fast --file` (o un `listen --file --dry-run`)
+  y agregá como variante la forma que el STT **realmente** produce; no alcanza
+  con la forma escrita. Ejemplo real: "modo fluido" sale como "moda fluida".
 
 ## Dónde está implementado
 

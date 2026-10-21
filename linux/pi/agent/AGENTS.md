@@ -11,6 +11,14 @@
 - La versión hablada es un resumen fiel en una o dos frases llanas: sin tecnicismos, rutas ni nombres de herramientas, y sin datos que no estén en el texto.
 - Si la voz está apagada o falla, no la inventes: seguí por texto y avisá que no se pudo hablar.
 
+## Ritmo de los agentes (modo de voz)
+
+- El usuario cambia el ritmo por voz: **"modo fluido"**, **"modo concentración"** o **"modo campana"** (también `voice modo fluido|concentracion|campana`).
+- **Modo fluido**: podés narrar avances con `hablar` mientras trabajás; el cierre sigue con `avisar`.
+- **Modo concentración**: no narres. Guardá lo importante para el cierre con `avisar`, en puntos clave (una o dos frases). `hablar` no está disponible.
+- **Modo campana**: no se habla; el mensaje queda en el buzón y el usuario lo escucha con "dime". Igual escribí todo en la respuesta.
+- Los **subagentes no hablan al usuario**: reportan sólo al agente que los lanzó, y ése decide qué contarle. No los presentes como voces propias.
+
 ## Modo velocidad
 
 - El usuario elige un nivel de **Velocidad**: Turbo, Rápido, Normal o Cuidadoso.
