@@ -94,6 +94,32 @@ test("el progreso cuenta por dónde va", async () => {
   assert.ok(vistos.some((linea) => /paso (alpha|beta|gamma)/.test(linea)), vistos.join(" | "));
 });
 
+test("sigue el registro de la puerta aunque el comando no diga nada por consola", async () => {
+  const dir = carpeta();
+  const registro = join(dir, "gate.log");
+  const previo = process.env.PI_GATE_LOG;
+  process.env.PI_GATE_LOG = registro;
+  try {
+    const vistos: string[] = [];
+    // Así escribe la puerta de verdad: el detalle va a $PI_GATE_LOG y a la
+    // consola solo le deja el resumen.
+    const resultado = await correrComando({
+      cwd: dir,
+      comando: 'echo "› cargo clippy" >> "$PI_GATE_LOG"; sleep 3; echo "✗ verificador 61" >> "$PI_GATE_LOG"; exit 1',
+      progreso: (linea) => vistos.push(linea),
+    });
+
+    assert.equal(resultado.ok, false);
+    assert.match(resultado.resumen, /verificador 61/);
+    assert.match(resultado.mensaje, /verificador 61/);
+    assert.equal(resultado.archivo, registro);
+    assert.ok(vistos.some((linea) => /clippy/.test(linea)), vistos.join(" | "));
+  } finally {
+    if (previo === undefined) delete process.env.PI_GATE_LOG;
+    else process.env.PI_GATE_LOG = previo;
+  }
+});
+
 test("las líneas de falla se limpian y se recortan", () => {
   const texto = "\u001b[31m✗ uno\u001b[0m\n  ✓ dos\n\u001b[31m✗ tres\u001b[0m\n";
   const fallas = lineasDeFalla(texto).split("\n");

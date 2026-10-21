@@ -32,12 +32,13 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import { correrComando, formatearSegundos, type ResultadoGate } from "./lib/gate.ts";
 import {
   configNormalizada,
   dentroDe,
@@ -63,6 +64,12 @@ interface Datos {
   rama: string | null;
   /** Repo recién creado, sin commits: no hay historia que aislar. */
   vacio: boolean;
+}
+
+/** Lo mínimo que necesita el cierre para no dejar la sesión a oscuras. */
+interface Aviso {
+  progreso?: (linea: string, segundos: number) => void;
+  signal?: AbortSignal;
 }
 
 interface Worktree {
@@ -209,12 +216,6 @@ function listarWorktrees(dir: string): string {
   return git(actual.datos.principal, ["worktree", "list"]);
 }
 
-interface ResultadoGate {
-  ok: boolean;
-  resumen: string;
-  mensaje: string;
-}
-
 /**
  * Corre la puerta de merge del repo, si declara una. Sin puerta declarada no hay
  * nada que verificar y el merge sigue como antes (repos chicos o de configs).
@@ -226,50 +227,23 @@ interface ResultadoGate {
  * Escapes: `PI_SIN_GATE=1` (explícito y avisado) y `PI_GATE_CMD` para forzar un
  * comando concreto.
  */
-function correrGate(ruta: string): ResultadoGate {
-  if (process.env.PI_SIN_GATE === "1") {
-    return { ok: true, resumen: "puerta de merge salteada (PI_SIN_GATE=1)", mensaje: "" };
-  }
+async function correrGate(ruta: string, aviso: Aviso = {}): Promise<ResultadoGate> {
   const comando = comandoGate(ruta);
-  if (!comando) {
-    return { ok: true, resumen: "sin puerta de merge declarada", mensaje: "" };
+  if (process.env.PI_SIN_GATE === "1" || !comando) {
+    const resumen = process.env.PI_SIN_GATE === "1" ? "puerta de merge salteada (PI_SIN_GATE=1)" : "sin puerta de merge declarada";
+    return { ok: true, resumen, mensaje: "", segundos: 0, archivo: "" };
   }
   const limite = Number(process.env.PI_GATE_TIMEOUT ?? 2400) || 2400;
-  try {
-    const salida = execFileSync("bash", ["-lc", comando], {
-      cwd: ruta,
-      encoding: "utf8",
-      timeout: limite * 1000,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env },
-    });
-    const fin = ultimaLineaUtil(salida) ?? "verificación en verde";
-    return { ok: true, resumen: `puerta de merge OK: ${fin}`, mensaje: "" };
-  } catch (error) {
-    const e = error as { stdout?: string; stderr?: string; message?: string; code?: string };
-    const texto = `${e.stdout ?? ""}${e.stderr ?? ""}` || e.message || "falló";
-    // El detalle completo queda en un archivo: el mensaje del tool se recorta y
-    // si no, hay que adivinar por qué rojo.
-    let detalle = "";
-    try {
-      const rutaLog = join(tmpdir(), `pi-gate-${Date.now()}.log`);
-      writeFileSync(rutaLog, `${comando}\n\n${texto}`);
-      detalle = `detalle: ${rutaLog}\n`;
-    } catch {
-      /* sin archivo, el mensaje alcanza */
-    }
-    const resumenFallas = fallas(texto).replace(/\n+/g, " · ").slice(0, 300);
-    return {
-      ok: false,
-      resumen: `puerta de merge en rojo${resumenFallas ? `: ${resumenFallas}` : e.code ? ` (${e.code})` : ""}`,
-      mensaje:
-        `la verificación del repo falló (${comando}); la rama no se mergeó y el worktree quedó intacto.\n` +
-        detalle +
-        fallas(texto) +
-        `Arreglá lo que falla y volvé a cerrar. Si el gate está roto por el entorno y querés saltearlo igual: PI_SIN_GATE=1.\n` +
-        `── final de la salida ──\n${colita(texto, 25)}`,
-    };
-  }
+  // Sin `execFileSync`: la puerta tarda minutos y, con stdout en un pipe, un
+  // servidor que dejaba vivo un verificador la dejaba esperando para siempre.
+  // Ver `lib/gate.ts`.
+  return correrComando({
+    cwd: ruta,
+    comando,
+    limiteMs: limite * 1000,
+    signal: aviso.signal,
+    progreso: aviso.progreso,
+  });
 }
 
 /** El comando de verificación que declara el repo, o `null` si no hay. */
@@ -288,36 +262,16 @@ function comandoGate(ruta: string): string | null {
   return null;
 }
 
-function ultimaLineaUtil(salida: string): string | undefined {
-  return salida
-    .split("\n")
-    .map((l) => l.replace(/\u001b\[[0-9;]*m/g, "").trim())
-    .filter(Boolean)
-    .at(-1);
-}
-
-/** Las líneas que dicen qué falló, arriba y cortas: es lo primero que se lee. */
-function fallas(texto: string): string {
-  const limpias = texto
-    .split("\n")
-    .map((l) => l.replace(/\u001b\[[0-9;]*m/g, "").trimEnd())
-    .filter((l) => /✗|FALLÓ|^error|^--- FAIL|panicked/.test(l));
-  if (!limpias.length) return "";
-  const unicas = [...new Set(limpias)].slice(0, 12);
-  return `── qué falló ──\n${unicas.join("\n")}\n`;
-}
-
-function colita(texto: string, lineas: number): string {
-  const limpias = texto.split("\n").map((l) => l.replace(/\u001b\[[0-9;]*m/g, ""));
-  return limpias.slice(-lineas).join("\n");
-}
-
 function commitsAdelante(ruta: string, base: string): number {
   const salida = tal(ruta, ["rev-list", "--count", `${base}..HEAD`]);
   return Number(salida ?? 0) || 0;
 }
 
-function cerrarWorktree(ruta: string, opciones: { borrarRama?: boolean; base?: string } = {}): string {
+async function cerrarWorktree(
+  ruta: string,
+  opciones: { borrarRama?: boolean; base?: string } = {},
+  aviso: Aviso = {},
+): Promise<string> {
   const datos = datosRepo(ruta);
   if (!datos) throw new Error(`no es un repo git: ${ruta}`);
   if (!datos.esWorktree) throw new Error(`${datos.raiz} es la copia principal, no un worktree`);
@@ -345,7 +299,7 @@ function cerrarWorktree(ruta: string, opciones: { borrarRama?: boolean; base?: s
     // Nada entra a la base sin la verificación del repo en verde. Antes el merge
     // era ciego: entró código con un verificador en rojo y el binario de `main`
     // quedó viejo; el usuario lo vio como «no cambió nada».
-    const gate = correrGate(datos.raiz);
+    const gate = await correrGate(datos.raiz, aviso);
     lineas.push(gate.resumen);
     if (!gate.ok) throw new Error(gate.mensaje);
     try {
@@ -611,7 +565,7 @@ export default function (pi: ExtensionAPI) {
       ),
       conservarRama: Type.Optional(Type.Boolean({ description: "No borrar la rama al cerrar" })),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, signal, onUpdate, ctx) {
       try {
         if (params.accion === "lista") {
           const donde = normalizar(String(params.repo ?? ""), ctx.cwd);
@@ -626,9 +580,25 @@ export default function (pi: ExtensionAPI) {
               isError: true,
             };
           }
-          const texto = cerrarWorktree(normalizar(ruta, ctx.cwd), {
-            borrarRama: params.conservarRama !== true,
-          });
+          // La puerta puede tardar minutos: se avisa por dónde va para que la
+          // sesión no parezca colgada (y el spinner siga animando).
+          const texto = await cerrarWorktree(
+            normalizar(ruta, ctx.cwd),
+            { borrarRama: params.conservarRama !== true },
+            {
+              signal,
+              progreso: (linea, segundos) =>
+                onUpdate?.({
+                  content: [
+                    {
+                      type: "text",
+                      text: `puerta de merge (${formatearSegundos(segundos)})${linea ? `: ${linea.slice(0, 160)}` : "…"}`,
+                    },
+                  ],
+                  details: { segundos },
+                }),
+            },
+          );
           return { content: [{ type: "text", text: texto }], details: { ruta } };
         }
         const wt = abrirWorktree(normalizar(String(params.repo ?? ""), ctx.cwd), String(params.id ?? "trabajo"), params.desde);
