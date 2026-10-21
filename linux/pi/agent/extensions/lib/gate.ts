@@ -183,7 +183,12 @@ export async function correrComando(pedido: PedidoGate): Promise<ResultadoGate> 
   }
 
   if (resultado.codigo === 0) {
-    const fin = ultimaLineaUtil(texto) ?? "verificación en verde";
+    // La puerta de este repo ya termina en «✓ puerta de merge: todo verde»:
+    // se le saca el prefijo para no decir lo mismo dos veces.
+    const fin = (ultimaLineaUtil(texto) ?? "verificación en verde")
+      .replace(/^[✓✗]\s*/, "")
+      .replace(/^puerta de merge:?\s*/i, "")
+      .trim() || "verificación en verde";
     return {
       ok: true,
       segundos,
