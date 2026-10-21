@@ -661,3 +661,49 @@ widget.
   compositor. Antes va un spike de un día con criterio de corte explícito.
 - Migrar los 38 lugares con duraciones literales de una vez: se migran por
   impacto visual y cada carpeta tocada pasa el verificador.
+
+## Fábrica de ideas: capturar en vez de perder
+
+**Contexto.** El usuario piensa en voz alta todo el tiempo ("¿se podría usar un
+teléfono viejo como cerebro y dejar el portátil de pantalla?"). Esas ideas se
+contestaban en el chat y se perdían con la sesión. También quería poder
+revisarlas después, abrir conversaciones alrededor de una idea y descartar las
+que no van. Necesita memoria externa, no que el agente decida por él.
+
+**Elegido.**
+
+- **Un archivo Markdown por idea** en `~/.local/share/pi/ideas/`, con
+  frontmatter (id, estado, etiquetas, fechas, origen) y cuerpo con la idea, qué
+  la haría funcionar, dudas y **conversación append-only** (fecha + agente).
+  Nada de base de datos: el usuario lo abre con `cat` y el agente lo lee igual.
+- **Un CLI, dos consumidores**: `linux/bin/ideas` (node, sin dependencias) es la
+  única implementación; la extensión `ideas.ts` la invoca por `execFileSync` y
+  expone la tool `idea` + los comandos `/ideas` y `/idea`. Cero lógica duplicada.
+- **Captura automática por system prompt**, no por pedido: la extensión inyecta
+  la regla en `before_agent_start` (igual que `rig.ts`). Si el mensaje es una
+  idea o pregunta especulativa, se guarda antes de responder. Preguntar
+  "¿querés que lo guarde?" rompe el flujo y la idea se pierde.
+- **Descartar no borra.** El estado pasa a `descartada` con el motivo escrito y
+  la idea queda fuera del listado por defecto (`--todas` la muestra). Se puede
+  reabrir sin perder la conversación; descartar es una decisión, no una pérdida.
+- **`ideas charlar IDEA-XXXX`** abre una sesión de pi con el archivo de la idea
+  como contexto: es el puente entre "idea guardada" y "conversación en torno a
+  ella", que es lo que el usuario pidió.
+- **Verificador determinista** `scripts/verify/ideas.sh`: corre el CLI completo
+  sobre un directorio temporal (nunca toca las ideas reales) y comprueba además
+  que la extensión declare tool, comandos y regla, y que la skill cargue.
+
+**Descartado.**
+
+- **Guardar las ideas dentro de `tareas.json`/`trazas`**: una idea no tiene
+  dueño, ni estado de trabajo, ni pasos. Mezclarla con los tickets ensucia las
+  dos cosas y el usuario no las encuentra.
+- **Base de datos o app aparte**: más superficie, más migraciones, y el usuario
+  quiere ver las ideas en la terminal y en el editor.
+- **Que el agente pregunte antes de capturar**: la respuesta útil se demora y la
+  idea se pierde cuando el usuario cambia de tema. Se captura, se contesta, y si
+  no le interesaba, se descarta con un motivo.
+- **Capturar tareas**: "arreglá el bug del panel" es un ticket; convertirlo en
+  idea llena la fábrica de ruido y le quita sentido a la lista.
+- **Borrar ideas**: el valor de la fábrica es la colección. Sin la idea
+  descartada y su motivo, se vuelve a discutir lo mismo en tres meses.

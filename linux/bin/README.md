@@ -109,3 +109,30 @@ sesiones respetan el workspace que ya les tocó. **El sonido no se aísla**: avi
 notificaciones son globales a propósito.
 
 Verificación: `scripts/verify/espacios.sh` (corre sin escritorio: `ESPACIOS_SIN_ESC=1`).
+
+## `ideas` — la fábrica de ideas
+
+El usuario piensa en voz alta: "¿se podría usar un teléfono viejo como cerebro y dejar
+el portátil de pantalla?". Cada una de esas ideas se captura sola (la extensión
+`linux/pi/agent/extensions/ideas.ts` inyecta la regla en el system prompt y expone la
+tool `idea`), y queda viva hasta que se explore, se promueva o se descarte.
+
+```bash
+ideas                                  # lista las abiertas
+ideas listar --todas                   # incluye descartadas
+ideas nueva "título" -t texto -e etiquetas -d dudas
+ideas ver IDEA-7K2P
+ideas anotar IDEA-7K2P "conclusión" -r riesgo -d duda
+ideas estado IDEA-7K2P explorando      # abierta | explorando | promovida
+ideas descartar IDEA-7K2P "motivo"     # no borra: archiva
+ideas reabrir IDEA-7K2P
+ideas etiquetar IDEA-7K2P hardware,bateria
+ideas buscar batería
+ideas charlar IDEA-7K2P                # abre pi con la idea como contexto
+```
+
+Datos en `~/.local/share/pi/ideas/`: `index.md` (tabla legible) + `IDEA-XXXX.md` por
+idea, con la idea, las dudas y la conversación append-only (fecha + agente). En pi:
+`/ideas` lista, `/idea IDEA-7K2P` la muestra en el panel.
+
+Verificación: `scripts/verify/ideas.sh`.
