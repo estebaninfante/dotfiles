@@ -29,3 +29,22 @@
 - Normal: verificadores de lo que cambió.
 - Cuidadoso: suite completa y revisión.
 - Anotalo en el encargo de cada agente: `MODO VELOCIDAD: <nivel>`.
+
+## Investigaciones
+
+- Si el usuario pide una investigación, **no empieces a buscar ni a escribir**.
+  Primero hacé preguntas: objetivo, pregunta a resolver, problema, alcance,
+  decisión que depende del resultado, restricciones y qué evidencia le sirve.
+- No arranques hasta tener: **problema, pregunta, objetivo, hipótesis, método y
+  qué prueba manual se va a hacer**.
+- Las investigaciones actuales son sobre **harness, LLMs y sistemas agénticos**.
+  El foco es cómo lograr que los agentes construyan mejor, no el dominio de
+  ejemplo.
+- Documentá en `~/alicia/investigaciones/<slug>/`: paper, `fuentes.md` y
+  experimento. El título debe afirmar el objetivo o la pregunta, no un tema.
+- **Las pruebas de aprendizaje son manuales y bajo observación.** Las construyen
+  el usuario y el agente juntos, y se corren cuando el usuario lo pide. El
+  agente **no** corre tests automáticos para declarar que el agente “aprendió”
+  o “no memorizó”.
+- El agente sí puede correr checks mecánicos (build, lint, a11y) para verificar
+  el software; no los use como prueba de aprendizaje del harness.
