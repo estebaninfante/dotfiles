@@ -253,8 +253,9 @@ function correrGate(ruta: string): ResultadoGate {
       resumen: "puerta de merge en rojo: no se mergeó",
       mensaje:
         `la verificación del repo falló (${comando}); la rama NO se mergeó y el worktree quedó intacto.\n` +
+        fallas(texto) +
         `Arreglá lo que falla y volvé a cerrar. Si el gate está roto por el entorno y querés saltearlo igual: PI_SIN_GATE=1.\n` +
-        `── final de la salida ──\n${colita(texto, 40)}`,
+        `── final de la salida ──\n${colita(texto, 25)}`,
     };
   }
 }
@@ -281,6 +282,17 @@ function ultimaLineaUtil(salida: string): string | undefined {
     .map((l) => l.replace(/\u001b\[[0-9;]*m/g, "").trim())
     .filter(Boolean)
     .at(-1);
+}
+
+/** Las líneas que dicen qué falló, arriba y cortas: es lo primero que se lee. */
+function fallas(texto: string): string {
+  const limpias = texto
+    .split("\n")
+    .map((l) => l.replace(/\u001b\[[0-9;]*m/g, "").trimEnd())
+    .filter((l) => /✗|FALLÓ|^error|^--- FAIL|panicked/.test(l));
+  if (!limpias.length) return "";
+  const unicas = [...new Set(limpias)].slice(0, 12);
+  return `── qué falló ──\n${unicas.join("\n")}\n`;
 }
 
 function colita(texto: string, lineas: number): string {
