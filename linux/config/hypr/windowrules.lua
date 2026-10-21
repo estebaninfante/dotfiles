@@ -2,6 +2,12 @@ local variables = require("base.variables")
 
 hl.window_rule({ match = { class = "swappy" }, no_anim = true })
 
+-- El salvapantallas de Omarchy corre en foot (el terminal por defecto), y foot
+-- anuncia su app-id recién después del primer map: la regla por `class` de
+-- default/hypr/apps/system.lua no le pega, así que quedaba como una ventana tiled
+-- en vez de a pantalla completa. `initial_class` sí matchea a tiempo.
+hl.window_rule({ match = { initial_class = "^org\\.omarchy\\.screensaver$" }, fullscreen = true, float = true })
+
 hl.window_rule({ match = { class = ".*" }, opacity = "1.0 1.0" })
 hl.window_rule({ match = { class = "kitty" }, opacity = "1.0 1.0" })
 hl.window_rule({ match = { class = "herdr" }, opacity = "1.0 1.0" })
