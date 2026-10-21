@@ -12,7 +12,7 @@
 #   voice play-inbox [N|--all]           reproduce los pendientes y los marca escuchados
 #   voice think "texto"                  cerebro Pi headless: entiende y actúa, y responde
 #   voice ptt                            push-to-talk: habla y te responde (Pi, sin nube)
-#   voice delivery [direct|mailbox|hybrid]  inmediato, acumular en el buzon, o aviso+pausa+voz
+#   voice delivery [direct|mailbox|hybrid|bell]  inmediato, buzon, aviso+pausa+voz, o solo campana
 #   voice messages [--json] [N]          registro unificado (voz + notificaciones)
 #   voice repeat [N] | --index M         repetir los ultimos mensajes
 #                                        (--restart: corta el que suena y reinicia)
@@ -26,7 +26,7 @@
 #   voice color <nombre> --set #hex      fijar el color de un agente
 #   voice role <nombre> [rol]            ver/fijar el rol (main, audio, ...)
 #   voice agents                         tabla de identidades fijadas
-#   voice send --agent <nombre> --text "..."   API por-agente (Hermes, opencode, ...)
+#   voice send --agent <nombre> --text "..." [--key K]   API por-agente (Hermes, opencode, ...)
 #   voice test                           test TTS + STT
 #   voice accelerator [auto|gpu|cpu]     ver/cambiar dispositivo STT Handy
 #   voice gpu                            estado GPU NVIDIA
@@ -920,18 +920,23 @@ PYEOF
 
 usage() { sed -n '2,/^# Arquitectura/p' "$0" | grep '^#'; }
 
-send_agent() {  # send_agent --agent <nombre> --text "texto" [--voice V] [--engine E] [--lang L] [--profile P]
-  local agent="" text="" extra=()
+send_agent() {  # send_agent --agent <nombre> --text "texto" [--key K] [--voice V] [--engine E] [--lang L] [--profile P]
+  local agent="" text="" key="" extra=()
   while [ "$#" -ge 1 ]; do
     case "$1" in
       --agent) agent="${2:?falta nombre agente}"; shift 2 ;;
       --text)  text="${2:?falta texto}"; shift 2 ;;
+      --key)   key="${2:?falta clave}"; shift 2 ;;
       --voice|--engine|--lang|--profile|--pitch|--speed) extra+=("$1" "$2"); shift 2 ;;
       *) break ;;
     esac
   done
-  if [ -z "$text" ]; then echo "uso: voice send --agent <nombre> --text \"texto\"" >&2; return 2; fi
-  speak --key "${agent:-send}" --source "${agent:-send}" "${extra[@]}" "$text"
+  if [ -z "$text" ]; then echo "uso: voice send --agent <nombre> --text \"texto\" [--key K]" >&2; return 2; fi
+  local args=(--source "${agent:-send}")
+  # Sin --key no hay antirrebote: el llamador decide si quiere dedup. El bus de
+  # agentes manda una clave única por mensaje para que nada se pierda.
+  [ -n "$key" ] && args+=(--key "$key")
+  speak "${args[@]}" "${extra[@]}" "$text"
 }
 
 # ── despacho ────────────────────────────────────────────────────────────
@@ -1118,9 +1123,9 @@ PYEOF
   benchmark) "$PY" "$VOICE_DIR/benchmark.py" "${@:2}" ;;
   send)
     # API de salida por agente: `voice send --agent <nombre> --text "..."`.
-    # Habla el texto via el daemon TTS (igual que speak) con una `key` por
-    # agente (dedup) — sin depender de STT/Handy. Interfaz estable para
-    # integrar Hermes, opencode u otros agentes.
+    # Habla el texto via el daemon TTS (igual que speak). El antirrebote solo
+    # se aplica si el llamador pasa `--key K`: sin clave, cada mensaje suena.
+    # Interfaz estable para integrar Hermes, opencode u otros agentes.
     shift
     send_agent "$@"
     ;;

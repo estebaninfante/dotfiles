@@ -2,19 +2,32 @@
   "schemaVersion": 1,
   "id": "eztvn.pi-tts",
   "name": "Pi TTS",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "eztvn",
   "license": "MIT",
-  "description": "Voz TTS del sistema (voice): activa/desactiva los anuncios hablados de los agentes, ajusta su volumen relativo y repasa el registro de mensajes del sistema (voz y notificaciones) para repetir cualquiera",
-  "kinds": ["bar-widget"],
+  "description": "Voz TTS del sistema (voice): activa/desactiva los anuncios hablados de los agentes, ajusta su volumen relativo, elige si avisa con campana o habla al instante, y repasa el registro de mensajes del sistema (voz y notificaciones) para repetir cualquiera",
+  "kinds": [
+    "bar-widget"
+  ],
   "entryPoints": {
     "barWidget": "Panel.qml"
   },
   "barWidget": {
     "displayName": "Voz (TTS)",
-    "description": "Activa o desactiva la voz TTS del sistema, ajusta su volumen y repite mensajes (voz y notificaciones)",
+    "description": "Activa o desactiva la voz TTS, ajusta su volumen, elige entre campana o voz inmediata y repite mensajes (voz y notificaciones)",
     "category": "Assistant",
-    "aliases": ["pi", "tts", "voz", "resumen", "speak", "notificaciones", "repetir"],
+    "aliases": [
+      "pi",
+      "tts",
+      "voz",
+      "resumen",
+      "speak",
+      "notificaciones",
+      "repetir",
+      "campana",
+      "entrega",
+      "aviso"
+    ],
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {

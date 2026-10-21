@@ -153,14 +153,17 @@ agente lleva su color. Ver `conversar.ts`.
 
 ## Entrega de mensajes
 
-`[tts] delivery` decide cómo entrega `avisar` el mensaje de un agente:
+`[tts] delivery` decide cómo entrega `avisar` el mensaje de un agente. El
+widget de la barra (`eztvn.pi-tts`, sección **CÓMO AVISAR**) elige entre
+`bell` y `direct` sin editar archivos; `hybrid` y `mailbox` quedan por CLI.
 
-- **`bell` (por defecto):** los mensajes de los agentes **nunca se hablan
-  solos**. Suena la campana (`[tts] chime`, una sola vez por ráfaga) y el
-  mensaje queda en el buzón con su autor. Cuando querés, decís **"dime"** (o
-  `voice dime`): **suena la campana** (la señal de "te lo leo") y después Omar
-  lee la cola en orden, `"<agente> dice: <mensaje>"`, y avisa si quedan más.
-  Nada se habla encima del dictado.
+- **`bell`:** los mensajes de los agentes **nunca se hablan
+  solos**. Suena la campana (`[tts] chime`, una por mensaje: los agentes ya no
+  comparten el antirrebote de 8 s) y el mensaje queda en el buzón con su autor.
+  Cuando querés, decís **"dime"** (o `voice dime`): **suena la campana** (la
+  señal de "te lo leo") y después Omar lee la cola en orden,
+  `"<agente> dice: <mensaje>"`, y avisa si quedan más. Nada se habla encima del
+  dictado.
 
   El buzón es un **buffer acotado**, no un archivo que crece para siempre:
   combina cantidad y tiempo. Lo más viejo que `[tts] dime_max_age_min` (30 min)
@@ -192,7 +195,7 @@ agente lleva su color. Ver `conversar.ts`.
 
 ```bash
 voice delivery                # ver modo de entrega
-voice delivery hybrid         # aviso + pausa + voz (por defecto)
+voice delivery hybrid         # aviso + pausa + voz
 voice delivery direct         # volver a hablar al instante
 voice delivery mailbox        # acumular
 voice inbox                   # listar pendientes

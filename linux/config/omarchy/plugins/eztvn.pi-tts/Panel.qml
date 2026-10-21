@@ -49,6 +49,9 @@ Panel {
   property int playingIndex: -1
   // Mensajes pendientes de escuchar (buzon).
   property int pending: 0
+  // Como entrega los mensajes de los agentes: "bell" (campana + buzon) o
+  // "direct" (habla al instante). Lo controla el selector del panel.
+  property string delivery: "direct"
 
   readonly property string glyph: root.pending > 0 ? "󰂚" : (root.ttsEnabled ? "󰕾" : "󰖁")
   readonly property string stateLabel: root.ttsEnabled ? "Activado" : "Desactivado"
@@ -60,6 +63,7 @@ Panel {
   readonly property int historyCount: root.history ? root.history.length : 0
   readonly property string tooltipText: "Voz TTS · " + root.stateLabel + " · " +
     Math.round(root.volume * 100) + "%" +
+    (root.delivery === "bell" ? " · campana" : " · habla al instante") +
     (root.pending > 0 ? " · " + root.pending + " pendientes" : "") +
     (root.speaking && root.speakSource ? " · habla " + root.speakSource : "") +
     " · clic derecho: activar/desactivar"
@@ -105,6 +109,15 @@ Panel {
     if (!speedProc.running) speedProc.running = true
   }
 
+  // Como llega un mensaje de agente: campana al buzon o voz inmediata.
+  function setDelivery(mode) {
+    if (mode !== "bell" && mode !== "direct") return
+    if (root.delivery === mode) return
+    root.delivery = mode
+    deliveryProc.cmd = [root.scriptPath, "delivery-set", mode]
+    if (!deliveryProc.running) deliveryProc.running = true
+  }
+
   function playEntry(index) {
     if (index < 0 || index >= root.historyCount) return
     var entry = root.history[index]
@@ -130,6 +143,7 @@ Panel {
     if (typeof parsed.volume === "number") root.volume = parsed.volume
     if (typeof parsed.speed === "number") root.speed = parsed.speed
     if (typeof parsed.pending === "number") root.pending = parsed.pending
+    if (parsed.delivery) root.delivery = String(parsed.delivery)
     root.speaking = parsed.speaking === true
     if (parsed.source) root.speakSource = String(parsed.source)
     if (parsed.role) root.speakRole = String(parsed.role)
@@ -227,6 +241,17 @@ Panel {
   }
 
   Process {
+    id: deliveryProc
+    property var cmd: []
+    command: cmd
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.refresh()
+    }
+    onExited: root.refresh()
+  }
+
+  Process {
     id: historyProc
     command: [scriptPath, "messages", "200"]
     stdout: StdioCollector {
@@ -314,6 +339,7 @@ Panel {
         if (text === " " || text === "t" || text === "T") root.toggleEnabled()
         else if (text === "b" || text === "B") root.playInbox()
         else if (text === "l" || text === "L") root.repeatLast()
+        else if (text === "v" || text === "V") root.setDelivery(root.delivery === "bell" ? "direct" : "bell")
         else if (text === "r" || text === "R") { root.refresh(); root.refreshHistory() }
         else if (text === "+" || text === "=") root.setVolume(root.volume + 0.05)
         else if (text === "-" || text === "_") root.setVolume(root.volume - 0.05)
@@ -489,6 +515,61 @@ Panel {
             }
           }
 
+          PanelSeparator { width: parent.width; foreground: root.foreground }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(6)
+
+            PanelSectionHeader {
+              width: parent.width
+              text: "CÓMO AVISAR"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+
+              Button {
+                text: "Campana"
+                bordered: true
+                selected: root.delivery === "bell"
+                enabled: !root.busy
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.setDelivery("bell")
+              }
+
+              Button {
+                text: "Al instante"
+                bordered: true
+                selected: root.delivery === "direct" || root.delivery === "hybrid"
+                enabled: !root.busy
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.setDelivery("direct")
+              }
+            }
+
+            Text {
+              width: parent.width
+              textFormat: Text.PlainText
+              text: root.delivery === "bell"
+                ? "Suena la campana y guarda el mensaje en el buzón; lo escuchás cuando decís «dime»."
+                : "Habla el mensaje apenas llega, sin pasar por el buzón."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+          }
+
+          PanelSeparator { width: parent.width; foreground: root.foreground }
+
           Row {
             width: column.width
             spacing: Style.space(8)
@@ -630,7 +711,7 @@ Panel {
           Text {
             width: parent.width
             textFormat: Text.PlainText
-            text: "T · voz   ·   B · escuchar buzón   ·   + / − · volumen   ·   L · repetir última   ·   R · recargar   ·   clic en un mensaje · repetirlo"
+            text: "T · voz   ·   V · campana / al instante   ·   B · escuchar buzón   ·   + / − · volumen   ·   L · repetir última   ·   R · recargar   ·   clic en un mensaje · repetirlo"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
