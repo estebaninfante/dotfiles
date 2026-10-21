@@ -42,6 +42,9 @@
   ejemplo.
 - Documentá en `~/alicia/investigaciones/<slug>/`: paper, `fuentes.md` y
   experimento. El título debe afirmar el objetivo o la pregunta, no un tema.
+- El paper es para aprender, no para publicar: sin abstract, sin palabras clave,
+  sin introducción. Cada frase debe aportar un dato, una relación o una
+  consecuencia. Incluir contradicciones, dudas y fuentes.
 - **Las pruebas de aprendizaje son manuales y bajo observación.** Las construyen
   el usuario y el agente juntos, y se corren cuando el usuario lo pide. El
   agente **no** corre tests automáticos para declarar que el agente “aprendió”
