@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Notes and learning
+GenericName=Notas y aprendizaje
+Comment=Notas, diario e investigaciones en un grafo local (Logseq, vault ~/alicia)
+Exec=logseq %u
+Icon=logseq
+Terminal=false
+StartupNotify=true
+StartupWMClass=Logseq
+Categories=Office;Education;
+Keywords=notas;notes;learning;aprendizaje;diario;investigaciones;logseq;grafo;
+MimeType=x-scheme-handler/logseq;
