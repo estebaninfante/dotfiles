@@ -30,6 +30,13 @@ auto_profiles = true
 #             prestar atencion sin acumular nada en el buzon. Si la voz esta
 #             apagada cae al buzon para no perder el mensaje.
 delivery = "direct"
+# Cuánto comenta el agente mientras trabaja (independiente de `delivery`):
+#   fluido        = puede narrar avances con `hablar`; se siente acompañado.
+#   concentracion = no narra: sólo el resumen de puntos clave al cerrar
+#                   (`avisar`). Menos ruido cuando querés foco.
+# El modo se cambia junto con la entrega: `voice modo fluido|concentracion|campana`
+# (o por voz: "modo fluido", "modo concentración", "modo campana").
+chatiness = "fluido"
 # Aviso sonoro sutil al llegar un mensaje (dos notas, bajo volumen).
 chime = true
 # Segundos de silencio entre el aviso y la voz del modo hybrid.

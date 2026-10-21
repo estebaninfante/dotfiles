@@ -157,6 +157,10 @@ function modoHeadless(): boolean {
 const HEADLESS = modoHeadless();
 const TMUX_PANE = HEADLESS ? "" : process.env.TMUX_PANE?.trim() ?? "";
 
+/** Lo lanzó otro agente (`subagent`). No tiene voz propia: su informe vuelve al
+ *  padre, que es el único que habla con el usuario. */
+const SUBAGENTE = process.env.PI_SUBAGENT === "1";
+
 /** Tipo de entrada de sesión donde vive la identidad del agente: así el nombre,
  *  el rol, el color y la voz quedan atados a la conversación y vuelven al
  *  reanudarla, aunque cambie el panel, la carpeta o el proceso. */
@@ -1063,7 +1067,7 @@ export default function (pi: ExtensionAPI) {
     try {
       const activas = pi.getActiveTools();
       const tiene = activas.includes("hablar");
-      if (ttsEnabled()) {
+      if (ttsEnabled() && !SUBAGENTE) {
         if (!tiene) pi.setActiveTools([...activas, "hablar"]);
       } else if (tiene) {
         pi.setActiveTools(activas.filter((n) => n !== "hablar"));
@@ -1110,6 +1114,19 @@ export default function (pi: ExtensionAPI) {
       const mensaje = String(params.mensaje ?? "").trim();
       if (!mensaje) {
         return { content: [{ type: "text", text: "Falta el mensaje." }], details: undefined };
+      }
+      if (SUBAGENTE) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "Sos un subagente: no tenés voz propia. Devolvé el informe en tu " +
+                "respuesta final; el agente que te lanzó decide qué contarle al usuario.",
+            },
+          ],
+          details: undefined,
+        };
       }
       // Doble seguro: aunque la tool siguiera activa, con la voz apagada no se
       // llama al bus ni se deja un escucha dando vueltas.

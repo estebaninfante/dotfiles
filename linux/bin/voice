@@ -13,6 +13,7 @@
 #   voice think "texto"                  cerebro Pi headless: entiende y actúa, y responde
 #   voice ptt                            push-to-talk: habla y te responde (Pi, sin nube)
 #   voice delivery [direct|mailbox|hybrid|bell]  inmediato, buzon, aviso+pausa+voz, o solo campana
+#   voice modo [fluido|concentracion|campana]   ritmo de los agentes (entrega + comentarios)
 #   voice messages [--json] [N]          registro unificado (voz + notificaciones)
 #   voice repeat [N] | --index M         repetir los ultimos mensajes
 #                                        (--restart: corta el que suena y reinicia)
@@ -1037,6 +1038,28 @@ PYEOF
   mode)
     if [ "$#" -ge 2 ]; then get_set tts mode "$2"; echo "modo: $2 (summary|full)"
     else echo "modo: $(config_val tts mode)"; fi
+    ;;
+  modo)
+    # Ritmo de los agentes en un solo gesto: entrega + cuánto comentan.
+    #   fluido        -> habla al instante y puede narrar avances
+    #   concentracion -> habla al instante, sólo resumen de puntos clave
+    #   campana       -> no habla: campana + buzon (lo oís con "dime")
+    if [ "$#" -ge 2 ]; then
+      case "$2" in
+        fluido)
+          get_set tts delivery direct; get_set tts chatiness fluido
+          echo "modo: fluido (habla al instante y comenta avances)" ;;
+        concentracion|concentración|concentrado)
+          get_set tts delivery direct; get_set tts chatiness concentracion
+          echo "modo: concentracion (sólo puntos clave al cerrar)" ;;
+        campana|bell|buzon|buzón)
+          get_set tts delivery bell; get_set tts chatiness concentracion
+          echo "modo: campana (silencio; el mensaje queda en el buzon)" ;;
+        *) echo "voice: modo fluido|concentracion|campana" >&2; exit 2 ;;
+      esac
+    else
+      echo "modo: $(config_val tts chatiness) · entrega: $(config_val tts delivery)"
+    fi
     ;;
   delivery)
     # Como entrega `avisar`: direct (habla ya), mailbox (acumula en el buzon)

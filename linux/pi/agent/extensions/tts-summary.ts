@@ -227,6 +227,12 @@ function deliver(text: string, limit = MAX_SUMMARY): void {
 }
 
 export default function (pi: ExtensionAPI) {
+  /* Un subagente no le habla al usuario: su informe vuelve al agente padre y
+     es el padre el que cierra con voz. Sin esto, cada subagente de una tarea
+     aparece como una voz desconocida que el usuario nunca abrió. Se apaga la
+     extensión entera (tool `avisar` + resumen de respaldo). */
+  if (process.env.PI_SUBAGENT === "1") return;
+
   /* Con la voz apagada, `avisar` ni se le declara al modelo. Se revisa en
      `session_start` y en cada turno, así el toggle de la barra aplica sin
      reiniciar Pi. */
