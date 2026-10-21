@@ -200,6 +200,10 @@ function voiceAvisar(line: string): void {
       detached: true,
       stdio: "ignore",
     });
+    // El fallo de `spawn` llega como evento asíncrono: sin listener, pi se caía
+    // entero con ENOENT cuando el binario no estaba (p. ej. mientras el sync de
+    // dotfiles reescribía el symlink). Avisar una frase no puede matar la sesión.
+    child.on("error", () => {});
     child.unref();
   } catch {
     /* sin sistema de voz disponible: no rompe el turno */
