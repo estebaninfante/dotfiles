@@ -25,6 +25,7 @@ RATE = 48000
 MAC = os.environ.get("MIC_BT_MAC", "50:C0:F0:00:00:D1")
 SRC = os.environ.get("MIC_BT_TARGET", f"bluez_input.{MAC}")
 OUT_SINK = os.environ.get("MIC_BT_SINK", "mic_bt_fx_sink")
+MUSIC_PROFILE = os.environ.get("MIC_BT_MUSIC_PROFILE", "a2dp-sink")
 VIRTUAL = "mic-bt-fx"
 CARD = "bluez_card." + MAC.replace(":", "_")
 
@@ -111,8 +112,43 @@ def device_connected() -> bool:
     return "Connected: yes" in out
 
 
+def card_profile() -> str:
+    """Perfil activo de la placa Bluetooth ("" si no está)."""
+    out = run(["pactl", "list", "cards"]).stdout
+    in_card = False
+    for line in out.splitlines():
+        if line.startswith("Card #"):
+            in_card = False
+        elif line.strip() == f"Name: {CARD}":
+            in_card = True
+        elif in_card and line.strip().startswith("Active Profile:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def source_ready() -> bool:
+    out = run(["pactl", "list", "short", "sources"]).stdout
+    return any(SRC in line for line in out.splitlines())
+
+
 def ensure_headset_profile() -> None:
     run(["pactl", "set-card-profile", CARD, "headset-head-unit"])
+
+
+def restore_profile(prev: str) -> None:
+    """Devuelve el auricular a música cuando ya nadie usa el micrófono.
+
+    HFP y A2DP son excluyentes: al usar el micrófono la placa queda en modo
+    llamada y WirePlumber no lo revierte solo. Si no lo devolviéramos, todo
+    lo que suene después (música, videos) saldría mono a 16 kHz, como una
+    llamada, hasta desconectar el auricular.
+    """
+    target = prev if prev.startswith("a2dp") else MUSIC_PROFILE
+    cur = card_profile()
+    if not cur or cur == target:
+        return
+    if cur.startswith("headset"):
+        run(["pactl", "set-card-profile", CARD, target])
 
 
 def pipeline() -> subprocess.Popen:
@@ -161,19 +197,31 @@ def main() -> int:
         CONF.write_text(json.dumps(DEFAULTS, indent=2))
     proc = None
     active = False
+    prev_profile = ""
     while True:
         want = virtual_in_use()
         if want and not active:
             if not device_connected():
                 time.sleep(3)
                 continue
+            # Recordar si venía en A2DP para devolverlo igual al terminar.
+            if not prev_profile:
+                prev_profile = card_profile()
             ensure_headset_profile()
-            time.sleep(0.4)
+            # El nodo de captura tarda en aparecer tras el cambio de perfil:
+            # si arrancamos antes, pw-record no engancha y el mic queda mudo.
+            for _ in range(20):
+                if source_ready():
+                    break
+                time.sleep(0.15)
             proc = pipeline()
             active = True
         elif not want and active:
             stop(proc)
             proc, active = None, False
+            time.sleep(0.3)  # soltar el transporte antes de cambiar de perfil
+            restore_profile(prev_profile)
+            prev_profile = ""
         elif active and proc and proc.poll() is not None:
             # Se cortó el audífono o cambió el perfil: reintentar.
             stop(proc)
