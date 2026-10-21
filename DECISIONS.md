@@ -3,6 +3,33 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-20 — Un reinicio corta el buzón de "dime" (lo viejo no se repite)
+
+**Contexto.** El usuario reinició el equipo, dijo "dime" y Omar le leyó una
+ráfaga de mensajes de la sesión anterior. El TTL por edad (`dime_max_age_min`,
+30 min) no alcanzaba: si los mensajes habían llegado minutos antes de apagar,
+seguían siendo "recientes" y se leían como si fueran de ahora.
+
+**Qué se eligió.** El corte es la **hora de arranque del sistema**
+(`/proc/stat`, `btime`). `voice dime` descarta los pendientes con `ts` anterior
+al arranque: no los borra, los marca `heard` + `expired` con
+`expired_reason: "reboot"`, así siguen visibles con `voice messages` (el
+usuario los quiere "por si acaso") pero no se leen. Lo que llegó después del
+arranque se lee normal. Si no queda nada, en vez de "No hay mensajes
+pendientes" dice "No hay mensajes nuevos desde que prendiste".
+
+**Por qué btime y no un servicio de arranque.** No hace falta un estado que se
+limpie ni un hook de systemd: leer `btime` es idempotente y no puede quedar
+desincronizado (si el proceso arranca tarde, el corte sigue siendo correcto).
+Correr `dime` dos veces no cambia nada, y un mensaje nuevo nunca se descarta.
+
+**Descartado.** Un archivo con el `boot_id` que se renueva en el primer `dime`:
+habría que escribir estado y decidir cuándo rotarlo, sin ganar nada. También se
+descartó vaciar el buzón en el arranque: perdería los mensajes que llegan
+entre prender el equipo y el primer "dime".
+Verificación: `scripts/verify/voz-dime.sh` (corte por reinicio + historial
+conservado).
+
 ## 2026-10-20 — Un espacio del escritorio por agente (`espacios`)
 
 **Qué se eligió.** Cada sesión de pi reclama un espacio de Hyprland propio

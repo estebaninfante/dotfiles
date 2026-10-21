@@ -512,6 +512,12 @@ profile_cmd() {  # profile list|show|set|remove|test|auto
 #   - `[tts] dime_max` (6): cuántos lee por vez un backlog viejo.
 #   - Si TODO lo pendiente es fresco (`dime_fresh_min`, 15 min), el tope sube a
 #     `dime_max_recent` (12): una ráfaga reciente se puede leer de una.
+#
+# Un reinicio corta el hilo: lo pendiente de antes de apagar queda guardado en
+# el historial (`voice messages`) pero NO se lee. El corte es la hora de
+# arranque del sistema (`/proc/stat` btime), no un estado que haya que limpiar:
+# correr `dime` dos veces no cambia nada y lo que llega después del arranque se
+# lee normal.
 dime() {  # dime [--quiet-empty]
   local quiet=0
   while [ $# -gt 0 ]; do
@@ -528,14 +534,26 @@ dime() {  # dime [--quiet-empty]
   keep=$(config_val tts dime_keep);       keep=${keep:-20}
 
   # Primero se limpia: nada de leer mensajes de hace hora y media.
-  local descartados total
+  local descartados de_antes total arranque
+  arranque=$("$PY" "$VOICE_DIR/engine.py" boot-time 2>/dev/null || echo 0)
+  de_antes=0
+  if [ "${arranque:-0}" -gt 0 ]; then
+    de_antes=$("$PY" "$VOICE_DIR/engine.py" prune-before \
+      --ts "$arranque" --reason reboot 2>/dev/null || echo 0)
+  fi
   descartados=$("$PY" "$VOICE_DIR/engine.py" prune-pending \
     --max-age-min "$age" --keep "$keep" 2>/dev/null || echo 0)
+
+  # El aviso de viejos descartados suma los dos cortes: edad y reinicio.
+  descartados=$(( ${descartados:-0} + ${de_antes:-0} ))
+
   total=$("$PY" "$VOICE_DIR/engine.py" pending-count 2>/dev/null || echo 0)
 
   if [ "${total:-0}" -eq 0 ]; then
     [ "$quiet" = 1 ] && return 0
-    if [ "${descartados:-0}" -gt 0 ]; then
+    if [ "${de_antes:-0}" -gt 0 ]; then
+      speak --source omar "No hay mensajes nuevos desde que prendiste. Los de antes quedaron guardados."
+    elif [ "${descartados:-0}" -gt 0 ]; then
       speak --source omar "No hay mensajes recientes. Descarté $descartados viejos."
     else
       speak --source omar "No hay mensajes pendientes."

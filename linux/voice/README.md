@@ -168,6 +168,12 @@ agente lleva su color. Ver `conversar.ts`.
   nunca guarda más de `[tts] dime_keep` (20) y tira los más viejos; y por lectura
   lee `[tts] dime_max` (6) si el backlog es viejo, o `[tts] dime_max_recent` (12)
   si **todo** llegó hace menos de `[tts] dime_fresh_min` (15 min).
+
+  Un **reinicio corta el hilo**: lo que estaba pendiente antes de apagar la
+  máquina no se lee en la sesión nueva (queda guardado en `voice messages`,
+  marcado como expirado por reinicio). Si no hay nada nuevo, "dime" avisa
+  "No hay mensajes nuevos desde que prendiste" en lugar de repetir la cola
+  anterior. Lo que llega después del arranque se lee normal.
 - **`hybrid`:** suena el aviso sutil (`[tts] chime`), espera
   `[tts] hybrid_pause` segundos (1.5) y **recién habla**. Te da un momento para
   prestar atención sin que la voz te caiga encima de golpe. No acumula nada en

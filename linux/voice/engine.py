@@ -757,6 +757,41 @@ def prune_pending(max_age_min: float | None = None, keep: int | None = None) -> 
         return len(descartar)
 
 
+def boot_time_ms() -> int:
+    """Hora de arranque del sistema en ms (0 si no se puede leer)."""
+    try:
+        with open("/proc/stat", encoding="utf-8") as f:
+            for linea in f:
+                if linea.startswith("btime "):
+                    return int(linea.split()[1]) * 1000
+    except (OSError, ValueError, IndexError):
+        pass
+    return 0
+
+
+def prune_before(ts_ms: int, reason: str = "reboot") -> int:
+    """Descarta pendientes que llegaron antes de `ts_ms` (p. ej. antes de apagar).
+
+    No borra del historial: los marca como escuchados con `expired` y el motivo,
+    para poder auditarlos con `voice messages`. Devuelve cuántos descartó. Así
+    `dime` en una sesión nueva no repite la cola de la anterior y, si el equipo
+    no se reinició, quedan intactos.
+    """
+    if ts_ms <= 0:
+        return 0
+    with _messages_lock():
+        recs = _messages_read()
+        descartar = [i for i, r in enumerate(recs)
+                     if _is_pending(r) and int(r.get("ts", 0) or 0) < ts_ms]
+        for i in descartar:
+            recs[i]["heard"] = True
+            recs[i]["expired"] = True
+            recs[i]["expired_reason"] = reason
+        if descartar:
+            _messages_write(recs)
+        return len(descartar)
+
+
 def mark_heard(ts: int | None = None, rec_id: str | None = None) -> int:
     """Marca como escuchados todos los pendientes, uno por id o uno por ts.
 
@@ -852,6 +887,16 @@ if __name__ == "__main__":
         if "--keep" in sys.argv:
             keep = int(sys.argv[sys.argv.index("--keep") + 1])
         print(prune_pending(edad, keep))
+    elif cmd == "prune-before":
+        corte = 0
+        if "--ts" in sys.argv:
+            corte = int(float(sys.argv[sys.argv.index("--ts") + 1]))
+        motivo = "reboot"
+        if "--reason" in sys.argv:
+            motivo = sys.argv[sys.argv.index("--reason") + 1]
+        print(prune_before(corte, motivo))
+    elif cmd == "boot-time":
+        print(boot_time_ms())
     elif cmd == "pending":
         args = [a for a in sys.argv[2:] if a != "--json"]
         as_json = "--json" in sys.argv[2:]

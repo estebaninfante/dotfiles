@@ -97,6 +97,16 @@ if rg -q 'quiet-empty' "$CLI"; then
 else
   fail "sin modo silencioso para la hotword"
 fi
+if rg -q '^def boot_time_ms' "$ENGINE" && rg -q '^def prune_before' "$ENGINE"; then
+  ok "el motor sabe la hora de arranque y descarta lo anterior"
+else
+  fail "falta boot_time_ms/prune_before en el motor"
+fi
+if awk '/^dime\(\)/{f=1} f&&/boot-time/{b=1} f&&/prune-before/{p=1} f&&/--reason reboot/{r=1} f&&/^}/{exit} END{exit !(b&&p&&r)}' "$CLI"; then
+  ok "dime corta por el arranque del sistema (no por antigüedad)"
+else
+  fail "dime no descarta los pendientes de antes del reinicio"
+fi
 if rg -q 'bell' "$README"; then
   ok "documentado en el README de voz"
 else
@@ -185,6 +195,49 @@ if [ "$n" = "2" ] && [ "$(python3 "$ENGINE" pending-count)" = "3" ]; then
   ok "el buffer tira los más viejos al llegar al tope"
 else
   fail "el tope del buffer no funciona (descartó $n)"
+fi
+
+# --- 6. un reinicio no repite la cola anterior ------------------------
+# Lo pendiente de antes de apagar queda en el historial, pero no se lee en la
+# sesión nueva; lo que llega después del arranque se lee normal.
+rm -f "$VOICE_HISTORY_DIR/messages.jsonl"
+python3 "$ENGINE" record-message --source pi --text "de antes" --pending >/dev/null
+python3 - "$VOICE_HISTORY_DIR" <<'PYEOF'
+import json, os, sys, time
+p = os.path.join(sys.argv[1], "messages.jsonl")
+l = [json.loads(x) for x in open(p) if x.strip()]
+for r in l:
+    r["ts"] = int(time.time() * 1000) - 4 * 60 * 60 * 1000
+open(p, "w").write("\n".join(json.dumps(r, ensure_ascii=False) for r in l) + "\n")
+PYEOF
+arranque="$(python3 "$ENGINE" boot-time)"
+if [ "${arranque:-0}" -gt 0 ]; then
+  podados="$(python3 "$ENGINE" prune-before --ts "$arranque" --reason reboot)"
+  if [ "$podados" = "1" ] && [ "$(python3 "$ENGINE" pending-count)" = "0" ]; then
+    ok "lo de antes del reinicio no queda pendiente"
+  else
+    fail "el corte por reinicio no descartó lo anterior"
+  fi
+  python3 "$ENGINE" record-message --source omar --text "después del reinicio" --pending >/dev/null
+  python3 "$ENGINE" prune-before --ts "$arranque" --reason reboot >/dev/null
+  if [ "$(python3 "$ENGINE" pending-count)" = "1" ]; then
+    ok "lo que llega después del arranque se lee igual"
+  else
+    fail "el corte por reinicio se llevó un mensaje nuevo"
+  fi
+  if python3 - "$VOICE_HISTORY_DIR/messages.jsonl" <<'PYEOF'
+import json, sys
+l = [json.loads(x) for x in open(sys.argv[1]) if x.strip()]
+viejos = [r for r in l if r.get("expired_reason") == "reboot"]
+sys.exit(0 if len(viejos) == 1 and all(r.get("heard") for r in viejos) else 1)
+PYEOF
+  then
+    ok "lo de antes queda guardado y auditable (hecho + motivo)"
+  else
+    fail "no queda rastro de lo descartado por reinicio"
+  fi
+else
+  fail "no se pudo leer la hora de arranque del sistema"
 fi
 
 if [ "$fails" -eq 0 ]; then
