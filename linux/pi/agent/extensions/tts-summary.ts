@@ -44,13 +44,14 @@
  *   PI_TTS_DRY=1       no habla ni notifica; escribe en PI_TTS_DRY_FILE o /tmp
  */
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { cierreDeCorrida, esInterrupcion, esTextoDeLaCorrida } from "./lib/tts-cierre.ts";
+import { avisarPorVoz } from "./lib/voz.ts";
 
 type Block = { type?: string; text?: string };
 type Message = { content?: unknown };
@@ -194,20 +195,9 @@ function condense(text: string): string {
    duplica el interruptor, así Pi deja de ser el dueño de la voz. El mismo
    `voice avisar` lo pueden usar opencode, la barra o cualquier otro proceso. */
 function voiceAvisar(line: string): void {
-  const bin = process.env.PI_TTS_VOICE_BIN ?? `${HOME}/.local/bin/voice`;
-  try {
-    const child = spawn(bin, ["avisar", "--source", agentName(), "--", line], {
-      detached: true,
-      stdio: "ignore",
-    });
-    // El fallo de `spawn` llega como evento asíncrono: sin listener, pi se caía
-    // entero con ENOENT cuando el binario no estaba (p. ej. mientras el sync de
-    // dotfiles reescribía el symlink). Avisar una frase no puede matar la sesión.
-    child.on("error", () => {});
-    child.unref();
-  } catch {
-    /* sin sistema de voz disponible: no rompe el turno */
-  }
+  // El lanzamiento vive en `lib/voz.ts`: captura el `error` asíncrono del
+  // `spawn` (un ENOENT sin listener mataba el proceso entero) y tiene su test.
+  avisarPorVoz(line, { source: agentName(), home: HOME });
 }
 
 let lastDelivered = "";
