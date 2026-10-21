@@ -32,8 +32,8 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -246,13 +246,25 @@ function correrGate(ruta: string): ResultadoGate {
     const fin = ultimaLineaUtil(salida) ?? "verificación en verde";
     return { ok: true, resumen: `puerta de merge OK: ${fin}`, mensaje: "" };
   } catch (error) {
-    const e = error as { stdout?: string; stderr?: string; message?: string };
+    const e = error as { stdout?: string; stderr?: string; message?: string; code?: string };
     const texto = `${e.stdout ?? ""}${e.stderr ?? ""}` || e.message || "falló";
+    // El detalle completo queda en un archivo: el mensaje del tool se recorta y
+    // si no, hay que adivinar por qué rojo.
+    let detalle = "";
+    try {
+      const rutaLog = join(tmpdir(), `pi-gate-${Date.now()}.log`);
+      writeFileSync(rutaLog, `${comando}\n\n${texto}`);
+      detalle = `detalle: ${rutaLog}\n`;
+    } catch {
+      /* sin archivo, el mensaje alcanza */
+    }
+    const resumenFallas = fallas(texto).replace(/\n+/g, " · ").slice(0, 300);
     return {
       ok: false,
-      resumen: "puerta de merge en rojo: no se mergeó",
+      resumen: `puerta de merge en rojo${resumenFallas ? `: ${resumenFallas}` : e.code ? ` (${e.code})` : ""}`,
       mensaje:
         `la verificación del repo falló (${comando}); la rama NO se mergeó y el worktree quedó intacto.\n` +
+        detalle +
         fallas(texto) +
         `Arreglá lo que falla y volvé a cerrar. Si el gate está roto por el entorno y querés saltearlo igual: PI_SIN_GATE=1.\n` +
         `── final de la salida ──\n${colita(texto, 25)}`,
