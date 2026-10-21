@@ -93,11 +93,15 @@ hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { relea
 -- Dictado nativo de Omar: graba con VAD, transcribe con Whisper y escribe
 -- en la ventana enfocada. Reemplaza a Handy (ya no se usa). SUPER+I es el
 -- atajo principal; F7 queda como alias cómodo.
-hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/omar dictate"))
+-- `--toggle` es obligatorio: el primer gesto abre; el segundo cierra el
+-- dictado que ya está grabando y pega lo escuchado. Sin esto, cada gesto
+-- abría una invocación nueva que se ignoraba y el dictado seguía hasta el
+-- silencio (o el tope de 120 s).
+hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/omar dictate --toggle"))
 
 hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 
-hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("~/.local/bin/omar dictate"))
+hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("~/.local/bin/omar dictate --toggle"))
 
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode opencode --agent dotfiles"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
