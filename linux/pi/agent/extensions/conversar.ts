@@ -31,6 +31,10 @@
  * El widget de latido muestra, mientras el modelo trabaja:
  *   - Hace cuánto piensa: por turno y acumulado de la sesión, en horas,
  *     minutos y segundos según corresponda.
+ *   - Al cerrar el turno, lo que costó: duración, tokens movidos, la relación
+ *     tokens/tiempo (tok/s) y la hora local en que terminó; debajo, el
+ *     acumulado de la sesión y su promedio. Así se ve de un vistazo si un
+ *     modelo es lento o caro, sin abrir nada más.
  *   - El agente y su tarea (título + id) en una sola fila, para ver de un
  *     vistazo en qué anda cada terminal.
  *   - Los subtítulos del pensamiento: se toma una oración corta y se deja fija
@@ -83,6 +87,12 @@ import {
   oracionUtil,
   recortar,
 } from "./lib/pensamiento.ts";
+import {
+  formatoTokens,
+  lineaSesion,
+  lineaTurno,
+  type TotalesTurno,
+} from "./lib/estadisticas.ts";
 
 const HOME = process.env.HOME ?? "";
 const AGENTE_BIN = process.env.PI_AGENTE_BIN ?? `${HOME}/developing/voz-agentes/agente`;
@@ -574,6 +584,11 @@ export default function (pi: ExtensionAPI) {
   let lastPrompt = ""; // último pedido del usuario, de respaldo si no hay tarea
   let sessionThinkingMs = 0; // acumulado de la sesión
   let lastTurnMs = 0; // duración del último turno
+  let runTokens = 0; // tokens del turno en curso
+  let lastTurnTokens = 0; // tokens del último turno cerrado
+  let sessionTokens = 0; // tokens acumulados de la sesión
+  let sessionTurns = 0; // turnos cerrados en la sesión
+  let lastTurnEndedAt: number | null = null; // hora del último cierre
 
   /** Normaliza espacios sin romper palabras. */
   function cleanText(s: unknown): string {
@@ -846,28 +861,36 @@ export default function (pi: ExtensionAPI) {
     return CFG.wordMs;
   }
 
-  /** Muestra/actualiza el widget: agente × tarea, tiempos y pensamiento. */
+  /** Muestra/actualiza el widget: agente × tarea, tiempos, tokens y pensamiento. */
   function updateLatido(force = false): void {
     const ui = uiCtx?.ui;
     if (!ui) return;
     const now = Date.now();
-    const turnMs = working ? now - workStart : lastTurnMs;
-    const sessionMs = sessionThinkingMs + (working ? now - workStart : 0);
+    const totales: TotalesTurno = {
+      turnMs: working ? now - workStart : lastTurnMs,
+      turnTokens: working ? runTokens : lastTurnTokens,
+      sessionMs: sessionThinkingMs + (working ? now - workStart : 0),
+      sessionTokens: sessionTokens + (working ? runTokens : 0),
+      turns: sessionTurns,
+      endedAt: working ? null : lastTurnEndedAt,
+    };
     const head = working
-      ? `⏱ Pensando hace ${formatoDuracion(turnMs)} · Sesión ${formatoDuracion(sessionMs)}`
-      : `✓ ${formatoDuracion(lastTurnMs)} · Sesión ${formatoDuracion(sessionThinkingMs)}`;
+      ? `⏱ Pensando hace ${formatoDuracion(totales.turnMs)} · ${formatoTokens(totales.turnTokens)} tok`
+      : `✓ ${lineaTurno(totales)}`;
+    const sesion = lineaSesion(totales) ?? "";
     const upcoming = paragraphs.slice(0, CFG.lines).map((p) => p.join(" ")).join("|");
     const label = headerLine();
-    const key = `${label}|${head}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
+    const key = `${label}|${head}|${sesion}|${currentIndex}|${current ? current.join(" ") : ""}|${upcoming}|${dropped}`;
     if (!force && key === lastRenderedKey) return;
     lastRenderedKey = key;
     lastRender = now;
     const lines = [label, head];
+    if (sesion) lines.push(sesion);
     if (working) lines.push(...thoughtLines());
     try {
       ui.setStatus?.(
         "voz-latido",
-        colored(`${tareaActual?.id ? `${tareaActual.id} ` : ""}⏱ ${formatoDuracion(turnMs)}`),
+        colored(`${tareaActual?.id ? `${tareaActual.id} ` : ""}⏱ ${formatoDuracion(totales.turnMs)}`),
       );
       ui.setWidget?.("voz-latido", lines);
       // El título de la ventana es lo que herdr/la barra muestran arriba:
@@ -1223,7 +1246,12 @@ export default function (pi: ExtensionAPI) {
       }
     }
     // Si un turno anterior no llegó a asentarse, no perdemos su tiempo.
-    if (working && workStart) sessionThinkingMs += Date.now() - workStart;
+    if (working && workStart) {
+      sessionThinkingMs += Date.now() - workStart;
+      sessionTokens += runTokens;
+      sessionTurns += 1;
+    }
+    runTokens = 0;
     working = true;
     workStart = Date.now();
     tmuxSet("@agent_status", "working");
@@ -1258,9 +1286,30 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  pi.on("turn_end", async (_event, ctx) => {
+  pi.on("turn_end", async (event, ctx) => {
     uiCtx = ctx;
     outstanding = false;
+    // Los tokens se informan al cerrar cada ronda del turno: se suman hasta
+    // que el turno entero se asienta.
+    const uso = (
+      event as {
+        message?: {
+          usage?: {
+            totalTokens?: number;
+            input?: number;
+            output?: number;
+            cacheRead?: number;
+            cacheWrite?: number;
+          };
+        };
+      }
+    ).message?.usage;
+    if (uso) {
+      runTokens +=
+        typeof uso.totalTokens === "number"
+          ? uso.totalTokens
+          : (uso.input ?? 0) + (uso.output ?? 0) + (uso.cacheRead ?? 0) + (uso.cacheWrite ?? 0);
+    }
     updateLatido();
   });
 
@@ -1268,7 +1317,12 @@ export default function (pi: ExtensionAPI) {
     if (working && workStart) {
       lastTurnMs = Date.now() - workStart;
       sessionThinkingMs += lastTurnMs;
+      lastTurnTokens = runTokens;
+      sessionTokens += runTokens;
+      sessionTurns += 1;
+      lastTurnEndedAt = Date.now();
     }
+    runTokens = 0;
     working = false;
     outstanding = false;
     uiCtx = ctx;

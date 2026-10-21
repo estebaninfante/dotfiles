@@ -381,13 +381,17 @@ Todo local (STT + TTS), nada de speech-to-speech. Verificador:
 **La tecla de Windows (F13).** `voice-key-listener` corre `present-remote
 toggle`; una pulsación, una acción (sin antirrebote por tiempo: el de 800 ms
 se comía la segunda pulsación rápida). La decisión es instantánea: la píldora se
-consulta por su archivo `pill-open` (no por IPC) y, si Omar está apagado pero
-hay un TTS sonando (`speaking.json` vigente), la tecla **calla el audio** en vez
-de prender a Omar encima de la voz. Cerrar corta el audio por los dos caminos a
-la vez (`SIGUSR2` al oído + `voice stop`) y la señal va por `listen.pid` +
-`kill(2)`, sin levantar `systemctl`: medido ~60 ms de la pulsación al silencio
-(antes ~120 ms y, con Omar apagado, ni siquiera callaba). Escape (`cancel_key`)
-hace lo mismo. Verificador: `scripts/verify/cancelar-voz.sh`.
+consulta por su archivo `pill-open` (no por IPC). **Si hay algo en uso, la tecla
+cancela TODO** y no prende nada: audio del TTS (`voice stop`), conversación
+(`SIGUSR2` al oído, por `listen.pid` + `kill(2)`, sin `systemctl`), dictado en
+curso (`SIGINT` a `dictate.pid` = descartar, no pegar), píldora y glow (IPC en
+el acto, con su fade) y el cartel de escritorio del aviso que sonaba (se
+descarta esa notificación por el nombre del agente, no todo el centro). Antes,
+con Omar apagado, la tecla sólo callaba el audio y el mensaje quedaba en
+pantalla; y mientras dictabas seguía grabando. Si no hay nada en curso, la
+tecla abre Omar. Escape (`cancel_key`) cancela lo mismo, pero sólo si hay algo
+que cancelar. Medido: ~60 ms de la pulsación al silencio. Verificador:
+`scripts/verify/cancelar-voz.sh`.
 
 **Registro unificado + API para cualquier proceso:** cada mensaje entregado
 (voz y notificaciones) queda en `~/.local/share/voice/tts/messages.jsonl`, con
