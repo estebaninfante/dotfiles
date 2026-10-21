@@ -11,7 +11,8 @@
     "opencode/deepseek-v4.1-flash": "low"
   },
   "packages": [
-    "npm:pi-model-fallback"
+    "npm:pi-model-fallback",
+    "npm:pi-thinking-box"
   ],
   "hideThinkingBlock": true
 }

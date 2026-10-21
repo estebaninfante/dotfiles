@@ -312,6 +312,11 @@ export class Detector {
     this.podar(ahora);
   }
 
+  /** Cuántas veces apareció ya esta huella en la ventana. */
+  contarHuella(huella: string, ahora = Date.now()): number {
+    return this.recientes(ahora).filter((h) => h.huella === huella).length;
+  }
+
   /** Cuántas veces apareció ya esta firma de error en la ventana. */
   contarFirma(firma: string, ahora = Date.now()): number {
     if (!firma) return 0;
