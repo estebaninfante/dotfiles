@@ -1054,7 +1054,7 @@ PYEOF
           echo "modo: concentracion (silencio: puntos clave al buzón)" ;;
         campana|bell|buzon|buzón)
           get_set tts delivery bell; get_set tts chatiness concentracion
-          echo "modo: campana (silencio; el mensaje queda en el buzon)" ;;
+          echo "modo: campana (campana + buzon; lo oís con dime)" ;;
         *) echo "voice: modo fluido|concentracion|campana" >&2; exit 2 ;;
       esac
     else
