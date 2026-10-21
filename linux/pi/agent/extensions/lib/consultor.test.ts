@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   PREFERIDOS,
+  archivosDelHistorial,
   armarDossier,
   elegirConsultor,
   esClaude,
@@ -45,6 +46,16 @@ test("sin frontera disponible no consulta (salvo que se habilite el medio)", () 
   const soloMedio = disponibles.filter((m) => m.id === "deepseek-v4-pro" || m.id === "deepseek-v4.1-flash");
   assert.equal(elegirConsultor(soloMedio), undefined);
   assert.equal(elegirConsultor(soloMedio, { permitirMedio: true })?.id, "deepseek-v4-pro");
+});
+
+test("saca los archivos involucrados del historial, sin repetir", () => {
+  const archivos = archivosDelHistorial([
+    { nombre: "read", resumen: "read: src/a.ts" },
+    { nombre: "edit", resumen: "edit: src/a.ts" },
+    { nombre: "bash", resumen: "bash: npm test" },
+    { nombre: "read", resumen: "read: src/b.ts" },
+  ]);
+  assert.deepEqual(archivos, ["src/a.ts", "src/b.ts"]);
 });
 
 test("la lista de preferidos no incluye Claude", () => {
