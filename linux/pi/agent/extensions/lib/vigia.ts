@@ -141,6 +141,8 @@ export interface Historial {
   ok: boolean;
   firma?: string;
   resumen?: string;
+  /** Texto del error recortado, para el dossier del consultor. */
+  error?: string;
   ts: number;
   /** Llamada bloqueada por vigia (no llegó a ejecutarse). */
   bloqueada?: boolean;
@@ -290,6 +292,7 @@ export class Detector {
       nombre,
       ok,
       firma: ok ? undefined : firmaDeError(textoError),
+      error: ok ? undefined : String(textoError ?? "").slice(0, 800),
       resumen: resumenDeLlamada(nombre, entrada),
       ts: ahora,
     });
