@@ -29,7 +29,7 @@ auto_profiles = true
 #   hybrid  = aviso sutil, pausa breve y recien habla. Te da un momento para
 #             prestar atencion sin acumular nada en el buzon. Si la voz esta
 #             apagada cae al buzon para no perder el mensaje.
-delivery = "bell"
+delivery = "hybrid"
 # Aviso sonoro sutil al llegar un mensaje (dos notas, bajo volumen).
 chime = true
 # Segundos de silencio entre el aviso y la voz del modo hybrid.

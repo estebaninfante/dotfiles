@@ -524,6 +524,8 @@ const HABLAR_PARAMS = Type.Object({
     description:
       "Lo que le decís al usuario en voz alta: el contexto, un avance o la " +
       "pregunta. Una o dos frases llanas en español, sin tecnicismos ni rutas. " +
+      "Si es una respuesta, el mismo contenido tiene que quedar escrito en tu " +
+      "mensaje: la voz no reemplaza al texto. " +
       "Si vas a preguntar algo, PRIMERO contá el contexto y después la pregunta.",
   }),
   esperar: Type.Optional(
@@ -1057,6 +1059,9 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Para hablarle al usuario por voz usá `hablar`. Sirve para contar un " +
         "avance, dar contexto o preguntar; es la vía general.",
+      "Lo que digas con `hablar` también va escrito en tu respuesta: la voz " +
+        "acompaña al texto, nunca lo reemplaza. Si el contenido principal solo " +
+        "quedó en la voz, el usuario lo pierde en la UI y en la terminal.",
       "Nunca te quedes esperando una respuesta: `hablar` no bloquea el turno. " +
         "Si preguntás, hacelo con `esperar: true` y TERMINÁ el turno en el acto " +
         "(con `avisar` si corresponde); la respuesta hablada llega sola como " +
@@ -1095,7 +1100,7 @@ export default function (pi: ExtensionAPI) {
         const dicho = await execCapture(["hablar", agentName(), mensaje], 15000, signal);
         if (dicho.code === 0) announceSpoken(mensaje);
         return {
-          content: [{ type: "text", text: "Dicho al usuario por voz." }],
+          content: [{ type: "text", text: `Dicho al usuario por voz: "${mensaje}"` }],
           details: undefined,
         };
       }

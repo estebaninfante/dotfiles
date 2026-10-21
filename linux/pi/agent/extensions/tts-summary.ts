@@ -277,8 +277,10 @@ export default function (pi: ExtensionAPI) {
       "quien le reporta un avance a otra persona: qué hiciste y si quedó listo. " +
       "Si la llamás varias veces, solo se dice la última. Para avisar algo en " +
       "medio del trabajo, que el usuario necesite en el momento, usá `hablar`; " +
-      "`avisar` es el cierre. Sin tecnicismos, sin rutas, sin nombres de " +
-      "herramientas o funciones. No uses apelativos ni lo llames 'jefe'. " +
+      "`avisar` es el cierre. Lo que digas por voz también va escrito en tu " +
+      "respuesta: la voz acompaña al texto, nunca lo reemplaza. Sin " +
+      "tecnicismos, sin rutas, sin nombres de herramientas o funciones. No uses " +
+      "apelativos ni lo llames 'jefe'. " +
       "Si necesitás una respuesta, usá `hablar` con `esperar: true`.",
     promptSnippet: "Avisar al usuario al cerrar (voz o buzón; solo se dice el último aviso)",
     promptGuidelines: [
@@ -289,6 +291,9 @@ export default function (pi: ExtensionAPI) {
         "corrida, `avisar` no vuelve a sonar: no la llames para cerrar. Nunca " +
         "incluyas tecnicismos, rutas ni nombres de herramientas; se dirá en voz " +
         "alta o se dejará en su buzón.",
+      "Lo que digas con `avisar` también va escrito en tu respuesta: la voz " +
+        "acompaña al texto, nunca lo reemplaza. Si el contenido principal solo " +
+        "quedó en la voz, el usuario lo pierde en la UI y en la terminal.",
       "Si necesitás que el usuario te responda, no te quedes en `avisar`: usá " +
         "`hablar` con `esperar: true` y una pregunta concreta, y TERMINÁ el turno " +
         "en el acto (no esperes la respuesta en el momento). `avisar` es para " +
@@ -306,7 +311,7 @@ export default function (pi: ExtensionAPI) {
       // el último). Sin tope de largo: ya viene en una frase breve.
       pendingAviso = String(params.mensaje ?? "");
       return {
-        content: [{ type: "text", text: "Anotado: se avisa al cerrar la corrida." }],
+        content: [{ type: "text", text: `Anotado para el cierre: "${pendingAviso}"` }],
         details: undefined,
       };
     },
