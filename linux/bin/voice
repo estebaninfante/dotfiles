@@ -413,7 +413,10 @@ avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile
         --max-age-min "$b_age" --keep "$b_keep" >/dev/null 2>&1 || true
       "$PY" "$VOICE_DIR/engine.py" record-message --source "$source" \
         --text "$P_TEXT" --pending >/dev/null 2>&1 || true
-      chime
+      # --now: la campana de un mensaje de agente suena SIEMPRE (sin el
+      # antirrebote de 8 s, que la hacía sonar "a ratos" cuando varios
+      # agentes terminaban seguidos).
+      chime --now
       return 0
       ;;
     hybrid)
@@ -421,10 +424,10 @@ avisar() {  # avisar [--source S] [--voice V] [--engine E] [--lang L] [--profile
         # Sin voz no hay híbrido: al buzón para no perderlo.
         "$PY" "$VOICE_DIR/engine.py" record-message --source "$source" \
           --text "$P_TEXT" --pending >/dev/null 2>&1 || true
-        chime
+        chime --now
         return 0
       fi
-      chime
+      chime --now
       sleep "$(hybrid_pause)"
       speak "${args[@]}"
       return 0

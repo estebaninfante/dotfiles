@@ -10,9 +10,11 @@
 # que el agente dijo, sin salir de la barra.
 #
 # Usage:
-#   status.sh status              -> JSON: estado + volumen
+#   status.sh status              -> JSON: estado + volumen + entrega
 #   status.sh enable | disable    -> fija el estado
 #   status.sh toggle              -> alterna el estado
+#   status.sh delivery            -> modo de entrega (bell|direct|...)
+#   status.sh delivery-set <modo> -> campana (bell) o hablar ya (direct)
 #   status.sh volume-set <v>      -> volumen relativo (0.0-1.0 o NN%)
 #   status.sh speed [factor]      -> velocidad de lectura TTS (1.0 = normal)
 #   status.sh messages [N]        -> JSON array del registro de mensajes
@@ -61,6 +63,13 @@ speed_factor() {
   awk "BEGIN{printf \"%.2f\", $raw}"
 }
 
+# `voice delivery` imprime "entrega: hybrid". Normaliza al modo crudo.
+delivery_mode() {
+  local raw
+  raw="$("$VOICE_BIN" delivery 2>/dev/null | sed 's/.*: *//')" || raw=""
+  echo "${raw:-direct}"
+}
+
 # Agente que esta hablando AHORA (lo publica el daemon en speaking.json):
 # nombre, color y rol. Vacio si nadie habla. Salida: source<TAB>color<TAB>role
 speaking_agent() {
@@ -84,15 +93,16 @@ PY
 }
 
 print_status() {
-  local s v p sp spk src col role
+  local s v p sp spk src col role d
   s="$(state)"
   v="$(volume_fraction)"
   sp="$(speed_factor)"
   p="$("$VOICE_BIN" inbox count 2>/dev/null | tr -dc '0-9')"; p="${p:-0}"
+  d="$(delivery_mode)"
   spk="$(speaking_agent)"
   IFS=$'\t' read -r src col role <<<"$spk"
-  printf '{"state":"%s","enabled":%s,"volume":%s,"speed":%s,"pending":%s,"speaking":%s,"source":"%s","color":"%s","role":"%s"}\n' \
-    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v" "$sp" "$p" \
+  printf '{"state":"%s","enabled":%s,"volume":%s,"speed":%s,"pending":%s,"delivery":"%s","speaking":%s,"source":"%s","color":"%s","role":"%s"}\n' \
+    "$s" "$([[ "$s" == enabled ]] && echo true || echo false)" "$v" "$sp" "$p" "$d" \
     "$([[ -n "$src" ]] && echo true || echo false)" "${src:-voice}" "${col:-}" "${role:-}"
 }
 
@@ -101,6 +111,10 @@ case "${1:-status}" in
   enable)  "$VOICE_BIN" tts on >/dev/null 2>&1 ;;
   disable) "$VOICE_BIN" tts off >/dev/null 2>&1 ;;
   toggle)  "$VOICE_BIN" tts toggle >/dev/null 2>&1 ;;
+  delivery) delivery_mode ;;
+  delivery-set)
+    [ "$#" -ge 2 ] || { echo "uso: status.sh delivery-set <bell|direct>" >&2; exit 2; }
+    "$VOICE_BIN" delivery "$2" >/dev/null 2>&1 ;;
   volume-set)
     [ "$#" -ge 2 ] || { echo "uso: status.sh volume-set <0.0-1.0|NN%>" >&2; exit 2; }
     v="$2"
@@ -131,5 +145,5 @@ case "${1:-status}" in
   play)
     [ "$#" -ge 2 ] || { echo "uso: status.sh play <ruta.wav>" >&2; exit 2; }
     "$VOICE_BIN" play "$2" >/dev/null 2>&1 ;;
-  *) echo "uso: status.sh [status|enable|disable|toggle|volume-set|speed|speed-set|messages|inbox|pending-count|play-inbox|clear-inbox|repeat|repeat-entry|play]" >&2; exit 2 ;;
+  *) echo "uso: status.sh [status|enable|disable|toggle|delivery|delivery-set|volume-set|speed|speed-set|messages|inbox|pending-count|play-inbox|clear-inbox|repeat|repeat-entry|play]" >&2; exit 2 ;;
 esac
