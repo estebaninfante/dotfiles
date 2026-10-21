@@ -8,6 +8,6 @@ Icon=logseq
 Terminal=false
 StartupNotify=true
 StartupWMClass=Logseq
-Categories=Office;Education;
+Categories=Office;X-Notes;
 Keywords=notas;notes;learning;aprendizaje;diario;investigaciones;logseq;grafo;
 MimeType=x-scheme-handler/logseq;
