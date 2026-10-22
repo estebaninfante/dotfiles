@@ -29,24 +29,26 @@ dur() {
   jq -r --arg k "$1" '.duration[$k] // empty' "$MOTION" 2>/dev/null
 }
 
-out_ms="${FADE_OUT_MS:-$(dur base)}"; out_ms="${out_ms:-180}"
+out_ms="${FADE_OUT_MS:-$(dur fast)}"; out_ms="${out_ms:-120}"
 in_ms="${FADE_IN_MS:-$(dur morph)}"; in_ms="${in_ms:-260}"
-hold_ms="${FADE_HOLD_MS:-140}"
+hold_ms="${FADE_HOLD_MS:-80}"
 
 sleep_ms() {
   awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | xargs sleep
 }
 
-# ¿El shell está arriba y el plugin cargado? Si no, no hay cortina: no vale la
-# pena esperar animaciones que no van a existir.
-shell_ready() {
-  command -v omarchy-shell >/dev/null 2>&1 || return 1
-  [ "$(omarchy-shell eztvn.fade ping 2>/dev/null)" = "ok" ]
+# ¿El shell está arriba y el plugin cargado? Se pregunta una sola vez por
+# corrida: si no hay cortina no vale la pena esperar animaciones que no existen.
+ready=0
+check_ready() {
+  command -v omarchy-shell >/dev/null 2>&1 || return 0
+  [ "$(omarchy-shell eztvn.fade ping 2>/dev/null)" = "ok" ] && ready=1
+  return 0
 }
 
 fade_out() {
   is_covered=1
-  shell_ready || return 0
+  [ "$ready" = 1 ] || return 0
   omarchy-shell -q eztvn.fade blackout "$out_ms" >/dev/null 2>&1 || true
   # +20ms de aire: el negro ya está puesto cuando el comando corre.
   sleep_ms $((out_ms + 20))
@@ -55,7 +57,7 @@ fade_out() {
 fade_in() {
   [ "${is_covered:-0}" = 1 ] || return 0
   is_covered=0
-  shell_ready || return 0
+  [ "$ready" = 1 ] || return 0
   omarchy-shell -q eztvn.fade uncover "$in_ms" >/dev/null 2>&1 || true
   sleep_ms "$in_ms"
 }
@@ -67,6 +69,7 @@ on_exit() {
 
 main() {
   local action="${1:-pulse}"; shift || true
+  check_ready
   case "$action" in
     out) fade_out ;;
     in)  is_covered=1; fade_in ;;
