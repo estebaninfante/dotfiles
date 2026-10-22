@@ -20,12 +20,15 @@ renombres ni muevas esa carpeta sin avisarles: rompe sus sesiones.
 ## Ciclo por pedido
 
 1. **Clasificar.** Mirá la tabla de agentes vivos:
-   `oa-agent listar` (columnas: agente, workspace, tmux, tema).
+   `oa-agent listar` (columnas: agente, workspace, tmux, ruta, vista, tema).
    - Si algún agente ya trabajó esa misma zona de la UI (misma vista, mismo
      archivo, mismo tema), mandale el pedido **a ese**.
    - Si no, `oa-agent nuevo <slug> "<tema>"` con un slug corto y en kebab-case
      que describa la zona (ej. `barra-compacta`, `grilla-agentes`).
    El tema del agente es su memoria: escribilo pensando en el próximo pedido.
+   Al nacer, `oa-agent nuevo` enciende la **vista en vivo** del worktree (Vite
+   con HMR) y la registra para el tablero `/vivo` de openagents. `OA_VIVO=0`
+   desactiva ese encendido automático.
 2. **Enviar el encargo**: `oa-agent enviar <slug> "<pedido>"`. Escribí el pedido
    completo y en imperativo: el agente no ve esta conversación. El comando le
    agrega solo la instrucción de dejar la marca al terminar.
@@ -68,8 +71,20 @@ worktree, rama, tema), y las marcas de fin de encargo, en
 | `oa-agent enviar <slug> "<pedido>"` | manda el pedido a la sesión de pi |
 | `oa-agent esperar <slug> [seg]` | espera la marca y muestra resumen + `git status` |
 | `oa-agent estado <slug>` | si trabaja o está libre, y las últimas líneas |
+| `oa-agent vivo <slug>` | levanta la vista en vivo (Vite + HMR) del worktree |
+| `oa-agent apagar <slug>` | apaga solo la vista en vivo |
 | `oa-agent cerrar <slug>` | cierra ventana, tmux, worktree y rama |
 | `oa-agent adoptar <slug> <ws> "<tema>"` | registra una sesión ya existente |
+
+### Vistas en vivo
+
+El tablero **`/vivo`** de openagents (botón de monitor en la barra) muestra un
+iframe por agente encendido: los cambios de cada worktree se ven en tiempo real
+con HMR, sin recargar ni reabrir la app. La API la sigue atendiendo la app real;
+Vite le hace proxy (`PI_API_PORT`, por defecto 7717). Un worktree anterior a
+esta feature (sin `PI_UI_PREVIEW` en `hooks.server.ts`) necesita `git -C
+<worktree> merge main` para poder previsualizarse. Si cambiás el binario de la
+app, hay que reiniciarla una vez para que exista `/api/vivo`.
 
 El usuario ve cada sesión en su ventana de kitty: puede leerla, hablarle y
 corregirla. Si corrige algo ahí, esa corrección es la verdad: no la pises
