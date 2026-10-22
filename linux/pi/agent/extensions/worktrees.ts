@@ -32,9 +32,9 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -211,7 +211,30 @@ function compartirCaches(ruta: string, principal: string): string[] {
       // Si no se puede enlazar, el worktree queda como antes: solo más lento.
     }
   }
+  // Las cachés enlazadas viven dentro del worktree pero no son parte del
+  // repo: si quedan sin ignorar, `git status` las muestra como cambios y el
+  // cierre se niega a mergear. Antes eso obligaba al humano a limpiarlas.
+  ignorarCaches(principal, CACHES_COMPARTIDAS);
   return hechos;
+}
+
+/** Suma las rutas de caché al `info/exclude` común (no se commitea). */
+function ignorarCaches(principal: string, rutas: string[]): void {
+  if (!rutas.length) return;
+  try {
+    const comun = tal(principal, ["rev-parse", "--git-common-dir"]);
+    if (!comun) return;
+    const archivo = resolve(principal, comun, "info", "exclude");
+    const actual = existsSync(archivo) ? readFileSync(archivo, "utf8") : "";
+    const lineas = new Set(actual.split("\n").map((l) => l.trim()));
+    const nuevas = rutas
+      .map((r) => `/${r}`)
+      .filter((r) => !lineas.has(r) && !lineas.has(r.slice(1)));
+    if (!nuevas.length) return;
+    appendFileSync(archivo, `${actual && !actual.endsWith("\n") ? "\n" : ""}${nuevas.join("\n")}\n`);
+  } catch {
+    // Si no se puede escribir, el worktree queda como antes.
+  }
 }
 
 function abrirWorktree(dir: string, id: string, desde?: string): Worktree {
