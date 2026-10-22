@@ -12,8 +12,10 @@ import {
 
 const totales = (extra: Partial<TotalesTurno> = {}): TotalesTurno => ({
   turnMs: 123_000,
+  turnModelMs: 120_000,
   turnTokens: 3400,
   sessionMs: 300_000,
+  sessionModelMs: 300_000,
   sessionTokens: 10_000,
   turns: 2,
   endedAt: new Date(2026, 9, 21, 18, 42, 10).getTime(),
@@ -37,7 +39,7 @@ test("el ritmo no inventa números si falta el tiempo o los tokens", () => {
 test("el turno dice duración, tokens, ritmo y hora", () => {
   assert.equal(
     lineaTurno(totales()),
-    "2m 03s · 3.4k tok · 27.6 tok/s · terminó 18:42",
+    "2m 03s · 3.4k tok · 28.3 tok/s · terminó 18:42",
   );
   assert.equal(formatoHora(totales().endedAt as number), "18:42");
 });
@@ -51,7 +53,9 @@ test("la sesión acumula tokens y da el promedio", () => {
 
 test("sin turnos cerrados la línea de sesión no se muestra", () => {
   assert.equal(
-    lineaSesion(totales({ turns: 0, sessionMs: 0, sessionTokens: 0 })),
+    lineaSesion(
+      totales({ turns: 0, sessionMs: 0, sessionModelMs: 0, sessionTokens: 0 }),
+    ),
     undefined,
   );
 });

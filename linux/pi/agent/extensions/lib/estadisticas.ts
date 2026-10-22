@@ -10,12 +10,16 @@ import { formatoDuracion } from "./pensamiento.ts";
 
 /** Totales que muestra el widget al terminar un turno. */
 export type TotalesTurno = {
-  /** duración del turno (ms) */
+  /** duración del turno (ms), incluye esperas de herramientas */
   turnMs: number;
+  /** tiempo de las llamadas al modelo en el turno (ms), sin herramientas */
+  turnModelMs: number;
   /** tokens movidos en el turno */
   turnTokens: number;
   /** acumulado de la sesión */
   sessionMs: number;
+  /** tiempo de modelo acumulado de la sesión (ms), sin herramientas */
+  sessionModelMs: number;
   sessionTokens: number;
   /** turnos cerrados en la sesión */
   turns: number;
@@ -53,7 +57,7 @@ export function formatoHora(ms: number): string {
 export function lineaTurno(t: TotalesTurno): string {
   const partes = [formatoDuracion(t.turnMs)];
   if (t.turnTokens > 0) partes.push(`${formatoTokens(t.turnTokens)} tok`);
-  const ritmo = formatoRitmo(t.turnTokens, t.turnMs);
+  const ritmo = formatoRitmo(t.turnTokens, t.turnModelMs);
   if (ritmo) partes.push(ritmo);
   if (t.endedAt) partes.push(`terminó ${formatoHora(t.endedAt)}`);
   return partes.join(" · ");
@@ -64,7 +68,7 @@ export function lineaSesion(t: TotalesTurno): string | undefined {
   if (t.turns === 0 && t.sessionMs <= 0) return undefined;
   const partes = [`Sesión ${formatoDuracion(t.sessionMs)}`];
   if (t.sessionTokens > 0) partes.push(`${formatoTokens(t.sessionTokens)} tok`);
-  const ritmo = formatoRitmo(t.sessionTokens, t.sessionMs);
+  const ritmo = formatoRitmo(t.sessionTokens, t.sessionModelMs);
   if (ritmo) partes.push(`${ritmo} prom.`);
   return partes.join(" · ");
 }

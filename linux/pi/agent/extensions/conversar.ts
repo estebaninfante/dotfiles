@@ -650,7 +650,11 @@ export default function (pi: ExtensionAPI) {
   let lastPrompt = ""; // último pedido del usuario, de respaldo si no hay tarea
   let sessionThinkingMs = 0; // acumulado de la sesión
   let lastTurnMs = 0; // duración del último turno
+  let sessionModelMs = 0; // tiempo de modelo acumulado, sin esperas de herramientas
+  let lastTurnModelMs = 0; // tiempo de modelo del último turno
   let runTokens = 0; // tokens del turno en curso
+  let runModelMs = 0; // tiempo de modelo de las rondas del turno en curso
+  let roundStart = 0; // arranque de la ronda en curso
   let lastTurnTokens = 0; // tokens del último turno cerrado
   let sessionTokens = 0; // tokens acumulados de la sesión
   let sessionTurns = 0; // turnos cerrados en la sesión
@@ -934,8 +938,10 @@ export default function (pi: ExtensionAPI) {
     const now = Date.now();
     const totales: TotalesTurno = {
       turnMs: working ? now - workStart : lastTurnMs,
+      turnModelMs: working ? runModelMs : lastTurnModelMs,
       turnTokens: working ? runTokens : lastTurnTokens,
       sessionMs: sessionThinkingMs + (working ? now - workStart : 0),
+      sessionModelMs: sessionModelMs + (working ? runModelMs : 0),
       sessionTokens: sessionTokens + (working ? runTokens : 0),
       turns: sessionTurns,
       endedAt: working ? null : lastTurnEndedAt,
@@ -1307,10 +1313,13 @@ export default function (pi: ExtensionAPI) {
     // Si un turno anterior no llegó a asentarse, no perdemos su tiempo.
     if (working && workStart) {
       sessionThinkingMs += Date.now() - workStart;
+      sessionModelMs += runModelMs;
       sessionTokens += runTokens;
       sessionTurns += 1;
     }
     runTokens = 0;
+    runModelMs = 0;
+    roundStart = Date.now();
     working = true;
     workStart = Date.now();
     tmuxSet("@agent_status", "working");
@@ -1345,14 +1354,21 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
+  // El ritmo se mide sobre el tiempo de cada llamada al modelo, no sobre el
+  // reloj de pared: si un comando tarda, eso no baja los tok/s.
+  pi.on("turn_start", () => {
+    roundStart = Date.now();
+  });
+
   pi.on("turn_end", async (event, ctx) => {
     uiCtx = ctx;
     outstanding = false;
     // Los tokens se informan al cerrar cada ronda del turno: se suman hasta
     // que el turno entero se asienta.
-    const uso = (
+    const mensaje = (
       event as {
         message?: {
+          durationMs?: number;
           usage?: {
             totalTokens?: number;
             input?: number;
@@ -1362,26 +1378,39 @@ export default function (pi: ExtensionAPI) {
           };
         };
       }
-    ).message?.usage;
+    ).message;
+    const uso = mensaje?.usage;
     if (uso) {
       runTokens +=
         typeof uso.totalTokens === "number"
           ? uso.totalTokens
           : (uso.input ?? 0) + (uso.output ?? 0) + (uso.cacheRead ?? 0) + (uso.cacheWrite ?? 0);
     }
+    const modelo =
+      typeof mensaje?.durationMs === "number"
+        ? mensaje.durationMs
+        : roundStart > 0
+          ? Date.now() - roundStart
+          : 0;
+    if (modelo > 0) runModelMs += modelo;
+    roundStart = 0;
     updateLatido();
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
     if (working && workStart) {
       lastTurnMs = Date.now() - workStart;
+      lastTurnModelMs = runModelMs;
       sessionThinkingMs += lastTurnMs;
+      sessionModelMs += runModelMs;
       lastTurnTokens = runTokens;
       sessionTokens += runTokens;
       sessionTurns += 1;
       lastTurnEndedAt = Date.now();
     }
     runTokens = 0;
+    runModelMs = 0;
+    roundStart = 0;
     working = false;
     outstanding = false;
     uiCtx = ctx;
