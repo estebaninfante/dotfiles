@@ -9,8 +9,11 @@
  *    y qué está haciendo. Así otro agente puede verlo con `rig msg ls`.
  * 2. En cada herramienta actualiza su pulso ("bash: pytest", "edit: state.js"),
  *    que es lo que el otro lee para saber qué está pasando.
- * 3. Recibe: los mensajes sin leer entran al prompt de cada turno y, si está
- *    quieto, lo despiertan. Lo que ya se leyó no se repite.
+ * 3. Recibe: los mensajes sin leer entran al prompt de cada turno y, mientras
+ *    trabaja, entran como steering en el turno en curso. Si está quieto **no
+ *    lo despierta**: abrir un turno nuevo por un mensaje hacía que el agente
+ *    revisara de nuevo lo hecho, contestara y se armara un ping-pong. Lo que
+ *    ya se leyó no se repite.
  * 4. Habla: tools `agentes` (quién está vivo y qué hace) y `mensaje` (mandar).
  *
  * La otra punta no necesita pi: `rig msg enviar`/`rig msg leer` funcionan desde
@@ -28,8 +31,8 @@ const RIG = process.env.RIG_BIN ?? `${homedir()}/.local/bin/rig`;
 const CADA_PULSO_MS = 15_000;
 // Respaldo: si el vigilante de archivos no ve el cambio, igual revisamos.
 const CADA_REVISION_OCIOSO_MS = 15_000;
-// Anti-bucle: no despertamos por el mismo remitente más de N veces por minuto,
-// ni dos veces seguidas en menos de este tiempo, ni por mensajes propios.
+// Anti-bucle: no inyectamos mensajes del mismo remitente más de N veces por
+// minuto, ni dos veces seguidas en menos de este tiempo, ni los propios.
 const VENTANA_ANTIBUCLE_MS = 60_000;
 const MAX_DESPIERTES_POR_REMITENTE = 3;
 const MIN_MS_ENTRE_DESPIERTES = 5_000;
@@ -108,7 +111,7 @@ function textoDelCorreo(pendientes: Correo[]): string {
       : `${muestra.length} mensaje(s) sin leer:`,
     ...lineas,
     ``,
-    `No contestes por reflejo: si es un acuse, una confirmación o no te pide nada, no respondas y seguí con tu tarea. Contestá con la tool \`mensaje\` solo si hay algo que destrabar, una vez por tema, y no respondas a quien te acaba de responder.`,
+    `No contestes por reflejo: si es un acuse, una confirmación o no te pide nada, no respondas y seguí con tu tarea. Contestá con la tool \`mensaje\` solo si hay algo que destrabar, una vez por tema, y no respondas a quien te acaba de responder. Un acuse no se acusa.`,
   ].join("\n");
 }
 
@@ -171,10 +174,20 @@ export default function (pi: ExtensionAPI) {
     return true;
   };
 
-  /** Intenta entregar lo pendiente: solo despierta si hay algo nuevo y sano. */
+  /**
+   * Entrega lo pendiente **sin abrir un turno nuevo**.
+   *
+   * - Si el agente está trabajando, el correo entra como steering: se suma al
+   *   turno en curso, después de la herramienta que esté corriendo. El agente
+   *   se entera a tiempo y sigue, no vuelve a empezar.
+   * - Si está quieto, no se entrega: queda en el buzón y `before_agent_start`
+   *   lo suma cuando el agente arranque un turno por su cuenta. Despertarlo
+   *   con un `followUp` era lo que producía el bucle de revisar-contestar.
+   */
   const intentarEntrega = () => {
     const ctx = ctxActual;
-    if (!ctx || pendienteDeEntrega || !ctx.isIdle()) return;
+    if (!ctx || pendienteDeEntrega) return;
+    if (ctx.isIdle()) return;
     const pendientes = leerPendientes(false);
     if (!pendientes.length) return;
 
@@ -187,11 +200,12 @@ export default function (pi: ExtensionAPI) {
     const ultimo = ajenos[ajenos.length - 1];
     if (!puedeDespertar(ultimo.de)) return;
 
-    const entregados = leerPendientes(true).filter((m) => m.de && m.de !== nombre);
-    if (!entregados.length) return;
     pendienteDeEntrega = true;
     try {
-      pi.sendUserMessage(textoDelCorreo(entregados), { deliverAs: "followUp" });
+      pi.sendUserMessage(textoDelCorreo(ajenos), { deliverAs: "steer" });
+      // Recién acá se dan por leídos: si el steer no entró, quedan en el buzón
+      // para el próximo turno en vez de perderse.
+      leerPendientes(true);
     } catch {
       /* si no se puede entregar ahora, queda en el buzon */
     } finally {
@@ -277,6 +291,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: "Mandar un mensaje a otro agente",
     promptGuidelines: [
       "Para coordinar con otro agente usá `mensaje` con texto concreto: qué necesita saber y qué esperás que haga.",
+      "No mandes acuses ni confirmaciones de recibido: no piden respuesta y generan ida y vuelta inútil.",
     ],
     parameters: Type.Object({
       para: Type.String({ description: "Nombre del agente destino (ver tool agentes)" }),

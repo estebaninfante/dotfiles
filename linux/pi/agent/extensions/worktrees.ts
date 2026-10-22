@@ -320,15 +320,23 @@ async function cerrarWorktree(
 
   const actual = situacion(datos.principal);
   const base = opciones.base ?? (actual ? baseEfectiva(actual.datos, actual.politica) : ramaPrincipal(datos.principal));
+  const lineas: string[] = [];
   const enPrincipal = tal(datos.principal, ["symbolic-ref", "--short", "HEAD"]);
   if (enPrincipal !== base) {
-    throw new Error(
-      `la copia principal está en "${enPrincipal ?? "?"}", no en la base "${base}". ` +
-        `Cambiala a ${base} y volvé a cerrar.`,
-    );
+    // Antes frenaba el cierre y el agente tenía que pedirle al humano que
+    // cambie la rama. Si la copia principal está limpia, el cambio lo hace el
+    // cierre mismo; si tiene cambios, no se toca nada y se explica qué hacer.
+    const sucioPrincipal = git(datos.principal, ["status", "--porcelain"]);
+    if (sucioPrincipal) {
+      throw new Error(
+        `la copia principal está en "${enPrincipal ?? "?"}", no en la base "${base}", y tiene ` +
+          `cambios sin commitear; no la cambio para no pisarlos. Commiteá o guardá esos cambios ` +
+          `y volvé a cerrar.`,
+      );
+    }
+    git(datos.principal, ["checkout", base]);
+    lineas.push(`copia principal: ${enPrincipal ?? "?"} -> ${base}`);
   }
-
-  const lineas: string[] = [];
   const adelante = commitsAdelante(datos.raiz, base);
   if (adelante > 0) {
     // Nada entra a la base sin la verificación del repo en verde. Antes el merge
