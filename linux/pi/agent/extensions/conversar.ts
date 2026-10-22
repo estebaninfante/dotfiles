@@ -602,7 +602,8 @@ const HABLAR_PARAMS = Type.Object({
     Type.Number({
       description:
         "Cuánto tiempo queda escuchando una respuesta por voz (solo si " +
-        "esperar=true). Default 300.",
+        "esperar=true). Default 60. Mientras escucha, la voz del usuario va " +
+        "al agente en vez del asistente, así que conviene que sea corto.",
     }),
   ),
 });
@@ -1032,9 +1033,10 @@ export default function (pi: ExtensionAPI) {
   }
 
   /** Avisa al resto del harness qué se dijo en voz alta, para que `avisar` (u
-   *  otra extensión de cierre) no repita lo mismo al terminar la corrida. Solo
-   *  se anuncia el `hablar` que no espera respuesta: una pregunta con
-   *  `esperar: true` no reemplaza al cierre, así que no debe silenciarlo. */
+   *  otra extensión de cierre) no repita lo mismo al terminar la corrida.
+   *  También se anuncia la pregunta con `esperar: true`: lo que el usuario
+   *  ya escuchó no se vuelve a decir al cerrar. Si contesta, su respuesta
+   *  arranca un turno nuevo y el cierre de ESE turno sí suena. */
   function announceSpoken(texto: string): void {
     const t = cleanText(texto);
     if (!t) return;
@@ -1217,8 +1219,11 @@ export default function (pi: ExtensionAPI) {
       }
       // Una pregunta SIEMPRE se dice: el usuario tiene que oírla para responder,
       // aunque el modo sea campana. La respuesta llega como mensaje nuevo.
-      const segundos = Math.max(10, Number(params.segundos ?? 300) || 300);
+      const segundos = Math.max(10, Number(params.segundos ?? 60) || 60);
       await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
+      // Lo dicho cuenta como hablado: el cierre (`avisar` / resumen de respaldo)
+      // no repite la misma frase si el usuario no contesta.
+      announceSpoken(mensaje);
       watchVoiceAnswer(segundos);
       return {
         content: [
