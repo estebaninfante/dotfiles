@@ -150,6 +150,9 @@ hl.bind(main_mod .. " + right", hl.dsp.window.resize({ x = 20, y = 0, relative =
 hl.bind(main_mod .. " + up",    hl.dsp.window.resize({ x = 0, y = -20, relative = true }), { repeating = true })
 hl.bind(main_mod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative = true }), { repeating = true })
 
+-- Ahorro extremo de batería (docs/energia-laptop-82y5.md §8)
+hl.bind(main_mod .. " + SHIFT + B", hl.dsp.exec_cmd("~/.local/bin/power-extreme.sh toggle"), { description = "Ahorro extremo (batería)" })
+
 hl.bind(main_mod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/ohm"), { description = "Ohm" })
 hl.bind(main_mod .. " + SHIFT + Y", hl.dsp.exec_cmd("~/.local/bin/ohm https://youtube.com/"), { description = "Ohm: YouTube" })
 

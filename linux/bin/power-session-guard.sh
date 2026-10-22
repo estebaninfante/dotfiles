@@ -61,6 +61,14 @@ wait_hypr() {
   return 1
 }
 
+# Modo ahorro extremo: existe y se sale solo al enchufar el cargador.
+# El script es del usuario (maneja systemd --user, brillo y shell.json).
+EXTREME_FLAG="$HOME/.local/state/power-extreme/on"
+if [ -f "$EXTREME_FLAG" ] && ! on_battery; then
+  log "AC conectado: saliendo del modo ahorro extremo"
+  "$HOME/.local/bin/power-extreme.sh" off >/dev/null 2>&1 || log "no se pudo salir del modo extremo"
+fi
+
 if ! wait_hypr; then
   log "Hyprland no responde; nada que hacer"
   exit 0

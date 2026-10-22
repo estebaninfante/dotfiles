@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.fade",
+  "name": "Fade",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Cortina negra a pantalla completa para tapar el modeset del panel (60↔120Hz) y los reloads de Hyprland con un fundido, en vez de un apagón seco.",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Fade.qml"
+  }
+}

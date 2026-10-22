@@ -24,8 +24,14 @@ BRIGHT_SAVE="/var/lib/power-guard/brightness-ac"
 GUARD_DIR="/var/lib/power-guard"
 USER_NAME="eztvn"
 USER_RT="/run/user/1000"
+# Modo ahorro extremo (power-extreme.sh): cuando está activo, ese script manda
+# sobre brillo y servicios; acá solo se respeta (wifi powersave forzado, no se
+# toca el brillo).
+EXTREME_FLAG="/home/$USER_NAME/.local/state/power-extreme/on"
 
 log() { logger -t battery-power-guard -- "$*"; echo "$*"; }
+
+extreme() { [ -f "$EXTREME_FLAG" ]; }
 
 on_battery() {
   for p in /sys/class/power_supply/*/online; do
@@ -149,17 +155,24 @@ session_trigger() {
 
 if low_power; then
   if on_battery; then
-    log "bateria: power-saver + dGPU auto + syncthing off + brillo<=50% + ASPM powersave"
+    log "bateria: power-saver + dGPU auto + syncthing off + ASPM powersave"
     "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 || true
   else
-    log "power-saver (AC): dGPU auto + syncthing off + brillo<=50% + ASPM powersave"
+    log "power-saver (AC): dGPU auto + syncthing off + ASPM powersave"
   fi
   gpu_powersave
   aspm_policy powersave
   nmi_watchdog off
-  wifi_powersave on
+  # En modo extremo el Wi-Fi power save ya no es opt-in: es parte del ahorro.
+  if [ -f "$GUARD_DIR/wifi-powersave" ] || extreme; then
+    wifi_powersave on
+  fi
   systemctl stop syncthing.service >/dev/null 2>&1 || true
-  bright_cap_half
+  if extreme; then
+    log "modo extremo activo: el brillo lo maneja power-extreme.sh"
+  else
+    bright_cap_half
+  fi
 else
   log "AC/rendimiento: syncthing on + brillo restaurado + ASPM default"
   gpu_powersave
@@ -167,8 +180,12 @@ else
   nmi_watchdog on
   wifi_powersave off
   [ -f /tmp/syncthing-manual-off ] || systemctl start syncthing.service >/dev/null 2>&1 || true
-  bright_record
-  bright_restore
+  if extreme; then
+    log "modo extremo activo: no se toca el brillo"
+  else
+    bright_record
+    bright_restore
+  fi
 fi
 
 session_trigger

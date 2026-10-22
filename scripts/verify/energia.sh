@@ -124,6 +124,44 @@ if [ -n "$wl" ]; then
   fi
 fi
 
+# --- modo ahorro extremo --------------------------------------------------
+# Ver docs/energia-laptop-82y5.md §8. Si está activo, lo que promete apagado
+# tiene que estar apagado; si está apagado, no puede quedar basura (drop-in de
+# la voz, unidades paradas de un modo anterior).
+EXTREME="$HOME/.local/state/power-extreme/on"
+if [ -f "$EXTREME" ]; then
+  [ "$battery" = 1 ] && ok "extremo: activo en batería" || fail "extremo: activo pero hay corriente (debería auto-salir)"
+  prof="$(busctl get-property org.freedesktop.UPower.PowerProfiles /org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles ActiveProfile 2>/dev/null | cut -d'"' -f2)"
+  [ "${prof:-}" = "power-saver" ] && ok "extremo: perfil power-saver" || fail "extremo: perfil ${prof:-?} (se espera power-saver)"
+  br_now="$(brightnessctl --class=backlight get 2>/dev/null)"
+  br_max="$(brightnessctl --class=backlight max 2>/dev/null)"
+  if [ -n "${br_now:-}" ] && [ -n "${br_max:-}" ]; then
+    pct=$((br_now * 100 / br_max))
+    [ "$pct" -le 30 ] && ok "extremo: brillo ${pct}%" || fail "extremo: brillo ${pct}% (se espera <=30%)"
+  fi
+  dropin="$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf"
+  [ -f "$dropin" ] && ok "extremo: voz en CPU (drop-in presente)" || fail "extremo: falta el drop-in que pone Kokoro en CPU"
+  for u in kokoro-tts.service lan-mouse.service ollama.service sunshine.service omar-listen.service rig-main-seat.service; do
+    systemctl --user is-active --quiet "$u" && fail "extremo: $u sigue activo" || ok "extremo: $u parado"
+  done
+  for t in wallpaper-power-guard.timer dev-sync.timer dotfiles-sync.timer; do
+    systemctl --user is-active --quiet "$t" && fail "extremo: $t sigue corriendo" || ok "extremo: $t parado"
+  done
+  idle="$(python3 - "$HOME/.config/omarchy/shell.json" <<'PY' 2>/dev/null
+import json, sys
+try:
+    print(json.load(open(sys.argv[1])).get('idle', {}).get('screensaver', ''))
+except Exception:
+    pass
+PY
+)"
+  [ -n "${idle:-}" ] && [ "$idle" -le 60 ] 2>/dev/null && ok "extremo: pantalla se apaga a ${idle}s" || warn "extremo: screensaver en ${idle:-?}s (se espera <=60)"
+else
+  [ -f "$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf" ] \
+    && fail "extremo: quedó el drop-in de voz en CPU con el modo apagado" \
+    || ok "extremo: apagado y sin restos"
+fi
+
 printf '\n'
 if [ "$fails" -gt 0 ]; then
   printf 'RESULTADO: %d falla(s), %d aviso(s) — correr battery-power-guard.sh\n' "$fails" "$warns"

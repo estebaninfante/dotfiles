@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# pantalla-fade — fundido a negro para tapar los cambios de modo del panel.
+#
+# El panel OLED tarda unas décimas en re-aplicar el modo (60Hz en ahorro,
+# 120Hz en rendimiento) y ese hueco se ve como si la pantalla se apagara de
+# golpe. Acá se baja a negro con el motor de movimiento del escritorio, se hace
+# el cambio mientras ya está negro y se vuelve. En OLED el negro puro apaga los
+# píxeles, así que se siente como un apagado lento, no como un flash.
+#
+# Uso:
+#   pantalla-fade out                 # baja a negro y queda
+#   pantalla-fade in                  # vuelve desde negro
+#   pantalla-fade cover -- <comando>  # negro -> comando -> espera -> vuelve
+#   pantalla-fade pulse               # negro y vuelve (para probar)
+#
+# La animación vive en el plugin del shell `eztvn.fade`; este guion solo marca
+# el ritmo. Las duraciones salen de ~/.config/omarchy/motion/motion.json para
+# que la espera coincida con lo que se ve. Si el shell no está o el plugin no
+# está cargado, no hace nada y el cambio ocurre igual (peor, pero igual).
+#
+# Variables para probar: FADE_OUT_MS, FADE_IN_MS, FADE_HOLD_MS.
+set -uo pipefail
+
+MOTION="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/motion/motion.json"
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/pantalla-fade.lock"
+
+dur() {
+  command -v jq >/dev/null 2>&1 || return 1
+  jq -r --arg k "$1" '.duration[$k] // empty' "$MOTION" 2>/dev/null
+}
+
+out_ms="${FADE_OUT_MS:-$(dur base)}"; out_ms="${out_ms:-180}"
+in_ms="${FADE_IN_MS:-$(dur morph)}"; in_ms="${in_ms:-260}"
+hold_ms="${FADE_HOLD_MS:-140}"
+
+sleep_ms() {
+  awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | xargs sleep
+}
+
+# ¿El shell está arriba y el plugin cargado? Si no, no hay cortina: no vale la
+# pena esperar animaciones que no van a existir.
+shell_ready() {
+  command -v omarchy-shell >/dev/null 2>&1 || return 1
+  [ "$(omarchy-shell eztvn.fade ping 2>/dev/null)" = "ok" ]
+}
+
+fade_out() {
+  is_covered=1
+  shell_ready || return 0
+  omarchy-shell -q eztvn.fade blackout "$out_ms" >/dev/null 2>&1 || true
+  # +20ms de aire: el negro ya está puesto cuando el comando corre.
+  sleep_ms $((out_ms + 20))
+}
+
+fade_in() {
+  [ "${is_covered:-0}" = 1 ] || return 0
+  is_covered=0
+  shell_ready || return 0
+  omarchy-shell -q eztvn.fade uncover "$in_ms" >/dev/null 2>&1 || true
+  sleep_ms "$in_ms"
+}
+
+on_exit() {
+  # Si el comando falló o el guion murió, no dejar la pantalla en negro.
+  fade_in
+}
+
+main() {
+  local action="${1:-pulse}"; shift || true
+  case "$action" in
+    out) fade_out ;;
+    in)  is_covered=1; fade_in ;;
+    pulse)
+      fade_out
+      sleep_ms "$hold_ms"
+      fade_in
+      ;;
+    cover|wrap)
+      [ "${1:-}" = "--" ] && shift
+      if [ "$#" -eq 0 ]; then
+        echo "Uso: pantalla-fade cover -- <comando> [args...]" >&2
+        exit 2
+      fi
+      trap on_exit EXIT
+      fade_out
+      "$@"
+      local rc=$?
+      sleep_ms "$hold_ms"
+      fade_in
+      exit "$rc"
+      ;;
+    *)
+      echo "Uso: pantalla-fade [out|in|pulse|cover -- <comando>]" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# Serializa transiciones: si dos pedidos se pisan (conectar/desconectar rápido)
+# el segundo espera y la pantalla nunca queda negra por carrera.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$LOCK" && flock -w 8 9 || true
+fi
+
+main "$@"

@@ -33,6 +33,9 @@
   "sync.now": {"icon":"󰐯","label":"Sincronizar ahora","description":"git pull --rebase --autostash","action":"~/dotfiles/scripts/dotfiles-sync.sh --force"},
   "sync.auto": {"icon":"󰔣","label":"Auto-sync","description":"Pull cada 5 min (timer systemd)","action":"~/dotfiles/scripts/dotfiles-sync.sh --toggle","checked":"test ! -f ~/.config/dotfiles-autosync.off"},
 
+  // Ahorro extremo de batería (power-extreme.sh + docs/energia-laptop-82y5.md §8)
+  "trigger.toggle.extreme-power": {"icon":"󰂄","label":"Ahorro extremo","aliases":["ahorro-extremo","extremo"],"description":"Batería: apaga IA local, KVM, streaming, agentes y timers; brillo 25%","when":"omarchy-battery-present","checked":"test -f ~/.local/state/power-extreme/on","action":"~/.local/bin/power-extreme.sh toggle"},
+
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
   "personal.investigaciones": {"icon":"󰎞","label":"Investigaciones","description":"Notas de investigacion del vault (abre en Logseq)","action":"omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""},
