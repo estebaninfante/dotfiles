@@ -319,7 +319,8 @@ export default function (pi: ExtensionAPI) {
       "respuesta: la voz acompaña al texto, nunca lo reemplaza. Sin " +
       "tecnicismos, sin rutas, sin nombres de herramientas o funciones. No uses " +
       "apelativos ni lo llames 'jefe'. " +
-      "Si necesitás una respuesta, usá `hablar` con `esperar: true`.",
+      "Si necesitás una respuesta, preguntala en el texto de tu respuesta: la " +
+      "voz es solo de salida y no espera contestación hablada.",
     promptSnippet: "Avisar al usuario al cerrar (voz o buzón; solo se dice el último aviso)",
     promptGuidelines: [
       "Llama a `avisar` UNA vez, al terminar la corrida (cuando ya no vas a " +
@@ -332,9 +333,8 @@ export default function (pi: ExtensionAPI) {
       "Lo que digas con `avisar` también va escrito en tu respuesta: la voz " +
         "acompaña al texto, nunca lo reemplaza. Si el contenido principal solo " +
         "quedó en la voz, el usuario lo pierde en la UI y en la terminal.",
-      "Si necesitás que el usuario te responda, no te quedes en `avisar`: usá " +
-        "`hablar` con `esperar: true` y una pregunta concreta, y TERMINÁ el turno " +
-        "en el acto (no esperes la respuesta en el momento). `avisar` es para " +
+      "Para preguntarle algo al usuario, hacelo en el texto de tu respuesta: la " +
+        "voz es solo de salida y no se queda esperando. `avisar` es para " +
         "reportar, no para preguntar.",
       "Para avisar algo en medio del trabajo, que el usuario necesite AHORA, usá " +
         "`hablar` (inmediato): eso ya cuenta como tu voz en la corrida, así que " +
