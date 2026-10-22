@@ -9,6 +9,8 @@
 #   oa-agent estado <slug>            últimas líneas + si está trabajando
 #   oa-agent esperar <slug> [seg]     espera a que termine el encargo
 #   oa-agent listar                   tabla de agentes vivos
+#   oa-agent vivo <slug>              levanta la vista previa del worktree (Vite + HMR)
+#   oa-agent apagar <slug>            apaga la vista previa
 #   oa-agent cerrar <slug>            cierra ventana, tmux y worktree
 #
 # Nunca cambia el workspace activo del usuario ni le da foco a la ventana.
@@ -20,6 +22,10 @@ STATE="${OA_STATE:-$HOME/.local/share/openagents-agents}"
 REG="$STATE/agentes.tsv"
 MARCAS="$STATE/marcas"
 mkdir -p "$MARCAS"
+VIVO="$STATE/vivo"
+mkdir -p "$VIVO"
+# La app que atiende la API de las vistas previas (proxy de Vite).
+APP_PORT="${OA_APP_PORT:-7717}"
 # Workspaces donde se muestran las sesiones: ni el activo del usuario, ni el 9.
 WS_CANDIDATOS=(1 3 8 10)
 WS_PROHIBIDOS=(6 9)
@@ -63,6 +69,93 @@ abrir_ventana() { # slug ws worktree
   hyprctl dispatch "hl.dsp.exec_cmd(\"kitty --title oa-$slug tmux new-session -A -s oa-$slug -c $wt 'env PI_AGENTE_WS=$ws PI_VOICE_AGENT=$slug pi --name $slug'\")" >/dev/null
 }
 
+# Un puerto libre en loopback. Se pide al sistema en vez de escanear a mano.
+puerto_libre() {
+  python3 -c 'import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()'
+}
+
+# URL de la vista guardada, o vacío si no hay registro.
+url_de_vivo() { # slug
+  local reg="$VIVO/$1.json"
+  [ -f "$reg" ] && jq -r '.url // empty' "$reg" 2>/dev/null || true
+}
+
+# ¿La vista contesta? Sirve para no levantar dos Vite sobre el mismo worktree.
+vivo_andando() { # slug
+  local url
+  url=$(url_de_vivo "$1")
+  [ -n "$url" ] && curl -fsS --max-time 2 "$url" >/dev/null 2>&1
+}
+
+# Levanta Vite con HMR sobre el worktree del agente. La API la sigue
+# atendiendo la app abierta: Vite le hace proxy, así los datos son reales.
+cmd_vivo() { # slug
+  local slug="$1" wt rama tema p pid log url i
+  wt=$(campo "$slug" 4)
+  [ -n "$wt" ] || { echo "no conozco el agente $slug" >&2; return 1; }
+  [ -d "$wt/web-svelte" ] || { echo "el worktree de $slug no tiene web-svelte" >&2; return 1; }
+  # Los worktrees viejos no traen el modo vista previa (arranca Mongo y el
+  # login de chat-ui). Se resuelve trayendo main a la rama del agente.
+  if ! grep -q "PI_UI_PREVIEW" "$wt/web-svelte/src/hooks.server.ts" 2>/dev/null; then
+    echo "el worktree de $slug es anterior a las vistas en vivo." >&2
+    echo "traele main y reintentá: git -C '$wt' merge main" >&2
+    return 1
+  fi
+  if vivo_andando "$slug"; then
+    echo "la vista de $slug ya está en vivo: $(url_de_vivo "$slug")"
+    return 0
+  fi
+  # Las dependencias se comparten con el checkout principal: instalar 600 MB
+  # por worktree no tiene sentido para ver la UI.
+  if [ ! -d "$wt/web-svelte/node_modules" ]; then
+    ln -sfn "$REPO/web-svelte/node_modules" "$wt/web-svelte/node_modules"
+  fi
+  rama=$(campo "$slug" 5)
+  tema=$(campo "$slug" 6)
+  p=$(puerto_libre)
+  log="$VIVO/$slug.log"
+  # setsid: la vista sobrevive a esta terminal y muere entera con `apagar`.
+  setsid bash -c "cd '$wt/web-svelte' && exec env PI_UI_PREVIEW=1 PI_API_PORT=$APP_PORT ALLOW_IFRAME=true npm run dev -- --port $p --strictPort --host 127.0.0.1" \
+    >"$log" 2>&1 &
+  pid=$!
+  url="http://127.0.0.1:$p"
+  i=0
+  while [ "$i" -lt 120 ]; do
+    curl -fsS --max-time 1 "$url" >/dev/null 2>&1 && break
+    sleep 0.5; i=$((i + 1))
+  done
+  if ! curl -fsS --max-time 2 "$url" >/dev/null 2>&1; then
+    echo "la vista de $slug no arrancó; log en $log" >&2
+    kill -TERM -- "-$pid" 2>/dev/null || true
+    return 1
+  fi
+  python3 - "$VIVO/$slug.json" "$slug" "$tema" "$rama" "$wt" "$url" "$pid" <<'PYJSON'
+import json, sys, time
+ruta, slug, tema, rama, wt, url, pid = sys.argv[1:]
+json.dump({
+    "slug": slug, "tema": tema, "rama": rama, "worktree": wt,
+    "url": url, "pid": int(pid), "desde": int(time.time()),
+}, open(ruta, "w"))
+PYJSON
+  echo "vista en vivo de $slug: $url"
+}
+
+cmd_apagar() { # slug
+  local slug="$1"
+  local reg="$VIVO/$slug.json"
+  local pid=""
+  if [ -f "$reg" ]; then
+    pid=$(jq -r '.pid // empty' "$reg" 2>/dev/null || true)
+    [ -n "$pid" ] && kill -TERM -- "-$pid" 2>/dev/null || true
+    rm -f "$reg"
+  fi
+  echo "vista apagada: $slug"
+}
+
 cmd_nuevo() { # slug tema
   local slug="$1" tema="${2:-}" ws wt tmux="oa-$1"
   existe "$slug" && { echo "ya existe el agente $slug" >&2; return 1; }
@@ -73,6 +166,10 @@ cmd_nuevo() { # slug tema
   for _ in 1 2 3 4 5 6 7 8 9 10; do tmux has-session -t "$tmux" 2>/dev/null && break; sleep 1; done
   registrar "$slug" "$ws" "$tmux" "$wt" "agente/$slug" "$tema"
   echo "agente $slug | workspace $ws | tmux $tmux | worktree $wt"
+  # La vista nace con el agente: así los cambios se ven mientras se hacen.
+  if [ "${OA_VIVO:-1}" != "0" ]; then
+    cmd_vivo "$slug" || echo "aviso: el agente quedó sin vista previa" >&2
+  fi
 }
 
 cmd_adoptar() { # slug ws tema
@@ -139,13 +236,19 @@ cmd_esperar() { # slug [segundos]
 }
 
 cmd_listar() {
-  printf '%-16s %-4s %-18s %-52s %s\n' AGENTE WS TMUX RUTA TEMA
-  awk -F'\t' '{printf "%-16s %-4s %-18s %-52s %s\n", $1, $2, $3, $4, $6}' "$REG"
+  printf '%-16s %-4s %-18s %-52s %-6s %s\n' AGENTE WS TMUX RUTA VIVO TEMA
+  while IFS=$'\t' read -r slug ws tmux wt rama tema; do
+    [ -n "$slug" ] || continue
+    local visto="-"
+    vivo_andando "$slug" && visto="sí"
+    printf '%-16s %-4s %-18s %-52s %-6s %s\n' "$slug" "$ws" "$tmux" "$wt" "$visto" "$tema"
+  done <"$REG"
 }
 
 cmd_cerrar() { # slug
   local slug="$1" tmux wt
   tmux=$(campo "$slug" 3); wt=$(campo "$slug" 4)
+  cmd_apagar "$slug" >/dev/null
   tmux kill-session -t "$tmux" 2>/dev/null || true
   hyprctl clients -j | python3 -c "
 import json,sys
@@ -167,6 +270,8 @@ case "${1:-listar}" in
   estado)  shift; cmd_estado "$@" ;;
   esperar) shift; cmd_esperar "$@" ;;
   listar)  cmd_listar ;;
+  vivo)    shift; cmd_vivo "$@" ;;
+  apagar)  shift; cmd_apagar "$@" ;;
   cerrar)  shift; cmd_cerrar "$@" ;;
-  *) echo "uso: oa-agent {nuevo|adoptar|enviar|estado|esperar|listar|cerrar} ..." >&2; exit 2 ;;
+  *) echo "uso: oa-agent {nuevo|adoptar|enviar|estado|esperar|listar|vivo|apagar|cerrar} ..." >&2; exit 2 ;;
 esac
