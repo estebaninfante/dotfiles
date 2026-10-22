@@ -246,35 +246,13 @@ engage() {
   touch "$FLAG"
   log "on: $(wc -l <"$RUNNING") servicios, $(wc -l <"$TIMERS_ON") timers, $(wc -l <"$SYSTEM_ON") del sistema"
 
-  # 3) Parar la actividad de fondo.
-  if [ -s "$TIMERS_ON" ]; then
-    # shellcheck disable=SC2046
-    systemctl --user stop $(read_list "$TIMERS_ON") >/dev/null 2>&1 || true
-  fi
-  if [ -s "$RUNNING" ]; then
-    # shellcheck disable=SC2046
-    systemctl --user stop $(read_list "$RUNNING") >/dev/null 2>&1 || true
-  fi
-  if have_root; then
-    if [ -s "$SYSTEM_ON" ]; then
-      # shellcheck disable=SC2046
-      sudo -n systemctl stop $(read_list "$SYSTEM_ON") >/dev/null 2>&1 || true
-    fi
-  else
-    log "sin sudo: no se pudieron parar servicios del sistema"
-  fi
-  # 3b) Soltar cachés del kernel: es memoria reclamable, pero el modo busca el
-  # mínimo y así `free` refleja lo que realmente queda en uso.
-  if have_root; then
-    sudo -n sync
-    echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true
-  fi
-
-  # 4) Perfil + palancas del kernel (las aplica el guard, que ya las conoce).
+  # 3) Perfil + palancas del kernel (las aplica el guard, que ya las conoce).
   "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 || true
   sudo -n systemctl start battery-power-guard.service >/dev/null 2>&1 || true
 
-  # 5) Voz en CPU, brillo, teclado, pantalla.
+  # 4) Voz en CPU (por si algo la arranca después), brillo, teclado, pantalla.
+  #    Todo esto va ANTES de parar servicios: si el modo se lanza desde dentro
+  #    de la silla del agente, al pararla muere este mismo proceso.
   voice_cpu_on
   local max
   max="$(br_max)"
@@ -284,10 +262,34 @@ engage() {
   led_set 0
   idle_set "$IDLE_SCREENSAVER" "$IDLE_LOCK"
 
+  # 5) Parar la actividad de fondo. Primero timers y servicios del sistema;
+  #    los del usuario al final (uno de ellos puede matar este proceso).
+  if [ -s "$TIMERS_ON" ]; then
+    # shellcheck disable=SC2046
+    systemctl --user stop $(read_list "$TIMERS_ON") >/dev/null 2>&1 || true
+  fi
+  if have_root; then
+    if [ -s "$SYSTEM_ON" ]; then
+      # shellcheck disable=SC2046
+      sudo -n systemctl stop $(read_list "$SYSTEM_ON") >/dev/null 2>&1 || true
+    fi
+    # Soltar cachés del kernel: es memoria reclamable, pero el modo busca el
+    # mínimo y así `free` refleja lo que realmente queda en uso.
+    sudo -n sync
+    echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true
+  else
+    log "sin sudo: no se pudieron parar servicios del sistema"
+  fi
+
   log "on: aplicado (power-saver, brillo ${BRIGHT_PCT}%, idle ${IDLE_SCREENSAVER}/${IDLE_LOCK})"
   notify "Ahorro extremo activo" \
     "IA local, voz, KVM, agentes y timers apagados. Solo SSH/Tailscale. Brillo ${BRIGHT_PCT}%, pantalla ${IDLE_SCREENSAVER}s."
   echo "Modo ahorro extremo ACTIVO. Se sale al enchufar el cargador (o «power-extreme.sh off»)."
+
+  if [ -s "$RUNNING" ]; then
+    # shellcheck disable=SC2046
+    systemctl --user stop $(read_list "$RUNNING") >/dev/null 2>&1 || true
+  fi
 }
 
 # ── apagado ───────────────────────────────────────────────────────────────
