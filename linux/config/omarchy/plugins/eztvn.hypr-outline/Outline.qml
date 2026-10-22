@@ -23,6 +23,27 @@ Item {
   property var menu: []
   property string firmaMenu: ""
   property bool abierto: false
+  // Modo ahorro extremo (power-extreme.sh): hypr-remote está parado, no se sondea.
+  property bool paused: false
+  // Sin respuesta del servidor (hypr-remote parado) se sondea cada 3 s en vez
+  // de cada 350 ms: cada sondeo son un bash y dos curl.
+  property bool servidorVivo: true
+
+  function pause() { root.paused = true }
+  function resume() { root.paused = false }
+
+  IpcHandler {
+    target: "eztvn.hypr-outline"
+    function pause(): void { root.pause() }
+    function resume(): void { root.resume() }
+  }
+
+  Process {
+    id: extremeCheck
+    running: true
+    command: ["sh", "-c", "test -f \"${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on\""]
+    onExited: function(code) { if (code === 0) root.pause() }
+  }
   property string sel: ""
   property string hijo: ""
   property int base: 0
@@ -186,7 +207,7 @@ Item {
   Process {
     id: pedirMenu
     running: true
-    command: ["bash", "-lc", root.fuenteMenu]
+    command: ["bash", "-c", root.fuenteMenu]
     stdout: StdioCollector {
       onStreamFinished: {
         try {
@@ -202,9 +223,10 @@ Item {
   Process {
     id: leer
     running: false
-    command: ["bash", "-lc", root.fuenteEstado]
+    command: ["bash", "-c", root.fuenteEstado]
     stdout: StdioCollector {
       onStreamFinished: {
+        root.servidorVivo = text.length > 0
         try {
           root.aplicarRadial(JSON.parse(text))
         } catch (e) {}
@@ -215,9 +237,9 @@ Item {
   // Se sondea siempre: cuando está cerrado, espaciado; abierto, seguido. Así el
   // espejo aparece solo, sin que ningún servidor tenga que avisarle.
   Timer {
-    running: true
+    running: !root.paused
     repeat: true
-    interval: root.abierto ? 110 : 350
+    interval: root.abierto ? 110 : (root.servidorVivo ? 350 : 3000)
     onTriggered: if (!leer.running) leer.running = true
   }
 

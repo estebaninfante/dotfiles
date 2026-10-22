@@ -67,6 +67,19 @@ BarWidget {
 
   function refresh() { if (!probe.running) probe.running = true }
 
+  // Modo ahorro extremo (power-extreme.sh): la voz está parada; no se corre
+  // `voice` cada 2 s.
+  property bool paused: false
+  function pause() { root.paused = true }
+  function resume() { root.paused = false; root.refresh() }
+
+  Process {
+    id: extremeCheck
+    running: true
+    command: ["sh", "-c", "test -f \"${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on\""]
+    onExited: function(code) { if (code === 0) root.pause() }
+  }
+
   function cycle() {
     if (changing) return
     changing = true
@@ -109,7 +122,7 @@ BarWidget {
 
   Timer {
     interval: root.refreshMs
-    running: true
+    running: !root.paused
     repeat: true
     triggeredOnStart: true
     onTriggered: root.refresh()
@@ -119,5 +132,7 @@ BarWidget {
     target: "eztvn.modo-voz"
     function refresh(): void { root.refresh() }
     function cycle(): void { root.cycle() }
+    function pause(): void { root.broadcast("pause") }
+    function resume(): void { root.broadcast("resume") }
   }
 }

@@ -67,9 +67,35 @@ BarWidget {
   implicitWidth: root.vertical ? Style.bar.statusSlot : root.fixedWidth
   implicitHeight: root.barSize
 
+  // Modo ahorro extremo (power-extreme.sh): sin monitor (parec + pactl cada
+  // segundo). Se consulta el flag al arrancar y el script avisa por IPC.
+  property bool paused: false
+
+  function pause() {
+    root.paused = true
+    monitor.running = false
+    root.level = 0
+    root.peak = 0
+    root.peakHold = 0
+  }
+
+  function resume() {
+    root.paused = false
+    monitor.running = true
+  }
+
   IpcHandler {
     target: "eztvn.mic"
     function refresh(): void { root.broadcast("refresh") }
+    function pause(): void { root.broadcast("pause") }
+    function resume(): void { root.broadcast("resume") }
+  }
+
+  Process {
+    id: extremeCheck
+    running: true
+    command: ["sh", "-c", "test -f \"${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on\""]
+    onExited: function(code) { if (code === 0) root.pause() }
   }
 
   Process {
@@ -83,7 +109,7 @@ BarWidget {
   Timer {
     id: restartTimer
     interval: 800
-    onTriggered: monitor.running = true
+    onTriggered: if (!root.paused) monitor.running = true
   }
 
   Process { id: muteProc; command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"] }

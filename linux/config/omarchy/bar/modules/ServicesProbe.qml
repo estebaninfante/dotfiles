@@ -11,6 +11,7 @@ Item {
   property var unitEnabled: []
   property int lanEstab: 0
   property int lanDegradedMarkers: 0
+  property int intervalMs: 3000
 
   function refresh() {
     if (!probe.running) probe.running = true
@@ -19,7 +20,8 @@ Item {
   Process {
     id: probe
 
-    command: ["bash", "-lc",
+    // Sin `-l`: un shell de login carga el .bashrc entero en cada sondeo.
+    command: ["bash", "-c",
       "systemctl --user is-active " + probeRoot.unitIds.join(" ") + " 2>/dev/null; "
       + "echo '::enabled'; systemctl --user is-enabled " + probeRoot.unitIds.join(" ") + " 2>/dev/null; "
       + "echo '::lanconn'; ss -Hun state established 2>/dev/null | grep -c ':4242'; "
@@ -54,7 +56,7 @@ Item {
   }
 
   Timer {
-    interval: 3000
+    interval: probeRoot.intervalMs
     running: true
     repeat: true
     triggeredOnStart: true

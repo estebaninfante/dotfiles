@@ -19,7 +19,18 @@ local function grab(on)
     hl.config({ binds = { disable_keybind_grabbing = on } })
 end
 
+-- Sin daemon de lan-mouse no hay captura que soltar: el sync corre cada 3 s y
+-- cada llamada al script son varios procesos. os.rename(p, p) comprueba que el
+-- archivo existe sin crear ninguno. El socket queda huérfano al parar el
+-- daemon, así que también se mira el flag del modo ahorro extremo (que lo para).
+local LAN_MOUSE_SOCKET = (os.getenv("XDG_RUNTIME_DIR") or "") .. "/lan-mouse-socket.sock"
+local POWER_EXTREME_FLAG = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state"))
+    .. "/power-extreme/on"
+
 local function release_lan_mouse(on)
+    if not os.rename(LAN_MOUSE_SOCKET, LAN_MOUSE_SOCKET) or os.rename(POWER_EXTREME_FLAG, POWER_EXTREME_FLAG) then
+        return
+    end
     hl.exec_cmd(LAN_MOUSE_CAPTURE .. (on and " off" or " on"))
 end
 

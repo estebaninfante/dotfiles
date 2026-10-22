@@ -31,6 +31,7 @@ SYSTEM_ON="$STATE_DIR/system.running"
 BRIGHT_SAVE="$STATE_DIR/brightness"
 LED_SAVE="$STATE_DIR/kbd-led"
 IDLE_SAVE="$STATE_DIR/idle"
+HYPR_SAVE="$STATE_DIR/hypr"
 VOICE_DROPIN="$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf"
 SHELL_JSON="$HOME/.config/omarchy/shell.json"
 KBD_LED="/sys/class/leds/platform::kbd_backlight"
@@ -181,6 +182,58 @@ idle_restore() {
   [ -n "${s:-}" ] && [ -n "${l:-}" ] && idle_set "$s" "$l"
 }
 
+# ── barra y compositor ────────────────────────────────────────────────────
+# Widgets de la barra que sondean o animan sin parar. Se pausan por IPC; si la
+# barra arranca con el modo activo, cada widget lee el flag y arranca pausado.
+#   eztvn.wave         cava a 60 fps: quickshell redibuja siempre
+#   eztvn.mic          parec con el micrófono abierto + pactl cada segundo
+#   eztvn.hypr-outline bash + 2 curl cada 350 ms contra hypr-remote (parado)
+#   eztvn.modo-voz     CLI `voice` (Python) cada 2 s; la voz está parada
+#   eztvn.pi-tts       ídem
+#   services           LED que pulsa en bucle con servicios caídos (lo están
+#                      a propósito) + sondeo cada 3 s → cada 60 s
+#   eztvn.cpu-heatmap  script + animación cada 1 s → cada 10 s
+#   vm.sysmem          script + nvidia-smi cada 2 s → cada 10 s
+SHELL_WIDGETS=(eztvn.wave eztvn.mic eztvn.hypr-outline eztvn.modo-voz eztvn.pi-tts
+  services eztvn.cpu-heatmap vm.sysmem)
+shell_widgets() { # shell_widgets pause|resume
+  local w
+  command -v qs >/dev/null 2>&1 || return 0
+  for w in "${SHELL_WIDGETS[@]}"; do
+    timeout 3 qs ipc -n -p "${OMARCHY_PATH:-/usr/share/omarchy}/shell" \
+      call "$w" "$1" >/dev/null 2>&1 || true
+  done
+}
+
+# Animaciones, sombras y blur del compositor: cada animación son decenas de
+# frames a 60 Hz. Se guardan los valores para devolverlos exactos (no se usa
+# `hyprctl reload`: volvería a correr el autostart).
+hypr_get() { hyprctl getoption "$1" 2>/dev/null | awk '/^bool:/{print $2; exit}'; }
+hypr_lite_on() {
+  command -v hyprctl >/dev/null 2>&1 || return 0
+  printf '%s %s %s\n' "$(hypr_get animations:enabled)" \
+    "$(hypr_get decoration:shadow:enabled)" "$(hypr_get decoration:blur:enabled)" >"$HYPR_SAVE"
+  hyprctl eval 'hl.config({animations={enabled=false}, decoration={shadow={enabled=false}, blur={enabled=false}}})' \
+    >/dev/null 2>&1 || true
+}
+hypr_lite_off() {
+  local a s b
+  [ -f "$HYPR_SAVE" ] || return 0
+  read -r a s b <"$HYPR_SAVE" || true
+  [ -n "${a:-}" ] && [ -n "${s:-}" ] && [ -n "${b:-}" ] || return 0
+  hyprctl eval "hl.config({animations={enabled=$a}, decoration={shadow={enabled=$s}, blur={enabled=$b}}})" \
+    >/dev/null 2>&1 || true
+}
+
+# La dGPU solo suspende si nadie tiene /dev/nvidia* abierto. Hyprland la abre al
+# arrancar y no la suelta en caliente; env.lua la deja fuera cuando la sesión
+# arranca con el modo activo, así que hace falta cerrar sesión y volver a entrar.
+dgpu_held() {
+  local gpu=/sys/bus/pci/devices/0000:01:00.0/power/runtime_status
+  [ -r "$gpu" ] && [ "$(cat "$gpu")" = "active" ] &&
+    sudo -n fuser /dev/nvidia0 /dev/nvidiactl >/dev/null 2>&1
+}
+
 # ── voz en CPU ────────────────────────────────────────────────────────────
 # Sin esto, el primer aviso hablado arranca Kokoro en CUDA y deja la dGPU
 # despierta el resto de la sesión. Con CUDA_VISIBLE_DEVICES vacío, torch usa CPU.
@@ -261,6 +314,8 @@ engage() {
   fi
   led_set 0
   idle_set "$IDLE_SCREENSAVER" "$IDLE_LOCK"
+  shell_widgets pause
+  hypr_lite_on
 
   # 5) Parar la actividad de fondo. Primero timers y servicios del sistema;
   #    los del usuario al final (uno de ellos puede matar este proceso).
@@ -282,9 +337,19 @@ engage() {
   fi
 
   log "on: aplicado (power-saver, brillo ${BRIGHT_PCT}%, idle ${IDLE_SCREENSAVER}/${IDLE_LOCK})"
+  local dgpu_msg=""
+  dgpu_held && dgpu_msg=" Cerrá sesión y volvé a entrar para apagar la dGPU (≈8-10 W más)."
   notify "Ahorro extremo activo" \
-    "IA local, voz, KVM, agentes y timers apagados. Solo SSH/Tailscale. Brillo ${BRIGHT_PCT}%, pantalla ${IDLE_SCREENSAVER}s."
-  echo "Modo ahorro extremo ACTIVO. Se sale al enchufar el cargador (o «power-extreme.sh off»)."
+    "IA local, voz, KVM, agentes y timers apagados. Solo SSH/Tailscale. Brillo ${BRIGHT_PCT}%, pantalla ${IDLE_SCREENSAVER}s.${dgpu_msg}"
+  echo "Modo ahorro extremo ACTIVO. Se sale al enchufar el cargador (o «power-extreme.sh off»).${dgpu_msg}"
+
+  # lan-mouse deja el socket al parar: sin borrarlo, moonlight.lua y la barra
+  # creen que el daemon sigue vivo. Va antes de parar los servicios del usuario
+  # (uno de ellos puede matar este proceso); el daemon lo recrea al arrancar.
+  if grep -qx lan-mouse.service "$RUNNING" 2>/dev/null; then
+    systemctl --user stop lan-mouse.service >/dev/null 2>&1 || true
+    rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lan-mouse-socket.sock"
+  fi
 
   if [ -s "$RUNNING" ]; then
     # shellcheck disable=SC2046
@@ -313,6 +378,8 @@ release() {
   [ -n "${l:-}" ] && led_set "$l"
   idle_restore
   voice_cpu_off
+  shell_widgets resume
+  hypr_lite_off
 
   # 2) Volver a levantar lo que estaba corriendo.
   if [ -s "$RUNNING" ]; then
@@ -331,7 +398,7 @@ release() {
   # 3) Que el guard re-evalúe (batería: power-saver y cap normal de 50 %).
   sudo -n systemctl start battery-power-guard.service >/dev/null 2>&1 || true
 
-  rm -f "$RUNNING" "$TIMERS_ON" "$SYSTEM_ON" "$BRIGHT_SAVE" "$LED_SAVE" "$IDLE_SAVE"
+  rm -f "$RUNNING" "$TIMERS_ON" "$SYSTEM_ON" "$BRIGHT_SAVE" "$LED_SAVE" "$IDLE_SAVE" "$HYPR_SAVE"
   log "off: restaurado"
   notify "Ahorro extremo desactivado" "Servicios, brillo y pantalla vueltos a la normalidad."
   echo "Modo ahorro extremo DESACTIVADO."
@@ -368,7 +435,11 @@ PY
     "$([ -f "$TIMERS_ON" ] && wc -l <"$TIMERS_ON" || echo 0)" \
     "$([ -f "$SYSTEM_ON" ] && wc -l <"$SYSTEM_ON" || echo 0)"
   printf 'Voz en CPU (drop-in): %s\n' "$([ -f "$VOICE_DROPIN" ] && echo sí || echo no)"
-  [ -r "$gpu" ] && printf 'dGPU: %s\n' "$(cat "$gpu")"
+  if [ -r "$gpu" ]; then
+    printf 'dGPU: %s' "$(cat "$gpu")"
+    is_on && dgpu_held && printf ' (la tiene el compositor: cerrá sesión y volvé a entrar)'
+    printf '\n'
+  fi
   free | awk '/^Mem:/{printf "RAM: %.1f GB en uso de %.1f GB\n", $3/1048576, $2/1048576}'
   nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null |
     awk '{print "VRAM: "$0}'

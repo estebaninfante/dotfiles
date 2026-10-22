@@ -80,11 +80,31 @@ BarWidget {
   implicitWidth: root.vertical ? Style.bar.statusSlot : Math.round(root.gridW + root.hPad * 2)
   implicitHeight: root.vertical ? (root.gridH + 12) : root.barSize
 
+  // Modo ahorro extremo (power-extreme.sh): refresco cada 10 s. Se consulta el
+  // flag al arrancar y el script avisa por IPC al entrar/salir.
+  property bool paused: false
+  function pause() { root.paused = true }
+  function resume() { root.paused = false }
+
+  Process {
+    running: true
+    command: ["sh", "-c", "test -f \"${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on\""]
+    onExited: function(code) { if (code === 0) root.pause() }
+  }
+
   IpcHandler {
     target: "eztvn.cpu-heatmap"
 
     function refresh(): void {
       root.broadcast("refresh")
+    }
+
+    function pause(): void {
+      root.broadcast("pause")
+    }
+
+    function resume(): void {
+      root.broadcast("resume")
     }
   }
 
@@ -98,7 +118,7 @@ BarWidget {
   }
 
   Timer {
-    interval: root.refreshSeconds * 1000
+    interval: root.paused ? 10000 : root.refreshSeconds * 1000
     running: true
     repeat: true
     triggeredOnStart: true

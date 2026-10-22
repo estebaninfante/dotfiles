@@ -83,6 +83,25 @@ Panel {
     if (!probe.running) probe.running = true
   }
 
+  // Modo ahorro extremo (power-extreme.sh): la voz está parada; no se corre
+  // `voice` cada 2 s (con el panel abierto sí).
+  property bool paused: false
+  function pause() { root.paused = true }
+  function resume() { root.paused = false; root.refresh() }
+
+  IpcHandler {
+    target: "eztvn.pi-tts"
+    function pause(): void { root.pause() }
+    function resume(): void { root.resume() }
+  }
+
+  Process {
+    id: extremeCheck
+    running: true
+    command: ["sh", "-c", "test -f \"${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on\""]
+    onExited: function(code) { if (code === 0) root.pause() }
+  }
+
   function refreshHistory() {
     if (!historyProc.running) historyProc.running = true
   }
@@ -184,7 +203,7 @@ Panel {
 
   Timer {
     interval: root.refreshMs
-    running: true
+    running: !root.paused || root.opened
     repeat: true
     triggeredOnStart: true
     onTriggered: root.refresh()

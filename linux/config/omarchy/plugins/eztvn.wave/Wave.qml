@@ -39,6 +39,35 @@ BarWidget {
   property int _lines: 0
   property int _linesAtCheck: 0
 
+  // Modo ahorro extremo (power-extreme.sh): sin cava ni animación. Se consulta
+  // el flag al arrancar y el script avisa por IPC al entrar/salir.
+  property bool paused: false
+
+  function pause() {
+    root.paused = true
+    cava.running = false
+    root.levels = []
+  }
+
+  function resume() {
+    root.paused = false
+    root._linesAtCheck = root._lines
+    cava.running = true
+  }
+
+  IpcHandler {
+    target: "eztvn.wave"
+    function pause(): void { root.broadcast("pause") }
+    function resume(): void { root.broadcast("resume") }
+  }
+
+  Process {
+    id: extremeCheck
+    running: true
+    command: ["sh", "-c", "test -f \"${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on\""]
+    onExited: function(code) { if (code === 0) root.pause() }
+  }
+
   visible: true
   implicitWidth: root.barCount * root.barWidth + (root.barCount - 1) * root.barGap + 12
   implicitHeight: root.barSize
@@ -55,13 +84,13 @@ BarWidget {
   Timer {
     id: restartTimer
     interval: 1000
-    onTriggered: cava.running = true
+    onTriggered: if (!root.paused) cava.running = true
   }
 
   Timer {
     id: watchdog
     interval: 4000
-    running: true
+    running: !root.paused
     repeat: true
     onTriggered: {
       if (root._lines === root._linesAtCheck) {

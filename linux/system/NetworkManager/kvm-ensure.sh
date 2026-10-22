@@ -92,6 +92,9 @@ home_wifi_up() {
 restart_lan_mouse() {
     local uid
     uid=$(id -u "$USER" 2>/dev/null) || return 1
+    # Modo ahorro extremo (power-extreme.sh) apagó lan-mouse a propósito: un
+    # cambio de red (p. ej. al volver de suspensión) no debe resucitarlo.
+    [ -f "/home/$USER/.local/state/power-extreme/on" ] && return 0
     # Asíncrono + timeout: en desktop el stop de lan-mouse puede tardar ~90s
     # (KVM con sesión activa); no debe bloquear dispatcher ni timer.
     su "$USER" -c "XDG_RUNTIME_DIR=/run/user/$uid timeout 20 systemctl --user restart lan-mouse.service" >/dev/null 2>&1 </dev/null &

@@ -175,8 +175,10 @@ QtObject {
     root.updateTrend()
   }
 
+  // Sin `-l`: un shell de login carga el .bashrc entero (starship, zoxide,
+  // decenas de procesos) en cada muestra.
   property Process sampleProc: Process {
-    command: ["bash", "-lc", root.pluginScript("eztvn-power-sample")]
+    command: ["bash", root.pluginScript("eztvn-power-sample")]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.appendSample(Model.parseSample(text))
@@ -208,7 +210,7 @@ QtObject {
   }
 
   property Process extrasProc: Process {
-    command: ["bash", "-lc", root.pluginScript("eztvn-power-extras")]
+    command: ["bash", root.pluginScript("eztvn-power-extras")]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyKeyValue(text, "system")
@@ -216,7 +218,7 @@ QtObject {
   }
 
   property Process tailProc: Process {
-    command: ["bash", "-lc", root.pluginScript("eztvn-power-history") + " 24000"]
+    command: ["bash", root.pluginScript("eztvn-power-history"), "24000"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.parseTail(text)

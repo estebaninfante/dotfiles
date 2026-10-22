@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -26,6 +27,25 @@ Item {
     "lan-mouse.service",
     "hypr-remote.service"
   ]
+
+  // Modo ahorro extremo (power-extreme.sh): estos servicios están parados a
+  // propósito. Sin pulso infinito del LED (60 fps de redibujo constante) y
+  // sondeo cada minuto en vez de cada 3 s.
+  property bool extreme: false
+  function pause() { root.extreme = true }
+  function resume() { root.extreme = false; statusProbe.refresh() }
+
+  IpcHandler {
+    target: "services"
+    function pause(): void { root.pause() }
+    function resume(): void { root.resume() }
+  }
+
+  Process {
+    running: true
+    command: ["sh", "-c", "test -f \"${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on\""]
+    onExited: function(code) { if (code === 0) root.pause() }
+  }
 
   readonly property string lanUnit: "lan-mouse.service"
   readonly property int lanIndex: unitIds.indexOf(lanUnit)
@@ -210,6 +230,7 @@ Item {
   ServicesProbe {
     id: statusProbe
     unitIds: root.unitIds
+    intervalMs: root.extreme ? 60000 : 3000
   }
 
   Motion { id: motion }
@@ -276,7 +297,7 @@ Item {
         visible: root.anyDown && !root.settling && !root.menuOpen
         opacity: 0.0
         SequentialAnimation on opacity {
-          running: ledPulse.visible && !motion.reduced
+          running: ledPulse.visible && !motion.reduced && !root.extreme
           loops: Animation.Infinite
           NumberAnimation { to: 0.6; duration: 460; easing.type: Easing.OutQuad } // pulso
           NumberAnimation { to: 0.0; duration: 460; easing.type: Easing.InQuad } // pulso
