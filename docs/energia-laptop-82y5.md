@@ -495,11 +495,38 @@ para quien quiera seguir hablando con el agente durante el modo.
 
 La RAM y la VRAM son deterministas (se van con los modelos). El consumo se midió
 una vez con la máquina tranquila; con cientos de agentes corriendo el número
-salta y no sirve. La dGPU **sigue en `active`**: Hyprland y hyprpaper tienen
-`/dev/nvidia0` abierto y sostienen las referencias de runtime-PM. Ya no hay
-contextos CUDA (VRAM ~0), así que lo que falta es sacarle la dGPU al compositor:
-`AQ_DRM_DEVICES=/dev/dri/card2`, que requiere reiniciar el compositor y no entra
-en un toggle en caliente. Ahí hay otros ~8-10 W (§4.1).
+salta y no sirve.
+
+### Segunda pasada (2026-10-22 13:20): la barra era el piso
+
+Con el modo activo el consumo seguía en **34 W**. La causa no eran servicios
+sino la barra (quickshell) y Hyprland: **213 procesos nuevos por segundo** con
+la máquina quieta (medido con `/proc/stat` y ftrace `sched_process_exec`).
+
+| Culpable | Qué hacía | Arreglo |
+|---|---|---|
+| `vm.sysmem` | `nvidia-smi` cada 2 s: **la dGPU nunca suspendía** | no lo llama si la dGPU está `suspended`; 10 s en extremo; sin `awk` |
+| `eztvn.hypr-outline` | `bash -l` + 2 `curl` cada 350 ms contra hypr-remote (parado) | `bash -c`; 3 s si no responde; pausado en extremo |
+| `services` (barra) | LED con pulso infinito a 60 fps mientras haya servicios caídos (el modo los apaga) + `bash -l` cada 3 s | sin pulso y sondeo cada 60 s en extremo; `bash -c` |
+| `eztvn.wave` | `cava` a 60 fps | pausado en extremo |
+| `eztvn.mic` | `parec` con el micrófono abierto + `pactl` cada 1 s | pausado en extremo |
+| `eztvn.modo-voz`, `eztvn.pi-tts` | CLI `voice` (Python) cada 2 s | pausados en extremo |
+| `eztvn.cpu-heatmap` | script + animación cada 1 s | 10 s en extremo |
+| `eztvn.power` | `bash -l` (carga el `.bashrc`: starship, zoxide…) cada 5 s | `bash` sin login |
+| `moonlight.lua` | `lan-mouse-capture.sh` cada 3 s aunque lan-mouse esté parado | no lo llama sin socket o con el modo activo |
+| `kvm-ensure.sh` | al volver de suspensión hacía `restart` de lan-mouse | respeta el flag del modo |
+| Hyprland | animaciones y sombras | apagadas en extremo (`hyprctl eval`, se restauran) |
+
+Los widgets se pausan por IPC (`qs ipc … call <widget> pause|resume`, lista en
+`SHELL_WIDGETS` de `power-extreme.sh`) y, si la barra arranca con el modo
+activo, leen el flag y arrancan pausados. Resultado: **6 forks/s, quickshell
+2 % CPU, dGPU `suspended`, 18.5–19.3 W**. La dGPU suspende aunque Hyprland
+tenga `/dev/nvidia0` abierto: lo que la mantenía activa era el sondeo.
+
+Respaldo: si la dGPU quedara `active` igual, `env.lua` arranca la sesión solo
+con la iGPU (`AQ_DRM_DEVICES` + EGL/GLX/Vulkan de Mesa) cuando el modo está
+activo al iniciar sesión; `power-extreme.sh on` y `status` avisan de cerrar
+sesión en ese caso. En esa sesión HDMI y DP-1 (cuelgan de la dGPU) no andan.
 
 ### Costo / reversión
 

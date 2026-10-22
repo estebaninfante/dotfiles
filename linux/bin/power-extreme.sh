@@ -441,8 +441,13 @@ PY
     printf '\n'
   fi
   free | awk '/^Mem:/{printf "RAM: %.1f GB en uso de %.1f GB\n", $3/1048576, $2/1048576}'
-  nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null |
-    awk '{print "VRAM: "$0}'
+  # nvidia-smi despierta la dGPU: si está suspendida, la VRAM es 0.
+  if [ -r "$gpu" ] && [ "$(cat "$gpu")" = "suspended" ]; then
+    echo "VRAM: 0 MiB (dGPU suspendida)"
+  else
+    nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null |
+      awk '{print "VRAM: "$0}'
+  fi
   printf 'SSH: sshd %s   Tailscale: %s   Red: %s\n' \
     "$(systemctl is-active sshd 2>/dev/null)" \
     "$(systemctl is-active tailscaled 2>/dev/null)" \
