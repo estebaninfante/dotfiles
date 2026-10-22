@@ -184,7 +184,7 @@ export default function (pi: ExtensionAPI) {
    *   lo suma cuando el agente arranque un turno por su cuenta. Despertarlo
    *   con un `followUp` era lo que producía el bucle de revisar-contestar.
    */
-  const intentarEntrega = () => {
+  const intentarEntrega = async () => {
     const ctx = ctxActual;
     if (!ctx || pendienteDeEntrega) return;
     if (ctx.isIdle()) return;
@@ -202,7 +202,7 @@ export default function (pi: ExtensionAPI) {
 
     pendienteDeEntrega = true;
     try {
-      pi.sendUserMessage(textoDelCorreo(ajenos), { deliverAs: "steer" });
+      await pi.sendUserMessage(textoDelCorreo(ajenos), { deliverAs: "steer" });
       // Recién acá se dan por leídos: si el steer no entró, quedan en el buzón
       // para el próximo turno en vez de perderse.
       leerPendientes(true);
