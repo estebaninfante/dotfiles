@@ -3,6 +3,37 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-22 — Modo extremo, segunda vuelta: todo afuera, solo SSH/Tailscale
+
+**Contexto.** La primera versión conservaba `rig-main-seat` (la silla del
+agente) y `voice-daemon` (voz en CPU). El usuario pidió que se apague **todo**
+proceso de fondo y que RAM y VRAM queden al mínimo, dejando vivos solo Tailscale
+y lo necesario para entrar por SSH.
+
+**Qué se eligió.** Se suman a la lista `voice-daemon`, `rig-main-seat`,
+`audio-jack-guard` y `omarchy-migrate-notify`, y se liberan las cachés del kernel
+(`drop_caches`) después de parar todo. Queda vivo únicamente: SSH/Tailscale/red,
+la sesión gráfica (Hyprland, shell, idle, lock, polkit, fcitx5, keyd), el keyring
+(agente SSH) y la plomería del sistema (dbus, logind, udev, journald, polkit,
+upower, pipewire por socket). `scripts/verify/energia.sh` ahora falla si `sshd`,
+`tailscaled` o NetworkManager no están activos, o si queda VRAM ocupada.
+
+**Por qué no hay auto-encendido al 10 %.** Con la silla y la voz adentro, entrar
+solo al 10 % mataría la sesión del agente sin que el usuario lo haya pedido. El
+modo es un interruptor explícito (tecla/menú). La salida al enchufar sí sigue
+automática.
+
+**Por qué se conserva una válvula.** `POWER_EXTREME_KEEP_SEAT=1` deja viva la
+silla: sirve para probar el modo sin matar la sesión desde la que se prueba (lo
+usé para verificar todo lo demás) y para quien quiera seguir hablando con el
+agente mientras ahorra.
+
+**Resultado medido (batería, sesión arriba).** RAM 7.8 GB → **3.2 GB**; VRAM
+1178 MiB → **2 MiB**; 27 servicios de usuario, 11 timers y 5 servicios del
+sistema abajo. SSH, Tailscale y red siguen activos.
+
+Verificación: `scripts/verify/energia.sh`. Doc: `docs/energia-laptop-82y5.md` §8.
+
 ## 2026-10-22 — Modo ahorro extremo: apagar el stack propio, y la voz en CPU
 
 **Contexto.** El guard de energía solo tocaba perfil, ASPM, NMI watchdog, una

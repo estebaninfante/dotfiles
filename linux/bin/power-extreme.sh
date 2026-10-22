@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # power-extreme.sh — modo de ahorro extremo para batería.
 #
-# Apaga lo que no hace falta para trabajar (voz de entrada, modelos locales,
-# KVM/streaming, agentes y servidores de desarrollo, timers periódicos), pone
-# power-saver, capa el brillo al 25 %, apaga la luz del teclado y acorta el
-# apagado de pantalla. La SALIDA de voz sigue viva: el daemon de voz se reinicia
-# con CUDA_VISIBLE_DEVICES="" para que Kokoro corra en CPU y no despierte la
-# dGPU (que es ~8-10 W, ver docs/energia-laptop-82y5.md §4.1).
+# Apaga TODO servicio de fondo que no sea imprescindible para la sesión o para
+# entrar por SSH: modelos locales (RAM/VRAM a cero), voz, KVM/streaming, agentes
+# y servidores, timers periódicos, impresión, docker, bluetooth. Pone
+# power-saver, brillo 25 %, luz del teclado apagada, pantalla 60 s y libera las
+# cachés del kernel. Solo quedan: Tailscale, sshd, red, sesión gráfica, entrada
+# y los servicios del sistema.
 #
 # Al enchufar el cargador se sale solo (power-session-guard.service llama `off`).
-# Y a <=10 % de batería entra solo (hook omarchy battery-low).
 #
 # Uso:
 #   power-extreme.sh on|off|toggle|status
-#   power-extreme.sh on --auto    no falla si está con corriente (hook)
+#   power-extreme.sh on --auto    no falla si está con corriente
+#
+# POWER_EXTREME_KEEP_SEAT=1 conserva la silla del agente (rig-main-seat) en vez
+# de matarla. Sirve para pruebas y para quien quiera seguir hablando con el
+# agente mientras el modo está activo.
 #
 # Documentación: docs/energia-laptop-82y5.md §8
 # Verificación:  scripts/verify/energia.sh
@@ -36,10 +39,11 @@ IDLE_SCREENSAVER=60 # antes 150
 IDLE_LOCK=180       # antes 300
 
 # ── qué se apaga ──────────────────────────────────────────────────────────
-# Servicios de usuario. NO incluir acá: pipewire, wireplumber, omarchy-shell,
-# omarchy-sleep-lock, hypridle, hyprpolkitagent, omarchy-fcitx5,
-# gnome-keyring, dbus, NetworkManager y voice-daemon (salida de voz: queda
-# dormido y es el canal para avisar; su Kokoro pasa a CPU).
+# Servicios de usuario. NO incluir acá lo que sostiene la sesión, la entrada o
+# la red/SSH: pipewire/wireplumber (los reactiva el socket si algo pide audio),
+# omarchy-shell, omarchy-sleep-lock, hypridle, hyprpolkitagent,
+# omarchy-fcitx5, omarchy-recover-internal-monitor, gnome-keyring (agente SSH),
+# dbus, power-session-guard y NetworkManager.
 STOP_USER_UNITS=(
   # voz de entrada y modelos locales (lo más caro: micrófono + CUDA)
   omar-listen.service omar-whisper.service omar-pill.service
@@ -50,18 +54,31 @@ STOP_USER_UNITS=(
   lan-mouse.service lan-mouse-auto.service sunshine.service
   weylus.service weylus-tablet.service
   hypr-remote.service hypr-outline.service present-remote.service
-  # agentes y servidores de desarrollo. rig-main-seat NO va acá a propósito:
-  # es la silla que hospeda esta sesión y el canal para pedir que se salga del
-  # modo. Su costo en reposo es ~0; matarla dejaría al usuario sin agente.
-  rig-discord-bot.service rig-telegram-bot.service
+  # agentes y servidores de desarrollo (incluida la silla del agente: sin ella
+  # no queda ningún agente vivo, que es justo lo que pide el modo; para
+  # conservarla, POWER_EXTREME_KEEP_SEAT=1)
+  rig-main-seat.service rig-discord-bot.service rig-telegram-bot.service
   dsh-web.service agentes-platform-main.service
   agentes-platform-developing.service zentro-developing.service
   openclaw-gateway.service speeedy.service vision-gui.service
   ohm.service foldertinder.service omarchy-crash-watch.service
   airbnb-trip-compare.service talk-command.service
-  # audio de micrófono procesado e input automation
-  mic-bt-fx.service mic-gain.service ydotoold.service mnt-blackmagic.service
+  # audio de micrófono procesado, entrada e input automation
+  mic-bt-fx.service mic-gain.service audio-jack-guard.service
+  ydotoold.service mnt-blackmagic.service
+  # salida de voz (deja avisos sonoros apagados; queda el aviso de escritorio)
+  voice-daemon.service omarchy-migrate-notify.service
 )
+
+# Escape para pruebas o para conservar el agente mientras el modo está activo.
+if [ "${POWER_EXTREME_KEEP_SEAT:-0}" = "1" ]; then
+  _keep=()
+  for _u in "${STOP_USER_UNITS[@]}"; do
+    [ "$_u" = "rig-main-seat.service" ] || _keep+=("$_u")
+  done
+  STOP_USER_UNITS=("${_keep[@]}")
+  unset _keep _u
+fi
 
 # Timers y paths: son los que despiertan la CPU cada pocos minutos (el de
 # wallpaper corre cada 20 s).
@@ -246,6 +263,12 @@ engage() {
   else
     log "sin sudo: no se pudieron parar servicios del sistema"
   fi
+  # 3b) Soltar cachés del kernel: es memoria reclamable, pero el modo busca el
+  # mínimo y así `free` refleja lo que realmente queda en uso.
+  if have_root; then
+    sudo -n sync
+    echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true
+  fi
 
   # 4) Perfil + palancas del kernel (las aplica el guard, que ya las conoce).
   "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 || true
@@ -263,7 +286,7 @@ engage() {
 
   log "on: aplicado (power-saver, brillo ${BRIGHT_PCT}%, idle ${IDLE_SCREENSAVER}/${IDLE_LOCK})"
   notify "Ahorro extremo activo" \
-    "IA local, KVM, streaming y agentes apagados. Brillo ${BRIGHT_PCT}%, pantalla ${IDLE_SCREENSAVER}s. Se sale al enchufar."
+    "IA local, voz, KVM, agentes y timers apagados. Solo SSH/Tailscale. Brillo ${BRIGHT_PCT}%, pantalla ${IDLE_SCREENSAVER}s."
   echo "Modo ahorro extremo ACTIVO. Se sale al enchufar el cargador (o «power-extreme.sh off»)."
 }
 
@@ -344,6 +367,13 @@ PY
     "$([ -f "$SYSTEM_ON" ] && wc -l <"$SYSTEM_ON" || echo 0)"
   printf 'Voz en CPU (drop-in): %s\n' "$([ -f "$VOICE_DROPIN" ] && echo sí || echo no)"
   [ -r "$gpu" ] && printf 'dGPU: %s\n' "$(cat "$gpu")"
+  free | awk '/^Mem:/{printf "RAM: %.1f GB en uso de %.1f GB\n", $3/1048576, $2/1048576}'
+  nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null |
+    awk '{print "VRAM: "$0}'
+  printf 'SSH: sshd %s   Tailscale: %s   Red: %s\n' \
+    "$(systemctl is-active sshd 2>/dev/null)" \
+    "$(systemctl is-active tailscaled 2>/dev/null)" \
+    "$(systemctl is-active NetworkManager 2>/dev/null)"
   [ -r /sys/class/power_supply/BAT0/power_now ] &&
     awk '{printf "Consumo: %.1f W\n", $1 / 1000000}' /sys/class/power_supply/BAT0/power_now
 }

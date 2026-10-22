@@ -33,6 +33,14 @@ out_ms="${FADE_OUT_MS:-$(dur fast)}"; out_ms="${out_ms:-120}"
 in_ms="${FADE_IN_MS:-$(dur morph)}"; in_ms="${in_ms:-260}"
 hold_ms="${FADE_HOLD_MS:-80}"
 
+# Con animaciones apagadas el plugin cambia en seco: no esperar fundidos que no
+# van a existir. La espera del modeset (hold) se mantiene igual.
+if [ -z "${FADE_OUT_MS:-}${FADE_IN_MS:-}" ] &&
+   [ "$(cat "$HOME/.local/state/omarchy/animations-enabled" 2>/dev/null || echo 1)" = 0 ]; then
+  out_ms=0
+  in_ms=0
+fi
+
 sleep_ms() {
   awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | xargs sleep
 }

@@ -434,83 +434,123 @@ Los tres caminos concretos, en orden de menor a mayor esfuerzo:
 
 ## 8. Modo ahorro extremo (batería)
 
-Interruptor de "aguantar lo máximo posible": apaga todo lo que no hace falta
-para trabajar, no solo lo que ya apagaba el guard. Vive en
-`linux/bin/power-extreme.sh` y se maneja con `power-extreme.sh on|off|toggle|status`
-(menú: *Trigger → Toggle → Ahorro extremo*; tecla: **Super+Shift+B**).
+Interruptor de "aguantar lo máximo posible": apaga **todo** servicio de fondo
+que no sea imprescindible para la sesión o para entrar por SSH. Vive en
+`linux/bin/power-extreme.sh` y se maneja con
+`power-extreme.sh on|off|toggle|status` (menú: *Trigger → Toggle → Ahorro
+extremo*; tecla: **Super+Shift+B**).
 
-Entra solo a **≤10 %** de batería (`hooks/battery-low.d/00-power-extreme.sh`) y
-sale solo al **enchufar el cargador** (`power-session-guard.sh` llama `off`).
-También se niega a activarse con corriente: es un modo de batería.
+Sale solo al **enchufar el cargador** (`power-session-guard.sh` llama `off`) y
+se niega a activarse con corriente: es un modo de batería. No entra solo por
+batería baja a propósito: como ahora también baja la silla del agente y la voz,
+activarlo tiene que ser una decisión explícita.
 
 ### Qué apaga
 
-- **Voz de entrada y modelos locales:** `omar-listen` (wake word con el micrófono
-  abierto 24/7), `omar-whisper` (CUDA), `omar-pill`, `omar-surface`, `omar-glow`,
-  `voice-key-listener`, `voice-pi-shim`, `kokoro-tts`, `ollama`.
+- **Modelos locales (RAM y VRAM):** `ollama`, `omar-whisper` (CUDA),
+  `kokoro-tts` (CUDA), `voice-daemon` (Kokoro), `omar-listen` (wake word con el
+  micrófono abierto 24/7), `omar-pill`, `omar-surface`, `omar-glow`,
+  `voice-key-listener`, `voice-pi-shim`.
 - **KVM / streaming / remoto:** `lan-mouse`, `lan-mouse-auto`, `sunshine`,
   `weylus`, `weylus-tablet`, `hypr-remote`, `hypr-outline`, `present-remote`.
-- **Agentes y servidores:** `rig-discord-bot`, `rig-telegram-bot`, `dsh-web`,
-  `agentes-platform-*`, `zentro-developing`, `openclaw-gateway`, `speeedy`,
-  `vision-gui`, `ohm`, `foldertinder`, `omarchy-crash-watch`, `airbnb-trip-compare`,
-  `talk-command`, `mic-bt-fx`, `mic-gain`, `ydotoold`, `mnt-blackmagic`.
+- **Agentes y servidores:** `rig-main-seat` (la silla del agente), `rig-discord-bot`,
+  `rig-telegram-bot`, `dsh-web`, `agentes-platform-*`, `zentro-developing`,
+  `openclaw-gateway`, `speeedy`, `vision-gui`, `ohm`, `foldertinder`,
+  `omarchy-crash-watch`, `omarchy-migrate-notify`, `airbnb-trip-compare`,
+  `talk-command`.
+- **Audio de micrófono, entrada e input automation:** `mic-bt-fx`, `mic-gain`,
+  `audio-jack-guard`, `ydotoold`, `mnt-blackmagic`.
 - **Timers y paths** que despiertan la CPU: `wallpaper-power-guard.timer` (¡cada
   20 s!), `dev-sync`, `dotfiles-sync`, `ai-chats-sync`, `harness-research`,
   `res-budget`, `res-reap`, `rig-db-sync`, `tmux-reap`, `lan-mouse-auto`,
   `ai-chats-ingest.path`, `lan-mouse-sync.path`.
 - **Del sistema:** `syncthing@eztvn`, `cups`, `avahi`, `docker` (servicio y
   socket) y `bluetooth` (solo si no hay ningún dispositivo conectado).
-- **Hardware:** brillo al **25 %**, luz del teclado apagada, Wi-Fi power save
-  forzado, y `battery-power-guard.sh` mantiene ASPM powersave + NMI watchdog off
-  + dGPU en runtime-PM.
-- **Pantalla:** screensaver a 60 s y bloqueo a 180 s (normal: 150/300).
+- **Hardware y kernel:** brillo al **25 %**, luz del teclado apagada, Wi-Fi power
+  save forzado, ASPM powersave + NMI watchdog off (guard), pantalla a 60 s y
+  bloqueo a 180 s, y `drop_caches` para soltar la caché de páginas.
 
-### Qué NO se apaga (y por qué)
+### Qué persiste (lo único)
 
-- `rig-main-seat`: es la silla que hospeda la sesión del agente y el canal para
-  pedir que se salga del modo. Su costo en reposo es ~0. Matarla dejaría al
-  usuario sin agente y, si el modo entró solo al 10 %, sin forma de hablarle.
-- `voice-daemon` (salida de voz): queda dormido esperando en un FIFO. **Pero**
-  se reinicia con un drop-in que define `CUDA_VISIBLE_DEVICES=`, así Kokoro
-  corre en **CPU** y no despierta la dGPU. Sin esto, el primer aviso hablado
-  dejaba la RTX 4060 despierta el resto de la sesión (§4.1). La calidad baja
-  un poco y tarda ~0.4-0.8 s por frase; el modo se sale con la tecla.
-- Sesión gráfica: `omarchy-shell`, `hypridle`, `hyprpolkitagent`, `omarchy-fcitx5`,
-  pipewire/wireplumber, keyring y red (NetworkManager, tailscaled, sshd).
+- **SSH y Tailscale:** `sshd`, `tailscaled`, `NetworkManager`, `wpa_supplicant`,
+  `systemd-resolved`, `systemd-timesyncd`. El verificador falla si alguno se cae.
+- **Sesión gráfica:** Hyprland, `omarchy-shell`, `hypridle`, `hyprpolkitagent`,
+  `omarchy-sleep-lock`, `omarchy-recover-internal-monitor`.
+- **Entrada:** `keyd`, `omarchy-fcitx5`, `gnome-keyring` (agente SSH).
+- **Plomería:** dbus, logind, udev, journald, polkit, upower,
+  power-profiles-daemon, systemd-oomd. `pipewire`/`wireplumber` quedan porque
+  sus sockets los reactivan igual y matarlos rompe apps de audio.
+
+`POWER_EXTREME_KEEP_SEAT=1 power-extreme.sh on` conserva `rig-main-seat` (y por
+lo tanto tu sesión de agente) aunque el resto se apague. Sirve para pruebas y
+para quien quiera seguir hablando con el agente durante el modo.
 
 ### Medición (2026-10-22, batería, sesión arriba)
 
-Muestreo de `BAT0/power_now` (promedios de 12-20 s):
+| Métrica | Normal | Extremo |
+|---|---|---|
+| RAM en uso | 7.8 GB | **3.2 GB** |
+| VRAM de la dGPU | 1178 MiB | **2 MiB** |
+| Consumo (`power_now`) | 26.6 W | **20.8 W** |
 
-| Estado | Consumo |
-|---|---|
-| Normal (todo el stack arriba) | **26.6 W** |
-| Modo extremo | **20.8 W** |
-
-≈ **-5.9 W (-22 %)**, y eso que la dGPU **sigue activa**: Hyprland y hyprpaper
-tienen `/dev/nvidia0` abierto y sostienen las referencias de runtime-PM. Ya no
-hay contextos CUDA (kokoro/whisper/ollama dan cero en `nvidia-smi`), así que lo
-que falta es sacarle la dGPU al compositor. La vía documentada es
-`AQ_DRM_DEVICES=/dev/dri/card2` (deja la dGPU fuera de Hyprland), pero requiere
-reiniciar el compositor: no se puede hacer en caliente y no entra en este modo.
-Si se hace algún día, acá hay otros ~8-10 W (§4.1).
+La RAM y la VRAM son deterministas (se van con los modelos). El consumo se midió
+una vez con la máquina tranquila; con cientos de agentes corriendo el número
+salta y no sirve. La dGPU **sigue en `active`**: Hyprland y hyprpaper tienen
+`/dev/nvidia0` abierto y sostienen las referencias de runtime-PM. Ya no hay
+contextos CUDA (VRAM ~0), así que lo que falta es sacarle la dGPU al compositor:
+`AQ_DRM_DEVICES=/dev/dri/card2`, que requiere reiniciar el compositor y no entra
+en un toggle en caliente. Ahí hay otros ~8-10 W (§4.1).
 
 ### Costo / reversión
 
 El estado vive en `~/.local/state/power-extreme/`: qué servicios y timers
-estaban corriendo, brillo, LED e idle previos. `off` los devuelve exactos. Si
-el script se interrumpiera, `off` sigue funcionando con lo registrado. No hay
-cambios permanentes: ni en el perfil, ni en systemd, ni en el kernel (el perfil
-lo re-evalúa el guard según la fuente).
+estaban corriendo, brillo, LED e idle previos. `off` los devuelve exactos
+(aunque se haya interrumpido a mitad). No hay cambios permanentes: el perfil lo
+re-evalúa el guard según la fuente. La salida de voz queda apagada mientras el
+modo está activo: los avisos son de escritorio.
 
 ### Verificación
 
 `scripts/verify/energia.sh` agrega una sección "extremo" que exige, mientras
-está activo: perfil `power-saver`, brillo ≤30 %, drop-in de voz en CPU, los
-servicios y timers pesados parados, pantalla ≤60 s y Wi-Fi power save on. Con el
-modo apagado, falla si quedó el drop-in (basura de una corrida anterior).
+está activo: perfil `power-saver`, brillo ≤30 %, drop-in de voz presente, los
+servicios pesados parados (incluidos `voice-daemon` y `rig-main-seat`), timers
+parados, pantalla ≤60 s, Wi-Fi power save on, VRAM ≤256 MiB, y `sshd`,
+`tailscaled` y NetworkManager activos. Con el modo apagado, falla si quedó el
+drop-in (basura de una corrida anterior).
 
-## 9. Dónde se va la CPU (medido)
+## 9. Cambio de modo del panel: fundido en vez de apagón
+
+Cuando el guard re-aplica el modo del panel (60 Hz en ahorro, 120 Hz en
+rendimiento) el OLED pasa por un *modeset* de unas décimas en el que no hay
+imagen. Antes eso se veía como si la pantalla se apagara de golpe, y encima se
+hacía con un `hyprctl reload` completo (~1.5 s de negro, más el trabajo de
+re-evaluar todo el config).
+
+Ahora el cambio se hace detrás de una cortina negra a pantalla completa con
+fundido, y solo se re-evalúa lo que depende de la energía:
+
+| Pieza | Qué hace |
+| --- | --- |
+| `plugins/eztvn.fade` (overlay del shell) | `PanelWindow` negro puro a pantalla completa en capa Overlay, sin región de entrada. Expone `blackout (ms)`, `uncover (ms)`, `phase` por IPC. En OLED el negro apaga los píxeles: el fundido se siente como un apagado lento. Usa los tokens del motor de movimiento (`Tokens.fast` al bajar, `Tokens.morph` al subir) y con animaciones apagadas cae a negro seco. Tiene un timer de 3 s que descubre la pantalla si quien pidió el negro murió. |
+| `linux/bin/pantalla-fade` | Marca el ritmo: `blackout` → comando → espera corta → `uncover`. Lee las duraciones de `motion.json`, serializa con `flock` y no hace nada si el shell no responde (el cambio ocurre igual). |
+| `hypr/monitors.lua` | Expone `omarchy.apply_power_monitors()`, que re-evalúa la rama de monitores (incluido el espejo por HDMI) leyendo el estado de energía **en el momento del llamado**. |
+| `hypr/looknfeel.lua` | Expone `omarchy.apply_power_blur()`, que cambia solo el blur según el estado actual. |
+| `power-session-guard.sh` | `aplicar_modo()` = `pantalla-fade cover -- hyprctl eval 'omarchy.apply_power_monitors(); omarchy.apply_power_blur()'`. Si los helpers no existen (config vieja) o no hay cortina, cae al `hyprctl reload` de siempre. |
+
+Por qué `hyprctl eval` y no `reload`: el reload tarda ~1.5 s y deja el panel en
+negro todo ese rato; el eval aplica el modo en ~10-400 ms y el blur en ~10 ms
+(cuando cambia de verdad). Medido: la transición completa quedó en ~0.6-1.4 s de
+punta a punta, con el negro visible solo mientras dura el modeset.
+
+`scripts/verify/energia.sh` falla si falta `pantalla-fade`, si el plugin no está
+habilitado en `shell.json` o si la cortina no responde.
+
+Un detalle del shell de Omarchy: si un plugin nuevo no compila la primera vez,
+queda cacheado como roto hasta reiniciar el shell (`Qt.clearComponentCache` no
+existe en esta versión). Por eso el plugin se probó con una instancia aparte de
+Quickshell antes de habilitarlo.
+
+## 10. Dónde se va la CPU (medido)
 
 Ranking por proceso, ventana de 10 s, sumando procesos con el mismo nombre:
 
@@ -530,7 +570,7 @@ Dos fotos concretas: con load 8.9 → **3.1 núcleos** ocupados (76 % idle); con
 load 13.4 → **7.0 núcleos** ocupados (49 % idle). En ninguna sobra CPU: el gasto
 es el stack propio, no el kernel.
 
-## 10. Fuentes
+## 11. Fuentes
 
 - `amdgpu.dcdebugmask=0x10` = `DC_DISABLE_PSR`:
   https://knowledgebase.frame.work/en_us/psr-display-flicker-workaround-for-linux-SJTKb7VMl

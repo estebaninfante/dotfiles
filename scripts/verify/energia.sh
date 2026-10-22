@@ -81,6 +81,28 @@ if [ -n "${cap:-}" ]; then
   fi
 fi
 
+# --- transición del modo de pantalla (cortina eztvn.fade) -----------------
+# El cambio 60↔120Hz deja el panel en negro unas décimas; `pantalla-fade` lo
+# tapa con un fundido. Si falta el guion o la cortina, el cambio vuelve a
+# sentirse como un apagón seco.
+if command -v pantalla-fade >/dev/null 2>&1; then
+  ok "pantalla-fade: instalado"
+else
+  fail "pantalla-fade: falta (el cambio de modo de pantalla parpadeará)"
+fi
+if grep -q '"id": "eztvn.fade"' "$HOME/.config/omarchy/shell.json" 2>/dev/null; then
+  ok "plugin eztvn.fade: habilitado"
+else
+  fail "plugin eztvn.fade: falta en shell.json"
+fi
+if command -v omarchy-shell >/dev/null 2>&1; then
+  if [ "$(timeout 1 omarchy-shell eztvn.fade ping 2>/dev/null)" = "ok" ]; then
+    ok "cortina del panel: responde"
+  else
+    warn "cortina del panel: no responde (shell sin recargar o plugin caído)"
+  fi
+fi
+
 # --- dGPU ----------------------------------------------------------------
 gpu="/sys/bus/pci/devices/0000:01:00.0"
 if [ -e "$gpu" ]; then
@@ -142,9 +164,23 @@ if [ -f "$EXTREME" ]; then
   fi
   dropin="$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf"
   [ -f "$dropin" ] && ok "extremo: voz en CPU (drop-in presente)" || fail "extremo: falta el drop-in que pone Kokoro en CPU"
-  for u in kokoro-tts.service lan-mouse.service ollama.service sunshine.service omar-listen.service; do
+  for u in kokoro-tts.service lan-mouse.service ollama.service sunshine.service omar-listen.service voice-daemon.service rig-main-seat.service; do
     systemctl --user is-active --quiet "$u" && fail "extremo: $u sigue activo" || ok "extremo: $u parado"
   done
+  # Lo único que tiene que seguir vivo además de la sesión: SSH y Tailscale.
+  systemctl is-active --quiet sshd && ok "extremo: sshd activo" || fail "extremo: sshd NO está activo (se pierde el acceso SSH)"
+  systemctl is-active --quiet tailscaled && ok "extremo: tailscaled activo" || fail "extremo: tailscaled NO está activo"
+  systemctl is-active --quiet NetworkManager && ok "extremo: red activa" || fail "extremo: NetworkManager NO está activo"
+  # VRAM: sin contextos CUDA no debería quedar casi nada (ohm/whisper/kokoro off).
+  if vram="$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null)"; then
+    if [ "${vram:-0}" -le 256 ] 2>/dev/null; then
+      ok "extremo: VRAM ${vram} MiB"
+    else
+      fail "extremo: VRAM ${vram} MiB (quedó un contexto en la dGPU)"
+    fi
+  fi
+  ram_gb="$(free | awk '/^Mem:/{printf "%.1f", $3/1048576}')"
+  info "extremo: RAM en uso ${ram_gb:-?} GB"
   for t in wallpaper-power-guard.timer dev-sync.timer dotfiles-sync.timer; do
     systemctl --user is-active --quiet "$t" && fail "extremo: $t sigue corriendo" || ok "extremo: $t parado"
   done

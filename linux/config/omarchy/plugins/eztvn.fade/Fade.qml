@@ -34,14 +34,15 @@ Item {
 
   function out(ms) {
     var requested = parseInt(String(ms), 10)
-    root.outMs = (isFinite(requested) && requested > 0) ? requested : Tokens.base
+    // Con animaciones apagadas (reduced) el fundido no existe: negro seco.
+    root.outMs = Tokens.reduced ? 0 : ((isFinite(requested) && requested > 0) ? requested : Tokens.base)
     inAnimation.stop()
     outAnimation.restart()
   }
 
   function into(ms) {
     var requested = parseInt(String(ms), 10)
-    root.inMs = (isFinite(requested) && requested > 0) ? requested : Tokens.morph
+    root.inMs = Tokens.reduced ? 0 : ((isFinite(requested) && requested > 0) ? requested : Tokens.morph)
     outAnimation.stop()
     inAnimation.restart()
   }
@@ -79,6 +80,15 @@ Item {
     function resetCover(): string { root.reset(); return "ok" }
     function phase(): string { return root.covered ? "covered" : (root.cover > 0 ? "moving" : "open") }
     function ping(): string { return "ok" }
+  }
+
+  // Red de seguridad: si el que pidió el negro murió a mitad de camino, no
+  // dejar la pantalla tapada. En uso normal el negro dura <1s y el timer no
+  // llega a dispararse.
+  Timer {
+    interval: 3000
+    running: root.cover > 0.001
+    onTriggered: root.into()
   }
 
   Variants {
