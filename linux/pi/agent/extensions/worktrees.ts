@@ -32,7 +32,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Type } from "typebox";
@@ -180,6 +180,40 @@ function repoDeRuta(ruta: string): { datos: Datos; politica: Politica } | null {
 
 // ------------------------------------------------------------- worktrees
 
+/**
+ * Cachés pesadas que se comparten entre worktrees en vez de nacer vacías.
+ *
+ * Sin esto, cada worktree compila Rust desde cero (~50s en esta máquina) y
+ * baja/instala la UI de nuevo (674 MB): el agente siente que todo tarda cinco
+ * veces más, aunque el cambio sea de una línea. `target` va a una caché única
+ * del repo en `~/.cache` (compartida por todos los worktrees, no la de la
+ * copia principal: así el binario de `main` no se pisa). `node_modules` es de
+ * solo lectura, así que se enlaza directo al del principal.
+ */
+const CACHES_COMPARTIDAS = ["target", "node_modules", "web-svelte/node_modules", "web-svelte/.svelte-kit"];
+
+function compartirCaches(ruta: string, principal: string): string[] {
+  const hechos: string[] = [];
+  const cacheTarget = join(homedir(), ".cache", "rig", "worktrees", basename(principal), "target");
+  for (const rel of CACHES_COMPARTIDAS) {
+    const destino = join(ruta, rel);
+    if (existsSync(destino)) continue;
+    const esTarget = rel === "target";
+    const origen = join(principal, rel);
+    if (!esTarget && !existsSync(origen)) continue;
+    const fuente = esTarget ? cacheTarget : origen;
+    try {
+      if (esTarget) mkdirSync(fuente, { recursive: true });
+      mkdirSync(dirname(destino), { recursive: true });
+      symlinkSync(fuente, destino);
+      hechos.push(rel);
+    } catch {
+      // Si no se puede enlazar, el worktree queda como antes: solo más lento.
+    }
+  }
+  return hechos;
+}
+
 function abrirWorktree(dir: string, id: string, desde?: string): Worktree {
   const actual = situacion(dir);
   if (!actual) throw new Error(`no es un repo git: ${dir}`);
@@ -207,6 +241,7 @@ function abrirWorktree(dir: string, id: string, desde?: string): Worktree {
   } else {
     git(datos.principal, ["worktree", "add", "-b", rama, ruta, base]);
   }
+  compartirCaches(normalizar(ruta), datos.principal);
   return { ruta: normalizar(ruta), rama, base, repo: datos.principal, creado: true };
 }
 
