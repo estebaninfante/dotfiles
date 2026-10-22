@@ -3,6 +3,52 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-22 — Modo ahorro extremo: apagar el stack propio, y la voz en CPU
+
+**Contexto.** El guard de energía solo tocaba perfil, ASPM, NMI watchdog, una
+parte del brillo y syncthing. Con el stack propio arriba (wake word escuchando
+siempre, Ollama, Kokoro y Whisper en CUDA, lan-mouse, Sunshine, dos servidores
+Node, agentes y timers cada pocos minutos) el piso seguía en ~27 W. El usuario
+pidió un modo de batería "extremo, que restrinja hasta todos los procesos en
+segundo plano".
+
+**Qué se eligió.** Un interruptor explícito (`power-extreme.sh on|off|toggle`)
+que apaga por lista blanca al revés: 25 servicios de usuario, 11 timers/paths y
+5 servicios del sistema; brillo 25 %, LED del teclado off, pantalla 60 s/bloqueo
+180 s, Wi-Fi power save forzado. Entra solo a ≤10 % de batería y sale solo al
+enchufar. El estado de lo que estaba corriendo se registra antes de parar nada,
+así `off` restaura exacto.
+
+Dos exclusiones deliberadas:
+- **`rig-main-seat` se queda.** Hospeda la sesión del agente y es el canal para
+  pedir que se salga del modo; si el modo entró solo al 10 %, matarla dejaba al
+  usuario sin interlocutor. Cuesta ~0 en reposo.
+- **`voice-daemon` se queda, en CPU.** La salida de voz es el canal de avisos.
+  Para que no despierte la dGPU se le instala un drop-in con
+  `CUDA_VISIBLE_DEVICES=` y se reinicia; Kokoro pasa a CPU (~0.4-0.8 s por
+  frase). Sin eso, el primer aviso hablado dejaba la RTX 4060 despierta toda la
+  sesión, que es justo lo que el modo intenta evitar.
+
+**Por qué no tocar el engine de `voice`.** La config tiene motor por idioma y
+por perfil; cambiarla dejaba perfiles apuntando a Kokoro igual y, si algo se
+interrumpía, quedaba el usuario con otra voz. El drop-in es una sola pieza,
+reversible y no toca la config vivo versionada.
+
+**Descartado.** `acpi_call _OFF` / `remove` de la dGPU: irreversible hasta
+reiniciar y rompe juegos/streaming (§4.1 del doc de energía). Bajar el techo de
+frecuencia: medido, no ahorra (§4.13). Apagar `rig-main-seat`: ver arriba.
+También se descartó un daemon que re-aplique Wi-Fi power save tras cada
+reconexión de NetworkManager: el guard lo repone al cambiar de fuente y el
+verificador lo reporta si se cae.
+
+**Resultado medido.** 26.6 W → 20.8 W (-22 %) con la pantalla encendida al 25 %.
+La dGPU sigue activa por Hyprland/hyprpaper (`/dev/nvidia0` abierto): sacarla
+pide `AQ_DRM_DEVICES` y reiniciar el compositor, fuera del alcance de un toggle
+en caliente.
+
+Verificación: `scripts/verify/energia.sh` (sección "extremo"). Doc:
+`docs/energia-laptop-82y5.md` §8.
+
 ## 2026-10-20 — Un reinicio corta el buzón de "dime" (lo viejo no se repite)
 
 **Contexto.** El usuario reinició el equipo, dijo "dime" y Omar le leyó una

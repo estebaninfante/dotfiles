@@ -432,7 +432,85 @@ Los tres caminos concretos, en orden de menor a mayor esfuerzo:
 3. **`gpu-mode.sh`/`acpi_call _OFF`** al pasar a batería si se acepta que la
    dGPU queda apagada hasta reiniciar.
 
-## 8. Dónde se va la CPU (medido)
+## 8. Modo ahorro extremo (batería)
+
+Interruptor de "aguantar lo máximo posible": apaga todo lo que no hace falta
+para trabajar, no solo lo que ya apagaba el guard. Vive en
+`linux/bin/power-extreme.sh` y se maneja con `power-extreme.sh on|off|toggle|status`
+(menú: *Trigger → Toggle → Ahorro extremo*; tecla: **Super+Shift+B**).
+
+Entra solo a **≤10 %** de batería (`hooks/battery-low.d/00-power-extreme.sh`) y
+sale solo al **enchufar el cargador** (`power-session-guard.sh` llama `off`).
+También se niega a activarse con corriente: es un modo de batería.
+
+### Qué apaga
+
+- **Voz de entrada y modelos locales:** `omar-listen` (wake word con el micrófono
+  abierto 24/7), `omar-whisper` (CUDA), `omar-pill`, `omar-surface`, `omar-glow`,
+  `voice-key-listener`, `voice-pi-shim`, `kokoro-tts`, `ollama`.
+- **KVM / streaming / remoto:** `lan-mouse`, `lan-mouse-auto`, `sunshine`,
+  `weylus`, `weylus-tablet`, `hypr-remote`, `hypr-outline`, `present-remote`.
+- **Agentes y servidores:** `rig-discord-bot`, `rig-telegram-bot`, `dsh-web`,
+  `agentes-platform-*`, `zentro-developing`, `openclaw-gateway`, `speeedy`,
+  `vision-gui`, `ohm`, `foldertinder`, `omarchy-crash-watch`, `airbnb-trip-compare`,
+  `talk-command`, `mic-bt-fx`, `mic-gain`, `ydotoold`, `mnt-blackmagic`.
+- **Timers y paths** que despiertan la CPU: `wallpaper-power-guard.timer` (¡cada
+  20 s!), `dev-sync`, `dotfiles-sync`, `ai-chats-sync`, `harness-research`,
+  `res-budget`, `res-reap`, `rig-db-sync`, `tmux-reap`, `lan-mouse-auto`,
+  `ai-chats-ingest.path`, `lan-mouse-sync.path`.
+- **Del sistema:** `syncthing@eztvn`, `cups`, `avahi`, `docker` (servicio y
+  socket) y `bluetooth` (solo si no hay ningún dispositivo conectado).
+- **Hardware:** brillo al **25 %**, luz del teclado apagada, Wi-Fi power save
+  forzado, y `battery-power-guard.sh` mantiene ASPM powersave + NMI watchdog off
+  + dGPU en runtime-PM.
+- **Pantalla:** screensaver a 60 s y bloqueo a 180 s (normal: 150/300).
+
+### Qué NO se apaga (y por qué)
+
+- `rig-main-seat`: es la silla que hospeda la sesión del agente y el canal para
+  pedir que se salga del modo. Su costo en reposo es ~0. Matarla dejaría al
+  usuario sin agente y, si el modo entró solo al 10 %, sin forma de hablarle.
+- `voice-daemon` (salida de voz): queda dormido esperando en un FIFO. **Pero**
+  se reinicia con un drop-in que define `CUDA_VISIBLE_DEVICES=`, así Kokoro
+  corre en **CPU** y no despierta la dGPU. Sin esto, el primer aviso hablado
+  dejaba la RTX 4060 despierta el resto de la sesión (§4.1). La calidad baja
+  un poco y tarda ~0.4-0.8 s por frase; el modo se sale con la tecla.
+- Sesión gráfica: `omarchy-shell`, `hypridle`, `hyprpolkitagent`, `omarchy-fcitx5`,
+  pipewire/wireplumber, keyring y red (NetworkManager, tailscaled, sshd).
+
+### Medición (2026-10-22, batería, sesión arriba)
+
+Muestreo de `BAT0/power_now` (promedios de 12-20 s):
+
+| Estado | Consumo |
+|---|---|
+| Normal (todo el stack arriba) | **26.6 W** |
+| Modo extremo | **20.8 W** |
+
+≈ **-5.9 W (-22 %)**, y eso que la dGPU **sigue activa**: Hyprland y hyprpaper
+tienen `/dev/nvidia0` abierto y sostienen las referencias de runtime-PM. Ya no
+hay contextos CUDA (kokoro/whisper/ollama dan cero en `nvidia-smi`), así que lo
+que falta es sacarle la dGPU al compositor. La vía documentada es
+`AQ_DRM_DEVICES=/dev/dri/card2` (deja la dGPU fuera de Hyprland), pero requiere
+reiniciar el compositor: no se puede hacer en caliente y no entra en este modo.
+Si se hace algún día, acá hay otros ~8-10 W (§4.1).
+
+### Costo / reversión
+
+El estado vive en `~/.local/state/power-extreme/`: qué servicios y timers
+estaban corriendo, brillo, LED e idle previos. `off` los devuelve exactos. Si
+el script se interrumpiera, `off` sigue funcionando con lo registrado. No hay
+cambios permanentes: ni en el perfil, ni en systemd, ni en el kernel (el perfil
+lo re-evalúa el guard según la fuente).
+
+### Verificación
+
+`scripts/verify/energia.sh` agrega una sección "extremo" que exige, mientras
+está activo: perfil `power-saver`, brillo ≤30 %, drop-in de voz en CPU, los
+servicios y timers pesados parados, pantalla ≤60 s y Wi-Fi power save on. Con el
+modo apagado, falla si quedó el drop-in (basura de una corrida anterior).
+
+## 9. Dónde se va la CPU (medido)
 
 Ranking por proceso, ventana de 10 s, sumando procesos con el mismo nombre:
 
@@ -452,7 +530,7 @@ Dos fotos concretas: con load 8.9 → **3.1 núcleos** ocupados (76 % idle); con
 load 13.4 → **7.0 núcleos** ocupados (49 % idle). En ninguna sobra CPU: el gasto
 es el stack propio, no el kernel.
 
-## 9. Fuentes
+## 10. Fuentes
 
 - `amdgpu.dcdebugmask=0x10` = `DC_DISABLE_PSR`:
   https://knowledgebase.frame.work/en_us/psr-display-flicker-workaround-for-linux-SJTKb7VMl

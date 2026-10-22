@@ -33,6 +33,8 @@ done
 src="batería"; [ "$battery" = 0 ] && src="AC"
 
 pw() { cat /sys/class/power_supply/BAT0/power_now 2>/dev/null; }
+# Modo ahorro extremo (ver más abajo).
+EXTREME="$HOME/.local/state/power-extreme/on"
 p="$(pw)"
 if [ -n "${p:-}" ]; then
   printf 'Energía — fuente: %s — consumo: %.2f W\n' "$src" "$(awk -v v="$p" 'BEGIN{print v/1000000}')"
@@ -117,8 +119,8 @@ fi
 wl="$(ls -d /sys/class/net/wl* 2>/dev/null | head -1)"
 if [ -n "$wl" ]; then
   ps="$(iw dev "$(basename "$wl")" get power_save 2>/dev/null | awk -F': ' '{print $2}')"
-  if [ -f /var/lib/power-guard/wifi-powersave ]; then
-    [ "$ps" = "on" ] && ok "Wi-Fi power save: on (opt-in activo)" || warn "Wi-Fi power save: off pese al flag /var/lib/power-guard/wifi-powersave"
+  if [ -f /var/lib/power-guard/wifi-powersave ] || [ -f "$EXTREME" ]; then
+    [ "$ps" = "on" ] && ok "Wi-Fi power save: on" || fail "Wi-Fi power save: off (lo pide el modo extremo o el opt-in)"
   else
     info "Wi-Fi power save: ${ps:-?} (opt-in: touch /var/lib/power-guard/wifi-powersave)"
   fi
@@ -128,7 +130,6 @@ fi
 # Ver docs/energia-laptop-82y5.md §8. Si está activo, lo que promete apagado
 # tiene que estar apagado; si está apagado, no puede quedar basura (drop-in de
 # la voz, unidades paradas de un modo anterior).
-EXTREME="$HOME/.local/state/power-extreme/on"
 if [ -f "$EXTREME" ]; then
   [ "$battery" = 1 ] && ok "extremo: activo en batería" || fail "extremo: activo pero hay corriente (debería auto-salir)"
   prof="$(busctl get-property org.freedesktop.UPower.PowerProfiles /org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles ActiveProfile 2>/dev/null | cut -d'"' -f2)"
@@ -141,7 +142,7 @@ if [ -f "$EXTREME" ]; then
   fi
   dropin="$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf"
   [ -f "$dropin" ] && ok "extremo: voz en CPU (drop-in presente)" || fail "extremo: falta el drop-in que pone Kokoro en CPU"
-  for u in kokoro-tts.service lan-mouse.service ollama.service sunshine.service omar-listen.service rig-main-seat.service; do
+  for u in kokoro-tts.service lan-mouse.service ollama.service sunshine.service omar-listen.service; do
     systemctl --user is-active --quiet "$u" && fail "extremo: $u sigue activo" || ok "extremo: $u parado"
   done
   for t in wallpaper-power-guard.timer dev-sync.timer dotfiles-sync.timer; do

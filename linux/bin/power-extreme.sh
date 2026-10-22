@@ -121,7 +121,8 @@ led_save() {
   cat "$KBD_LED/brightness" >"$LED_SAVE" 2>/dev/null || true
 }
 led_set() {
-  [ -w "$KBD_LED/brightness" ] || return 0
+  [ -e "$KBD_LED/brightness" ] || return 0
+  # sysfs es de root: no alcanza con [ -w ] como usuario; se intenta con sudo.
   echo "$1" | sudo -n tee "$KBD_LED/brightness" >/dev/null 2>&1 || true
 }
 

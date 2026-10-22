@@ -53,6 +53,19 @@ hl.config({
     }
 })
 
+-- Expuesto para el guard de energia: cambia solo el blur en caliente con
+-- `hyprctl eval` al pasar de ahorro a rendimiento (y al reves), sin recargar
+-- todo el config. Re-evaluar power.low_power() en el momento del llamado es lo
+-- que hace que sirva para los dos sentidos.
+_G.omarchy = _G.omarchy or {}
+_G.omarchy.apply_power_blur = function()
+    hl.config({
+        decoration = {
+            blur = { enabled = not power.low_power() }
+        }
+    })
+end
+
 hl.config({
     cursor = {
         -- El cursor no debe desaparecer al quedar quieto.

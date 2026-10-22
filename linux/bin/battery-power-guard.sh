@@ -133,10 +133,10 @@ nmi_watchdog() {
 }
 
 # Wi-Fi power save (ahorra ~0.3-1 W): OPT-IN, porque agrega picos de latencia
-# de 20-300 ms en links ociosos y eso molesta a lan-mouse/voz. Habilitar con:
+# de 20-300 ms en links ociosos y eso molesta a lan-mouse/voz. Habilitar con
 #   sudo touch /var/lib/power-guard/wifi-powersave
+# (el modo ahorro extremo lo fuerza aunque no esté el archivo).
 wifi_powersave() {
-  [ -f "$GUARD_DIR/wifi-powersave" ] || return 0
   command -v iw >/dev/null 2>&1 || return 0
   local i
   for i in /sys/class/net/wl*; do

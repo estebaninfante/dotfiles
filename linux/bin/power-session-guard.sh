@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Guard de sesion (corre como USUARIO via power-session-guard.service).
 #
-# Al cambiar la fuente de alimentacion, recarga Hyprland para que su config
-# re-evalue el estado de bateria (monitors.lua -> 60Hz / preferred,
-# hyprland.lua -> blur y animaciones off) y arranca/para Sunshine.
+# Al cambiar la fuente de alimentacion re-evalua en caliente lo unico que
+# depende del estado de bateria (monitors.lua -> 60Hz/120Hz, looknfeel.lua ->
+# blur) con `hyprctl eval`, sin un `hyprctl reload` completo (tarda ~1.5s y
+# deja el panel en negro todo ese rato). El cambio de modo del panel, que es el
+# que realmente parpadea, se hace detras de un fundido a negro (`pantalla-fade`)
+# para que se sienta como un apagado lento y no como un golpe. Despues
+# arranca/para Sunshine.
 #
 # Sunshine: nunca via graphical-session.target puro (con linger arranca antes
 # del compositor y cuelga el login). Aqui se espera a que hyprctl responda
@@ -77,20 +81,36 @@ fi
 desired=performance
 low_power && desired=save
 
+# Re-aplica en caliente el modo del panel y el blur del estado de energia
+# actual, detras de un fundido a negro. Si los helpers de la config no existen
+# (config vieja) o `pantalla-fade` no esta, cae al reload completo de siempre.
+aplicar_modo() {
+  local code="omarchy.apply_power_monitors(); omarchy.apply_power_blur()"
+  if command -v pantalla-fade >/dev/null 2>&1; then
+    pantalla-fade cover -- hyprctl eval "$code" >/dev/null 2>&1 && return 0
+  fi
+  hyprctl eval "$code" >/dev/null 2>&1 && return 0
+  hyprctl reload >/dev/null 2>&1 || true
+}
+
 state_file="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/power-session-guard.mode"
 applied="$(cat "$state_file" 2>/dev/null || true)"
 
 if [ "$applied" = "$desired" ]; then
   log "estado '$desired' sin cambios; no recargo Hyprland"
 else
+  # El reload re-aplica el modo del panel (60Hz en ahorro, 120Hz en
+  # rendimiento) y eso deja el OLED en negro unas décimas: se hace detras de
+  # una cortina que baja y sube con fundido (`pantalla-fade`), en vez de que la
+  # pantalla se apague de golpe. Si el shell no responde, el reload ocurre igual.
   if [ "$desired" = save ]; then
     log "ahorro (bateria o power-saver): recargando config de ahorro"
-    hyprctl reload >/dev/null 2>&1 || true
+    aplicar_modo
     notify -u low -g "󰂄" --app-name Energia \
       "Modo ahorro" "60Hz, sin blur, Sunshine off" 2>/dev/null || true
   else
     log "AC/rendimiento: recargando config completa"
-    hyprctl reload >/dev/null 2>&1 || true
+    aplicar_modo
     sleep 4
     notify -u low -g "󰂄" --app-name Energia \
       "Rendimiento completo" "120Hz, Sunshine on" 2>/dev/null || true

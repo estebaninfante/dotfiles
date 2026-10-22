@@ -43,4 +43,10 @@ elseif variables.machine == "desktop" then
     hl.monitor({ output = "DP-2", mode = "2560x1440@144", position = "0x0", scale = 1 })
 end
 
+-- Expuesto para el guard de energia: re-evalua la rama de monitores (60/120Hz)
+-- en caliente con `hyprctl eval`, sin un `hyprctl reload` completo. El reload
+-- tarda ~1.5s y deja el panel en negro todo ese rato; el eval tarda ~10ms.
+_G.omarchy = _G.omarchy or {}
+_G.omarchy.apply_power_monitors = apply_laptop_monitors
+
 return true
