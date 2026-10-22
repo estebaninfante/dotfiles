@@ -291,7 +291,7 @@ export default function (pi: ExtensionAPI) {
   // sino que se dice al cerrar (gana el último). Así el agente puede reportar
   // avances sin que te suene tres veces lo mismo.
   let pendingAviso = "";
-  /* Lo que el agente ya dijo con `hablar` (sin `esperar`) en esta corrida.
+  /* Lo que el agente ya dijo con `hablar` en esta corrida.
      Llega por el bus de extensiones (`conversar.ts` lo emite). Regla dura: si
      el agente ya habló, el cierre (`avisar`) y el resumen de respaldo callan.
      Así el final suena UNA sola vez, sin depender de parecidos de texto. */

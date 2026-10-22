@@ -5,11 +5,12 @@
  * las dos piezas que faltan:
  *
  *  1. Tool `hablar`: el agente LE HABLA al usuario (un avance, contexto o una
- *     explicación). NUNCA bloquea el turno: si pregunta, deja un escucha en
- *     segundo plano y la respuesta hablada entra después como mensaje del
- *     usuario, así el turno termina igual. Usa el bus `agente` (hablar /
- *     preguntar + esperar en segundo plano), que reutiliza el daemon de voz
- *     (`voice send --agent <nombre>`) y serializa varios agentes.
+ *     explicación). La voz es SOLO de salida: no espera respuesta hablada ni
+ *     deja escucha en segundo plano, así el turno nunca queda colgado. Usa el
+ *     bus `agente hablar`, que reutiliza el daemon de voz
+ *     (`voice send --agent <nombre>`) y serializa varios agentes. Si hace una
+ *     pregunta, va en el texto de la respuesta; el usuario contesta escribiendo
+ *     o hablándole al asistente, como cualquier pedido.
  *
  *     Si el interruptor maestro de voz (`tts.enabled` en el state.json del
  *     sistema de voz, el mismo que togglea el widget de la barra) está
@@ -157,9 +158,9 @@ function chatiness(): Chatiness {
 }
 
 /** Interruptor maestro de voz: `tts.enabled` del sistema de voz (state.json
- *  pisa a config.toml). Si está apagado no se habla, no se espera respuesta y
- *  la tool no se le ofrece al modelo. Sin archivo de estado se asume encendido
- *  (el default de config.toml). */
+ *  pisa a config.toml). Si está apagado no se habla y la tool no se le ofrece
+ *  al modelo. Sin archivo de estado se asume encendido (el default de
+ *  config.toml). */
 function ttsEnabled(): boolean {
   try {
     const j = JSON.parse(readFileSync(VOICE_STATE, "utf8")) as {
@@ -588,22 +589,22 @@ const HABLAR_PARAMS = Type.Object({
       "pregunta. Una o dos frases llanas en español, sin tecnicismos ni rutas. " +
       "Si es una respuesta, el mismo contenido tiene que quedar escrito en tu " +
       "mensaje: la voz no reemplaza al texto. " +
-      "Si vas a preguntar algo, PRIMERO contá el contexto y después la pregunta.",
+      "Si vas a preguntar algo, PRIMERO contá el contexto y después la pregunta, " +
+      "y esperá la respuesta como texto o como próximo pedido; no esperes nada " +
+      "por voz.",
   }),
+  // Compatibilidad: se aceptan y se ignoran. La voz es solo de salida; no hay
+  // escucha ni espera de respuesta hablada. Se dejan para no romper pedidos
+  // viejos que todavía manden `esperar: true`.
   esperar: Type.Optional(
     Type.Boolean({
       description:
-        "true si además querés escuchar la respuesta hablada. NO bloquea el " +
-        "turno: la respuesta llega después como mensaje del usuario. false o " +
-        "ausente para solo decir algo y seguir.",
+        "Ignorado. La voz es solo de salida: no se espera respuesta hablada.",
     }),
   ),
   segundos: Type.Optional(
     Type.Number({
-      description:
-        "Cuánto tiempo queda escuchando una respuesta por voz (solo si " +
-        "esperar=true). Default 60. Mientras escucha, la voz del usuario va " +
-        "al agente en vez del asistente, así que conviene que sea corto.",
+      description: "Ignorado. No se espera respuesta por voz.",
     }),
   ),
 });
@@ -1034,9 +1035,7 @@ export default function (pi: ExtensionAPI) {
 
   /** Avisa al resto del harness qué se dijo en voz alta, para que `avisar` (u
    *  otra extensión de cierre) no repita lo mismo al terminar la corrida.
-   *  También se anuncia la pregunta con `esperar: true`: lo que el usuario
-   *  ya escuchó no se vuelve a decir al cerrar. Si contesta, su respuesta
-   *  arranca un turno nuevo y el cierre de ESE turno sí suena. */
+   *  Todo `hablar` cuenta como hablado, así el cierre no repite la frase. */
   function announceSpoken(texto: string): void {
     const t = cleanText(texto);
     if (!t) return;
@@ -1047,50 +1046,9 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  /* Escucha la respuesta hablada en SEGUNDO PLANO. El turno no se queda
-     colgado: si el usuario contesta, entra como mensaje suyo y arranca un
-     turno nuevo; si no contesta, no pasa nada. Un solo escucha a la vez. */
-  let cancelAnswer: (() => void) | undefined;
-
-  function watchVoiceAnswer(segundos: number): void {
-    cancelAnswer?.();
-    let child;
-    try {
-      child = spawn(AGENTE_BIN, ["esperar", agentName(), "--timeout", String(segundos)], {
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-    } catch {
-      return;
-    }
-    let out = "";
-    let closed = false;
-    const cancel = () => {
-      if (closed) return;
-      closed = true;
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        /* ya terminó */
-      }
-      if (cancelAnswer === cancel) cancelAnswer = undefined;
-    };
-    cancelAnswer = cancel;
-    child.stdout?.on("data", (d) => (out += String(d)));
-    child.on("error", cancel);
-    child.on("close", (code) => {
-      if (closed) return;
-      closed = true;
-      if (cancelAnswer === cancel) cancelAnswer = undefined;
-      const text = out.trim();
-      if (code !== 0 || !text) return;
-      try {
-        // Si el turno sigue, se encola; si ya terminó, arranca uno nuevo.
-        pi.sendUserMessage(text, { deliverAs: "followUp" });
-      } catch {
-        /* sesión cerrada o en transición: no rompe nada */
-      }
-    });
-  }
+  /* La voz es solo de salida: no hay escucha en segundo plano ni espera de
+     respuesta hablada. Antes había un watcher que dejaba al agente "esperando"
+     y podía quedar colgado; se quitó a propósito. */
 
   /* El interruptor de la barra (`tts.enabled`) manda: con la voz apagada, la
      tool ni se le declara al modelo. Se revisa al arrancar y en cada turno,
@@ -1114,29 +1072,29 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: "hablar",
-    label: "Hablar al usuario (voz; con esperar, espera respuesta)",
+    label: "Hablar al usuario (voz, solo salida)",
     description:
-      "Le habla al usuario por voz. Por defecto solo dice algo: un avance, " +
-      "contexto o una explicación. Si `esperar` es true, además ESPERA su " +
-      "respuesta hablada y la devuelve como resultado. Es la vía general para " +
-      "comunicarte con el usuario por voz. Si el usuario se perdió o pide " +
-      "contexto, contale el contexto en `mensaje`; no te limites a preguntar. " +
+      "Le habla al usuario por voz: un avance, contexto o una explicación. " +
+      "Es solo salida: no espera respuesta hablada y termina al instante. Si " +
+      "tenés una pregunta, hacela en el texto de tu respuesta y esperá el " +
+      "próximo pedido; no te quedes esperando por voz. Si el usuario se perdió " +
+      "o pide contexto, contale el contexto en `mensaje`; no te limites a preguntar. " +
       "Si el usuario eligió «campana», el mensaje queda en su buzón y solo suena " +
       "el aviso; si eligió «al instante», se dice en el momento.",
     promptSnippet:
-      "Hablar al usuario por voz; con `esperar` escucha su respuesta sin bloquear el turno",
+      "Hablar al usuario por voz (solo salida; nunca espera respuesta)",
     promptGuidelines: [
       "Para hablarle al usuario por voz usá `hablar`. Sirve para contar un " +
         "avance, dar contexto o preguntar; es la vía general.",
       "Lo que digas con `hablar` también va escrito en tu respuesta: la voz " +
         "acompaña al texto, nunca lo reemplaza. Si el contenido principal solo " +
         "quedó en la voz, el usuario lo pierde en la UI y en la terminal.",
-      "Nunca te quedes esperando una respuesta: `hablar` no bloquea el turno. " +
-        "Si preguntás, hacelo con `esperar: true` y TERMINÁ el turno en el acto " +
-        "(con `avisar` si corresponde); la respuesta hablada llega sola como " +
-        "mensaje nuevo.",
-      "No cierres pidiendo confirmación y quedándote a esperar: preguntá y " +
-        "terminá. Si no necesitás respuesta, llamá `hablar` sin `esperar`.",
+      "`hablar` es SOLO de salida: no esperes ni escuches una respuesta por voz. " +
+        "Si preguntás algo, hacelo en el texto de tu respuesta y terminá el " +
+        "turno; el usuario contesta escribiendo o hablándole al asistente, y eso " +
+        "llega como un pedido nuevo.",
+      "No digas que vas a esperar, ni que estás esperando, ni pidas respuesta " +
+        "por voz. Nunca dejes el turno abierto esperando al usuario.",
       "Nunca mandes solo una pregunta si tenés contexto para dar: primero el " +
         "contexto en `mensaje`, después la pregunta. Así el usuario no se pierde.",
       "No uses `hablar` para cosas que ya podés resolver leyendo el repositorio " +
@@ -1191,50 +1149,30 @@ export default function (pi: ExtensionAPI) {
           details: undefined,
         };
       }
-      if (params.esperar !== true) {
-        const delivery = deliveryMode();
-        // Con «campana» el mensaje va al buzón: suena el aviso y el usuario lo
-        // escucha cuando quiere con «dime». Se anuncia como hablado para que el
-        // cierre (`avisar`) no repita lo mismo.
-        if (delivery === "bell" || delivery === "mailbox" || delivery === "silent") {
-          const aviso = await execCapture(
-            [VOICE_BIN, "avisar", "--source", agentName(), "--", mensaje],
-            15000,
-            signal,
-          );
-          if (aviso.code === 0) announceSpoken(mensaje);
-          return {
-            content: [
-              { type: "text", text: `Quedó en el buzón con campana: "${mensaje}"` },
-            ],
-            details: undefined,
-          };
-        }
-        const dicho = await execCapture(["hablar", agentName(), mensaje], 15000, signal);
-        if (dicho.code === 0) announceSpoken(mensaje);
+      // Voz solo de salida: se dice y se termina. Nunca se deja un escucha ni
+      // una marca de "esperando respuesta".
+      const delivery = deliveryMode();
+      // Con «campana» el mensaje va al buzón: suena el aviso y el usuario lo
+      // escucha cuando quiere con «dime». Se anuncia como hablado para que el
+      // cierre (`avisar`) no repita lo mismo.
+      if (delivery === "bell" || delivery === "mailbox" || delivery === "silent") {
+        const aviso = await execCapture(
+          [VOICE_BIN, "avisar", "--source", agentName(), "--", mensaje],
+          15000,
+          signal,
+        );
+        if (aviso.code === 0) announceSpoken(mensaje);
         return {
-          content: [{ type: "text", text: `Dicho al usuario por voz: "${mensaje}"` }],
+          content: [
+            { type: "text", text: `Quedó en el buzón con campana: "${mensaje}"` },
+          ],
           details: undefined,
         };
       }
-      // Una pregunta SIEMPRE se dice: el usuario tiene que oírla para responder,
-      // aunque el modo sea campana. La respuesta llega como mensaje nuevo.
-      const segundos = Math.max(10, Number(params.segundos ?? 60) || 60);
-      await execCapture(["preguntar", agentName(), mensaje], 15000, signal);
-      // Lo dicho cuenta como hablado: el cierre (`avisar` / resumen de respaldo)
-      // no repite la misma frase si el usuario no contesta.
-      announceSpoken(mensaje);
-      watchVoiceAnswer(segundos);
+      const dicho = await execCapture(["hablar", agentName(), mensaje], 15000, signal);
+      if (dicho.code === 0) announceSpoken(mensaje);
       return {
-        content: [
-          {
-            type: "text",
-            text:
-              "Preguntaste por voz. No te quedes esperando: terminá el turno ya " +
-              "(con `avisar` si corresponde). Si el usuario responde por voz, su " +
-              "respuesta llega sola como mensaje nuevo.",
-          },
-        ],
+        content: [{ type: "text", text: `Dicho al usuario por voz: "${mensaje}"` }],
         details: undefined,
       };
     },
