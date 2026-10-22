@@ -32,7 +32,15 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  unlinkSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Type } from "typebox";
@@ -190,10 +198,22 @@ function repoDeRuta(ruta: string): { datos: Datos; politica: Politica } | null {
  * copia principal: así el binario de `main` no se pisa). `node_modules` es de
  * solo lectura, así que se enlaza directo al del principal.
  */
-const CACHES_COMPARTIDAS = ["target", "node_modules", "web-svelte/node_modules", "web-svelte/.svelte-kit"];
+// `web-svelte/.svelte-kit` **no** se comparte: vite escribe rutas relativas al
+// worktree donde compiló. Un symlink a la copia principal hacía que `npm run
+// build` fallara dentro del worktree («Could not resolve …/shared-server.js»)
+// y el cierre quedaba trabado esperando que lo arregle el humano.
+const CACHES_COMPARTIDAS = ["target", "node_modules", "web-svelte/node_modules"];
 
 function compartirCaches(ruta: string, principal: string): string[] {
   const hechos: string[] = [];
+  // Worktrees viejos: si `.svelte-kit` quedó como symlink, se saca para que
+  // vite lo regenere en su lugar. Un symlink roto no tiene arreglo in situ.
+  const svelteKit = join(ruta, "web-svelte", ".svelte-kit");
+  try {
+    if (lstatSync(svelteKit).isSymbolicLink()) unlinkSync(svelteKit);
+  } catch {
+    // no existe o no se puede tocar: sigue el flujo normal
+  }
   const cacheTarget = join(homedir(), ".cache", "rig", "worktrees", basename(principal), "target");
   for (const rel of CACHES_COMPARTIDAS) {
     const destino = join(ruta, rel);
@@ -214,7 +234,7 @@ function compartirCaches(ruta: string, principal: string): string[] {
   // Las cachés enlazadas viven dentro del worktree pero no son parte del
   // repo: si quedan sin ignorar, `git status` las muestra como cambios y el
   // cierre se niega a mergear. Antes eso obligaba al humano a limpiarlas.
-  ignorarCaches(principal, CACHES_COMPARTIDAS);
+  ignorarCaches(principal, ["target", "node_modules", "web-svelte/node_modules", "web-svelte/.svelte-kit"]);
   return hechos;
 }
 
