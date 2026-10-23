@@ -14,5 +14,6 @@
     "npm:pi-model-fallback",
     "npm:pi-thinking-box"
   ],
-  "hideThinkingBlock": true
+  "hideThinkingBlock": true,
+  "httpIdleTimeoutMs": 90000
 }
