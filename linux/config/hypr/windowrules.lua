@@ -4,15 +4,14 @@ hl.window_rule({ match = { class = "swappy" }, no_anim = true })
 
 -- Llamada de WhatsApp (la ventanita emergente que abre el PWA de Brave al
 -- entrar a una llamada). Queda flotante y pinned (visible en todos los
--- workspaces y arriba del mosaico) en 16:9 arriba a la derecha, sin borde,
--- sin blur y opaca: sólo el video de la otra persona.
--- `keep_aspect_ratio` mantiene el 16:9 si después la agrandás o achicás.
+-- workspaces y arriba del mosaico) en la esquina superior derecha, sin borde,
+-- sin blur y opaca. El tamaño arranca en 9:16 y ~/.local/bin/whatsapp-call-fit
+-- lo ajusta al aspecto real del video (ver whatsapp-call.lua).
 hl.window_rule({
     match = { class = "[Ww]hatsapp", title = "[Ll]lamada de WhatsApp$" },
     float = true,
     pin = true,
-    size = { 640, 360 },
-    keep_aspect_ratio = true,
+    size = { 360, 520 },
     move = { "(monitor_w-window_w-24)", "40" },
     border_size = 0,
     rounding = 8,

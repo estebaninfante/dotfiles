@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Ajusta la ventanita de la llamada de WhatsApp al aspecto REAL del video.
+
+El compositor no puede recortar una ventana: lo único que podemos hacer es
+cambiar su tamaño. WhatsApp mete el video con franjas negras (letterbox) cuando
+el aspecto de la ventana no coincide con el de la cámara del otro lado, así que
+acá medimos el rectángulo de video de verdad (capturando la ventana y buscando
+las franjas negras) y redimensionamos la ventana a ese aspecto. Resultado: el
+video de la persona llena la ventanita, sin franjas.
+
+Se corre solo (lo dispara whatsapp-call.lua al abrir/acomodar la ventana) y
+también a mano:  whatsapp-call-fit [alto_logico]
+"""
+
+import json
+import subprocess
+import sys
+import time
+
+TARGET_H = 520          # alto lógico objetivo (px de layout) de la ventanita
+MIN_H = 180             # si el video es muy panorámico, no bajamos de acá
+MARGIN = 24             # margen derecho
+TOP = 40                # margen superior (deja libre la barra)
+THRESHOLD = 45          # canal máximo por encima del cual un pixel es "video"
+MIN_SIDE = 30           # rectángulo mínimo creíble, en px de captura
+MAX_PASSES = 3          # el relayout de WhatsApp puede pedir otra pasada
+
+
+def hyprctl(*args):
+    return subprocess.run(["hyprctl", *args], capture_output=True, text=True)
+
+
+def find_call_window():
+    out = hyprctl("clients", "-j").stdout
+    if not out:
+        return None
+    for c in json.loads(out):
+        cls = (c.get("class") or "").lower()
+        title = (c.get("title") or "").lower()
+        if "whatsapp" in cls and title.endswith("llamada de whatsapp") and c.get("mapped"):
+            return c
+    return None
+
+
+def capture(x, y, w, h, path):
+    r = subprocess.run(
+        ["grim", "-t", "ppm", "-g", f"{x},{y} {w}x{h}", path],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        return None
+    with open(path, "rb") as f:
+        data = f.read()
+    # P6\n<w> <h>\n255\n<pixeles>
+    fields, pos = [], 0
+    while len(fields) < 4:
+        while data[pos:pos + 1].isspace():
+            pos += 1
+        start = pos
+        while not data[pos:pos + 1].isspace():
+            pos += 1
+        fields.append(data[start:pos])
+    pos += 1
+    iw, ih = int(fields[1]), int(fields[2])
+    return iw, ih, data[pos:]
+
+
+def video_rect(iw, ih, pix):
+    """Bounding box de las filas y columnas que no son franja negra."""
+
+    def row_has_content(r):
+        base = r * iw * 3
+        hits = 0
+        for c in range(0, iw, 2):          # muestreo: alcanza y vuela
+            p = base + c * 3
+            if max(pix[p], pix[p + 1], pix[p + 2]) > THRESHOLD:
+                hits += 1
+        return hits > (iw / 2) * 0.5       # más de la mitad de la fila
+
+    rows = [r for r in range(ih) if row_has_content(r)]
+    if len(rows) < MIN_SIDE:
+        return None
+    y0, y1 = rows[0], rows[-1]
+
+    def col_has_content(c):
+        hits = 0
+        total = 0
+        for r in range(y0, y1 + 1, 2):
+            p = (r * iw + c) * 3
+            total += 1
+            if max(pix[p], pix[p + 1], pix[p + 2]) > THRESHOLD:
+                hits += 1
+        return hits > total * 0.5
+
+    cols = [c for c in range(iw) if col_has_content(c)]
+    if len(cols) < MIN_SIDE:
+        return None
+    x0, x1 = cols[0], cols[-1]
+    if (x1 - x0) < MIN_SIDE or (y1 - y0) < MIN_SIDE:
+        return None
+    return x0, y0, x1 - x0 + 1, y1 - y0 + 1
+
+
+def apply_geometry(addr, w, h, mon_w, mon_h, mon_x, mon_y):
+    hyprctl("dispatch", f'hl.dsp.window.resize({{window="address:{addr}", x={w}, y={h}, relative=false}})')
+    hyprctl("dispatch", (
+        f'hl.dsp.window.move({{window="address:{addr}", '
+        f'x={mon_x + mon_w - w - MARGIN}, y={mon_y + TOP}, relative=false}})'
+    ))
+
+
+def main():
+    win = find_call_window()
+    if not win:
+        return 0
+    addr = win["address"]
+    mon = next((m for m in json.loads(hyprctl("monitors", "-j").stdout)
+                if m.get("id") == win.get("monitor")), None)
+    if not mon:
+        return 0
+    scale = mon.get("scale") or 1
+    mon_w, mon_h = int(mon["width"] / scale), int(mon["height"] / scale)
+    mon_x, mon_y = mon["x"], mon["y"]
+
+    target_h = int(sys.argv[1]) if len(sys.argv) > 1 else TARGET_H
+    last = None
+
+    for _ in range(MAX_PASSES):
+        geo = hyprctl("clients", "-j")
+        cur = next((c for c in json.loads(geo.stdout or "[]")
+                    if c.get("address") == addr), None)
+        if not cur:
+            return 0
+        x, y = cur["at"]
+        w, h = cur["size"]
+        cap = capture(x, y, w, h, "/tmp/whatsapp-call-fit.ppm")
+        if not cap:
+            return 0
+        iw, ih, pix = cap
+        rect = video_rect(iw, ih, pix)
+        if not rect:
+            return 0
+        _, _, vw, vh = rect
+        aspect = vw / vh
+        if last is not None and abs(aspect - last) < 0.02:
+            break                        # ya está pegado al video
+        last = aspect
+
+        new_h = target_h
+        new_w = round(new_h * aspect)
+        max_w = int(mon_w * 0.55)
+        if new_w > max_w:                # video panorámico: manda el ancho
+            new_w, new_h = max_w, max(MIN_H, round(max_w / aspect))
+        if new_w == w and new_h == h:
+            break
+        apply_geometry(addr, new_w, new_h, mon_w, mon_h, mon_x, mon_y)
+        time.sleep(0.6)                  # WhatsApp reacomoda el video
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

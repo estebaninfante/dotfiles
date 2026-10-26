@@ -51,6 +51,7 @@ Item {
   property var toques: []
   property var lapiz: null
   property bool lapizAbajo: false
+  property bool scrolleando: false   // los dedos vienen del scroll de dos dedos
   readonly property bool touchPresent: toques.length > 0 || lapiz !== null
 
   function handleTouchLine(line) {
@@ -64,6 +65,7 @@ Item {
     root.toques = Array.isArray(msg.t) ? msg.t : []
     root.lapiz = (Array.isArray(msg.pen) && msg.pen.length >= 2) ? msg.pen : null
     root.lapizAbajo = msg.down === 1
+    root.scrolleando = msg.s === 1
   }
 
   function handleLine(line) {
@@ -222,9 +224,10 @@ Item {
         antialiasing: true
         x: modelData[0] * panel.width - width / 2
         y: modelData[1] * panel.height - height / 2
-        color: Qt.rgba(1, 1, 1, 0.22)
+        // Blanco al tocar; celeste mientras es scroll de dos dedos.
+        color: root.scrolleando ? Qt.rgba(0.48, 0.64, 0.97, 0.25) : Qt.rgba(1, 1, 1, 0.22)
         border.width: 2
-        border.color: Qt.rgba(1, 1, 1, 0.85)
+        border.color: root.scrolleando ? Qt.rgba(0.66, 0.77, 1, 0.9) : Qt.rgba(1, 1, 1, 0.85)
       }
     }
 
