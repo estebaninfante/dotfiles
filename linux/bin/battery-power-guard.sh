@@ -145,6 +145,61 @@ wifi_powersave() {
   done
 }
 
+# --- carga y noche (solo AC) -----------------------------------------------
+# La carga rapida ("Fast", ~100 W hacia la bateria) es lo que calienta la
+# laptop al enchufarla. Por defecto se carga en "Standard"; de dia se puede
+# volver a Fast con  sudo touch /var/lib/power-guard/fast-charge
+# De noche (NIGHT_START..NIGHT_END) ademas: power-saver + sin boost de CPU.
+# El timer battery-power-guard-night.timer reaplica esto a esas horas.
+NIGHT_START=21
+NIGHT_END=7
+NIGHT_FLAG="$GUARD_DIR/night-saver"
+
+is_night() {
+  local h
+  h=$((10#$(date +%H)))
+  [ "$h" -ge "$NIGHT_START" ] || [ "$h" -lt "$NIGHT_END" ]
+}
+
+charge_type() {
+  local f=/sys/class/power_supply/BAT0/charge_types
+  [ -w "$f" ] || return 0
+  echo "$1" >"$f" 2>/dev/null || true
+}
+
+cpu_boost() {
+  local f=/sys/devices/system/cpu/cpufreq/boost
+  [ -w "$f" ] || return 0
+  echo "$1" >"$f" 2>/dev/null || true
+}
+
+charge_policy() {
+  mkdir -p "$GUARD_DIR"
+  if is_night; then
+    charge_type Standard
+    # Solo se fuerza power-saver si no lo estaba; el flag permite deshacerlo
+    # en la manana sin pisar un power-saver puesto a mano. Va ANTES de apagar
+    # el boost: PPD escribe policy*/boost y falla (EINVAL) con el global en 0.
+    if ! power_saver; then
+      cpu_boost 1
+      "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 && touch "$NIGHT_FLAG"
+    fi
+    cpu_boost 0
+    log "noche (AC): carga Standard + sin boost + power-saver"
+  else
+    if [ -f "$GUARD_DIR/fast-charge" ]; then
+      charge_type Fast
+    else
+      charge_type Standard
+    fi
+    cpu_boost 1
+    if [ -f "$NIGHT_FLAG" ]; then
+      power_saver && "$BIN_DIR/power-mode.sh" balanced >/dev/null 2>&1 || true
+      rm -f "$NIGHT_FLAG"
+    fi
+  fi
+}
+
 session_trigger() {
   [ -S "$USER_RT/bus" ] || return 0
   runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$USER_RT" \
@@ -152,6 +207,13 @@ session_trigger() {
   runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$USER_RT" \
     systemctl --user --no-block start wallpaper-power-guard.service >/dev/null 2>&1 || true
 }
+
+if on_battery; then
+  # En bateria manda power-saver; solo se deshace lo nocturno de dia.
+  is_night || { cpu_boost 1; rm -f "$NIGHT_FLAG"; }
+else
+  charge_policy
+fi
 
 if low_power; then
   if on_battery; then
