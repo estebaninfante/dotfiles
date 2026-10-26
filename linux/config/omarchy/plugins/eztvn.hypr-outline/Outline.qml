@@ -167,8 +167,10 @@ Item {
     return root.centroY + Math.sin(aRadianes(grados)) * r
   }
 
+  // Direcciones fijas: cada opción va siempre en su ángulo, se abra donde se
+  // abra el menú. Se ignora el giro (base) que mandaba la tablet.
   function anguloDe(item) {
-    return ((item.ang + root.base) % 360 + 360) % 360
+    return ((item.ang) % 360 + 360) % 360
   }
 
   function angulosHijos(madre) {
@@ -189,14 +191,8 @@ Item {
   readonly property string fuenteMenu: "out=$(curl -sf --max-time 3 --unix-socket \"${XDG_RUNTIME_DIR}/hypr-remote/control.sock\" http://localhost/radial 2>/dev/null); if [ -z \"$out\" ]; then curl -s --max-time 3 http://127.0.0.1:1781/api/menu; else printf '%s' \"$out\"; fi"
 
   // Acepta las dos formas: solo el menú (array) o menú + selección (objeto).
-  function animarCambio() {
-    if (!root.animarSeleccion || !root.abierto) return
-    pulso.restart()
-    ondaNucleoCrece.restart()
-    ondaNucleoFade.restart()
-    chispa.avance = 0
-    viaje.restart()
-  }
+  // Sin animaciones: el menú aparece y cambia de selección al instante.
+  function animarCambio() {}
 
   function aplicarRadial(d) {
     if (!d) return
@@ -300,14 +296,6 @@ Item {
       radio: root.radio * 1.07
       color: Util.alpha(root.acento, 0.20)
       punteado: true
-
-      RotationAnimation on rotation {
-        from: 0
-        to: 360
-        duration: 120000
-        loops: Animation.Infinite
-        running: root.abierto
-      }
     }
 
     HudRing {
@@ -417,7 +405,7 @@ Item {
         item: modelData
         elegida: root.sel === modelData.id
         atenuada: root.sel !== "" && !elegida
-        animarOnda: root.animarSeleccion
+        animarOnda: false
         lado: root.lado
         fuenteIcono: root.fuenteIcono
         fuenteTexto: root.fuenteTexto
@@ -444,7 +432,7 @@ Item {
         item: modelData
         elegida: root.hijo === modelData.id
         atenuada: root.hijo !== "" && !elegida
-        animarOnda: root.animarSeleccion
+        animarOnda: false
         hijo: true
         lado: root.ladoHijo
         fuenteIcono: root.fuenteIcono * 0.78
@@ -583,11 +571,10 @@ Item {
     // ── Globo con la selección ────────────────────────────────────────────
     Rectangle {
       visible: root.globo !== ""
-      // Debajo del anillo, como en la tablet; si no cabe, arriba.
+      // Siempre debajo del anillo, como en la tablet (sin saltar de lado);
+      // solo se mete hacia adentro si se saldría de la pantalla.
       x: Math.max(0, Math.min(panel.width - width, root.centroX - width / 2))
-      y: root.centroY + root.radio * 1.95 + height / 2 < panel.height
-         ? root.centroY + root.radio * 1.95 - height / 2
-         : Math.max(0, root.centroY - root.radio * 1.95 - height / 2)
+      y: Math.min(panel.height - height, root.centroY + root.radio * 1.95 - height / 2)
       width: textoGlobo.implicitWidth + Style.space(64)
       height: Style.space(48)
       radius: height / 2
