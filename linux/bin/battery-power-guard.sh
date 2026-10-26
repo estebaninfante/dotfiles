@@ -8,8 +8,9 @@
 #
 # BATERIA: power-saver + dGPU runtime-PM + syncthing off + brillo <=50%
 #          + ASPM=powersave + lector SD suspendido + NMI watchdog off.
-# AC:      performance + syncthing on + brillo restaurado + ASPM=default
-#          + NMI watchdog on.
+# AC:      syncthing on + brillo restaurado + ASPM=default + NMI watchdog on,
+#          salvo con perfil power-saver (el default: ver "modo silencioso"),
+#          que aplica lo mismo que BATERIA.
 # Despues dispara la guard de sesion de usuario (refresco/blur/anims/sunshine),
 # que vive en power-session-guard.sh porque necesita hyprctl.
 #
@@ -145,20 +146,32 @@ wifi_powersave() {
   done
 }
 
-# --- carga y noche (solo AC) -----------------------------------------------
-# La carga rapida ("Fast", ~100 W hacia la bateria) es lo que calienta la
-# laptop al enchufarla. Por defecto se carga en "Standard"; de dia se puede
-# volver a Fast con  sudo touch /var/lib/power-guard/fast-charge
-# De noche (NIGHT_START..NIGHT_END) ademas: power-saver + sin boost de CPU.
-# El timer battery-power-guard-night.timer reaplica esto a esas horas.
+# --- modo silencioso (default) ---------------------------------------------
+# Por defecto la laptop va SIEMPRE en modo silencioso / bajo consumo, tambien
+# en AC: carga "Standard" (la "Fast", ~100 W hacia la bateria, es lo que mas
+# calienta), power-saver, sin boost de CPU y ventiladores en super silent.
+# Excepciones (opt-in):
+#   sudo touch /var/lib/power-guard/performance  -> de dia (NIGHT_END..NIGHT_START)
+#       se vuelve a balanced + boost; de noche sigue silencioso. El timer
+#       battery-power-guard-night.timer reaplica esto a esas horas.
+#   sudo touch /var/lib/power-guard/fast-charge  -> carga Fast fuera del modo
+#       silencioso.
 NIGHT_START=21
 NIGHT_END=7
-NIGHT_FLAG="$GUARD_DIR/night-saver"
+# Marca que el power-saver lo puso este guard (y no el usuario a mano), para
+# poder deshacerlo al salir del modo silencioso.
+QUIET_FLAG="$GUARD_DIR/night-saver"
+FAN_MODE="/sys/bus/platform/drivers/ideapad_acpi/VPC2004:00/fan_mode"
 
 is_night() {
   local h
   h=$((10#$(date +%H)))
   [ "$h" -ge "$NIGHT_START" ] || [ "$h" -lt "$NIGHT_END" ]
+}
+
+quiet_mode() {
+  [ -f "$GUARD_DIR/performance" ] || return 0
+  is_night
 }
 
 charge_type() {
@@ -173,19 +186,26 @@ cpu_boost() {
   echo "$1" >"$f" 2>/dev/null || true
 }
 
-charge_policy() {
+# ideapad_acpi: 0 = super silent, 1 = standard.
+fan_mode() {
+  [ -w "$FAN_MODE" ] || return 0
+  echo "$1" >"$FAN_MODE" 2>/dev/null || true
+}
+
+quiet_policy() {
   mkdir -p "$GUARD_DIR"
-  if is_night; then
-    charge_type Standard
-    # Solo se fuerza power-saver si no lo estaba; el flag permite deshacerlo
-    # en la manana sin pisar un power-saver puesto a mano. Va ANTES de apagar
-    # el boost: PPD escribe policy*/boost y falla (EINVAL) con el global en 0.
-    if ! power_saver; then
+  if quiet_mode; then
+    on_battery || charge_type Standard
+    # El perfil va ANTES de apagar el boost: PPD escribe policy*/boost y
+    # falla (EINVAL) con el global en 0. En bateria el perfil lo pone el
+    # bloque de abajo.
+    if ! on_battery && ! power_saver; then
       cpu_boost 1
-      "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 && touch "$NIGHT_FLAG"
+      "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 && touch "$QUIET_FLAG"
     fi
     cpu_boost 0
-    log "noche (AC): carga Standard + sin boost + power-saver"
+    fan_mode 0
+    log "modo silencioso: carga Standard + power-saver + sin boost + fan super silent"
   else
     if [ -f "$GUARD_DIR/fast-charge" ]; then
       charge_type Fast
@@ -193,10 +213,12 @@ charge_policy() {
       charge_type Standard
     fi
     cpu_boost 1
-    if [ -f "$NIGHT_FLAG" ]; then
-      power_saver && "$BIN_DIR/power-mode.sh" balanced >/dev/null 2>&1 || true
-      rm -f "$NIGHT_FLAG"
+    fan_mode 1
+    if [ -f "$QUIET_FLAG" ]; then
+      ! on_battery && power_saver && "$BIN_DIR/power-mode.sh" balanced >/dev/null 2>&1
+      rm -f "$QUIET_FLAG"
     fi
+    log "modo rendimiento (opt-in, de dia)"
   fi
 }
 
@@ -208,12 +230,7 @@ session_trigger() {
     systemctl --user --no-block start wallpaper-power-guard.service >/dev/null 2>&1 || true
 }
 
-if on_battery; then
-  # En bateria manda power-saver; solo se deshace lo nocturno de dia.
-  is_night || { cpu_boost 1; rm -f "$NIGHT_FLAG"; }
-else
-  charge_policy
-fi
+quiet_policy
 
 if low_power; then
   if on_battery; then
