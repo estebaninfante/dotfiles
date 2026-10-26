@@ -57,10 +57,14 @@ suppress = ["f14", "f17"]
 # sonando, lo reinicia desde el principio).
 # (El hold-resultaba poco confiable en este control, que a veces manda dos
 # pulsos por toque.)
+# Con el modo Kindle activo (ver f16 hold) pasa a la página anterior del Kindle.
 [buttons.f15]
-tap = "voice repeat --restart"
+tap = "kindle-mode or prev -- voice repeat --restart"
 
 # Flecha derecha: siguiente. Doble -> terminal nueva con pi.
+# Mantener -> toggle del modo Kindle (`kindle-mode`): con el modo activo las
+# flechas pasan página en KOReader (doble = 2 páginas) en vez de su acción normal.
 [buttons.f16]
-tap = "@arrow next"
-double = "pi-new"
+tap = "kindle-mode or next -- present-remote arrow next"
+double = "kindle-mode or next2 -- pi-new"
+hold = "kindle-mode toggle"
