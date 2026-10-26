@@ -40,6 +40,10 @@
   // (kindle-mode + kindle-page; también se alterna manteniendo la flecha derecha)
   "trigger.toggle.kindle": {"icon":"󰂺","label":"Modo Kindle","aliases":["kindle","koreader"],"description":"Flechas del control = pasar página en el Kindle","checked":"test -f ~/.local/state/kindle-mode/on","action":"~/.local/bin/kindle-mode toggle"},
 
+  // Weylus: la tablet por USB como tableta gráfica / touchpad
+  // (weylus-toggle prende el servicio y el vigilante USB; url: localhost:1701)
+  "trigger.toggle.weylus": {"icon":"","label":"Weylus (tablet)","aliases":["weylus","tablet","tableta"],"description":"Tablet como tableta gráfica por USB: http://localhost:1701","checked":"test -f ~/.local/state/weylus/on","action":"~/.local/bin/weylus-toggle toggle"},
+
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
   "personal.investigaciones": {"icon":"󰎞","label":"Investigaciones","description":"Notas de investigacion del vault (abre en Logseq)","action":"omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""},

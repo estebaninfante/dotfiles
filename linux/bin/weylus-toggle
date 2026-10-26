@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# weylus-toggle — prende o apaga Weylus (la tablet como tableta gráfica).
+#
+#   weylus-toggle            alterna
+#   weylus-toggle on|off     enciende / apaga
+#   weylus-toggle status     imprime on u off
+#
+# Encendido deja el servicio de Weylus y el vigilante del USB habilitados (se
+# levantan solos al iniciar sesión) y el estado en ~/.local/state/weylus/on,
+# que es lo que mira el menú de Omarchy para mostrar el ✓.
+set -u
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/weylus"
+STATE="$STATE_DIR/on"
+WEB_PORT=1701
+WS_PORT=9001
+UI_PORT=1781
+
+notify() { notify-send -a Weylus -i input-tablet -t 1800 "$@" 2>/dev/null || true; }
+
+activar() {
+  mkdir -p "$STATE_DIR" && touch "$STATE"
+  systemctl --user enable --now weylus.service weylus-tablet.service 2>/dev/null
+  notify "Weylus: activo" "Enchufá la tablet y abrí  http://localhost:$WEB_PORT"
+}
+
+desactivar() {
+  rm -f "$STATE"
+  systemctl --user disable --now weylus.service weylus-tablet.service 2>/dev/null
+  for puerto in "$WEB_PORT" "$WS_PORT" "$UI_PORT"; do
+    adb reverse --remove "tcp:$puerto" >/dev/null 2>&1
+  done
+  notify "Weylus: apagado" "La tablet ya no se conecta"
+}
+
+case "${1:-toggle}" in
+  on|activar)     activar ;;
+  off|desactivar) desactivar ;;
+  toggle)
+    if [ -e "$STATE" ]; then desactivar; else activar; fi ;;
+  status)
+    if [ -e "$STATE" ]; then echo on; else echo off; fi ;;
+  *)
+    echo "uso: weylus-toggle [on|off|toggle|status]" >&2
+    exit 2 ;;
+esac

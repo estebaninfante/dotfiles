@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# Weylus: usar la tablet como tableta gráfica.
+#
+# Instalador portable. Deja la máquina lista:
+#   1. instala el paquete de Weylus (AUR, o Flatpak como alternativa)
+#   2. crea el servicio que corre Weylus de fondo, sin ventana
+#   3. crea el vigilante que arma el túnel USB apenas enchufás la tablet
+#   4. si la máquina usa Hyprland, instala el selector automático de pantalla
+#
+# Uso:
+#   ./weylus-instalar              instala y activa todo
+#   ./weylus-instalar --simular    muestra qué haría, sin tocar nada
+#
+# Es idempotente: se puede correr las veces que quieras.
+# ---------------------------------------------------------------------------
+set -uo pipefail
+
+BIN_DIR="$HOME/.local/bin"
+REPO_BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UNIT_DIR="$HOME/.config/systemd/user"
+STATE_DIR="$HOME/.local/state/weylus"
+SIMULAR=0
+[ "${1:-}" = "--simular" ] && SIMULAR=1
+
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+info() { printf '  · %s\n' "$1"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$1"; }
+die()  { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; exit 1; }
+
+hacer() {
+  if [ "$SIMULAR" = 1 ]; then
+    info "(simulado) $*"
+  else
+    "$@"
+  fi
+}
+
+escribir() {   # escribir <ruta> ; el contenido viene por stdin
+  local ruta="$1"
+  if [ "$SIMULAR" = 1 ]; then
+    info "(simulado) escribir $ruta"
+    cat >/dev/null
+  else
+    mkdir -p "$(dirname "$ruta")"
+    cat >"$ruta"
+    ok "escrito $ruta"
+  fi
+}
+
+echo
+echo "Weylus - instalación [$([ "$SIMULAR" = 1 ] && echo simulación || echo real)]"
+echo "-----------------------------------------------"
+
+# --- 1. paquete ------------------------------------------------------------
+echo
+echo "1) Paquete de Weylus"
+if command -v weylus >/dev/null 2>&1; then
+  ok "ya está instalado: $(command -v weylus)"
+elif command -v yay >/dev/null 2>&1; then
+  info "instalando desde AUR con yay..."
+  hacer yay -S --noconfirm --needed weylus-community-bin || die "falló la instalación del paquete"
+elif command -v paru >/dev/null 2>&1; then
+  info "instalando desde AUR con paru..."
+  hacer paru -S --noconfirm --needed weylus-community-bin || die "falló la instalación del paquete"
+elif command -v flatpak >/dev/null 2>&1; then
+  info "instalando desde Flatpak..."
+  hacer flatpak install -y --user io.github.electronstudio.WeylusCommunityEdition \
+    || die "falló la instalación del Flatpak"
+  warn "con Flatpak el comando puede no llamarse 'weylus'; revisá el paso 2"
+else
+  die "no encontré ni AUR (yay/paru) ni Flatpak. Instalá Weylus a mano y volvé a correr esto."
+fi
+
+WEYLUS_CMD="$(command -v weylus || true)"
+[ -n "$WEYLUS_CMD" ] || WEYLUS_CMD="weylus"
+info "comando a usar: $WEYLUS_CMD"
+
+# --- 2. servicio de Weylus (de fondo, sin ventana) -------------------------
+echo
+echo "2) Servicio de Weylus (sin ventana)"
+escribir "$UNIT_DIR/weylus.service" <<EOF
+[Unit]
+Description=Weylus - usar la tablet como tableta grafica / touchpad
+After=graphical-session.target xdg-desktop-portal.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+ExecStartPre=/bin/sleep 3
+ExecStart=$WEYLUS_CMD --no-gui --wayland-support --auto-start
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+# --- 3. vigilante del USB --------------------------------------------------
+echo
+echo "3) Vigilante de la tablet por USB"
+if ! command -v adb >/dev/null 2>&1; then
+  warn "falta 'adb' (paquete android-tools). El túnel USB no va a funcionar sin eso."
+fi
+
+# El vigilante y el interruptor viven en el repo (linux/bin) y estan
+# enlazados a ~/.local/bin; si no estan, se escriben aca como respaldo.
+if [ -f "$REPO_BIN/weylus-tablet-watch" ] && [ -f "$REPO_BIN/weylus-toggle" ]; then
+  ok "vigilante e interruptor ya estan en $REPO_BIN"
+  for par in "weylus-tablet-watch:weylus-tablet-watch" "weylus-toggle:weylus-toggle"; do
+    src="$REPO_BIN/${par%%:*}"; dst="$BIN_DIR/${par##*:}"
+    [ -e "$dst" ] || hacer ln -s "$src" "$dst"
+  done
+else
+  warn "no encontre weylus-tablet-watch/weylus-toggle en $REPO_BIN; no los creo acá"
+fi
+hacer chmod +x "$BIN_DIR/weylus-tablet-watch" "$BIN_DIR/weylus-toggle"
+
+escribir "$UNIT_DIR/weylus-tablet.service" <<'EOF'
+[Unit]
+Description=Vigila la tablet Lenovo por USB y prepara el tunel de Weylus
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/weylus-tablet-watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+# --- 4. selector automático de pantalla (solo Hyprland) --------------------
+echo
+echo "4) Selector automático de pantalla"
+XDPH_CONF="$HOME/.config/hypr/xdph.conf"
+if command -v hyprctl >/dev/null 2>&1 && [ -f "$XDPH_CONF" ]; then
+  escribir "$BIN_DIR/xdph-auto-picker" <<'EOF'
+#!/usr/bin/env bash
+# Selector automático para el portal de Hyprland: elige la pantalla sin preguntar.
+set -uo pipefail
+REAL_PICKER=/usr/bin/hyprland-preview-share-picker
+HYPRCTL=/usr/bin/hyprctl
+JQ=/usr/bin/jq
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/weylus"
+LOG="$STATE_DIR/picker.log"
+PREF_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/xdph-auto-picker/output"
+PREGUNTAR_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/xdph-auto-picker/preguntar"
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+  hypo_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr"
+  if [ -d "$hypo_dir" ]; then
+    inst="$(ls -t "$hypo_dir" 2>/dev/null | head -1)"
+    [ -n "$inst" ] && export HYPRLAND_INSTANCE_SIGNATURE="$inst"
+  fi
+fi
+registrar() {
+  mkdir -p "$STATE_DIR" 2>/dev/null
+  printf '%s %s\n' "$(date -Is)" "$1" >> "$LOG" 2>/dev/null
+}
+flags=""
+for arg in "$@"; do
+  [ "$arg" = "--allow-token" ] && flags="r"
+done
+if [ -e "$PREGUNTAR_FILE" ]; then
+  registrar "modo preguntar -> abro el selector normal"
+  exec "$REAL_PICKER" "$@"
+fi
+candidatas=()
+IFS=';' read -ra entries <<< "${XDPH_OUTPUT_SHARING_LIST:-}"
+for entry in "${entries[@]}"; do
+  [ -z "$entry" ] && continue
+  len="${entry%%:*}"
+  rest="${entry#*:}"
+  [[ "$len" =~ ^[0-9]+$ ]] || continue
+  nombre="${rest:0:$len}"
+  [ -n "$nombre" ] && candidatas+=("$nombre")
+done
+if [ "${#candidatas[@]}" -eq 0 ] && [ -x "$HYPRCTL" ] && [ -x "$JQ" ]; then
+  json="$("$HYPRCTL" -j monitors 2>/dev/null)"
+  if [ -n "$json" ]; then
+    enfocado="$("$JQ" -r 'first(.[] | select(.focused) | .name) // empty' <<<"$json" 2>/dev/null)"
+    primera="$("$JQ" -r '.[0].name // empty' <<<"$json" 2>/dev/null)"
+    [ -n "$enfocado" ] && candidatas+=("$enfocado")
+    if [ -n "$primera" ] && [ "$primera" != "$enfocado" ]; then
+      candidatas+=("$primera")
+    fi
+  fi
+fi
+if [ "${#candidatas[@]}" -eq 0 ]; then
+  registrar "sin pantalla deducible -> abro el selector normal"
+  exec "$REAL_PICKER" "$@"
+fi
+elegida="${candidatas[0]}"
+if [ -r "$PREF_FILE" ]; then
+  pedida="$(head -n1 "$PREF_FILE" | tr -d '[:space:]')"
+  for n in "${candidatas[@]}"; do
+    [ "$n" = "$pedida" ] && elegida="$n"
+  done
+fi
+registrar "automatico -> pantalla=$elegida flags=${flags:--}"
+printf '[SELECTION]%s/screen:%s\n' "$flags" "$elegida"
+EOF
+  hacer chmod +x "$BIN_DIR/xdph-auto-picker"
+
+  if grep -q "^ *custom_picker_binary" "$XDPH_CONF"; then
+    info "actualizando custom_picker_binary en $XDPH_CONF"
+    hacer mkdir -p "$STATE_DIR"
+    # El respaldo se guarda fuera del repo de dotfiles para no ensuciarlo.
+    hacer cp -n "$XDPH_CONF" "$STATE_DIR/xdph.conf.antes-de-weylus"
+    hacer sed -i "s#^\( *custom_picker_binary = \).*#\1$BIN_DIR/xdph-auto-picker#" "$XDPH_CONF"
+    ok "selector automático conectado al portal"
+  else
+    warn "$XDPH_CONF no tiene 'custom_picker_binary'; agregalo a mano dentro de screencopy { }"
+  fi
+
+  hacer mkdir -p "$HOME/.config/xdph-auto-picker"
+  info "para que vuelva a preguntar: touch ~/.config/xdph-auto-picker/preguntar"
+else
+  info "no es Hyprland (o no hay xdph.conf): salteo el selector automático"
+fi
+
+# --- 5. activar ------------------------------------------------------------
+echo
+echo "5) Activación"
+hacer mkdir -p "$STATE_DIR"
+if [ "$SIMULAR" = 0 ]; then
+  systemctl --user daemon-reload
+  "$BIN_DIR/weylus-toggle" on >/dev/null 2>&1 || \
+    systemctl --user enable --now weylus.service weylus-tablet.service 2>/dev/null
+  ok "servicios activados (interruptor en on)"
+else
+  info "(simulado) systemctl --user enable --now weylus.service weylus-tablet.service"
+fi
+
+echo
+echo "-----------------------------------------------"
+if [ "$SIMULAR" = 0 ]; then
+  echo "Listo. Enchufá la tablet y abrí en su navegador:  http://localhost:1701"
+  echo "En la tablet, aceptá el cartel de depuración USB la primera vez."
+else
+  echo "Simulación terminada. Sacá --simular para instalar de verdad."
+fi
+echo
