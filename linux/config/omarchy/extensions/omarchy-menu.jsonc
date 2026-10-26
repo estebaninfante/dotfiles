@@ -44,6 +44,9 @@
   // (weylus-toggle prende el servicio y el vigilante USB; sirve por WiFi y por USB)
   "trigger.toggle.weylus": {"icon":"","label":"Weylus (tablet)","aliases":["weylus","tablet","tableta"],"description":"Tablet como tableta gráfica: por WiFi (la IP aparece al activar) o por USB http://localhost:1701","checked":"test -f ~/.local/state/weylus/on","action":"~/.local/bin/weylus-toggle toggle"},
 
+  // Toques de la tablet: dibuja en la compu los dedos/lápiz que apoyás en Weylus
+  "trigger.toggle.weylus-toques": {"icon":"󰟸","label":"Toques de la tablet","aliases":["toques","weylus toques","dedos tablet"],"description":"Muestra en la compu dónde tocás la tablet (Weylus)","checked":"test -f ~/.local/state/weylus-toques/on","action":"~/.local/bin/weylus-toques toggle"},
+
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
   "personal.investigaciones": {"icon":"󰎞","label":"Investigaciones","description":"Notas de investigacion del vault (abre en Logseq)","action":"omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""},
