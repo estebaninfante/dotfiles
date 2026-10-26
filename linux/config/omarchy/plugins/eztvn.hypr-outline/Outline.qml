@@ -47,6 +47,12 @@ Item {
   property string sel: ""
   property string hijo: ""
   property int base: 0
+  // Dónde apoyó el dedo en la tablet, en fracciones de la pantalla, y el
+  // radio del anillo en fracción del alto. Así el espejo cae en el mismo
+  // punto y con el mismo tamaño relativo que el menú de la tablet.
+  property real fx: 0.5
+  property real fy: 0.5
+  property real fr: 0
   property string fontFamily: Style.font.menuFamily
   property string pendingInitialMenu: "root"
 
@@ -56,8 +62,10 @@ Item {
 
   // Todo proporcional a la pantalla, para que se lea de lejos.
   readonly property real escala: Math.max(700, Math.min(panel.width, panel.height))
-  readonly property real radio: escala * 0.25
-  readonly property real radioHijo: radio * 1.56
+  readonly property real radio: fr > 0 ? fr * panel.height : escala * 0.25
+  readonly property real radioHijo: radio * 1.45
+  readonly property real centroX: fx * panel.width
+  readonly property real centroY: fy * panel.height
   readonly property real lado: radio * 0.47
   readonly property real ladoHijo: lado * 0.70
   readonly property real fuenteIcono: lado * 0.36
@@ -89,6 +97,9 @@ Item {
         if (a && a.sel !== undefined) sel = a.sel || ""
         if (a && a.hijo !== undefined) hijo = a.hijo || ""
         if (a && a.base !== undefined) base = a.base || 0
+        if (a && a.fx !== undefined) fx = a.fx
+        if (a && a.fy !== undefined) fy = a.fy
+        if (a && a.fr !== undefined) fr = a.fr
       } catch (e) {}
     }
     animarSeleccion = false
@@ -149,11 +160,11 @@ Item {
   }
 
   function posX(grados, r) {
-    return panel.width / 2 + Math.cos(aRadianes(grados)) * r
+    return root.centroX + Math.cos(aRadianes(grados)) * r
   }
 
   function posY(grados, r) {
-    return panel.height / 2 + Math.sin(aRadianes(grados)) * r
+    return root.centroY + Math.sin(aRadianes(grados)) * r
   }
 
   function anguloDe(item) {
@@ -174,8 +185,8 @@ Item {
   // El menú se pide del hub de hypr-remote (su socket de control) y, si no
   // está, del servidor hypr-outline de siempre. Así el espejo funciona con
   // cualquiera de los dos, sin depender de quién lo dispare.
-  readonly property string fuenteEstado: "out=$(curl -s --max-time 3 --unix-socket \"${XDG_RUNTIME_DIR}/hypr-remote/control.sock\" http://localhost/radial 2>/dev/null); if [ -z \"$out\" ]; then curl -s --max-time 3 http://127.0.0.1:1781/api/radial; else printf '%s' \"$out\"; fi"
-  readonly property string fuenteMenu: "out=$(curl -s --max-time 3 --unix-socket \"${XDG_RUNTIME_DIR}/hypr-remote/control.sock\" http://localhost/radial 2>/dev/null); if [ -z \"$out\" ]; then curl -s --max-time 3 http://127.0.0.1:1781/api/menu; else printf '%s' \"$out\"; fi"
+  readonly property string fuenteEstado: "out=$(curl -sf --max-time 3 --unix-socket \"${XDG_RUNTIME_DIR}/hypr-remote/control.sock\" http://localhost/radial 2>/dev/null); if [ -z \"$out\" ]; then curl -s --max-time 3 http://127.0.0.1:1781/api/radial; else printf '%s' \"$out\"; fi"
+  readonly property string fuenteMenu: "out=$(curl -sf --max-time 3 --unix-socket \"${XDG_RUNTIME_DIR}/hypr-remote/control.sock\" http://localhost/radial 2>/dev/null); if [ -z \"$out\" ]; then curl -s --max-time 3 http://127.0.0.1:1781/api/menu; else printf '%s' \"$out\"; fi"
 
   // Acepta las dos formas: solo el menú (array) o menú + selección (objeto).
   function animarCambio() {
@@ -194,6 +205,9 @@ Item {
     root.sel = d.sel || ""
     root.hijo = d.hijo || ""
     root.base = d.base || 0
+    if (d.fx !== undefined) root.fx = d.fx
+    if (d.fy !== undefined) root.fy = d.fy
+    if (d.fr !== undefined) root.fr = d.fr
     if (d.abierto === true) root.abierto = true
     else if (d.abierto === false) root.abierto = false
   }
@@ -255,49 +269,34 @@ Item {
     exclusionMode: ExclusionMode.Ignore
     mask: Region {}                     // solo se mira: los clics pasan de largo
 
-    // Fondo opaco: el menú no se tiñe con lo que haya detrás (wallpaper,
-    // ventanas). El escritorio se oculta mientras el radial está abierto.
-    Rectangle {
-      anchors.fill: parent
-      color: root.fondo
+    // Sin fondo: el escritorio se sigue viendo (y en la tablet, por Weylus,
+    // no tapa nada). Solo un halo suave detrás del anillo para que se lea.
+    Item {
+      id: ancla
+      x: root.centroX
+      y: root.centroY
+      width: 0
+      height: 0
     }
 
-    // Viñeta radial: oscurece el centro (donde vive el menú) y se abre en
-    // los bordes, como el halo de un HUD.
-    Shape {
-      anchors.fill: parent
-      visible: true
-
-      ShapePath {
-        fillGradient: RadialGradient {
-          centerX: panel.width / 2
-          centerY: panel.height / 2
-          centerRadius: root.radio * 2.1
-          focalX: panel.width / 2
-          focalY: panel.height / 2
-          focalRadius: 0
-          GradientStop { position: 0.0; color: Qt.lighter(root.fondo, 2.1) }
-          GradientStop { position: 0.55; color: Qt.lighter(root.fondo, 1.15) }
-          GradientStop { position: 1.0; color: root.fondo }
-        }
-        startX: 0
-        startY: 0
-        PathLine { x: panel.width; y: 0 }
-        PathLine { x: panel.width; y: panel.height }
-        PathLine { x: 0; y: panel.height }
-        PathLine { x: 0; y: 0 }
-      }
+    Rectangle {
+      anchors.centerIn: ancla
+      width: (root.madreElegida !== null && root.madreElegida.hijos
+              ? root.radioHijo : root.radio) * 2 + root.lado * 1.4
+      height: width
+      radius: width / 2
+      color: Util.alpha(root.fondo, 0.45)
     }
 
     // ── Aros base ─────────────────────────────────────────────────────────
     HudRing {
-      anchors.centerIn: parent
+      anchors.centerIn: ancla
       radio: root.radio
       color: Util.alpha(root.tinta, 0.10)
     }
 
     HudRing {
-      anchors.centerIn: parent
+      anchors.centerIn: ancla
       radio: root.radio * 1.07
       color: Util.alpha(root.acento, 0.20)
       punteado: true
@@ -312,7 +311,7 @@ Item {
     }
 
     HudRing {
-      anchors.centerIn: parent
+      anchors.centerIn: ancla
       radio: root.radioHijo
       visible: root.madreElegida !== null
       color: Util.alpha(root.acento, 0.16)
@@ -320,27 +319,23 @@ Item {
 
     // ── Arcos de foco ─────────────────────────────────────────────────────
     HudRing {
-      anchors.centerIn: parent
+      anchors.centerIn: ancla
       radio: root.radio
       color: root.acento
       grosor: 2.5
       apertura: 42
       rotation: root.madreElegida ? root.anguloDe(root.madreElegida) : 0
       opacity: root.madreElegida ? 1 : 0
-      Behavior on rotation { NumberAnimation { duration: root.msMedio; easing.type: Easing.OutCubic } }
-      Behavior on opacity { NumberAnimation { duration: root.msRapido } }
     }
 
     HudRing {
-      anchors.centerIn: parent
+      anchors.centerIn: ancla
       radio: root.radioHijo
       color: root.acento
       grosor: 2
       apertura: 28
       rotation: root.anguloHijoElegido()
       opacity: root.hijoElegido ? 1 : 0
-      Behavior on rotation { NumberAnimation { duration: root.msMedio; easing.type: Easing.OutCubic } }
-      Behavior on opacity { NumberAnimation { duration: root.msRapido } }
     }
 
     // ── Radios hacia cada opción ──────────────────────────────────────────
@@ -352,8 +347,8 @@ Item {
 
         readonly property bool activa: root.sel === modelData.id
 
-        x: panel.width / 2
-        y: panel.height / 2
+        x: root.centroX
+        y: root.centroY
         width: Math.max(0, root.radio - root.lado * 0.42)
         height: 2
         transformOrigin: Item.Left
@@ -378,7 +373,6 @@ Item {
             GradientStop { position: 0.0; color: Util.alpha(root.acento, 0.0) }
             GradientStop { position: 1.0; color: Util.alpha(root.acento, 0.9) }
           }
-          Behavior on opacity { NumberAnimation { duration: root.msRapido } }
         }
       }
     }
@@ -409,7 +403,6 @@ Item {
           color: root.hijo === modelData.id
             ? Util.alpha(root.acento, 0.75)
             : Util.alpha(root.tinta, 0.10)
-          Behavior on color { ColorAnimation { duration: root.msRapido } }
         }
       }
     }
@@ -435,8 +428,6 @@ Item {
 
         x: root.posX(root.anguloDe(modelData), root.radio) - width / 2
         y: root.posY(root.anguloDe(modelData), root.radio) - height / 2
-        Behavior on x { SpringAnimation { spring: 4; damping: 0.55 } }
-        Behavior on y { SpringAnimation { spring: 4; damping: 0.55 } }
       }
     }
 
@@ -465,15 +456,13 @@ Item {
 
         x: root.posX(ang, root.radioHijo) - width / 2
         y: root.posY(ang, root.radioHijo) - height / 2
-        Behavior on x { SpringAnimation { spring: 4; damping: 0.55 } }
-        Behavior on y { SpringAnimation { spring: 4; damping: 0.55 } }
       }
     }
 
     // ── Núcleo ────────────────────────────────────────────────────────────
     Item {
       id: nucleo
-      anchors.centerIn: parent
+      anchors.centerIn: ancla
       width: root.radio * 0.36
       height: width
 
@@ -591,42 +580,14 @@ Item {
       }
     }
 
-    // ── Encabezado HUD ────────────────────────────────────────────────────
-    Row {
-      id: encabezado
-      anchors.horizontalCenter: parent.horizontalCenter
-      y: Style.space(56)
-      spacing: Style.space(10)
-
-      Rectangle {
-        width: Style.space(28)
-        height: 1
-        y: (rotulo.height - height) / 2
-        color: Util.alpha(root.acento, 0.55)
-      }
-
-      Text {
-        id: rotulo
-        text: "HYPR · MENÚ RADIAL"
-        color: Util.alpha(root.tinta, 0.55)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        font.letterSpacing: 2.4
-      }
-
-      Rectangle {
-        width: Style.space(28)
-        height: 1
-        y: (rotulo.height - height) / 2
-        color: Util.alpha(root.acento, 0.55)
-      }
-    }
-
     // ── Globo con la selección ────────────────────────────────────────────
     Rectangle {
       visible: root.globo !== ""
-      anchors.horizontalCenter: parent.horizontalCenter
-      y: parent.height - Style.space(112)
+      // Debajo del anillo, como en la tablet; si no cabe, arriba.
+      x: Math.max(0, Math.min(panel.width - width, root.centroX - width / 2))
+      y: root.centroY + root.radio * 1.95 + height / 2 < panel.height
+         ? root.centroY + root.radio * 1.95 - height / 2
+         : Math.max(0, root.centroY - root.radio * 1.95 - height / 2)
       width: textoGlobo.implicitWidth + Style.space(64)
       height: Style.space(48)
       radius: height / 2
@@ -652,17 +613,6 @@ Item {
         font.pixelSize: root.fuenteGlobo
         font.letterSpacing: 0.8
       }
-    }
-
-    Text {
-      visible: root.globo === ""
-      anchors.horizontalCenter: parent.horizontalCenter
-      y: parent.height - Style.space(112)
-      text: "RECORRÉ CON EL DEDO"
-      color: Util.alpha(root.tinta, 0.42)
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.letterSpacing: 3
     }
   }
 }

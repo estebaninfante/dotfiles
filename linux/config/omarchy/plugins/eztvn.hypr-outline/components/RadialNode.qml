@@ -31,8 +31,6 @@ Item {
   opacity: atenuada ? 0.52 : 1
   scale: elegida ? 1.06 : 1
 
-  Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
-  Behavior on scale { SpringAnimation { spring: 5; damping: 0.5; mass: 1 } }
 
   onElegidaChanged: {
     if (!elegida || !animarOnda) return
@@ -48,7 +46,6 @@ Item {
     radius: height / 2
     color: Util.alpha(nodo.acento, 0.14)
     opacity: nodo.elegida ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
   }
 
   // Sombra corrida: da profundidad a la placa.
@@ -67,8 +64,6 @@ Item {
     border.width: nodo.elegida ? 1.6 : 1
     border.color: nodo.elegida ? nodo.acento : Util.alpha(nodo.tinta, 0.10)
 
-    Behavior on color { ColorAnimation { duration: 170 } }
-    Behavior on border.color { ColorAnimation { duration: 170 } }
 
     // Brillo de vidrio: la luz que pega arriba.
     Rectangle {
@@ -89,7 +84,6 @@ Item {
       height: 2
       radius: 1
       color: nodo.acento
-      Behavior on width { NumberAnimation { duration: 230; easing.type: Easing.OutCubic } }
     }
   }
 
@@ -103,7 +97,6 @@ Item {
       color: nodo.elegida ? nodo.acento : Util.alpha(nodo.tinta, 0.95)
       font.family: nodo.familia
       font.pixelSize: nodo.fuenteIcono
-      Behavior on color { ColorAnimation { duration: 170 } }
     }
 
     Text {
@@ -114,7 +107,6 @@ Item {
       font.family: nodo.familia
       font.pixelSize: nodo.fuenteTexto
       font.letterSpacing: nodo.fuenteTexto * 0.06
-      Behavior on color { ColorAnimation { duration: 170 } }
     }
   }
 
