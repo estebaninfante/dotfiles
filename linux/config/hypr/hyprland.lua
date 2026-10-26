@@ -13,6 +13,7 @@ require("navigation")
 require("visionhub-typing")
 
 require("windowrules")
+require("poco-f3")
 require("whatsapp-call")
 require("windowhelpers")
 require("bindings")

@@ -19,6 +19,20 @@ hl.window_rule({
     opacity = "1.0 1.0",
 })
 
+-- Poco F3 por scrcpy: columna tipo teléfono en el borde derecho, de alto
+-- completo. El tamaño/posición final lo calcula poco-f3.lua según el monitor;
+-- acá sólo se fija que nazca flotante, pinned y sin adornos.
+hl.window_rule({
+    match = { class = "^scrcpy$" },
+    float = true,
+    pin = true,
+    border_size = 0,
+    rounding = 0,
+    no_blur = 1,
+    no_shadow = 1,
+    opacity = "1.0 1.0",
+})
+
 -- El salvapantallas de Omarchy corre en foot (el terminal por defecto), y foot
 -- anuncia su app-id recién después del primer map: la regla por `class` de
 -- default/hypr/apps/system.lua no le pega, así que quedaba como una ventana tiled
