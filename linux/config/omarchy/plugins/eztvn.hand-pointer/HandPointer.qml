@@ -43,6 +43,29 @@ Item {
 
   readonly property real dotSize: 30
 
+  // Toques de la tablet (Weylus): los publica weylus-toques.service leyendo
+  // los dispositivos "Weylus Touch" / "Weylus Stylus".
+  //   {"v":1,"t":[[x,y],...],"pen":[x,y]|null,"down":0|1}
+  readonly property string touchSocketPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+    + "/weylus-touch.sock"
+  property var toques: []
+  property var lapiz: null
+  property bool lapizAbajo: false
+  readonly property bool touchPresent: toques.length > 0 || lapiz !== null
+
+  function handleTouchLine(line) {
+    var msg
+    try {
+      msg = JSON.parse(line)
+    } catch (e) {
+      return
+    }
+    if (!msg || msg.v !== 1) return
+    root.toques = Array.isArray(msg.t) ? msg.t : []
+    root.lapiz = (Array.isArray(msg.pen) && msg.pen.length >= 2) ? msg.pen : null
+    root.lapizAbajo = msg.down === 1
+  }
+
   function handleLine(line) {
     var msg
     try {
@@ -111,6 +134,24 @@ Item {
     }
   }
 
+  Process {
+    id: limpiarToques
+    running: true
+    command: ["rm", "-f", root.touchSocketPath]
+    onExited: touchServer.active = true
+  }
+
+  SocketServer {
+    id: touchServer
+    active: false
+    path: root.touchSocketPath
+    handler: Socket {
+      parser: SplitParser {
+        onRead: line => root.handleTouchLine(line)
+      }
+    }
+  }
+
   // Si deja de llegar un `n` nuevo, algo se colgó: se apaga solo.
   Timer {
     interval: 400
@@ -124,7 +165,7 @@ Item {
   PanelWindow {
     id: panel
 
-    visible: root.present
+    visible: root.present || root.touchPresent
     anchors {
       top: true
       bottom: true
@@ -166,6 +207,39 @@ Item {
         screenH: panel.height
         dotSize: root.dotSize
       }
+    }
+
+    // Dedos sobre la tablet: anillo blanco, sin interpolar (llegan a 60 Hz).
+    Repeater {
+      model: root.toques
+
+      delegate: Rectangle {
+        required property var modelData
+
+        width: 38
+        height: 38
+        radius: width / 2
+        antialiasing: true
+        x: modelData[0] * panel.width - width / 2
+        y: modelData[1] * panel.height - height / 2
+        color: Qt.rgba(1, 1, 1, 0.22)
+        border.width: 2
+        border.color: Qt.rgba(1, 1, 1, 0.85)
+      }
+    }
+
+    // Lápiz: punto chico; se llena cuando apoya.
+    Rectangle {
+      visible: root.lapiz !== null
+      width: 14
+      height: 14
+      radius: width / 2
+      antialiasing: true
+      x: (root.lapiz ? root.lapiz[0] : 0) * panel.width - width / 2
+      y: (root.lapiz ? root.lapiz[1] : 0) * panel.height - height / 2
+      color: root.lapizAbajo ? Qt.rgba(1, 1, 1, 0.9) : "transparent"
+      border.width: 2
+      border.color: Qt.rgba(1, 1, 1, 0.9)
     }
 
     HeadPointer {

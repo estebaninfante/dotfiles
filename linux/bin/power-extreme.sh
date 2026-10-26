@@ -53,7 +53,7 @@ STOP_USER_UNITS=(
   kokoro-tts.service ollama.service
   # KVM, streaming y escritorio remoto
   lan-mouse.service lan-mouse-auto.service sunshine.service
-  weylus.service weylus-tablet.service
+  weylus.service weylus-tablet.service weylus-toques.service
   hypr-remote.service hypr-outline.service present-remote.service
   # agentes y servidores de desarrollo (incluida la silla del agente: sin ella
   # no queda ningún agente vivo, que es justo lo que pide el modo; para

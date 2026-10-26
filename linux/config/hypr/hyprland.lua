@@ -13,6 +13,7 @@ require("navigation")
 require("visionhub-typing")
 
 require("windowrules")
+require("whatsapp-call")
 require("windowhelpers")
 require("bindings")
 require("moonlight")

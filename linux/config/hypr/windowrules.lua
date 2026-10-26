@@ -2,6 +2,24 @@ local variables = require("base.variables")
 
 hl.window_rule({ match = { class = "swappy" }, no_anim = true })
 
+-- Llamada de WhatsApp (la ventanita emergente que abre el PWA de Brave al
+-- entrar a una llamada). Queda flotante y pinned (visible en todos los
+-- workspaces y arriba del mosaico) en 16:9 arriba a la derecha, sin borde,
+-- sin blur y opaca: sólo el video de la otra persona.
+-- `keep_aspect_ratio` mantiene el 16:9 si después la agrandás o achicás.
+hl.window_rule({
+    match = { class = "[Ww]hatsapp", title = "[Ll]lamada de WhatsApp$" },
+    float = true,
+    pin = true,
+    size = { 640, 360 },
+    keep_aspect_ratio = true,
+    move = { "(monitor_w-window_w-24)", "40" },
+    border_size = 0,
+    rounding = 8,
+    no_blur = 1,
+    opacity = "1.0 1.0",
+})
+
 -- El salvapantallas de Omarchy corre en foot (el terminal por defecto), y foot
 -- anuncia su app-id recién después del primer map: la regla por `class` de
 -- default/hypr/apps/system.lua no le pega, así que quedaba como una ventana tiled
