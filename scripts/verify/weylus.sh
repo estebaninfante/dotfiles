@@ -19,6 +19,7 @@ QUIET=0
 [ "${1:-}" = "--quiet" ] && QUIET=1
 fails=0
 ok()   { [ "$QUIET" = 1 ] || printf '  ok    %s\n' "$*"; }
+warn() { [ "$QUIET" = 1 ] || printf '  AVISO %s\n' "$*"; }
 fail() { fails=$((fails + 1)); printf '  FALLA %s\n' "$*"; }
 
 # --- scripts versionados y enlazados --------------------------------------
@@ -67,6 +68,19 @@ else
             && fail "$unidad sigue corriendo con el interruptor en off" \
             || ok "$unidad detenido (modo apagado)"
     done
+fi
+
+# --- acceso por WiFi (firewall) -------------------------------------------
+# Por USB el tunel adb no pasa por el firewall; por WiFi si. Si ufw esta
+# activo, el puerto tiene que estar abierto para la red local.
+if systemctl is-active --quiet ufw 2>/dev/null; then
+    if ! reglas="$(sudo -n ufw status 2>/dev/null)"; then
+        warn "no puedo leer las reglas de ufw sin sudo; revisá a mano que 1701/tcp este permitido"
+    elif grep -q '^1701/tcp' <<<"$reglas"; then
+        ok "el firewall deja entrar al 1701 (WiFi)"
+    else
+        fail "ufw activo y sin regla para 1701/tcp: la tablet no va a conectar por WiFi"
+    fi
 fi
 
 # --- fila en el menu de Omarchy -------------------------------------------

@@ -17,10 +17,24 @@ UI_PORT=1781
 
 notify() { notify-send -a Weylus -i input-tablet -t 1800 "$@" 2>/dev/null || true; }
 
+# IP de la red local (prefiere Wi-Fi): es la que la tablet abre por WiFi.
+ip_lan() {
+  ip -4 -o addr show scope global 2>/dev/null | awk '
+    $2 == "wlo1" && !w { split($4, a, "/"); w = a[1] }
+    $2 !~ /^(lo|tailscale)/ && !f { split($4, a, "/"); f = a[1] }
+    END { print (w != "" ? w : f) }'
+}
+
 activar() {
   mkdir -p "$STATE_DIR" && touch "$STATE"
   systemctl --user enable --now weylus.service weylus-tablet.service 2>/dev/null
-  notify "Weylus: activo" "Enchufá la tablet y abrí  http://localhost:$WEB_PORT"
+  local ip
+  ip="$(ip_lan)"
+  if [ -n "$ip" ]; then
+    notify "Weylus: activo" "En la tablet: http://$ip:$WEB_PORT (WiFi)"
+  else
+    notify "Weylus: activo" "En la tablet: http://localhost:$WEB_PORT (USB)"
+  fi
 }
 
 desactivar() {

@@ -41,8 +41,8 @@
   "trigger.toggle.kindle": {"icon":"󰂺","label":"Modo Kindle","aliases":["kindle","koreader"],"description":"Flechas del control = pasar página en el Kindle","checked":"test -f ~/.local/state/kindle-mode/on","action":"~/.local/bin/kindle-mode toggle"},
 
   // Weylus: la tablet por USB como tableta gráfica / touchpad
-  // (weylus-toggle prende el servicio y el vigilante USB; url: localhost:1701)
-  "trigger.toggle.weylus": {"icon":"","label":"Weylus (tablet)","aliases":["weylus","tablet","tableta"],"description":"Tablet como tableta gráfica por USB: http://localhost:1701","checked":"test -f ~/.local/state/weylus/on","action":"~/.local/bin/weylus-toggle toggle"},
+  // (weylus-toggle prende el servicio y el vigilante USB; sirve por WiFi y por USB)
+  "trigger.toggle.weylus": {"icon":"","label":"Weylus (tablet)","aliases":["weylus","tablet","tableta"],"description":"Tablet como tableta gráfica: por WiFi (la IP aparece al activar) o por USB http://localhost:1701","checked":"test -f ~/.local/state/weylus/on","action":"~/.local/bin/weylus-toggle toggle"},
 
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
