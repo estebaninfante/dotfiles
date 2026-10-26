@@ -36,6 +36,10 @@
   // Ahorro extremo de batería (power-extreme.sh + docs/energia-laptop-82y5.md §8)
   "trigger.toggle.extreme-power": {"icon":"󰂄","label":"Ahorro extremo","aliases":["ahorro-extremo","extremo"],"description":"Batería: apaga IA local, KVM, streaming, agentes y timers; brillo 25%","when":"omarchy-battery-present","checked":"test -f ~/.local/state/power-extreme/on","action":"~/.local/bin/power-extreme.sh toggle"},
 
+  // Modo Kindle: las flechas del control de presentaciones pasan página en KOReader
+  // (kindle-mode + kindle-page; también se alterna manteniendo la flecha derecha)
+  "trigger.toggle.kindle": {"icon":"󰂺","label":"Modo Kindle","aliases":["kindle","koreader"],"description":"Flechas del control = pasar página en el Kindle","checked":"test -f ~/.local/state/kindle-mode/on","action":"~/.local/bin/kindle-mode toggle"},
+
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
   "personal.investigaciones": {"icon":"󰎞","label":"Investigaciones","description":"Notas de investigacion del vault (abre en Logseq)","action":"omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""},
