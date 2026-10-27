@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# tira — un workspace de Hyprland como tira de pantallas completas (scrolling).
+#
+# Uso:
+#   tira estado            muestra como esta configurada la tira
+#   tira on | off          activa / desactiva la tira (off = ese workspace vuelve a grilla)
+#   tira down | right | up | left
+#                          eje en que crece la cinta y se scrollea
+#   tira ws N              mueve la tira a otro numero de workspace
+#   tira ir                salta al workspace de la tira
+#   tira verificar         chequea que el layout este realmente andando
+#
+# El estado vive en ~/.local/state/tira.conf y lo lee ~/.config/hypr/tira.lua.
+# Cada cambio escribe el archivo y recarga Hyprland.
+
+set -euo pipefail
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/tira.conf"
+CONF="$HOME/.config/hypr/tira.lua"
+
+workspace=5
+layout=scrolling
+direction=down
+
+if [[ -r "$STATE" ]]; then
+    while IFS='=' read -r key value; do
+        key="${key//[[:space:]]/}"
+        value="${value//[[:space:]]/}"
+        case "$key" in
+            workspace) workspace="$value" ;;
+            layout)    layout="$value" ;;
+            direction) direction="$value" ;;
+        esac
+    done < "$STATE"
+fi
+
+save() {
+    mkdir -p "$(dirname "$STATE")"
+    printf 'workspace=%s\nlayout=%s\ndirection=%s\n' "$workspace" "$layout" "$direction" > "$STATE"
+    if ! hyprctl reload >/dev/null 2>&1; then
+        echo "no pude recargar Hyprland (¿está corriendo?). El estado quedó escrito igual." >&2
+        return 1
+    fi
+    local errors
+    errors="$(hyprctl configerrors 2>/dev/null | sed -e '/^ *$/d')"
+    if [[ -n "$errors" ]]; then
+        echo "Hyprland reportó errores de config:" >&2
+        echo "$errors" >&2
+        return 1
+    fi
+}
+
+case "${1:-estado}" in
+    estado)
+        echo "workspace:  $workspace"
+        echo "layout:     $layout"
+        echo "direction:  $direction"
+        if command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1; then
+            local_width="$(hyprctl getoption scrolling:column_width 2>/dev/null | sed -n 's/^float: //p')"
+            echo "column_width: ${local_width:-?} (1.0 = cada columna ocupa la pantalla)"
+        fi
+        ;;
+    on)
+        layout=scrolling; save && echo "tira activa en el workspace $workspace (dirección $direction)"
+        ;;
+    off)
+        layout=off; save && echo "tira apagada: el workspace $workspace vuelve a la grilla"
+        ;;
+    down|right|up|left)
+        direction="$1"; layout=scrolling
+        save && echo "tira en el workspace $workspace, la cinta crece hacia $direction"
+        ;;
+    ws)
+        if [[ ! "${2:-}" =~ ^[0-9]+$ ]]; then
+            echo "uso: tira ws N (N = número de workspace)" >&2
+            exit 2
+        fi
+        workspace="$2"
+        save && echo "tira movida al workspace $workspace"
+        ;;
+    ir)
+        hyprctl dispatch workspace "$workspace" >/dev/null
+        ;;
+    verificar)
+        fail=0
+        [[ -r "$CONF" ]] || { echo "falta $CONF"; exit 1; }
+        if ! hyprctl version >/dev/null 2>&1; then
+            echo "Hyprland no está corriendo"; exit 1
+        fi
+        errors="$(hyprctl configerrors 2>/dev/null | sed -e '/^ *$/d')"
+        if [[ -n "$errors" ]]; then
+            echo "✗ errores de config:"; echo "$errors"; fail=1
+        else
+            echo "✓ config sin errores"
+        fi
+        if [[ "$layout" == "scrolling" ]]; then
+            width="$(hyprctl getoption scrolling:column_width | sed -n 's/^float: //p')"
+            if awk -v w="${width:-0}" 'BEGIN { exit !(w == 1.0) }'; then
+                echo "✓ column_width = 1.0 (cada columna ocupa la pantalla)"
+            else
+                echo "✗ column_width = ${width:-?}, esperaba 1.0"; fail=1
+            fi
+                # La prueba de fuego: en la tira, cada ventana ocupa la
+            # pantalla entera y están apiladas a un alto de monitor de
+            # distancia (por eso se scrollea entre ellas).
+            hyprctl -j clients | python3 -c "
+import json, sys
+ws = int('$workspace')
+tiled = [c for c in json.load(sys.stdin)
+         if c['workspace']['id'] == ws and c['fullscreen'] == 0 and not c['floating']]
+if len(tiled) < 2:
+    print('· una sola ventana en la tira: no hay nada que medir todavía')
+    raise SystemExit(0)
+ys = sorted(c['at'][1] for c in tiled)
+heights = {c['size'][1] for c in tiled}
+gaps = {b - a for a, b in zip(ys, ys[1:])}
+if len(heights) == 1 and len(gaps) == 1 and gaps == heights:
+    print('✓ cinta vertical: %d ventanas, cada una de pantalla completa' % len(tiled))
+else:
+    print('✗ las ventanas no están en cinta (altos %s, saltos %s)' % (heights, gaps))
+    raise SystemExit(1)
+" || exit 1
+            echo "→ prueba manual: 'tira ir' y scrolleá con SUPER+O/U/ñ/E"
+        else
+            echo "✓ tira apagada (workspace $workspace en grilla)"
+        fi
+        exit "$fail"
+        ;;
+    *)
+        sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+        exit 2
+        ;;
+esac
