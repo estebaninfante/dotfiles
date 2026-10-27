@@ -169,11 +169,37 @@ en_curso() {  # true si hay una operación de git a medias en el repo
 }
 
 # Archivos que NO se suben ni con `add -A`: secretos de verdad (los .example sí).
+# Cualquier nombre que contenga .env cuenta: Syncthing renombra los conflictos a
+# "x.sync-conflict-...-HOST.env" y el patrón viejo (solo ^.env) los dejó pasar
+# (así llegó un .env del bot a GitHub el 2026-10-19).
+# Solo mira lo que está por subirse (nuevo o modificado): un .env versionado y sin
+# cambios ya está en el remoto, y frenarlo solo pararía el sync sin proteger nada.
 secretos() {
   local repo="$1"
-  (cd "$repo" && { git ls-files; git ls-files -o --exclude-standard; }) 2>/dev/null \
-    | grep -Ei '(^|/)(\.env|\.env\.[^e].*|id_rsa|id_ed25519|.*\.(pem|key|p12|pfx|keystore)|credentials[^/]*)$' \
-    | grep -v '\.example$' || true
+  { git -C "$repo" diff HEAD --name-only --diff-filter=AMR; git -C "$repo" ls-files -o --exclude-standard; } 2>/dev/null \
+    | grep -Ei '(^|/)([^/]*\.env(\.[^/]*)?|\.envrc|id_rsa|id_ed25519|[^/]*\.(pem|key|p12|pfx|keystore)|credentials[^/]*)$' \
+    | grep -Ev '\.(example|sample|template)$' || true
+}
+
+# Segunda red: lo que se va a commitear (cambios + archivos nuevos) no puede
+# traer algo con forma de clave, se llame como se llame el archivo.
+# Imprime "archivo: tipo" (nunca el valor).
+PATRONES_CLAVE='EAA[A-Za-z0-9]{60,}|AIza[0-9A-Za-z_-]{35}|gsk_[A-Za-z0-9]{40,}|sk-(ant-)?[A-Za-z0-9_-]{24,}|gh[pousr]_[A-Za-z0-9]{36,}|oc_sk_[A-Za-z0-9]{16,}|prv_(prod|test)_[A-Za-z0-9]{16,}|(prod|test)_(events|integrity)_[A-Za-z0-9]{16,}|postgres(ql)?://[^:/[:space:]]+:[^@[:space:]]+@|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+claves_en_contenido() {
+  local repo="$1" f
+  {
+    git -C "$repo" diff HEAD --name-only --diff-filter=AM 2>/dev/null
+    git -C "$repo" ls-files -o --exclude-standard 2>/dev/null
+  } | sort -u | while IFS= read -r f; do
+    [ -f "$repo/$f" ] || continue
+    [ "$(stat -c %s "$repo/$f" 2>/dev/null || echo 0)" -lt 2000000 ] || continue
+    if git -C "$repo" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+      # versionado: solo las líneas agregadas
+      git -C "$repo" diff HEAD -- "$f" | grep '^+' | grep -qIE "$PATRONES_CLAVE" && echo "$f: clave en líneas nuevas"
+    else
+      grep -qIE "$PATRONES_CLAVE" "$repo/$f" 2>/dev/null && echo "$f: clave en archivo nuevo"
+    fi
+  done
 }
 
 asegurar_origin() {  # crea el repo privado en GitHub si falta y deja origin
@@ -228,7 +254,7 @@ for root in $ROOTS; do
 
     if [ "$MODO" != "medir" ]; then
       # 0) secretos: si hay, no se commitea nada en este repo
-      peligrosos=$(secretos "$repo")
+      peligrosos=$(secretos "$repo"; claves_en_contenido "$repo")
       if [ -n "$peligrosos" ]; then
         errores+=("$nombre: posibles secretos, no se tocó ($(echo "$peligrosos" | head -3 | tr '\n' ' '))")
         log "$nombre: salteado por posibles secretos"
