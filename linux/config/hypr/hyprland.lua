@@ -19,3 +19,6 @@ require("windowhelpers")
 require("bindings")
 require("moonlight")
 require("ohm")
+-- Tira: workspace de scroll (pantallas completas en columnas). Estado en
+-- ~/.local/state/tira.conf; se maneja con el comando `tira`.
+require("tira")
