@@ -38,21 +38,6 @@ if [ ! -d node_modules ]; then
     fi
 fi
 
-# Se sirve un BUILD de la rama activa (no `next dev`): Clerk no carga su UI
-# fuera de `localhost` en modo dev (su handshake de desarrollo falla y el modal
-# de login queda en blanco). En modo producción funciona en cualquier host.
-# Rebuild automático si falta o si hay fuentes más nuevas que el build.
-needs_build=0
-if [ ! -f .next/BUILD_ID ]; then
-    needs_build=1
-elif [ -n "$(find app components lib modules hooks i18n messages proxy.ts next.config.mjs package.json \
-    -newer .next/BUILD_ID -print -quit 2>/dev/null)" ]; then
-    needs_build=1
-fi
-
-if [ "$needs_build" = "1" ]; then
-    echo "zentro-serve: construyendo $tree" >&2
-    pnpm build
-fi
-
-exec pnpm exec next start -p "$port"
+# Se sirve la rama activa en modo desarrollo (`next dev`), con recarga en
+# caliente. `predev` regenera el registro de modulos antes de arrancar.
+exec pnpm dev --port "$port"

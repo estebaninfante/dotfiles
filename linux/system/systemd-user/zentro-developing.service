@@ -1,5 +1,5 @@
 [Unit]
-Description=Zentro (rama dev, build) servida en 127.0.0.1:3050
+Description=Zentro (rama dev, modo desarrollo) servida en 127.0.0.1:3050
 Documentation=https://github.com/eztvn/dotfiles
 After=network-online.target
 Wants=network-online.target
