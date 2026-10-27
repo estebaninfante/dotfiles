@@ -1,6 +1,6 @@
 ---
 name: interfaz
-description: Reglas para diseñar y revisar interfaces (web, escritorio o CLI) con foco en jerarquía, espaciado y minimalismo. Usar SIEMPRE que se cree o modifique una pantalla, vista, componente, menú o formulario; cuando haya que decidir qué botones mostrar, cuánto espacio usar o cómo ordenar la información; y cuando el usuario pida "minimalista", "menos botones", "que se entienda en 3 segundos", "respetá los espacios" o "no tener que traducir tanto".
+description: Reglas para diseñar y revisar interfaces (web, escritorio o CLI) con foco en jerarquía, espaciado y minimalismo; si el repo tiene docs/ui/PATRONES.md, lleva a ese contrato (patrones, galería, bocetos). Usar SIEMPRE que se cree o modifique una pantalla, vista, componente, menú o formulario; cuando haya que decidir qué botones mostrar, cuánto espacio usar o cómo ordenar la información; y cuando el usuario pida "minimalista", "menos botones", "que se entienda en 3 segundos", "respetá los espacios" o "no tener que traducir tanto".
 ---
 
 # Interfaz
@@ -8,6 +8,27 @@ description: Reglas para diseñar y revisar interfaces (web, escritorio o CLI) c
 Tu trabajo no es agregar elementos hasta cubrir todas las funciones. Es lograr
 que la persona entienda en 3 segundos qué hacer. Cada elemento que agregás le
 quita atención a los demás. Ante la duda, quitá.
+
+## 0. Primero: ¿el repo tiene su contrato de UI?
+
+Buscá `docs/ui/PATRONES.md` en el proyecto (o en la app dentro del monorepo,
+p. ej. `erp/docs/ui/PATRONES.md`). **Si existe, manda sobre todo este archivo**:
+
+1. Leelo completo y abrí su galería viva (`/es/patrones`, código en
+   `app/[locale]/patrones/`).
+2. No diseñes: elegí el patrón de su tabla "Si te piden… → patrón" y nombralo
+   en tu plan.
+3. Pantalla nueva o cambio grande de layout → **boceto** en
+   `app/[locale]/boceto/<slug>/` + `pnpm boceto <slug>`; entregá enlace y
+   capturas y esperá aprobación antes de construir.
+4. Construí solo con las piezas de los kits que lista. Si el lint de UI falla,
+   arreglá el código; nunca subas `eslint-suppressions.json`.
+5. Cerrá con su línea: **Patrón: … · Oculté/simplifiqué: … · Piezas nuevas: …**
+
+Las secciones de abajo aplican solo donde ese archivo no dice nada, o en repos
+que no lo tienen. En un repo sin contrato, antes de maquetar abrí las dos
+pantallas existentes más parecidas a lo que te piden y copiá su estructura,
+componentes y espaciado: parecerse al vecino gana sobre cualquier regla de acá.
 
 ## 1. Antes de escribir código
 
