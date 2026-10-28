@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+# conserje — la cara hablada y el broker con la flota de agentes.
+#
+# Arquitectura (definida con Claude como arquitecto, 2026-10-28):
+#   - sensorium: lectores puros de disco (trazas, espacios, chats). Sin modelo.
+#   - conserje: CLI on-demand, un proceso por pedido. Habla por `voice say`.
+#   - manos: Pi headless (todavía no, corte #2).
+#
+# Reglas que no se negocian:
+#   1. Narra ESTADO con procedencia: cada frase sale de un `claim` con fuente,
+#      fecha y si está verificado. Si no hay fuente, no se dice.
+#   2. No parafrasea contenido técnico: las frases se arman con plantillas, no
+#      con un modelo. Así no se convierte en un "meat proxy" que suena experto.
+#   3. Dice a quién delega y por qué (cuando exista delegación, corte #2).
+#   4. Si no entiende el pedido, lo dice. Nunca adivina.
+#
+# Uso:
+#   conserje                          cuenta cómo van los agentes (y lo dice)
+#   conserje "cómo van mis agentes"   igual, con el pedido como argumento
+#   conserje ask --text T [--json] [--dry-run] [--no-say]
+#   conserje estado [--json]          snapshot crudo, sin hablar
+#
+# Contrato JSON:
+#   ask → {route, said, claims[], delegated_to?, decision{modelo, regla, p}}
+#   claim → {texto, fuente, actualizada, verificado}
+#
+# Entorno: CONSERJE_TRAZAS (dir de trazas), CONSERJE_ESTADO (dir de estado),
+#          CONSERJE_VOICE (binario de voz), CONSERJE_VRAM_LIBRE_MIN (GB).
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+HOME = Path(os.path.expanduser("~"))
+TRAZAS = Path(os.environ.get("CONSERJE_TRAZAS") or HOME / ".local/share/pi/trazas")
+ESTADO_DIR = Path(os.environ.get("CONSERJE_ESTADO") or HOME / ".local/state/conserje")
+DECISIONES = ESTADO_DIR / "decisions.jsonl"
+VOICE = os.environ.get("CONSERJE_VOICE") or str(HOME / ".local/bin/voice")
+
+# Una traza sin novedades por más de esto se cuenta pero no se afirma.
+FRESCO_H = float(os.environ.get("CONSERJE_FRESCO_H") or 24)
+
+
+# ── sensorium: lectura pura ──────────────────────────────────────────────
+def ahora() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def iso_a_dt(texto: str):
+    try:
+        return datetime.fromisoformat(str(texto).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def leer_indice(dir_trazas: Path) -> list[dict]:
+    """El índice es una tabla: ticket | agente | estado | tickets | actualizada | archivo."""
+    indice = dir_trazas / "index.md"
+    if not indice.is_file():
+        return []
+    filas = []
+    for linea in indice.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not linea.startswith("|"):
+            continue
+        celdas = [c.strip() for c in linea.strip().strip("|").split("|")]
+        if len(celdas) < 6 or not celdas[0].startswith("T-"):
+            continue
+        ticket = celdas[0].split()[0]
+        filas.append(
+            {
+                "ticket": ticket,
+                "sesion": celdas[0],
+                "agente": celdas[1],
+                "estado": celdas[2].lower(),
+                "tickets": int(celdas[3]) if celdas[3].isdigit() else 0,
+                "actualizada": celdas[4],
+                "archivo": str(dir_trazas / f"{ticket}.md"),
+            }
+        )
+    return filas
+
+
+def ultimo_evento(archivo: str) -> str:
+    """Última línea del timeline de la traza ('12:31:04 · nota …')."""
+    try:
+        lineas = Path(archivo).read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return ""
+    for linea in reversed(lineas):
+        m = re.match(r"^\s+(\d{2}:\d{2}:\d{2})\s+·\s+(.+)$", linea)
+        if m:
+            return f"{m.group(1)} · {m.group(2).strip()}"
+    return ""
+
+
+def snapshot(dir_trazas: Path = TRAZAS) -> dict:
+    filas = leer_indice(dir_trazas)
+    activas = [f for f in filas if f["estado"] == "activa"]
+    activas.sort(key=lambda f: f["actualizada"], reverse=True)
+    ahora_dt = ahora()
+    sesiones = []
+    for f in activas:
+        momento = iso_a_dt(f["actualizada"])
+        edad_h = (ahora_dt - momento).total_seconds() / 3600 if momento else 9999
+        sesiones.append(
+            {
+                **f,
+                "edad_h": edad_h,
+                "verificado": edad_h <= FRESCO_H and momento is not None,
+                "evento": ultimo_evento(f["archivo"]),
+            }
+        )
+    return {
+        "generado": ahora().isoformat(timespec="seconds"),
+        "agentes": sorted({s["agente"] for s in sesiones}),
+        "tickets": sesiones,
+        "total_activas": len(sesiones),
+        "archivos_leidos": bool(filas),
+    }
+
+
+# ── narración: plantillas sobre claims, sin modelo ───────────────────────
+def hace(edad_h: float) -> str:
+    if edad_h < 1 / 60:
+        return "recién"
+    if edad_h < 1:
+        return f"hace {max(1, int(edad_h * 60))} minutos"
+    if edad_h < 2:
+        return "hace una hora"
+    if edad_h < 24:
+        return f"hace {int(edad_h)} horas"
+    if edad_h < 48:
+        return "ayer"
+    return f"hace {int(edad_h / 24)} días"
+
+
+def narrar(snap: dict) -> tuple[str, list[dict]]:
+    """Devuelve (frase para el oído, claims con procedencia).
+
+    Se agrupa por agente (una sesión por agente no es lo que le importa al oído),
+    se dicen los más recientes y el resto se resume. Los eventos largos NO se
+    citan: narrar estado no es narrar lo que el agente escribió.
+    """
+    sesiones = snap["tickets"]
+    if not snap["archivos_leidos"]:
+        return (
+            "No encuentro el registro de tus agentes, así que no te cuento nada.",
+            [],
+        )
+    if not sesiones:
+        return ("No hay ningún agente activo ahora mismo.", [])
+
+    # Un agente puede tener varias sesiones abiertas: se cuenta una vez.
+    por_agente: dict[str, dict] = {}
+    for s in sesiones:
+        a = por_agente.get(s["agente"])
+        if not a:
+            por_agente[s["agente"]] = dict(s)
+            continue
+        a["tickets"] = max(a["tickets"], s["tickets"])
+        if s["edad_h"] < a["edad_h"]:
+            a.update(edad_h=s["edad_h"], actualizada=s["actualizada"],
+                     archivo=s["archivo"], ticket=s["ticket"],
+                     verificado=s["verificado"], evento=s.get("evento", ""))
+
+    agentes = sorted(por_agente.values(), key=lambda f: f["edad_h"])
+    n = len(agentes)
+    cabecera = "Hay un agente activo" if n == 1 else f"Hay {n} agentes activos"
+
+    # Se nombran los más recientes (hasta tres); el resto va como resumen.
+    hablados = agentes[:3]
+    resto = agentes[3:]
+    partes: list[str] = []
+    claims: list[dict] = []
+    for a in hablados:
+        quien = a["agente"][:1].upper() + a["agente"][1:]
+        cuantos = a["tickets"]
+        texto = (
+            f"{quien}, {cuantos} ticket{'s' if cuantos != 1 else ''}, "
+            f"última señal {hace(a['edad_h'])}"
+        )
+        if not a["verificado"]:
+            texto += ", sin confirmar"
+        partes.append(texto)
+        claims.append(
+            {
+                "texto": texto,
+                "fuente": f"{a['archivo']}#{a['ticket']}",
+                "actualizada": a["actualizada"],
+                "verificado": bool(a["verificado"]),
+            }
+        )
+
+    if resto:
+        viejo = resto[-1]
+        cola = f"Y {len(resto)} más, el más viejo {hace(viejo['edad_h'])}"
+        if not viejo["verificado"]:
+            cola += ", sin confirmar"
+        partes.append(cola)
+        claims.append(
+            {
+                "texto": cola,
+                "fuente": f"{viejo['archivo']}#{viejo['ticket']}",
+                "actualizada": viejo["actualizada"],
+                "verificado": bool(viejo["verificado"]),
+            }
+        )
+
+    return f"{cabecera}: " + ". ".join(partes) + ".", claims
+
+
+# ── ruteo (corte #1: solo estado; el resto se declara) ───────────────────
+def ruta(texto: str) -> str:
+    t = (texto or "").lower()
+    if re.search(
+        r"\b(c[oó]mo van|como est[aá]n|qu[eé] hacen|qu[eé] est[aá]n haciendo|"
+        r"estado|qui[eé]n est[aá]|agentes|tickets|novedades|qu[eé] pas[oó])\b",
+        t,
+    ):
+        return "estado"
+    return "no_entendido"
+
+
+def ejecutar(consulta: str, dir_trazas: Path = TRAZAS) -> dict:
+    decision = {"modelo": "ninguno", "regla": "corte-1-estado", "p": None}
+    r = ruta(consulta)
+    if r == "estado":
+        said, claims = narrar(snapshot(dir_trazas))
+        return {
+            "route": "estado",
+            "said": said,
+            "claims": claims,
+            "decision": decision,
+        }
+    return {
+        "route": "no_entendido",
+        "said": "Todavía no sé hacer eso. Por ahora te puedo contar cómo van tus agentes.",
+        "claims": [],
+        "decision": decision,
+    }
+
+
+def decir(texto: str) -> bool:
+    try:
+        subprocess.Popen(
+            [VOICE, "say", "--source", "Conserje", "--", texto],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return True
+    except Exception as exc:
+        print(f"conserje: no pude hablar: {exc}", file=sys.stderr)
+        return False
+
+
+def registrar(consulta: str, salida: dict) -> None:
+    try:
+        ESTADO_DIR.mkdir(parents=True, exist_ok=True)
+        with DECISIONES.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "t": ahora().isoformat(timespec="seconds"),
+                        "consulta": consulta,
+                        "route": salida["route"],
+                        "claims": len(salida.get("claims") or []),
+                        "decision": salida.get("decision"),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+
+
+def main(argv: list[str]) -> int:
+    args = argv[1:]
+    json_out = "--json" in args
+    dry = "--dry-run" in args
+    no_say = "--no-say" in args
+    mostrar_snapshot = False
+    consulta = ""
+    dir_trazas = TRAZAS
+
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("--json", "--dry-run", "--no-say"):
+            i += 1
+            continue
+        if a in ("--text", "-t"):
+            consulta = args[i + 1] if i + 1 < len(args) else ""
+            i += 2
+            continue
+        if a == "--trazas":
+            dir_trazas = Path(args[i + 1])
+            i += 2
+            continue
+        if a in ("estado", "snapshot"):
+            mostrar_snapshot = True
+            i += 1
+            continue
+        if a == "ask":
+            i += 1
+            continue
+        if a in ("-h", "--help", "help"):
+            print(__doc__ or "conserje")
+            return 0
+        consulta = (consulta + " " + a).strip()
+        i += 1
+
+    if not consulta and not mostrar_snapshot and not sys.stdin.isatty():
+        consulta = sys.stdin.read().strip()
+    if not consulta and not mostrar_snapshot:
+        mostrar_snapshot = True
+
+    if mostrar_snapshot and not consulta:
+        snap = snapshot(dir_trazas)
+        print(json.dumps(snap, ensure_ascii=False, indent=1) if json_out else narrar(snap)[0])
+        return 0
+
+    salida = ejecutar(consulta, dir_trazas)
+    registrar(consulta, salida)
+    if json_out:
+        print(json.dumps(salida, ensure_ascii=False, indent=1))
+    else:
+        print(salida["said"])
+    if not dry and not no_say:
+        decir(salida["said"])
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
