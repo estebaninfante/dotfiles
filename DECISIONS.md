@@ -3,6 +3,45 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-10-28 — Omni tiene una página local, y una sola fuente de estado
+
+**Contexto.** Omni ya tenía el oído abierto, la tecla de Windows y el HUD
+flotante, pero ninguna superficie para hablarle con el mouse, escribirle o ver
+el hilo de la conversación. El usuario pidió "un frontend, una página local para
+interactuar con el omni de mi computador, por palabra y botón".
+
+**Qué se eligió.** Un subcomando, `omni web`, que sirve una sola página
+(`linux/config/omni/omni-web.html`) en `127.0.0.1:9932` usando solo la
+biblioteca estándar de Python. La página tiene un botón de micrófono y un campo
+de texto, y muestra el hilo y el estado en vivo. Endpoints: `GET /` (página),
+`GET /api/estado`, `GET /api/eventos` (SSE), `POST /api/ptt`, `POST /api/texto`,
+`POST /api/oido`. El botón reusa `omni ptt` (grabación con sox en el equipo) y
+el texto reusa `omni pedir`: la página no reimplementa nada. El estado sale del
+mismo `status.json` que dibuja el HUD, así la tarjeta flotante y el navegador
+nunca se contradicen. Un lock serializa grabación y pedido; si el modelo está
+dormido, el primer toque lo levanta (`asegurar_modelo`) antes de grabar. Unit
+`omni-web.service` con el resto de la sesión gráfica (es liviano: no carga nada
+hasta que se usa).
+
+**Por qué.** Lo que ya funcionaba (grabar, transcribir, pensar, hablar, anotar
+el estado) queda en un solo lugar. La página es una vista, no un segundo Omni.
+
+**Descartado.**
+
+- **Grabar en el navegador (`MediaRecorder`) y subir el audio**: otra ruta de
+audio, otro formato, conversión y permisos del navegador; `rec` ya estaba
+  probado y es el mismo camino que la tecla.
+- **Un framework (React/Svelte) o un servidor aparte**: una página sola, sin
+  build ni dependencias, que se puede leer de punta a punta.
+- **Websockets**: el estado va en una sola dirección; SSE alcanza y no suma
+  dependencias.
+- **Que la página hable directo con el modelo**: duplicaría la limpieza del
+  texto, el buzón y el contexto.
+
+**Verificador** `scripts/verify/omni-web.py`: levanta el servidor en un puerto
+libre con estado temporal y comprueba página, estado real, canal en vivo,
+validación de pedidos y 404. Nunca toca el micrófono ni el modelo.
+
 ## 2026-10-22 — Modo extremo, segunda vuelta: todo afuera, solo SSH/Tailscale
 
 **Contexto.** La primera versión conservaba `rig-main-seat` (la silla del

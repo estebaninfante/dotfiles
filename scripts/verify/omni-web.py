@@ -140,12 +140,19 @@ if arriba:
     # ── 5. el canal en vivo manda el primer estado enseguida ──
     try:
         req = urllib.request.Request(f"{base}/api/eventos")
+        evento = None
         with urllib.request.urlopen(req, timeout=6) as r:
             assert r.headers.get("Content-Type", "").startswith("text/event-stream"), \
                 f"tipo inesperado: {r.headers.get('Content-Type')}"
-            crudo = r.read(400).decode("utf-8", "replace")
-        assert "data: " in crudo, f"no llegó ningún evento: {crudo[:120]!r}"
-        evento = json.loads(crudo.split("data: ", 1)[1].split("\n", 1)[0])
+            limite = time.time() + 6
+            while time.time() < limite:
+                linea = r.readline().decode("utf-8", "replace")
+                if not linea:
+                    break
+                if linea.startswith("data: "):
+                    evento = json.loads(linea[6:])
+                    break
+        assert evento is not None, "no llegó ningún evento en 6 s"
         assert "estado" in evento and "grabando" in evento, "el evento no trae el estado"
         ok("el canal en vivo manda el estado apenas se conecta")
     except AssertionError as exc:
