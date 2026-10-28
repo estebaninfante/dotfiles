@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# probar — levanta y baja modelos locales para probarlos, sin dejarlos cargados.
+#
+#   probar                 estado (y qué está ocupando la placa)
+#   probar omni            arranca LFM3-Omni-2B y abre la interfaz de chat
+#   probar off             lo baja y libera la VRAM
+#   probar log             últimas líneas del servidor
+#
+# Por qué así: llama-server carga el modelo al arrancar y lo suelta al salir, no
+# queda un servicio latente comiendo VRAM. La interfaz es la que trae llama.cpp
+# (chat con adjuntos: audio, imágenes, PDF). El binario es el release oficial
+# b11960, el primero que conoce la familia LFM3.
+#
+# Variables: PROBAR_DIR (binarios), PROBAR_PORT, PROBAR_MODELO, PROBAR_DEVICE.
+set -uo pipefail
+export PATH="$HOME/.local/bin:$PATH"
+
+LLAMA_DIR="${PROBAR_DIR:-$HOME/.local/opt/llama-b11960}"
+BIN="$LLAMA_DIR/llama-server"
+PORT="${PROBAR_PORT:-9931}"
+MODELO="${PROBAR_MODELO:-LiquidAI/LFM3-Omni-2B-GGUF:Q4_K_M}"
+DEVICE="${PROBAR_DEVICE:-Vulkan1}"
+CTX="${PROBAR_CTX:-8192}"
+ESTADO_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/probar"
+LOG="$ESTADO_DIR/omni.log"
+PIDFILE="$ESTADO_DIR/omni.pid"
+URL="http://127.0.0.1:$PORT/"
+
+mkdir -p "$ESTADO_DIR"
+
+vivo() {
+    [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
+}
+
+estado() {
+    if vivo; then
+        echo "probar: Omni arriba (pid $(cat "$PIDFILE")) en $URL"
+    elif curl -s -m 2 -o /dev/null "$URL/health"; then
+        echo "probar: hay un servidor en el puerto $PORT (no lo arranqué yo)"
+    else
+        echo "probar: nada cargado"
+    fi
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader 2>/dev/null |
+            sed 's/^/  VRAM usada: /'
+        nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader 2>/dev/null |
+            sed 's/^/  /'
+    fi
+}
+
+arrancar() {
+    [ -x "$BIN" ] || { echo "probar: falta $BIN (bajá el binario b11960)" >&2; return 1; }
+    if vivo || curl -s -m 2 -o /dev/null "$URL/health"; then
+        echo "probar: ya está arriba en $URL"
+        return 0
+    fi
+    echo "probar: cargando $MODELO en $DEVICE…"
+    ( cd "$LLAMA_DIR" || exit 1
+      HF_HOME="$HOME/.local/share/huggingface" \
+      setsid nohup ./llama-server -hf "$MODELO" -dev "$DEVICE" -ngl 99 -c "$CTX" \
+          --host 127.0.0.1 --port "$PORT" >>"$LOG" 2>&1 </dev/null &
+      echo $! > "$PIDFILE" )
+    local i=0
+    while [ "$i" -lt 120 ]; do
+        if curl -s -m 2 -o /dev/null "$URL/health"; then
+            echo "probar: listo en $URL"
+            # La interfaz se abre en el espacio del agente que llamó (nunca roba foco).
+            "$HOME/.local/bin/espacios" url "$URL" >/dev/null 2>&1 || true
+            return 0
+        fi
+        sleep 1; i=$((i + 1))
+    done
+    echo "probar: no levantó en 120 s; mirá 'probar log'" >&2
+    return 1
+}
+
+bajar() {
+    if vivo; then
+        kill "$(cat "$PIDFILE")" 2>/dev/null
+        rm -f "$PIDFILE"
+        echo "probar: bajado, VRAM liberada"
+    else
+        pkill -f "llama-server.*--port $PORT" 2>/dev/null &&
+            echo "probar: bajado (servidor suelto), VRAM liberada" ||
+            echo "probar: no había nada cargado"
+    fi
+}
+
+case "${1:-estado}" in
+    omni|start|on) arrancar ;;
+    off|stop|bajar) bajar ;;
+    log) tail -n "${2:-20}" "$LOG" ;;
+    estado|status|"") estado ;;
+    -h|--help|help) sed -n '2,16p' "$0" ;;
+    *) echo "probar: uso: probar [omni|off|estado|log]" >&2; exit 2 ;;
+esac
