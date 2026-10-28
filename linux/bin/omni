@@ -209,12 +209,27 @@ def hablar_omni(texto: str) -> bool:
         return False
 
 
+def tts_motor() -> str:
+    """Quién pone la voz: `voice` (Kokoro, español parejo) o `omni` (el modelo).
+
+    El modelo escucha bien, pero su español suena a extranjero leyendo: queda
+    como opción, no como defecto. `OMNI_TTS=omni` o {"tts": "omni"} en config.
+    """
+    env = os.environ.get("OMNI_TTS")
+    if env:
+        return env
+    try:
+        return json.loads(CONFIG.read_text(encoding="utf-8")).get("tts", "voice")
+    except Exception:
+        return "voice"
+
+
 def decir(texto: str, dry: bool = False) -> None:
     if not texto:
         return
     if dry:
         return
-    if motor() == "omni" and hablar_omni(texto):
+    if tts_motor() == "omni" and hablar_omni(texto):
         return
     try:
         subprocess.Popen(
@@ -227,7 +242,7 @@ def decir(texto: str, dry: bool = False) -> None:
         print(f"omni: no pude hablar: {exc}", file=sys.stderr)
 
 
-# ── estado en pantalla (HUD) ─────────────────────────────────────────────
+# ── estado en pantalla (para la página y el HUD viejo) ───────────────────
 STATUS = ESTADO / "status.json"
 
 
@@ -239,9 +254,9 @@ def _cargar_status() -> dict:
 
 
 def publicar(estado: str, **actividad) -> None:
-    """Escribe el estado para el HUD (superficie flotante abajo al centro).
+    """Escribe el estado que leen la página web y cualquier superficie.
 
-    Estados que entiende el HUD: idle, listening, thinking, acting, done, error.
+    Estados: idle, listening, thinking, acting, done, error.
     """
     try:
         ESTADO.mkdir(parents=True, exist_ok=True)
@@ -286,6 +301,7 @@ DESPIERTAN = {
 }
 SEGUIMIENTO_S = float(os.environ.get("OMNI_SEGUIMIENTO_S") or 20)
 ULTIMA = ESTADO / "ultima-conversacion"
+OIDO_PID = ESTADO / "oido.pid"
 
 
 def normalizar(texto: str) -> str:
@@ -401,15 +417,39 @@ def grabar(destino: str, maxseg: int = 25) -> bool:
         "trim", "0", str(maxseg),
     ]
     rec_pid = ESTADO / "rec.pid"
+    espera = float(os.environ.get("OMNI_ESPERA_S") or (maxseg + 10))
+    proc = None
     try:
         ESTADO.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Grupo propio: si la frase no llega, se puede matar a `rec` entero.
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
         rec_pid.write_text(str(proc.pid), encoding="utf-8")
-        proc.wait(timeout=maxseg + 10)
+        try:
+            proc.wait(timeout=espera)
+        except subprocess.TimeoutExpired:
+            return False  # lo corta el finally
         return os.path.getsize(destino) > 2000
     except Exception:
         return False
     finally:
+        # Sin esto, en una habitación en silencio `rec` se quedaba esperando
+        # sonido para siempre: cada 35 s se apilaba otro y entre todos dejaban
+        # de entender al usuario. Un grabador vivo por vez, siempre.
+        if proc is not None and proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(proc.pid), 15)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            try:
+                proc.wait(timeout=3)
+            except Exception:
+                pass
         try:
             rec_pid.unlink()
         except Exception:
@@ -597,10 +637,36 @@ def hablar_y_esperar(texto: str) -> None:
         time.sleep(0.1)
 
 
+def _oido_unico() -> bool:
+    """Toma el micrófono para este proceso. Si ya hay un oído vivo, se aparta."""
+    try:
+        pid = int(OIDO_PID.read_text(encoding="utf-8").strip())
+    except Exception:
+        pid = 0
+    if pid and pid != os.getpid():
+        try:
+            os.kill(pid, 0)
+            return False
+        except Exception:
+            pass  # quedó de un cierre a la fuerza: se toma
+    try:
+        ESTADO.mkdir(parents=True, exist_ok=True)
+        OIDO_PID.write_text(str(os.getpid()), encoding="utf-8")
+    except Exception:
+        pass
+    return True
+
+
+def _soltar_oido() -> None:
+    try:
+        if OIDO_PID.read_text(encoding="utf-8").strip() == str(os.getpid()):
+            OIDO_PID.unlink()
+    except Exception:
+        pass
+
+
 def cmd_oido(opts: dict) -> dict:
     """Oído abierto: escucha, despierta con la palabra clave y responde."""
-    if not asegurar_modelo():
-        return {"accion": "oido", "dicho": "No pude levantar el modelo.", "error": "modelo"}
     log = ESTADO / "oido.log"
     ESTADO.mkdir(parents=True, exist_ok=True)
 
@@ -613,6 +679,8 @@ def cmd_oido(opts: dict) -> dict:
 
     # Una pasada sobre un WAV: sirve para verificar el oído sin micrófono.
     if opts.get("archivo"):
+        if not asegurar_modelo():
+            return {"accion": "oido", "dicho": "No pude levantar el modelo.", "error": "modelo"}
         texto = transcribir(opts["archivo"])
         if not texto:
             return {"accion": "oido", "dicho": "", "texto": "", "despierta": False}
@@ -627,6 +695,25 @@ def cmd_oido(opts: dict) -> dict:
             "accion": "oido", "texto": texto, "despierta": True,
             "pedido": pedido, "dicho": dicho,
         }
+
+    # Un solo oído por vez: dos se roban el micrófono y no entiende ninguno.
+    if not _oido_unico():
+        return {"accion": "oido", "dicho": "Ya hay un oído abierto.", "error": "ocupado"}
+
+    # Al cerrarlo (Ctrl+C o systemctl stop) suelta el micrófono y el pidfile.
+    import atexit
+    import signal
+
+    atexit.register(_soltar_oido)
+
+    def _cortar(*_):
+        raise KeyboardInterrupt  # systemctl stop se atiende como Ctrl+C
+
+    signal.signal(signal.SIGTERM, _cortar)
+
+    if not asegurar_modelo():
+        _soltar_oido()
+        return {"accion": "oido", "dicho": "No pude levantar el modelo.", "error": "modelo"}
 
     anotar("oido abierto")
     while True:
@@ -683,7 +770,7 @@ def cmd_ptt(opts: dict) -> dict:
 
     Nada de detección de silencio: el usuario decide cuándo empieza y cuándo
     termina, así no hay forma de que un ruido corte la frase ni de que el
-    micrófono del sistema se coma el inicio. El HUD muestra que está grabando.
+    micrófono del sistema se coma el inicio. La página muestra que graba.
     """
     ESTADO.mkdir(parents=True, exist_ok=True)
     pidfile = ESTADO / "ptt.pid"
@@ -852,8 +939,8 @@ def cmd_perfil(opts: dict) -> dict:
 
 # ── página local (la cara de Omni en el navegador) ──────────────────────
 # Una página en 127.0.0.1 para hablarle con un botón o escribirle, sin abrir
-# ventanas. El estado sale del mismo status.json que dibuja el HUD, así la
-# tarjeta flotante y el navegador nunca se contradicen.
+# ventanas. El estado sale del mismo status.json que comparten todas las
+# superficies, así nunca se contradicen.
 WEB_PAGINA = HOME / "dotfiles/linux/config/omni/omni-web.html"
 _CACHE_WEB = {"t": 0.0, "modelo": False, "oido": False}
 

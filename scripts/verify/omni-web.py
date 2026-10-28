@@ -205,6 +205,76 @@ except Exception:
     servidor.kill()
 shutil.rmtree(raiz, ignore_errors=True)
 
+# ── 9. un grabador colgado no se queda con el micrófono ──
+# `rec` espera sonido para siempre en una habitación en silencio: si el oído se
+# cansaba de esperar y arrancaba otro, se apilaban y ninguno entendía. Con un
+# `rec` de mentira se comprueba que el que sobra se mata.
+raiz2 = Path(tempfile.mkdtemp(prefix="omni-grab-"))
+bin_falso = raiz2 / "bin"
+bin_falso.mkdir()
+pid_falso = raiz2 / "rec.pid.txt"
+(bin_falso / "rec").write_text(
+    f"#!/bin/sh\necho $$ > {pid_falso}\nsleep 60\n", encoding="utf-8"
+)
+(bin_falso / "rec").chmod(0o755)
+try:
+    entorno2 = dict(
+        os.environ,
+        PATH=f"{bin_falso}:{os.environ.get('PATH', '')}",
+        OMNI_ESTADO=str(raiz2 / "estado"),
+        OMNI_ESPERA_S="1",
+    )
+    (raiz2 / "estado").mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(
+        [sys.executable, str(OMNI), "escuchar", "--no-say", "--json"],
+        env=entorno2, capture_output=True, text=True, timeout=30,
+    )
+    salida = json.loads(r.stdout or "{}")
+    assert pid_falso.is_file(), "el `rec` de mentira ni siquiera arrancó"
+    pid = int(pid_falso.read_text().strip())
+    vivo = True
+    try:
+        os.kill(pid, 0)
+    except Exception:
+        vivo = False
+    assert not vivo, f"el grabador quedó vivo (pid {pid}) después del corte"
+    assert salida.get("dicho"), "no avisó que no escuchó nada"
+    ok("si la frase no llega, el grabador se corta en vez de quedar colgado")
+except AssertionError as exc:
+    falla(f"grabador: {exc}")
+except Exception as exc:
+    falla(f"grabador (excepción): {exc}")
+finally:
+    if pid_falso.is_file():
+        try:
+            os.kill(int(pid_falso.read_text().strip()), 9)
+        except Exception:
+            pass
+    shutil.rmtree(raiz2, ignore_errors=True)
+
+# ── 10. un solo oído por vez ──
+# Dos oídos se roban el micrófono y no entiende ninguno: el segundo se aparta
+# sin levantar el modelo ni tocar el micrófono.
+raiz3 = Path(tempfile.mkdtemp(prefix="omni-oido-ocupado-"))
+try:
+    (raiz3 / "oido.pid").write_text(str(os.getpid()), encoding="utf-8")
+    entorno3 = dict(os.environ, OMNI_ESTADO=str(raiz3))
+    inicio = time.time()
+    r = subprocess.run(
+        [sys.executable, str(OMNI), "oido", "--json"],
+        env=entorno3, capture_output=True, text=True, timeout=30,
+    )
+    salida = json.loads(r.stdout or "{}")
+    assert salida.get("error") == "ocupado", f"no se apartó: {salida}"
+    assert time.time() - inicio < 10, "se quedó esperando en vez de apartarse"
+    ok("el segundo oído se aparta sin pelear por el micrófono")
+except AssertionError as exc:
+    falla(f"oído único: {exc}")
+except Exception as exc:
+    falla(f"oído único (excepción): {exc}")
+finally:
+    shutil.rmtree(raiz3, ignore_errors=True)
+
 if fallas:
     print(f"omni-web: {fallas} falla(s)")
     sys.exit(1)

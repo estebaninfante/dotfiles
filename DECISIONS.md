@@ -42,6 +42,43 @@ audio, otro formato, conversión y permisos del navegador; `rec` ya estaba
 libre con estado temporal y comprueba página, estado real, canal en vivo,
 validación de pedidos y 404. Nunca toca el micrófono ni el modelo.
 
+**El HUD de Quickshell se fue.** `omni-hud.qml` y su unit corrían las 24 h para
+una tarjeta flotante que ahora reemplaza la página. Se sacaron del repo y del
+sistema: la página no cuesta nada cuando nadie la mira, y el estado sigue en
+`status.json` para cualquier otra superficie que quiera leerlo.
+
+## 2026-10-28 — Un grabador por vez, y el español lo dice Kokoro
+
+**Contexto.** El usuario avisó que le hablaba y Omni no lo entendía, mientras
+que la página sí. El registro mostraba transcripciones de un video de fondo, y
+en el proceso del oído había **siete** `rec` vivos. Además el acento del modelo
+sonaba a extranjero leyendo español.
+
+**Qué se eligió.** (1) `grabar()` mata el `rec` que sobró en el `finally`
+(sesión propia, `killpg`) y `cmd_oido` toma un `oido.pid`: un solo oído por vez,
+y al cerrarlo suelta el micrófono. (2) La voz por defecto la pone `voice`
+(Kokoro), que ya habla español parejo en esta máquina; el TTS del modelo queda
+como opción con `OMNI_TTS=omni` o `{"tts": "omni"}` en la config. El modelo se
+sigue usando para escuchar, que lo hace bien.
+
+**Por qué.** `rec` con `silence` espera sonido para siempre: en una habitación
+en silencio el `wait` de 35 s vencía, el grabador quedaba vivo y el bucle
+arrancaba otro. A los diez minutos había ocho compitiendo por el mismo
+micrófono Bluetooth y ninguno entendía. No era el modelo: era la cola de
+grabadores.
+
+**Descartado.**
+
+- **Subir el tiempo de espera**: solo retrasa que se apilen.
+- **Detección de voz propia (VAD) en Python**: sox ya sabe cortar por silencio;
+  el problema era no matar el proceso cuando no había nada que cortar.
+- **Cambiar de modelo por el acento**: el modelo escucha bien y su TTS en
+español es lo único flojo; se cambia la boca, no el oído.
+
+**Verificador** `scripts/verify/omni-web.py` suma dos casos: con un `rec` de
+mentira que nunca termina, el que sobra queda muerto; y con un `oido.pid` vivo,
+el segundo oído se aparta en menos de diez segundos.
+
 ## 2026-10-22 — Modo extremo, segunda vuelta: todo afuera, solo SSH/Tailscale
 
 **Contexto.** La primera versión conservaba `rig-main-seat` (la silla del
