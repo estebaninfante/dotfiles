@@ -225,21 +225,42 @@ def guardar_contexto(yo: str, omni_dijo: str) -> None:
 
 
 # ── cerebro (nube, con manos) ───────────────────────────────────────────
-def pensar(texto: str, timeout: int = 90) -> str:
+PARA_EL_OIDO = (
+    "Te van a leer en voz alta. Contestá en UNA sola frase de hasta 25 palabras, sin markdown. "
+    "Si el pedido necesita más, hacé lo mínimo y decí a quién se lo pasás."
+)
+
+
+def pensar(texto: str, timeout: int = 120) -> str:
     """Manda el pedido al cerebro en la nube (Pi headless con bash)."""
     contexto = leer_contexto()
-    prompt = texto if not contexto else f"Contexto reciente:\n{contexto}\n\nPedido: {texto}"
+    prompt = (
+        f"{PARA_EL_OIDO}\n\n"
+        + (f"Contexto reciente:\n{contexto}\n\n" if contexto else "")
+        + f"Pedido: {texto}"
+    )
     env = dict(os.environ)
     env.setdefault("VOICE_PI_BRAIN_DIR", str(CEREBRO))
     env.setdefault("VOICE_PI_TIMEOUT", str(timeout))
     try:
         r = subprocess.run(
-            [VOICE_PI, prompt], env=env, capture_output=True, text=True, timeout=timeout + 5
+            [VOICE_PI, prompt], env=env, capture_output=True, text=True, timeout=timeout + 10
         )
-        return (r.stdout or "").strip()
+        salida = (r.stdout or "").strip()
+        if salida:
+            return salida
     except Exception as exc:
         print(f"omni: el cerebro no respondió: {exc}", file=sys.stderr)
+    return ""
+
+
+def dos_frases(texto: str) -> str:
+    """Lo que se dice: como mucho dos frases (el resto queda en el registro)."""
+    t = limpiar(texto)
+    if not t:
         return ""
+    partes = re.split(r"(?<=[.!?])\s+", t)
+    return " ".join(partes[:2]).strip()
 
 
 # ── comandos ─────────────────────────────────────────────────────────────
@@ -321,7 +342,11 @@ def cmd_pedir(opts: dict) -> dict:
 
 def _responder(texto: str, opts: dict, accion: str) -> dict:
     respuesta = pensar(texto)
-    dicho = limpiar(respuesta) if respuesta else "No supe qué contestar."
+    if not respuesta:
+        # Segundo intento, más corto y explícito: el cerebro a veces se queda
+        # escribiendo y se lo corta el tiempo.
+        respuesta = pensar(f"En una sola frase: {texto}", timeout=90)
+    dicho = dos_frases(respuesta) if respuesta else "No supe qué contestar."
     decir(dicho, opts["dry"])
     if not opts["dry"]:
         guardar_contexto(texto, dicho)
