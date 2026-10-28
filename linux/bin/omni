@@ -42,6 +42,11 @@ SPOKEN_PY = HOME / "dotfiles/linux/voice/spoken.py"
 CEREBRO = Path(os.environ.get("OMNI_CEREBRO") or HOME / ".local/share/omni/cerebro")
 CONTEXTO = ESTADO / "contexto.txt"
 WHISPER = os.environ.get("OMNI_WHISPER") or "http://127.0.0.1:8090"
+# Un solo modelo para casi todo: el Omni escucha y habla. El servidor local
+# (llama-server) expone /v1/chat/completions (audio entra) y /tts (audio sale).
+MODELO_URL = os.environ.get("OMNI_MODELO") or "http://127.0.0.1:9931"
+CONFIG = ESTADO / "config.json"
+VOCES = {"es": "female", "en": "female"}
 VOICE_PI = str(HOME / ".local/bin/voice-pi")
 
 
@@ -147,10 +152,67 @@ def frase_lote(avisos: list[dict]) -> str:
     return f"{cabeza}. " + " ".join(partes)
 
 
+def motor() -> str:
+    """`omni` (un solo modelo) o `kokoro`/`whisper` (los viejos, de respaldo)."""
+    env = os.environ.get("OMNI_MOTOR")
+    if env:
+        return env
+    try:
+        return json.loads(CONFIG.read_text(encoding="utf-8")).get("motor", "omni")
+    except Exception:
+        return "omni"
+
+
+def _post_json(url: str, payload: dict, timeout: int = 120) -> bytes:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def hablar_omni(texto: str) -> bool:
+    """Pide el audio al mismo modelo que escucha y lo reproduce."""
+    try:
+        wav = _post_json(
+            f"{MODELO_URL}/tts",
+            {"input": texto, "voice": VOCES.get("es", "female"), "language": "es"},
+        )
+    except Exception as exc:
+        print(f"omni: el modelo no generó voz: {exc}", file=sys.stderr)
+        return False
+    if not wav.startswith(b"RIFF"):
+        print("omni: el modelo no devolvió audio", file=sys.stderr)
+        return False
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    destino = ESTADO / "ultima-voz.wav"
+    try:
+        destino.write_bytes(wav)
+    except Exception:
+        pass
+    # El nombre del stream lleva "Voice TTS" para que `voice stop` (la tecla de
+    # Windows) corte esta reproducción igual que las demás.
+    try:
+        subprocess.Popen(
+            ["pw-play", "-P", '{ application.name = "Voice TTS" }', str(destino)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return True
+    except Exception as exc:
+        print(f"omni: no pude reproducir: {exc}", file=sys.stderr)
+        return False
+
+
 def decir(texto: str, dry: bool = False) -> None:
     if not texto:
         return
     if dry:
+        return
+    if motor() == "omni" and hablar_omni(texto):
         return
     try:
         subprocess.Popen(
@@ -184,8 +246,43 @@ def grabar(destino: str, maxseg: int = 25) -> bool:
         return False
 
 
+def transcribir_omni(wav: str) -> str:
+    """ASR con el mismo modelo que habla: audio entra, texto sale. Sin nube."""
+    try:
+        import base64
+
+        datos = base64.b64encode(open(wav, "rb").read()).decode()
+        out = json.loads(
+            _post_json(
+                f"{MODELO_URL}/v1/chat/completions",
+                {
+                    "messages": [
+                        {"role": "system", "content": "Perform ASR in Spanish."},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_audio", "input_audio": {"data": datos, "format": "wav"}}
+                            ],
+                        },
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 300,
+                    "stream": False,
+                },
+            )
+        )
+        return ((out.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+    except Exception as exc:
+        print(f"omni: el modelo no transcribió: {exc}", file=sys.stderr)
+        return ""
+
+
 def transcribir(wav: str) -> str:
-    """ASR local (sidecar de whisper en 8090). Sin nube."""
+    """Oído local: el modelo único; si no está, el whisper de siempre."""
+    if motor() == "omni":
+        texto = transcribir_omni(wav)
+        if texto:
+            return texto
     try:
         with open(wav, "rb") as f:
             datos = f.read()

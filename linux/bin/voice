@@ -974,6 +974,9 @@ case "${1:-status}" in
     listen
     ;;
   stop)
+    # Cualquier reproducción nuestra con esta marca se corta, aunque no la haya
+    # encolado el daemon (p. ej. la voz que genera Omni con el modelo local).
+    pkill -f '^pw-play .*Voice TTS' 2>/dev/null || true
     if daemon_alive; then
       exec 9<>"$FIFO"; printf '{"cmd":"stop"}\n' >&9; exec 9>&-
       echo "voice: cola vaciada"

@@ -15,11 +15,11 @@
 set -uo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
-LLAMA_DIR="${PROBAR_DIR:-$HOME/.local/opt/llama-b11960}"
+LLAMA_DIR="${PROBAR_DIR:-$HOME/.local/opt/llama-cuda}"
 BIN="$LLAMA_DIR/llama-server"
 PORT="${PROBAR_PORT:-9931}"
 MODELO="${PROBAR_MODELO:-LiquidAI/LFM3-Omni-2B-GGUF:Q4_K_M}"
-DEVICE="${PROBAR_DEVICE:-Vulkan1}"
+DEVICE="${PROBAR_DEVICE:-CUDA0}"
 CTX="${PROBAR_CTX:-8192}"
 ESTADO_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/probar"
 LOG="$ESTADO_DIR/omni.log"
@@ -56,7 +56,7 @@ arrancar() {
     fi
     echo "probar: cargando $MODELO en $DEVICE…"
     ( cd "$LLAMA_DIR" || exit 1
-      HF_HOME="$HOME/.local/share/huggingface" \
+      HF_HOME="$HOME/.local/share/huggingface" LD_LIBRARY_PATH="$LLAMA_DIR" \
       setsid nohup ./llama-server -hf "$MODELO" -dev "$DEVICE" -ngl 99 -c "$CTX" \
           --host 127.0.0.1 --port "$PORT" >>"$LOG" 2>&1 </dev/null &
       echo $! > "$PIDFILE" )
