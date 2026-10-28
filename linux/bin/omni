@@ -225,6 +225,49 @@ def decir(texto: str, dry: bool = False) -> None:
         print(f"omni: no pude hablar: {exc}", file=sys.stderr)
 
 
+# ── despertador (palabra clave) ──────────────────────────────────────────
+# El oído abierto no manda todo al cerebro: primero decide si te están
+# hablando. Se usa ASR (el mismo modelo) y una comparación tolerante, porque
+# "Omni" transcrito puede salir como "oni", "omni" o "homni".
+DESPIERTAN = {"omni", "oni", "omnni", "omny", "homni", "omni.", "om ni", "onmi"}
+SEGUIMIENTO_S = float(os.environ.get("OMNI_SEGUIMIENTO_S") or 20)
+ULTIMA = ESTADO / "ultima-conversacion"
+
+
+def normalizar(texto: str) -> str:
+    t = (texto or "").lower()
+    t = re.sub(r"[^\wáéíóúüñ\s]", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def despertar(texto: str) -> tuple[bool, str]:
+    """¿Me hablaron? Devuelve (despierta, pedido sin la palabra clave)."""
+    t = normalizar(texto)
+    if not t:
+        return False, ""
+    palabras = t.split(" ")
+    for i, w in enumerate(palabras[:3]):
+        if w in DESPIERTAN:
+            return True, " ".join(palabras[i + 1 :]).strip()
+    return False, ""
+
+
+def en_seguimiento() -> bool:
+    """Ventana corta después de una respuesta: no hace falta repetir 'Omni'."""
+    try:
+        return (time.time() - float(ULTIMA.read_text(encoding="utf-8"))) <= SEGUIMIENTO_S
+    except Exception:
+        return False
+
+
+def marcar_conversacion() -> None:
+    try:
+        ESTADO.mkdir(parents=True, exist_ok=True)
+        ULTIMA.write_text(str(time.time()), encoding="utf-8")
+    except Exception:
+        pass
+
+
 # ── oído ─────────────────────────────────────────────────────────────────
 def grabar(destino: str, maxseg: int = 25) -> bool:
     """Una frase: corta por silencio (sox), no hace falta apretar nada más."""
@@ -358,6 +401,108 @@ def dos_frases(texto: str) -> str:
         return ""
     partes = re.split(r"(?<=[.!?])\s+", t)
     return " ".join(partes[:2]).strip()
+
+
+def asegurar_modelo() -> bool:
+    """El oído necesita el modelo arriba: si no está, lo levanta (sin interfaz)."""
+    try:
+        urllib.request.urlopen(f"{MODELO_URL}/health", timeout=3).read()
+        return True
+    except Exception:
+        pass
+    try:
+        env = dict(os.environ)
+        env["PROBAR_SIN_UI"] = "1"
+        subprocess.Popen(
+            [str(HOME / ".local/bin/probar"), "omni"],
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception:
+        return False
+    for _ in range(90):
+        time.sleep(1)
+        try:
+            urllib.request.urlopen(f"{MODELO_URL}/health", timeout=3).read()
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def hablar_y_esperar(texto: str) -> None:
+    """Dice y espera a que termine (para no escucharse a sí mismo)."""
+    decir(texto)
+    time.sleep(0.2)
+    for _ in range(600):  # hasta 30 s
+        try:
+            vivo = subprocess.run(
+                ["pgrep", "-f", "^pw-play .*Voice TTS"], capture_output=True, text=True
+            ).stdout.strip()
+        except Exception:
+            vivo = ""
+        if not vivo:
+            return
+        time.sleep(0.1)
+
+
+def cmd_oido(opts: dict) -> dict:
+    """Oído abierto: escucha, despierta con la palabra clave y responde."""
+    if not asegurar_modelo():
+        return {"accion": "oido", "dicho": "No pude levantar el modelo.", "error": "modelo"}
+    log = ESTADO / "oido.log"
+    ESTADO.mkdir(parents=True, exist_ok=True)
+
+    def anotar(linea: str) -> None:
+        try:
+            with log.open("a", encoding="utf-8") as f:
+                f.write(f"{ahora()} {linea}\n")
+        except Exception:
+            pass
+
+    anotar("oido abierto")
+    while True:
+        wav = tempfile.mktemp(prefix="omni-oido-", suffix=".wav")
+        try:
+            if not grabar(wav):
+                continue
+            texto = transcribir(wav)
+            os.unlink(wav)
+            if not texto:
+                continue
+            despierta, pedido = despertar(texto)
+            if not despierta:
+                if en_seguimiento():
+                    pedido = texto  # seguimiento: no hace falta repetir "Omni"
+                else:
+                    anotar(f"ignorado: {texto}")
+                    continue
+            anotar(f"pedido: {pedido or '(vacío)'}  ← {texto}")
+            if not pedido:
+                hablar_y_esperar("Decime.")
+                continue
+            # Barge-in: si estaba sonando algo mío, se corta antes de responder.
+            subprocess.run([VOICE, "stop"], capture_output=True, timeout=15)
+            respuesta = pensar(pedido)
+            if not respuesta:
+                hablar_y_esperar("No supe qué contestar.")
+                continue
+            dicho = dos_frases(respuesta)
+            marcar_conversacion()
+            guardar_contexto(pedido, dicho)
+            hablar_y_esperar(dicho)
+        except KeyboardInterrupt:
+            anotar("oido cerrado")
+            return {"accion": "oido", "dicho": "Oído cerrado."}
+        except Exception as exc:
+            anotar(f"error: {exc}")
+            time.sleep(1)
+
+
+def cmd_gate(opts: dict) -> dict:
+    """Solo la compuerta: texto → (despierta, pedido). Para verificar sin mic."""
+    despierta, pedido = despertar(opts["texto"])
+    return {"accion": "gate", "despierta": despierta, "pedido": pedido}
 
 
 # ── comandos ─────────────────────────────────────────────────────────────
@@ -507,6 +652,8 @@ def main(argv: list[str]) -> int:
         "buzon": cmd_buzon,
         "decir": cmd_decir,
         "escuchar": cmd_escuchar,
+        "oido": cmd_oido,
+        "gate": cmd_gate,
         "pedir": cmd_pedir,
         "perfil": cmd_perfil,
     }.get(cmd)

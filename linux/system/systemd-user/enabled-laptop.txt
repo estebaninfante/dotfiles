@@ -6,6 +6,10 @@ dsh-web.service
 
 # Lee en voz alta las respuestas del tutor de LearnHarness (audífonos, manos
 # libres). Se apaga con `leer off`. Unit: lh-leer.service
+
+# Oído abierto de Omni (palabra clave "Omni"). Se para con
+# `systemctl --user stop omni-oido`.
+omni-oido.service
 lh-leer.service
 
 # Cerebro de Omar (puente Ollama -> Hermes). Vive con la sesión gráfica:

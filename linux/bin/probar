@@ -64,8 +64,10 @@ arrancar() {
     while [ "$i" -lt 120 ]; do
         if curl -s -m 2 -o /dev/null "$URL/health"; then
             echo "probar: listo en $URL"
-            # La interfaz se abre en el espacio del agente que llamó (nunca roba foco).
-            "$HOME/.local/bin/espacios" url "$URL" >/dev/null 2>&1 || true
+            # La interfaz se abre en el espacio del agente que llamó (nunca roba
+            # foco). El oído la levanta sin ventana: PROBAR_SIN_UI=1.
+            [ "${PROBAR_SIN_UI:-0}" = "1" ] || \
+              "$HOME/.local/bin/espacios" url "$URL" >/dev/null 2>&1 || true
             return 0
         fi
         sleep 1; i=$((i + 1))

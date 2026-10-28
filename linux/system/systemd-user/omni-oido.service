@@ -1,0 +1,17 @@
+[Unit]
+Description=Omni: oído abierto (palabra clave + respuestas en voz)
+After=graphical-session.target voice-daemon.service
+Wants=voice-daemon.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/omni oido
+Restart=on-failure
+RestartSec=5
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=XDG_SESSION_TYPE=wayland
+Nice=5
+
+[Install]
+WantedBy=graphical-session.target
