@@ -351,12 +351,20 @@ def grabar(destino: str, maxseg: int = 25) -> bool:
         "silence", "1", "0.18", "2%", "1", "0.9", "2%",
         "trim", "0", str(maxseg),
     ]
+    rec_pid = ESTADO / "rec.pid"
     try:
-        subprocess.run(cmd, check=True, timeout=maxseg + 10,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ESTADO.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        rec_pid.write_text(str(proc.pid), encoding="utf-8")
+        proc.wait(timeout=maxseg + 10)
         return os.path.getsize(destino) > 2000
     except Exception:
         return False
+    finally:
+        try:
+            rec_pid.unlink()
+        except Exception:
+            pass
 
 
 def transcribir_omni(wav: str) -> str:
@@ -614,6 +622,55 @@ def cmd_oido(opts: dict) -> dict:
             time.sleep(1)
 
 
+def cmd_ptt(opts: dict) -> dict:
+    """Push-to-talk de verdad: la tecla de Windows abre y cierra.
+
+    Primer toque: calla lo que esté sonando y escucha una frase.
+    Segundo toque: cancela (corta el audio y deja de grabar).
+    """
+    pidfile = ESTADO / "ptt.pid"
+    if pidfile.is_file():
+        try:
+            pid = int(pidfile.read_text(encoding="utf-8").strip())
+            try:
+                os.killpg(os.getpgid(pid), 15)   # el proceso y su `rec`
+            except Exception:
+                os.kill(pid, 15)
+        except Exception:
+            pass
+        try:
+            rec = ESTADO / "rec.pid"
+            if rec.is_file():
+                rpid = int(rec.read_text(encoding="utf-8").strip())
+                try:
+                    os.killpg(os.getpgid(rpid), 15)
+                except Exception:
+                    os.kill(rpid, 15)
+        except Exception:
+            pass
+        subprocess.run([VOICE, "stop"], capture_output=True, timeout=15)
+        try:
+            pidfile.unlink()
+        except Exception:
+            pass
+        return {"accion": "ptt", "dicho": "Cancelado.", "cancelado": True}
+    # Grupo propio: así el segundo toque corta también la grabación hija.
+    try:
+        os.setsid()
+    except Exception:
+        pass
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    pidfile.write_text(str(os.getpid()), encoding="utf-8")
+    try:
+        subprocess.run([VOICE, "stop"], capture_output=True, timeout=15)
+        return cmd_escuchar(opts)
+    finally:
+        try:
+            pidfile.unlink()
+        except Exception:
+            pass
+
+
 def cmd_gate(opts: dict) -> dict:
     """Solo la compuerta: texto → (despierta, pedido). Para verificar sin mic."""
     despierta, pedido = despertar(opts["texto"])
@@ -768,6 +825,7 @@ def main(argv: list[str]) -> int:
         "decir": cmd_decir,
         "escuchar": cmd_escuchar,
         "oido": cmd_oido,
+        "ptt": cmd_ptt,
         "gate": cmd_gate,
         "pedir": cmd_pedir,
         "perfil": cmd_perfil,
