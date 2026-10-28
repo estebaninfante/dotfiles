@@ -98,6 +98,16 @@ jugador.write_text(
     "exit 0\n"
 )
 jugador.chmod(0o755)
+# La boca de siempre (`voice`, Kokoro) es la que habla por defecto: se apunta a
+# un doble para ver qué texto le llega, sin sonar en la máquina.
+hablado = raiz / "hablado.txt"
+voz_falsa = bin_falso / "voice"
+voz_falsa.write_text(
+    "#!/usr/bin/env bash\n"
+    f'printf "%s\\n" "$@" >> "{hablado}"\n'
+    "exit 0\n"
+)
+voz_falsa.chmod(0o755)
 
 entorno = dict(os.environ)
 entorno.update(
@@ -106,14 +116,15 @@ entorno.update(
         "OMNI_ESTADO": str(estado),
         "OMNI_MODELO": f"http://127.0.0.1:{puerto}",
         "OMNI_MOTOR": "omni",
+        "OMNI_VOICE": str(voz_falsa),
     }
 )
 
 
-def correr(*args: str) -> tuple[dict, str]:
+def correr(*args: str, extra: dict | None = None) -> tuple[dict, str]:
     r = subprocess.run(
         [str(OMNI), *args, "--json"],
-        env=entorno,
+        env=dict(entorno, **(extra or {})),
         capture_output=True,
         text=True,
         timeout=60,
@@ -123,9 +134,9 @@ def correr(*args: str) -> tuple[dict, str]:
     return json.loads(r.stdout), r.stderr
 
 
-# 1) la boca pide el audio al modelo y lo reproduce
+# 1) con el TTS del modelo encendido, la boca pide el audio y lo reproduce
 try:
-    salida, _ = correr("decir", "Hola, soy Omni.")
+    salida, _ = correr("decir", "Hola, soy Omni.", extra={"OMNI_TTS": "omni"})
     assert len(pedidos["tts"]) == 1, pedidos["tts"]
     pedido = pedidos["tts"][0]
     assert pedido.get("input") == "Hola, soy Omni.", pedido
@@ -165,7 +176,7 @@ except Exception as exc:
 # 3) una sola boca: la respuesta también sale por el modelo
 try:
     reproducido.write_text("", encoding="utf-8")
-    correr("escuchar", "--archivo", str(wav))
+    correr("escuchar", "--archivo", str(wav), extra={"OMNI_TTS": "omni"})
     lineas = reproducido.read_text(encoding="utf-8")
     assert ".wav" in lineas, "no reprodujo la respuesta"
     ok("la respuesta se dice con la misma boca")
@@ -173,6 +184,22 @@ except AssertionError as exc:
     falla(f"respuesta hablada: {exc}")
 except Exception as exc:
     falla(f"respuesta hablada (excepción): {exc}")
+
+# 4) por defecto habla `voice` (Kokoro), no el TTS del modelo: el español del
+# modelo suena a extranjero leyendo, y es lo único flojo que tiene.
+try:
+    antes = len(pedidos["tts"])
+    hablado.write_text("", encoding="utf-8")
+    salida, _ = correr("decir", "Buenas tardes.")
+    lineas = hablado.read_text(encoding="utf-8")
+    assert "say" in lineas, f"no le habló a voice: {lineas!r}"
+    assert "Buenas tardes." in lineas, f"no dijo el texto: {lineas!r}"
+    assert len(pedidos["tts"]) == antes, "pidió el TTS del modelo sin que se lo pidan"
+    ok("la voz por defecto es la de la casa, no la del modelo")
+except AssertionError as exc:
+    falla(f"voz por defecto: {exc}")
+except Exception as exc:
+    falla(f"voz por defecto (excepción): {exc}")
 
 srv.shutdown()
 
