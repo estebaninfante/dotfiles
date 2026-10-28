@@ -225,6 +225,53 @@ def decir(texto: str, dry: bool = False) -> None:
         print(f"omni: no pude hablar: {exc}", file=sys.stderr)
 
 
+# ── estado en pantalla (HUD) ─────────────────────────────────────────────
+STATUS = ESTADO / "status.json"
+
+
+def _cargar_status() -> dict:
+    try:
+        return json.loads(STATUS.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def publicar(estado: str, **actividad) -> None:
+    """Escribe el estado para el HUD (superficie flotante abajo al centro).
+
+    Estados que entiende el HUD: idle, listening, thinking, acting, done, error.
+    """
+    try:
+        ESTADO.mkdir(parents=True, exist_ok=True)
+        previo = _cargar_status()
+        prev_act = previo.get("activity") or {}
+        act = {k: v for k, v in prev_act.items() if v}
+        act.update({k: v for k, v in actividad.items() if v is not None and v != ""})
+        act.setdefault("engine", "LFM3-Omni-2B")
+        feed = previo.get("feed") if isinstance(previo.get("feed"), list) else []
+        if actividad.get("say") or actividad.get("result"):
+            feed.insert(0, {
+                "ts": int(time.time() * 1000),
+                "state": estado,
+                "transcript": act.get("transcript", ""),
+                "result": act.get("result", "") or act.get("say", ""),
+            })
+            feed = feed[:8]
+        nuevo = {
+            "state": estado,
+            "level": float(actividad.get("level") or 0),
+            "updatedAt": int(time.time() * 1000),
+            "activity": act,
+            "feed": feed,
+            "context": previo.get("context") or {"active": "omni"},
+        }
+        tmp = STATUS.with_suffix(".tmp")
+        tmp.write_text(json.dumps(nuevo, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(STATUS)
+    except Exception:
+        pass
+
+
 # ── despertador (palabra clave) ──────────────────────────────────────────
 # El oído abierto no manda todo al cerebro: primero decide si te están
 # hablando. Se usa ASR (el mismo modelo) y una comparación tolerante, porque
@@ -601,6 +648,7 @@ def cmd_oido(opts: dict) -> dict:
                     anotar(f"ignorado (sin palabra clave): {texto}")
                     continue
             anotar(f"pedido: {pedido or '(vacío)'}  ← {texto}")
+            publicar("thinking", transcript=texto, understood=pedido)
             if not pedido:
                 hablar_y_esperar("Decime.")
                 continue
@@ -611,6 +659,7 @@ def cmd_oido(opts: dict) -> dict:
                 hablar_y_esperar("No supe qué contestar.")
                 continue
             dicho = dos_frases(respuesta)
+            publicar("done", result=dicho, say=dicho, transcript=texto)
             marcar_conversacion()
             guardar_contexto(pedido, dicho)
             hablar_y_esperar(dicho)
@@ -649,6 +698,7 @@ def cmd_ptt(opts: dict) -> dict:
         except Exception:
             pass
         subprocess.run([VOICE, "stop"], capture_output=True, timeout=15)
+        publicar("idle", transcript="(cancelado)", understood="", result="", say="")
         try:
             pidfile.unlink()
         except Exception:
@@ -727,6 +777,7 @@ def cmd_decir(opts: dict) -> dict:
 def cmd_escuchar(opts: dict) -> dict:
     """Habla y te responde: oído local, cerebro en la nube, boca local."""
     wav = tempfile.mktemp(prefix="omni-", suffix=".wav")
+    publicar("listening", transcript="", understood="", result="", say="")
     try:
         if opts.get("archivo"):
             shutil.copy(opts["archivo"], wav)
@@ -742,6 +793,7 @@ def cmd_escuchar(opts: dict) -> dict:
             pass
     if not texto:
         dicho = "No te entendí. Probá de nuevo."
+        publicar("error", transcript="(no se entendió nada)")
         decir(dicho, opts["dry"])
         return {"accion": "escuchar", "dicho": dicho, "texto": "", "respuesta": ""}
     return _responder(texto, opts, accion="escuchar")
@@ -755,12 +807,14 @@ def cmd_pedir(opts: dict) -> dict:
 
 
 def _responder(texto: str, opts: dict, accion: str) -> dict:
+    publicar("thinking", transcript=texto, understood=texto)
     respuesta = pensar(texto)
     if not respuesta:
         # Segundo intento, más corto y explícito: el cerebro a veces se queda
         # escribiendo y se lo corta el tiempo.
         respuesta = pensar(f"En una sola frase: {texto}", timeout=90)
     dicho = dos_frases(respuesta) if respuesta else "No supe qué contestar."
+    publicar("done", result=dicho, say=dicho, transcript=texto)
     decir(dicho, opts["dry"])
     if not opts["dry"]:
         guardar_contexto(texto, dicho)
