@@ -15,6 +15,7 @@
 #   omni buzon [--json]                                      # qué quedó sin escuchar
 #   omni decir "texto"                                       # boca (con limpieza para el oído)
 #   omni perfil                                              # identidad y voz
+#   omni web [--puerto 9932]                                 # página local: hablar o escribir
 #
 # Contrato de salida: --json imprime {dicho, avisos[], pendientes, accion}.
 # Reglas: nunca inventa; si no hay pendientes lo dice; el texto del agente va
@@ -849,6 +850,210 @@ def cmd_perfil(opts: dict) -> dict:
     return {"accion": "perfil", "dicho": (r.stdout or "").strip(), "pendientes": len(pendientes())}
 
 
+# ── página local (la cara de Omni en el navegador) ──────────────────────
+# Una página en 127.0.0.1 para hablarle con un botón o escribirle, sin abrir
+# ventanas. El estado sale del mismo status.json que dibuja el HUD, así la
+# tarjeta flotante y el navegador nunca se contradicen.
+WEB_PAGINA = HOME / "dotfiles/linux/config/omni/omni-web.html"
+_CACHE_WEB = {"t": 0.0, "modelo": False, "oido": False}
+
+
+def _modelo_arriba() -> bool:
+    try:
+        urllib.request.urlopen(f"{MODELO_URL}/health", timeout=2).read()
+        return True
+    except Exception:
+        return False
+
+
+def _servicio(nombre: str) -> bool:
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "is-active", nombre],
+            capture_output=True, text=True, timeout=3,
+        )
+        return r.stdout.strip() == "active"
+    except Exception:
+        return False
+
+
+def _grabando() -> bool:
+    """¿El botón está grabando? (ptt.pid vivo y su `rec` también)."""
+    if not (ESTADO / "ptt.pid").is_file():
+        return False
+    try:
+        pid = int((ESTADO / "rec.pid").read_text(encoding="utf-8").strip())
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def _foto_web() -> dict:
+    """Lo que ve la página. Lo caro (modelo, oído) se refresca cada 3 s."""
+    ahora_t = time.time()
+    if ahora_t - _CACHE_WEB["t"] > 3:
+        _CACHE_WEB.update(
+            t=ahora_t, modelo=_modelo_arriba(), oido=_servicio("omni-oido.service")
+        )
+    return {
+        "estado": _cargar_status(),
+        "grabando": _grabando(),
+        "modelo": _CACHE_WEB["modelo"],
+        "oido": _CACHE_WEB["oido"],
+        "pendientes": len(pendientes()),
+    }
+
+
+def cmd_web(opts: dict) -> dict:
+    """Sirve la página local: un botón para hablar y un campo para escribir."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import urlparse
+
+    puerto = int(opts.get("puerto") or os.environ.get("OMNI_WEB_PORT") or 9932)
+    verboso = bool(opts.get("verboso"))
+    turno = threading.Lock()  # una grabación o un pedido a la vez
+    nosotros = str(Path(__file__).resolve())
+
+    def correr(*args, timeout: int = 180) -> dict:
+        try:
+            r = subprocess.run(
+                [sys.executable, nosotros, *args],
+                capture_output=True, text=True, timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return {"error": "se quedó pensando demasiado"}
+        except Exception as exc:
+            return {"error": str(exc)[:200]}
+        try:
+            return json.loads(r.stdout or "{}")
+        except Exception:
+            return {"error": (r.stderr or r.stdout or "sin respuesta").strip()[:300]}
+
+    class Manejador(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, formato, *args):
+            if verboso:
+                sys.stderr.write("omni web: " + (formato % args) + "\n")
+
+        # ── respuestas ──
+        def _bytes(self, cuerpo: bytes, tipo: str, codigo: int = 200) -> None:
+            self.send_response(codigo)
+            self.send_header("Content-Type", tipo)
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(cuerpo)
+
+        def _json(self, objeto, codigo: int = 200) -> None:
+            self._bytes(
+                json.dumps(objeto, ensure_ascii=False).encode("utf-8"),
+                "application/json; charset=utf-8",
+                codigo,
+            )
+
+        def _cuerpo(self) -> dict:
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except Exception:
+                n = 0
+            if n <= 0:
+                return {}
+            try:
+                return json.loads(self.rfile.read(min(n, 1_000_000)).decode("utf-8", "replace") or "{}")
+            except Exception:
+                return {}
+
+        # ── lo que se pide ──
+        def do_POST(self):
+            ruta = urlparse(self.path).path.rstrip("/") or "/"
+            if ruta == "/api/ptt":
+                if not _modelo_arriba():
+                    publicar("thinking", transcript="Levantando el modelo…", understood="")
+                    if not asegurar_modelo():
+                        return self._json({"error": "el modelo no levantó"}, 503)
+                with turno:
+                    salida = correr("ptt", "--json")
+                return self._json(salida)
+            if ruta == "/api/texto":
+                pedido = str(self._cuerpo().get("texto") or "").strip()
+                if not pedido:
+                    return self._json({"error": "falta el texto"}, 400)
+                with turno:
+                    salida = correr("pedir", pedido, "--json")
+                return self._json(salida)
+            if ruta == "/api/oido":
+                cuerpo = self._cuerpo()
+                if "on" not in cuerpo:
+                    return self._json({"error": "falta «on»"}, 400)
+                accion = "start" if cuerpo.get("on") else "stop"
+                try:
+                    subprocess.run(
+                        ["systemctl", "--user", accion, "omni-oido.service"],
+                        capture_output=True, timeout=30,
+                    )
+                except Exception as exc:
+                    return self._json({"error": str(exc)[:200]}, 500)
+                _CACHE_WEB["t"] = 0.0
+                return self._json({"oido": _servicio("omni-oido.service")})
+            return self._json({"error": "no conozco ese pedido"}, 404)
+
+        def do_GET(self):
+            ruta = urlparse(self.path).path.rstrip("/") or "/"
+            if ruta == "/":
+                try:
+                    cuerpo = WEB_PAGINA.read_bytes()
+                except Exception:
+                    return self._json({"error": "falta omni-web.html"}, 500)
+                return self._bytes(cuerpo, "text/html; charset=utf-8")
+            if ruta == "/api/estado":
+                return self._json(_foto_web())
+            if ruta == "/api/eventos":
+                return self._eventos()
+            return self._json({"error": "no conozco esa dirección"}, 404)
+
+        def _eventos(self) -> None:
+            """Server-Sent Events: un «data:» cada vez que cambia el estado."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            previo, latido = None, 0.0
+            try:
+                while True:
+                    actual = json.dumps(_foto_web(), ensure_ascii=False)
+                    if actual != previo:
+                        self.wfile.write(f"data: {actual}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        previo = actual
+                    if time.time() - latido > 15:
+                        self.wfile.write(b": sigo\n\n")
+                        self.wfile.flush()
+                        latido = time.time()
+                    time.sleep(0.25)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
+
+    try:
+        servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
+    except OSError as exc:
+        print(f"omni web: el puerto {puerto} no está libre ({exc})", file=sys.stderr)
+        return {"accion": "web", "error": "puerto ocupado"}
+    servidor.daemon_threads = True
+    print(f"Omni en http://127.0.0.1:{puerto}  (Ctrl+C para cerrar)")
+    try:
+        servidor.serve_forever(poll_interval=0.5)
+    except KeyboardInterrupt:
+        print("")
+    finally:
+        servidor.shutdown()
+        servidor.server_close()
+    return {"accion": "web", "dicho": "Omni web cerrado."}
+
+
 def main(argv: list[str]) -> int:
     args = argv[1:]
     if not args or args[0] in ("-h", "--help", "help"):
@@ -862,6 +1067,8 @@ def main(argv: list[str]) -> int:
         "callar": False,
         "dry": False,
         "json": False,
+        "puerto": "",
+        "verboso": False,
     }
     i = 1
     while i < len(args):
@@ -872,6 +1079,11 @@ def main(argv: list[str]) -> int:
             opts["callar"] = True
         elif a in ("--dry-run", "--no-say"):
             opts["dry"] = True
+        elif a in ("--puerto", "-p"):
+            opts["puerto"] = args[i + 1] if i + 1 < len(args) else ""
+            i += 1
+        elif a in ("--verboso", "-v"):
+            opts["verboso"] = True
         elif a == "--json":
             opts["json"] = True
         elif a in ("--archivo", "-f"):
@@ -904,6 +1116,7 @@ def main(argv: list[str]) -> int:
         "gate": cmd_gate,
         "pedir": cmd_pedir,
         "perfil": cmd_perfil,
+        "web": cmd_web,
     }.get(cmd)
     if not salida:
         print(f"omni: no conozco «{cmd}»", file=sys.stderr)

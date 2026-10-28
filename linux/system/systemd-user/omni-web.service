@@ -1,0 +1,15 @@
+[Unit]
+Description=Omni: pagina local (hablar por boton o escribir desde el navegador)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/omni web
+Restart=on-failure
+RestartSec=3
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=XDG_SESSION_TYPE=wayland
+
+[Install]
+WantedBy=graphical-session.target

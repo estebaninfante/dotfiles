@@ -10,6 +10,9 @@ dsh-web.service
 # Oído abierto de Omni (palabra clave "Omni"). Se para con
 # `systemctl --user stop omni-oido`.
 omni-oido.service
+# Página local de Omni (botón para hablar y campo para escribir) en
+# http://127.0.0.1:9932. Es liviana: no carga el modelo hasta que la usás.
+omni-web.service
 lh-leer.service
 
 # Cerebro de Omar (puente Ollama -> Hermes). Vive con la sesión gráfica:
