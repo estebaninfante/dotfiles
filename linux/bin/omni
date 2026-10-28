@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+# omni — el agente de voz nuevo: oído, boca y puente de la flota.
+#
+# Rol (definido con el usuario, 2026-10-28): el cerebro duro está en la nube.
+# Omni NO razona: escucha, traduce a acciones, habla, y es el buzón por donde
+# los agentes te avisan. Prueba en curso: reemplaza a Omar mientras dure.
+#
+# Este corte es el buzón hablado, lo que hoy no existe: un agente deja un aviso
+# y Omni te lo cuenta, siempre diciendo de quién viene y sin parafrasear.
+#
+#   omni avisar --agente puma --texto "terminé el ticket"   # lo dice ya
+#   omni avisar --agente puma --texto "..." --urgente        # lo dice primero
+#   omni avisar --agente puma --texto "..." --callar         # solo al buzón
+#   omni dime                                                # junta los pendientes en una frase
+#   omni buzon [--json]                                      # qué quedó sin escuchar
+#   omni decir "texto"                                       # boca (con limpieza para el oído)
+#   omni perfil                                              # identidad y voz
+#
+# Contrato de salida: --json imprime {dicho, avisos[], pendientes, accion}.
+# Reglas: nunca inventa; si no hay pendientes lo dice; el texto del agente va
+# literal (limpio para el oído), con su nombre y su prioridad.
+#
+# Entorno: OMNI_ESTADO (dir de estado), OMNI_VOICE (binario de voz).
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+HOME = Path(os.path.expanduser("~"))
+ESTADO = Path(os.environ.get("OMNI_ESTADO") or HOME / ".local/state/omni")
+BUZON = ESTADO / "buzon.jsonl"
+LEIDOS = ESTADO / "leidos.txt"
+VOICE = os.environ.get("OMNI_VOICE") or str(HOME / ".local/bin/voice")
+VOZ = "Omni"
+SPOKEN_PY = HOME / "dotfiles/linux/voice/spoken.py"
+
+
+# ── limpieza para el oído (misma que usa el resto de la voz) ─────────────
+def limpiar(texto: str) -> str:
+    try:
+        sys.path.insert(0, str(SPOKEN_PY.parent))
+        from spoken import clean  # type: ignore
+
+        return clean(texto)
+    except Exception:
+        t = re.sub(r"```[\s\S]*?```", " ", texto or "")
+        t = re.sub(r"<[^>]+>", " ", t)
+        t = re.sub(r"[*_>#`]+", "", t)
+        return re.sub(r"\s+", " ", t).strip()
+
+
+# ── buzón ────────────────────────────────────────────────────────────────
+def ahora() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def leer_buzon() -> list[dict]:
+    if not BUZON.is_file():
+        return []
+    avisos = []
+    for linea in BUZON.read_text(encoding="utf-8", errors="replace").splitlines():
+        linea = linea.strip()
+        if not linea:
+            continue
+        try:
+            avisos.append(json.loads(linea))
+        except Exception:
+            continue
+    return avisos
+
+
+def leer_leidos() -> set[str]:
+    if not LEIDOS.is_file():
+        return set()
+    return {l.strip() for l in LEIDOS.read_text(encoding="utf-8").splitlines() if l.strip()}
+
+
+def marcar_leidos(ids: list[str]) -> None:
+    if not ids:
+        return
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    with LEIDOS.open("a", encoding="utf-8") as f:
+        for i in ids:
+            f.write(i + "\n")
+
+
+def pendientes() -> list[dict]:
+    leidos = leer_leidos()
+    sin_leer = [a for a in leer_buzon() if a.get("id") not in leidos]
+    # Urgentes primero, después por orden de llegada (estable).
+    return sorted(sin_leer, key=lambda a: (0 if a.get("urgente") else 1, a.get("t", "")))
+
+
+def guardar(agente: str, texto: str, urgente: bool) -> dict:
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    aviso = {
+        "id": f"{int(datetime.now(timezone.utc).timestamp() * 1000)}-{os.getpid()}",
+        "t": ahora(),
+        "agente": (agente or "sistema").strip(),
+        "texto": texto.strip(),
+        "urgente": bool(urgente),
+    }
+    with BUZON.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(aviso, ensure_ascii=False) + "\n")
+    return aviso
+
+
+# ── frases ───────────────────────────────────────────────────────────────
+NUM = {1: "Uno", 2: "Dos", 3: "Tres", 4: "Cuatro", 5: "Cinco", 6: "Seis"}
+
+
+def con_punto(texto: str) -> str:
+    """Una sola frase terminada: evita el «suite..» de encadenar signos."""
+    t = (texto or "").strip().rstrip(".")
+    return t + "." if t else ""
+
+
+def frase_uno(a: dict) -> str:
+    quien = a["agente"][:1].upper() + a["agente"][1:]
+    cuerpo = con_punto(limpiar(a["texto"]))
+    if a.get("urgente"):
+        return f"Urgente, de {quien}: {cuerpo}"
+    return f"Aviso de {quien}: {cuerpo}"
+
+
+def frase_lote(avisos: list[dict]) -> str:
+    n = len(avisos)
+    cuantos = NUM.get(n, str(n))
+    cabeza = f"{cuantos} avisos" if n > 1 else "Un aviso"
+    urgentes = sum(1 for a in avisos if a.get("urgente"))
+    if urgentes:
+        cabeza += f", {urgentes} urgente{'s' if urgentes > 1 else ''}"
+    partes = []
+    for a in avisos:
+        quien = a["agente"][:1].upper() + a["agente"][1:]
+        partes.append(f"{quien}: {con_punto(limpiar(a['texto']))}")
+    return f"{cabeza}. " + " ".join(partes)
+
+
+def decir(texto: str, dry: bool = False) -> None:
+    if not texto:
+        return
+    if dry:
+        return
+    try:
+        subprocess.Popen(
+            [VOICE, "say", "--source", VOZ, "--", texto],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:
+        print(f"omni: no pude hablar: {exc}", file=sys.stderr)
+
+
+# ── comandos ─────────────────────────────────────────────────────────────
+def cmd_avisar(opts: dict) -> dict:
+    if not opts["texto"]:
+        print("omni avisar: falta --texto", file=sys.stderr)
+        return {"error": "falta --texto"}
+    aviso = guardar(opts["agente"], opts["texto"], opts["urgente"])
+    dicho = ""
+    if not opts["callar"]:
+        # Si ya había pendientes, se cuentan todos juntos (nada de ráfagas).
+        lote = pendientes()
+        if len(lote) > 1:
+            dicho = frase_lote(lote)
+            marcar_leidos([a["id"] for a in lote])
+        else:
+            dicho = frase_uno(aviso)
+            marcar_leidos([aviso["id"]])
+        decir(dicho, opts["dry"])
+    return {"accion": "avisar", "dicho": dicho, "aviso": aviso}
+
+
+def cmd_dime(opts: dict) -> dict:
+    lote = pendientes()
+    if not lote:
+        dicho = "No hay avisos pendientes."
+        return {"accion": "dime", "dicho": dicho, "avisos": [], "pendientes": 0}
+    dicho = frase_lote(lote) if len(lote) > 1 else frase_uno(lote[0])
+    marcar_leidos([a["id"] for a in lote])
+    decir(dicho, opts["dry"])
+    return {"accion": "dime", "dicho": dicho, "avisos": lote, "pendientes": 0}
+
+
+def cmd_buzon(opts: dict) -> dict:
+    lote = pendientes()
+    dicho = (
+        "No hay avisos pendientes."
+        if not lote
+        else (frase_lote(lote) if len(lote) > 1 else frase_uno(lote[0]))
+    )
+    return {"accion": "buzon", "dicho": dicho, "avisos": lote, "pendientes": len(lote)}
+
+
+def cmd_decir(opts: dict) -> dict:
+    texto = limpiar(opts["texto"])
+    decir(texto, opts["dry"])
+    return {"accion": "decir", "dicho": texto}
+
+
+def cmd_perfil(opts: dict) -> dict:
+    r = subprocess.run(
+        [VOICE, "profile", "show", VOZ], capture_output=True, text=True, timeout=20
+    )
+    return {"accion": "perfil", "dicho": (r.stdout or "").strip(), "pendientes": len(pendientes())}
+
+
+def main(argv: list[str]) -> int:
+    args = argv[1:]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+
+    opts = {
+        "agente": "sistema",
+        "texto": "",
+        "urgente": False,
+        "callar": False,
+        "dry": False,
+        "json": False,
+    }
+    i = 1
+    while i < len(args):
+        a = args[i]
+        if a in ("--urgente", "-u"):
+            opts["urgente"] = True
+        elif a in ("--callar", "-c"):
+            opts["callar"] = True
+        elif a in ("--dry-run", "--no-say"):
+            opts["dry"] = True
+        elif a == "--json":
+            opts["json"] = True
+        elif a in ("--agente", "-a"):
+            opts["agente"] = args[i + 1] if i + 1 < len(args) else "sistema"
+            i += 1
+        elif a in ("--texto", "-t"):
+            opts["texto"] = args[i + 1] if i + 1 < len(args) else ""
+            i += 1
+        elif a.startswith("--"):
+            pass
+        else:
+            opts["texto"] = (opts["texto"] + " " + a).strip()
+        i += 1
+
+    if not opts["texto"] and not sys.stdin.isatty() and args[0] in ("avisar", "decir"):
+        opts["texto"] = sys.stdin.read().strip()
+
+    cmd = args[0]
+    salida = {
+        "avisar": cmd_avisar,
+        "dime": cmd_dime,
+        "buzon": cmd_buzon,
+        "decir": cmd_decir,
+        "perfil": cmd_perfil,
+    }.get(cmd)
+    if not salida:
+        print(f"omni: no conozco «{cmd}»", file=sys.stderr)
+        return 2
+    out = salida(opts)
+    if opts["json"]:
+        print(json.dumps(out, ensure_ascii=False, indent=1))
+    elif out.get("dicho"):
+        print(out["dicho"])
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
