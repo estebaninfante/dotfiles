@@ -1,0 +1,320 @@
+<!doctype html>
+<!-- omni-web — la cara de Omni en el navegador.
+     Una sola página, sin dependencias ni red: la sirve `omni web` desde
+     ~/dotfiles/linux/bin/omni. Habla con tres endpoints de la misma máquina:
+       GET  /api/eventos  estado en vivo (SSE) que sale de status.json
+       POST /api/ptt      el botón: graba, y el segundo toque responde
+       POST /api/texto    lo que escribís, mismo camino que la voz
+       POST /api/oido     prende o apaga el oído siempre abierto -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Omni</title>
+<style>
+  :root {
+    --tinte: #89b4fa;
+    --fondo: #11111b;
+    --panel: #181825;
+    --texto: #cdd6f4;
+    --apagado: #6c7086;
+    --borde: rgba(255, 255, 255, 0.08);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--tinte) 14%, transparent), transparent 70%), var(--fondo);
+    color: var(--texto);
+    font: 15px/1.55 "JetBrainsMono Nerd Font", ui-monospace, "DejaVu Sans Mono", monospace;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 22px 22px calc(18px + env(safe-area-inset-bottom));
+    gap: 18px;
+    transition: background 400ms ease;
+  }
+
+  /* ── arriba: quién es y cómo está ─────────────────────────────────── */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .marca { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  h1 { font-size: 17px; font-weight: 600; letter-spacing: .02em; margin: 0; }
+  .como { font-size: 12px; color: var(--apagado); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .como.vivo { color: var(--tinte); }
+  .punto {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--tinte);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tinte) 55%, transparent);
+    align-self: center; flex: none;
+  }
+  .punto.latido { animation: latido 1.4s ease-out infinite; }
+  @keyframes latido {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tinte) 55%, transparent); }
+    100% { box-shadow: 0 0 0 9px transparent; }
+  }
+  .oido { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--apagado); cursor: pointer; user-select: none; }
+  .oido input { appearance: none; width: 30px; height: 17px; border-radius: 999px; background: #313244; position: relative; margin: 0; cursor: pointer; transition: background 200ms; }
+  .oido input::after { content: ""; position: absolute; top: 2.5px; left: 2.5px; width: 12px; height: 12px; border-radius: 50%; background: var(--apagado); transition: transform 200ms, background 200ms; }
+  .oido input:checked { background: color-mix(in srgb, #a6e3a1 30%, transparent); }
+  .oido input:checked::after { transform: translateX(13px); background: #a6e3a1; }
+  .oido input:disabled { opacity: .45; cursor: default; }
+
+  /* ── el hilo de la conversación ───────────────────────────────────── */
+  main { overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
+  main::-webkit-scrollbar { width: 6px; }
+  main::-webkit-scrollbar-thumb { background: #313244; border-radius: 3px; }
+  .vacio { margin: auto; text-align: center; color: var(--apagado); font-size: 13px; }
+  .vacio kbd { font: inherit; color: var(--texto); background: var(--panel); border: 1px solid var(--borde); border-radius: 5px; padding: 1px 6px; }
+  .turno { display: flex; flex-direction: column; gap: 5px; max-width: 88%; }
+  .turno .vos { align-self: flex-end; background: var(--panel); border: 1px solid var(--borde); color: #a6adc8; font-size: 13px; padding: 7px 12px; border-radius: 14px 14px 4px 14px; }
+  .turno .omni { padding: 0 2px; white-space: pre-wrap; }
+  .turno .omni.error { color: #f38ba8; }
+
+  /* ── abajo: el botón y lo que escribís ────────────────────────────── */
+  .compositor { display: flex; align-items: center; gap: 12px; }
+  #micro {
+    flex: none; width: 56px; height: 56px; border-radius: 50%; cursor: pointer;
+    display: grid; place-items: center; color: var(--tinte);
+    background: color-mix(in srgb, var(--tinte) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--tinte) 35%, transparent);
+    transition: transform 140ms ease, background 200ms, border-color 200ms;
+  }
+  #micro:hover { transform: scale(1.04); }
+  #micro:active { transform: scale(.96); }
+  #micro[aria-pressed="true"] {
+    background: color-mix(in srgb, #f38ba8 22%, transparent);
+    border-color: #f38ba8; color: #f38ba8;
+    animation: respirar 1.6s ease-in-out infinite;
+  }
+  @keyframes respirar { 50% { box-shadow: 0 0 0 10px transparent; } 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #f38ba8 45%, transparent); } }
+  #texto {
+    flex: 1; min-width: 0; font: inherit; color: var(--texto);
+    background: var(--panel); border: 1px solid var(--borde); border-radius: 999px;
+    padding: 13px 18px; outline: none; transition: border-color 200ms;
+  }
+  #texto::placeholder { color: #585b70; }
+  #texto:focus { border-color: color-mix(in srgb, var(--tinte) 55%, transparent); }
+  .aviso { font-size: 12px; color: #fab387; text-align: center; margin: 0; }
+  .aviso[hidden] { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="marca">
+    <span class="punto" id="punto"></span>
+    <h1>Omni</h1>
+    <span class="como" id="como">conectando…</span>
+  </div>
+  <label class="oido" title="Oído siempre abierto: se despierta cuando decís «Omni» en la habitación">
+    <input type="checkbox" id="oido" disabled>
+    <span>oído</span>
+  </label>
+</header>
+
+<main id="hilo">
+  <p class="vacio" id="vacio">Decí <kbd>Omni</kbd> y después el pedido,<br>o tocá el micrófono y hablá.</p>
+</main>
+
+<form class="compositor" id="caja" autocomplete="off">
+  <button id="micro" type="button" aria-label="Hablar" aria-pressed="false">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <rect x="9" y="2.5" width="6" height="11" rx="3"></rect>
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"></path>
+    </svg>
+  </button>
+  <input type="text" id="texto" placeholder="Escribí y Enter, si preferís no hablar" maxlength="600">
+</form>
+
+<p class="aviso" id="aviso" hidden></p>
+
+<script>
+(function () {
+  "use strict";
+
+  var TINTE = { idle: "#89b4fa", listening: "#94e2d5", thinking: "#fab387", acting: "#cba6f7", error: "#f38ba8", done: "#a6e3a1" };
+  var COMO = { idle: "en reposo", listening: "escuchando", thinking: "pensando", acting: "haciendo", error: "no entendí", done: "listo" };
+  var TRABAJANDO = { listening: 1, thinking: 1, acting: 1 };
+
+  var punto = document.getElementById("punto");
+  var como = document.getElementById("como");
+  var hilo = document.getElementById("hilo");
+  var vacio = document.getElementById("vacio");
+  var micro = document.getElementById("micro");
+  var caja = document.getElementById("caja");
+  var texto = document.getElementById("texto");
+  var oido = document.getElementById("oido");
+  var aviso = document.getElementById("aviso");
+
+  var grabando = false;
+  var ocupado = false;
+  var ultimoHilo = "";
+  var espera = 0;
+
+  function decirAviso(t) {
+    if (!t) { aviso.hidden = true; aviso.textContent = ""; return; }
+    aviso.hidden = false;
+    aviso.textContent = t;
+  }
+
+  // ── dibujo del hilo: una tarjeta por intercambio, lo último abajo ──
+  function dibujar(entradas) {
+    var clave = JSON.stringify(entradas);
+    if (clave === ultimoHilo) return;
+    ultimoHilo = clave;
+    hilo.textContent = "";
+    if (!entradas.length) {
+      hilo.appendChild(vacio);
+      vacio.hidden = false;
+      return;
+    }
+    vacio.hidden = true;
+    entradas.forEach(function (e) {
+      var d = document.createElement("div");
+      d.className = "turno";
+      if (e.transcript) {
+        var v = document.createElement("p");
+        v.className = "vos";
+        v.textContent = e.transcript;
+        d.appendChild(v);
+      }
+      var o = document.createElement("p");
+      o.className = "omni" + (e.state === "error" ? " error" : "");
+      o.textContent = e.result || "";
+      if (o.textContent) d.appendChild(o);
+      hilo.appendChild(d);
+    });
+    hilo.scrollTop = hilo.scrollHeight;
+  }
+
+  function pintar(f) {
+    var e = f.estado || {};
+    var s = f.grabando ? "listening" : (e.state || "idle");
+    if (grabando) s = "listening";
+    var tinte = TINTE[s] || TINTE.idle;
+    document.documentElement.style.setProperty("--tinte", tinte);
+    punto.className = "punto" + (TRABAJANDO[s] ? " latido" : "");
+    como.textContent = f.grabando ? "grabando — tocá para terminar" : (COMO[s] || "en reposo");
+    como.classList.toggle("vivo", !!TRABAJANDO[s]);
+    micro.setAttribute("aria-pressed", f.grabando ? "true" : "false");
+    grabando = !!f.grabando;
+
+    // El pedido en curso todavía no está en el hilo: se muestra como borrador.
+    var act = e.activity || {};
+    var feed = (e.feed || []).slice().reverse();
+    if (act.transcript && (s === "thinking" || s === "acting")) {
+      feed.push({ transcript: act.transcript, result: "", state: s, borrador: true });
+    }
+    dibujar(feed);
+
+    if (typeof f.modelo === "boolean") {
+      decirAviso(f.modelo ? "" : "El modelo está dormido: el primer toque lo levanta (tarda unos segundos).");
+    }
+    if (typeof f.oido === "boolean" && document.activeElement !== oido) {
+      oido.checked = f.oido;
+      oido.disabled = false;
+    }
+  }
+
+  // ── estado en vivo ────────────────────────────────────────────────
+  function conectar() {
+    var fuente = new EventSource("/api/eventos");
+    fuente.onmessage = function (ev) {
+      try { pintar(JSON.parse(ev.data)); } catch (err) { /* evento roto: se ignora */ }
+      clearTimeout(espera);
+    };
+    fuente.onerror = function () {
+      como.textContent = "sin conexión con Omni";
+      como.classList.remove("vivo");
+      oido.disabled = true;
+    };
+    return fuente;
+  }
+
+  function refrescar() {
+    fetch("/api/estado", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(pintar)
+      .catch(function () {});
+  }
+
+  // ── el botón: un toque graba, otro toque procesa ──────────────────
+  function tocarMicro() {
+    if (ocupado) return;
+    ocupado = true;
+    micro.disabled = true;
+    var antes = grabando;
+    fetch("/api/ptt", { method: "POST" })
+      .then(function (r) { return r.json(); })
+      .then(function (o) {
+        if (o && o.error) decirAviso("No pude grabarte: " + o.error + ".");
+        else if (!antes) decirAviso("");
+        if (o && o.grabando) {
+          // Arrancó a grabar: el botón queda listo para cortar.
+          pintar({ estado: { state: "listening", feed: [] }, grabando: true });
+        }
+        refrescar();
+      })
+      .catch(function () { decirAviso("Se cortó la conexión con Omni."); })
+      .finally(function () {
+        ocupado = false;
+        micro.disabled = false;
+        texto.focus();
+      });
+    texto.blur();
+  }
+
+  micro.addEventListener("click", tocarMicro);
+
+  // ── lo que escribís ──────────────────────────────────────────────
+  caja.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var pedido = texto.value.trim();
+    if (!pedido || ocupado) return;
+    ocupado = true;
+    var esperando = pedido;
+    texto.value = "";
+    decirAviso("");
+    pintar({ estado: { state: "thinking", activity: { transcript: esperando }, feed: ultimoHilo ? JSON.parse(ultimoHilo) : [] }, grabando: false });
+    fetch("/api/texto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: pedido })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (o) {
+        if (o && o.error) decirAviso("No supe qué contestar: " + o.error + ".");
+        refrescar();
+      })
+      .catch(function () { decirAviso("Se cortó la conexión con Omni."); })
+      .finally(function () { ocupado = false; texto.focus(); });
+  });
+
+  // ── el oído siempre abierto ───────────────────────────────────────
+  oido.addEventListener("change", function () {
+    var encender = oido.checked;
+    oido.disabled = true;
+    fetch("/api/oido", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on: encender })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (o) {
+        if (o && o.error) {
+          decirAviso("No pude " + (encender ? "prender" : "apagar") + " el oído: " + o.error + ".");
+          oido.checked = !encender;
+        }
+        refrescar();
+      })
+      .catch(function () { oido.checked = !encender; })
+      .finally(function () { oido.disabled = false; });
+  });
+
+  conectar();
+  refrescar();
+  texto.focus();
+})();
+</script>
+</body>
+</html>
