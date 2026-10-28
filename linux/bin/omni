@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import tempfile
 import urllib.request
 from datetime import datetime, timezone
@@ -628,6 +629,11 @@ def cmd_oido(opts: dict) -> dict:
 
     anotar("oido abierto")
     while True:
+        # Si el walkie-talkie está grabando, el oído se aparta: un solo dueño
+        # del micrófono a la vez (si no, se pisan y no entiende ninguno).
+        if (ESTADO / "ptt.pid").is_file():
+            time.sleep(0.3)
+            continue
         wav = tempfile.mktemp(prefix="omni-oido-", suffix=".wav")
         try:
             if not grabar(wav):
@@ -672,53 +678,68 @@ def cmd_oido(opts: dict) -> dict:
 
 
 def cmd_ptt(opts: dict) -> dict:
-    """Push-to-talk de verdad: la tecla de Windows abre y cierra.
+    """Walkie-talkie: primer toque graba, segundo toque procesa.
 
-    Primer toque: calla lo que esté sonando y escucha una frase.
-    Segundo toque: cancela (corta el audio y deja de grabar).
+    Nada de detección de silencio: el usuario decide cuándo empieza y cuándo
+    termina, así no hay forma de que un ruido corte la frase ni de que el
+    micrófono del sistema se coma el inicio. El HUD muestra que está grabando.
     """
+    ESTADO.mkdir(parents=True, exist_ok=True)
     pidfile = ESTADO / "ptt.pid"
+    wavfile = ESTADO / "ptt.wav"
+
     if pidfile.is_file():
+        # Segundo toque: cerrar la grabación y procesar.
+        rpid = None
         try:
-            pid = int(pidfile.read_text(encoding="utf-8").strip())
+            rpid = int((ESTADO / "rec.pid").read_text(encoding="utf-8").strip())
+        except Exception:
+            pass
+        if rpid:
             try:
-                os.killpg(os.getpgid(pid), 15)   # el proceso y su `rec`
+                os.kill(rpid, 15)   # sox cierra y escribe el WAV
             except Exception:
-                os.kill(pid, 15)
-        except Exception:
-            pass
-        try:
-            rec = ESTADO / "rec.pid"
-            if rec.is_file():
-                rpid = int(rec.read_text(encoding="utf-8").strip())
+                pass
+        if rpid:
+            for _ in range(30):
+                time.sleep(0.1)
                 try:
-                    os.killpg(os.getpgid(rpid), 15)
+                    os.kill(rpid, 0)   # sigue vivo?
                 except Exception:
-                    os.kill(rpid, 15)
-        except Exception:
-            pass
-        subprocess.run([VOICE, "stop"], capture_output=True, timeout=15)
-        publicar("idle", transcript="(cancelado)", understood="", result="", say="")
+                    break
         try:
             pidfile.unlink()
         except Exception:
             pass
-        return {"accion": "ptt", "dicho": "Cancelado.", "cancelado": True}
-    # Grupo propio: así el segundo toque corta también la grabación hija.
+        try:
+            (ESTADO / "rec.pid").unlink()
+        except Exception:
+            pass
+        if not wavfile.is_file() or wavfile.stat().st_size < 8000:
+            publicar("error", transcript="(no se grabó nada)")
+            return {"accion": "ptt", "dicho": "", "texto": "", "error": "sin audio"}
+        publicar("thinking", transcript="…")
+        texto = transcribir(str(wavfile))
+        if not texto:
+            publicar("error", transcript="(no se entendió)")
+            return {"accion": "ptt", "dicho": "", "texto": "", "error": "sin transcripción"}
+        return _responder(texto, opts, accion="ptt")
+
+    # Primer toque: empezar a grabar (sin VAD: graba hasta que lo cortes).
     try:
         os.setsid()
     except Exception:
         pass
-    ESTADO.mkdir(parents=True, exist_ok=True)
+    subprocess.run([VOICE, "stop"], capture_output=True, timeout=15)
+    cmd = [
+        "rec", "-q", "-r", "16000", "-c", "1", "-b", "16", "-e", "signed-integer",
+        str(wavfile), "trim", "0", "120",
+    ]
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    (ESTADO / "rec.pid").write_text(str(proc.pid), encoding="utf-8")
     pidfile.write_text(str(os.getpid()), encoding="utf-8")
-    try:
-        subprocess.run([VOICE, "stop"], capture_output=True, timeout=15)
-        return cmd_escuchar(opts)
-    finally:
-        try:
-            pidfile.unlink()
-        except Exception:
-            pass
+    publicar("listening", transcript="", understood="", result="", say="")
+    return {"accion": "ptt", "grabando": True, "dicho": ""}
 
 
 def cmd_gate(opts: dict) -> dict:
