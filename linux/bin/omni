@@ -233,14 +233,19 @@ DESPIERTAN = {
     "omni", "oni", "omnni", "omny", "homni", "onmi", "omni.", "om ni", "omni,",
     # transcripciones que el ASR produce seguido con nombres propios:
     "onu", "onni", "omn", "amni", "hom ni", "hombres", "ombre", "honni", "on mi",
+    "ohmi", "omi", "homi", "oh my", "omni", "om ne", "onme",
 }
 SEGUIMIENTO_S = float(os.environ.get("OMNI_SEGUIMIENTO_S") or 20)
 ULTIMA = ESTADO / "ultima-conversacion"
 
 
 def normalizar(texto: str) -> str:
-    t = (texto or "").lower()
-    t = re.sub(r"[^\wáéíóúüñ\s]", " ", t)
+    """Minúsculas y sin acentos: "Oh, mí" tiene que poder compararse con "omni"."""
+    import unicodedata
+
+    t = unicodedata.normalize("NFKD", (texto or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    t = re.sub(r"[^\w\s]", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
 

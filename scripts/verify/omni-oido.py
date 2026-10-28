@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import unicodedata
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,11 @@ def falla(m):
     print(f"  FALLA {m}")
 
 
+def sin_acentos(texto: str) -> str:
+    t = unicodedata.normalize("NFKD", (texto or "").lower())
+    return "".join(c for c in t if not unicodedata.combining(c))
+
+
 def gate(estado: Path, texto: str) -> dict:
     env = dict(os.environ)
     env["OMNI_ESTADO"] = str(estado)
@@ -54,6 +60,10 @@ casos = [
     ("oni subí el volumen", True, "subí el volumen"),
     ("OMNI abrí brave", True, "abrí brave"),
     ("homni qué hora es", True, "qué hora es"),
+    # así lo transcribió de verdad el ASR con la voz del usuario (2026-10-28):
+    ("Oh, mí, oh, mí. no funciona.", True, "no funciona"),
+    ("Oh, mí, subí el volumen", True, "subí el volumen"),
+    ("O M I qué hora es", True, "qué hora es"),
     ("Omni.", True, ""),
     ("hombre, qué calor", False, ""),
     ("cómo van los agentes", False, ""),
@@ -64,7 +74,8 @@ try:
         got = gate(estado, texto)
         assert got["despierta"] == quiere, f"{texto!r}: despierta={got['despierta']}"
         if quiere and pedido:
-            assert pedido in got["pedido"], f"{texto!r}: pedido={got['pedido']!r}"
+            assert sin_acentos(pedido) in sin_acentos(got["pedido"]), \
+                f"{texto!r}: pedido={got['pedido']!r}"
     ok("se despierta solo con la palabra clave, tolera transcripciones raras y no se dispara con ruido")
 except AssertionError as exc:
     falla(f"compuerta: {exc}")
