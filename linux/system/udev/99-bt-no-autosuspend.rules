@@ -1,0 +1,11 @@
+# Adaptador Bluetooth siempre encendido (nunca autosuspend USB).
+#
+# El MediaTek MT7922 (USB 0489:e0d8 de esta laptop) entra en autosuspend por
+# hwdb. Cuando eso pasa en medio de una llamada, el audio de manos libres
+# (SCO/HFP) se corta: en el log queda "Failure in Bluetooth audio transport",
+# "SCO packet for unknown connection handle" y el audífono termina
+# desconectándose. A2DP (música) suele sobrevivir; las llamadas no.
+#
+# `options usbcore autosuspend=-1` en /etc/modprobe.d no sirve acá porque
+# usbcore va compilado dentro del kernel: la única forma es esta regla.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0489", ATTR{idProduct}=="e0d8", ATTR{power/control}="on"

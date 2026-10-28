@@ -9,6 +9,13 @@ que pueden elegir Zoom, Meet, el navegador o mic-lab.
 Se activa solo cuando alguna app está leyendo "mic-bt-fx": mientras nadie lo
 usa, suelta el audífono para que vuelva a sonar en alta calidad (A2DP).
 
+Ojo con el perfil: cambiarlo destruye y recrea los nodos de sonido del
+audífono, y eso corta lo que se esté escuchando. Por eso, al dejar de usar el
+micrófono, se espera MIC_BT_HOLD segundos (12 por defecto) antes de volver a
+A2DP: si la app vuelve a abrir el micrófono en ese rato, no se cambia nada.
+Sin esa espera, una app que abre y cierra el micrófono (WhatsApp Web al
+contestar, por ejemplo) hacía que el perfil oscilara y la llamada quedara muda.
+
 Ajustar los parámetros -> ~/.config/mic-lab/fx.json (o desde mic-lab) y
 reiniciar: systemctl --user restart mic-bt-fx
 """
@@ -27,6 +34,8 @@ SRC = os.environ.get("MIC_BT_TARGET", f"bluez_input.{MAC}")
 OUT_SINK = os.environ.get("MIC_BT_SINK", "mic_bt_fx_sink")
 MUSIC_PROFILE = os.environ.get("MIC_BT_MUSIC_PROFILE", "a2dp-sink")
 VIRTUAL = "mic-bt-fx"
+CALL_PROFILE = os.environ.get("MIC_BT_CALL_PROFILE", "headset-head-unit")
+HOLD_S = float(os.environ.get("MIC_BT_HOLD", "12"))
 CARD = "bluez_card." + MAC.replace(":", "_")
 
 CONF_DIR = Path(os.environ.get("MIC_LAB_CONF", Path.home() / ".config" / "mic-lab"))
@@ -132,7 +141,50 @@ def source_ready() -> bool:
 
 
 def ensure_headset_profile() -> None:
-    run(["pactl", "set-card-profile", CARD, "headset-head-unit"])
+    if card_profile() == CALL_PROFILE:
+        return
+    run(["pactl", "set-card-profile", CARD, CALL_PROFILE])
+
+
+def bluez_sink() -> str:
+    """Nombre de la salida Bluetooth actual ("" si no hay)."""
+    out = run(["pactl", "list", "short", "sinks"]).stdout
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) > 1 and parts[1].startswith("bluez_output."):
+            return parts[1]
+    return ""
+
+
+def sink_inputs_on(sink: str) -> list[str]:
+    """IDs de los streams que están sonando en `sink`."""
+    if not sink:
+        return []
+    ids = []
+    out = run(["pactl", "list", "short", "sink-inputs"]).stdout
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) > 2 and parts[2] == sink:
+            ids.append(parts[0])
+    return ids
+
+
+def follow_sink(old_sink: str) -> None:
+    """Recolgar en la salida nueva lo que sonaba en la salida vieja.
+
+    Al cambiar de perfil el nodo del audífono se recrea y los links viejos
+    quedan en error. Si el nombre cambió, movemos los streams a mano: es lo
+    que evita que una llamada en curso se quede sin audio.
+    """
+    for _ in range(20):
+        new = bluez_sink()
+        if new and new != old_sink:
+            for idx in sink_inputs_on(old_sink):
+                run(["pactl", "move-sink-input", idx, new])
+            return
+        if new == old_sink:
+            return
+        time.sleep(0.15)
 
 
 def restore_profile(prev: str) -> None:
@@ -198,6 +250,7 @@ def main() -> int:
     proc = None
     active = False
     prev_profile = ""
+    idle_since: float | None = None
     while True:
         want = virtual_in_use()
         if want and not active:
@@ -207,6 +260,8 @@ def main() -> int:
             # Recordar si venía en A2DP para devolverlo igual al terminar.
             if not prev_profile:
                 prev_profile = card_profile()
+            idle_since = None
+            old_sink = bluez_sink()
             ensure_headset_profile()
             # El nodo de captura tarda en aparecer tras el cambio de perfil:
             # si arrancamos antes, pw-record no engancha y el mic queda mudo.
@@ -216,17 +271,27 @@ def main() -> int:
                 time.sleep(0.15)
             proc = pipeline()
             active = True
+            follow_sink(old_sink)
         elif not want and active:
-            stop(proc)
-            proc, active = None, False
-            time.sleep(0.3)  # soltar el transporte antes de cambiar de perfil
-            restore_profile(prev_profile)
-            prev_profile = ""
+            # Esperar a que la app realmente suelte el micrófono: si vuelve a
+            # abrirlo enseguida, no tocamos el perfil (ver docstring).
+            if idle_since is None:
+                idle_since = time.monotonic()
+            elif time.monotonic() - idle_since >= HOLD_S:
+                stop(proc)
+                proc, active = None, False
+                idle_since = None
+                time.sleep(0.3)  # soltar el transporte antes de cambiar de perfil
+                restore_profile(prev_profile)
+                prev_profile = ""
         elif active and proc and proc.poll() is not None:
             # Se cortó el audífono o cambió el perfil: reintentar.
             stop(proc)
             proc, active = None, False
+            idle_since = None
             time.sleep(1.5)
+        else:
+            idle_since = None
         time.sleep(1.0)
 
 

@@ -534,6 +534,18 @@ else
     warn "Falta $DOTFILES_SYSTEM/systemd/battery-power-guard.service"
 fi
 
+# Bluetooth sin autosuspend USB: el adaptador MediaTek del laptop corta el
+# audio de las llamadas (SCO/HFP) cuando se suspende. Ver el propio archivo.
+if [[ -f "$DOTFILES_SYSTEM/udev/99-bt-no-autosuspend.rules" ]]; then
+    sudo install -o root -g root -m 644 \
+        "$DOTFILES_SYSTEM/udev/99-bt-no-autosuspend.rules" \
+        /etc/udev/rules.d/99-bt-no-autosuspend.rules
+    sudo udevadm control --reload-rules 2>/dev/null || true
+    ok "udev 99-bt-no-autosuspend instalado (Bluetooth siempre encendido)"
+else
+    warn "Falta $DOTFILES_SYSTEM/udev/99-bt-no-autosuspend.rules"
+fi
+
 # Bench de reposo: mide el consumo al arrancar (solo en bateria) y lo guarda en
 # /var/log/power-idle.tsv para comparar entre boots/cambios. Ver
 # docs/energia-laptop-82y5.md y scripts/verify/energia.sh.
