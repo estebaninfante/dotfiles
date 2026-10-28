@@ -350,6 +350,8 @@ sintetiza, la frase se descarta en vez de sonar después. Verificador:
 
 **La respuesta entera, si el usuario está escuchando.** El cierre normal dice un resumen de una frase. Con `leer on` (extensión `leer.ts` + `~/.local/state/voice/leer-respuesta.json`) la última respuesta de cada corrida se dice completa, limpia para el oído (fuera código, tablas, URLs y rutas) y troceada para empezar a sonar enseguida. Va por el daemon, así que la tecla de Windows la corta y `voice tts off` la apaga. Anuncia por el bus `voz:hablado` en `turn_end` para que el cierre no repita. Verificadores: `scripts/verify/leer-respuesta.sh` y `node --test linux/pi/agent/extensions/lib/leer.test.ts`.
 
+**LearnHarness no trae voz: se la pone un vigía.** La app usa pi como librería (`pi-ai` + `pi-agent-core`), no el CLI, así que las extensiones de pi no corren dentro y no hay salida de voz. `linux/bin/lh-leer` (unit `lh-leer.service`) vigila el chat que la app guarda en `~/.config/LearnHarness/data/chats/*.json` —escrito al cerrar cada turno— y dice en voz alta el último mensaje NUEVO del tutor, limpio para el oído con `spoken.py` y por `voice say`. Toma línea base al arrancar (nunca lee el historial), deduplica por id (el archivo se reescribe entero) e ignora razonamiento y herramientas. Respeta `leer off` y `voice tts`. Verificador: `scripts/verify/lh-leer.sh`.
+
 **La voz no habla encima de un dictado.** Mientras dictás, el TTS espera: el
 mensaje queda en la cola y sale cuando el micrófono queda libre; si el dictado
 empieza con la voz ya sonando, la corta en el acto (250 ms) y la frase vuelve a

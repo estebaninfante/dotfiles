@@ -4,6 +4,10 @@
 
 dsh-web.service
 
+# Lee en voz alta las respuestas del tutor de LearnHarness (audífonos, manos
+# libres). Se apaga con `leer off`. Unit: lh-leer.service
+lh-leer.service
+
 # Cerebro de Omar (puente Ollama -> Hermes). Vive con la sesión gráfica:
 # si queda fuera del repo, la copia viva drifta y el cerebro muere en silencio.
 voice-pi-shim.service

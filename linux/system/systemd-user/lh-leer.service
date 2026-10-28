@@ -1,0 +1,20 @@
+[Unit]
+Description=Lee en voz alta las respuestas del tutor de LearnHarness
+Documentation=https://github.com/amosblomqvist/learnharness
+After=graphical-session.target voice-daemon.service
+Wants=voice-daemon.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lh-leer
+Restart=on-failure
+RestartSec=5
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=XDG_SESSION_TYPE=wayland
+# La app no expone API para esto: se lee el chat que guarda en disco al cerrar
+# cada turno (el puente y sus reglas están en linux/bin/lh-leer).
+Nice=10
+
+[Install]
+WantedBy=graphical-session.target

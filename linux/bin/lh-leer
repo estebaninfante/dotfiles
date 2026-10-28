@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+# lh-leer — dice en voz alta lo que el tutor de LearnHarness responde.
+#
+# LearnHarness no puede hablar por sí solo: usa pi como LIBRERÍA dentro de su
+# propio servidor (pi-ai + pi-agent-core), no el CLI, así que las extensiones de
+# pi no existen ahí adentro y la app no tiene salida de voz. Lo que sí hace es
+# guardar el chat completo en disco (~/.config/LearnHarness/data/chats/*.json),
+# escrito al terminar cada turno: eso alcanza para escucharlo sin tocar la app
+# (ni parchearla, que se pisa en cada actualización).
+#
+# Cómo trabaja: vigila esos archivos, y cuando aparece un mensaje NUEVO del
+# asistente con texto, lo limpia para el oído (mismo criterio que `voice think`,
+# reusando `spoken.py`) y lo manda a `voice say --source learnharness`. Va por
+# el daemon, así que la tecla de Windows corta la lectura y `voice tts off` la
+# apaga.
+#
+# Reglas:
+#   - Nunca lee el historial que ya estaba al arrancar: la primera vez toma el
+#     último mensaje como línea base y calla. Después lee solo lo nuevo.
+#   - Deduplica por id de mensaje y por texto, porque el archivo se reescribe
+#     entero en cada turno.
+#   - No lee el razonamiento (pensamiento) ni las tarjetas de herramientas, solo
+#     lo que el tutor le dice al alumno.
+#   - Respeta el interruptor de `leer` (~/.local/state/voice/leer-respuesta.json)
+#     y el maestro de la voz (`voice tts`).
+#
+# Uso:
+#   lh-leer            vigila en bucle (lo corre el servicio systemd)
+#   lh-leer --once     una pasada y sale (lo usan los verificadores)
+#
+# Entorno: LH_CHATS_DIR, LH_LEER_STATE, LH_LEER_DRY (escribe en LH_LEER_DRY_FILE
+# en vez de hablar), LH_LEER_POLL (segundos, default 1).
+from __future__ import annotations
+
+import glob
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+import importlib.util
+from pathlib import Path
+
+HOME = Path(os.path.expanduser("~"))
+CHATS = Path(os.environ.get("LH_CHATS_DIR") or HOME / ".config/LearnHarness/data/chats")
+STATE = Path(os.environ.get("LH_LEER_STATE") or HOME / ".local/state/voice/lh-leer.json")
+TOGGLE = Path(os.environ.get("PI_LEER_CONFIG") or HOME / ".local/state/voice/leer-respuesta.json")
+DRY = os.environ.get("LH_LEER_DRY") == "1"
+DRY_FILE = Path(os.environ.get("LH_LEER_DRY_FILE") or "/tmp/lh-leer-dry.log")
+POLL = float(os.environ.get("LH_LEER_POLL") or 1)
+VOICE = os.environ.get("PI_TTS_VOICE_BIN") or str(HOME / ".local/bin/voice")
+SPOKEN = HOME / "dotfiles/linux/voice/spoken.py"
+
+
+def cargar_limpiador():
+    """Trae `clean` de spoken.py (la misma limpieza que usa el resto de la voz)."""
+    try:
+        spec = importlib.util.spec_from_file_location("spoken", SPOKEN)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod.clean
+    except Exception:
+        pass
+
+    def limpieza_simple(texto: str) -> str:
+        import re
+
+        t = re.sub(r"```[\s\S]*?```", " ", texto or "")
+        t = re.sub(r"<[^>]+>", " ", t)
+        t = re.sub(r"[*_>#`]+", "", t)
+        return re.sub(r"\s+", " ", t).strip()
+
+    return limpieza_simple
+
+
+limpiar = cargar_limpiador()
+
+
+def activada() -> bool:
+    env = os.environ.get("PI_LEER")
+    if env in ("0", "false"):
+        return False
+    if env in ("1", "true"):
+        return True
+    try:
+        return json.loads(TOGGLE.read_text(encoding="utf-8")).get("activado", True) is not False
+    except Exception:
+        return True
+
+
+def texto_del_asistente(mensaje: dict) -> str:
+    """Solo lo que el tutor le dice al alumno: texto, no pensamiento ni tools."""
+    partes = mensaje.get("content")
+    if isinstance(partes, str):
+        return partes.strip()
+    if not isinstance(partes, list):
+        return ""
+    dichos = [
+        p.get("text", "")
+        for p in partes
+        if isinstance(p, dict) and p.get("type") == "text"
+    ]
+    return "\n".join(d for d in dichos if d).strip()
+
+
+def mensajes_con_texto(doc: dict) -> list[dict]:
+    return [
+        m
+        for m in (doc.get("messages") or [])
+        if m.get("role") == "assistant" and texto_del_asistente(m)
+    ]
+
+
+def leer_estado() -> dict:
+    try:
+        return json.loads(STATE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def guardar_estado(estado: dict) -> None:
+    try:
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        STATE.write_text(json.dumps(estado, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def decir(texto: str) -> None:
+    texto = limpiar(texto)
+    if len(texto) < 2:
+        return
+    if DRY:
+        try:
+            DRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with DRY_FILE.open("a", encoding="utf-8") as f:
+                f.write(texto + "\n")
+        except Exception:
+            pass
+        return
+    try:
+        # Detached: no bloquea el bucle. `--` antes del texto (puede empezar con -).
+        subprocess.Popen(
+            [VOICE, "say", "--source", "learnharness", "--", texto],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:  # voz caída: se sigue vigilando, no se cae el servicio
+        print(f"lh-leer: no pude hablar: {exc}", file=sys.stderr, flush=True)
+
+
+def archivo_estable(path: Path, espera: float = 0.6) -> bool:
+    """El chat se escribe entero: se espera a que el tamaño deje de cambiar."""
+    try:
+        a = path.stat().st_size
+        time.sleep(espera)
+        return path.stat().st_size == a
+    except FileNotFoundError:
+        return False
+
+
+MAX_LEIDOS = 80
+
+
+def una_pasada(estado: dict, arranque: bool) -> None:
+    vistos = estado.setdefault("archivos", {})
+    for nombre in sorted(glob.glob(str(CHATS / "*.json"))):
+        path = Path(nombre)
+        try:
+            firma = f"{path.stat().st_size}:{int(path.stat().st_mtime)}"
+        except FileNotFoundError:
+            continue
+        prev = vistos.get(nombre) or {}
+        if prev.get("firma") == firma:
+            continue
+        if not arranque and not archivo_estable(path):
+            continue
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue  # archivo a medio escribir: se reintenta en la próxima
+        con_texto = mensajes_con_texto(doc)
+        leidos = list(prev.get("leidos") or [])
+        vistos[nombre] = {"firma": firma, "leidos": leidos}
+        if not con_texto:
+            continue
+        # Primera vez que vemos este chat: se toma todo como línea base y se
+        # calla (no queremos leerte la conversación vieja al prender el
+        # servicio).
+        if not prev and arranque:
+            vistos[nombre] = {
+                "firma": firma,
+                "leidos": [uid(m) for m in con_texto][-MAX_LEIDOS:],
+            }
+            continue
+        # Lo que ya estaba leído no se repite: el archivo se reescribe entero en
+        # cada turno, así que se compara por id del mensaje.
+        for mensaje in con_texto:
+            uid_m = uid(mensaje)
+            if uid_m in leidos:
+                continue
+            leidos.append(uid_m)
+            if activada():
+                decir(texto_del_asistente(mensaje))
+        vistos[nombre] = {"firma": firma, "leidos": leidos[-MAX_LEIDOS:]}
+
+
+def uid(mensaje: dict) -> str:
+    """Identidad del mensaje, con respaldo para transcripciones viejas."""
+    base = str(mensaje.get("id") or mensaje.get("timestamp") or "")
+    if base:
+        return base
+    return hashlib.sha1(texto_del_asistente(mensaje).encode("utf-8")).hexdigest()[:16]
+
+
+def main() -> int:
+    estado = leer_estado()
+    una_vez = "--once" in sys.argv
+    arranque = True
+    while True:
+        una_pasada(estado, arranque)
+        guardar_estado(estado)
+        arranque = False
+        if una_vez:
+            return 0
+        time.sleep(POLL)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
