@@ -24,8 +24,11 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,6 +39,10 @@ LEIDOS = ESTADO / "leidos.txt"
 VOICE = os.environ.get("OMNI_VOICE") or str(HOME / ".local/bin/voice")
 VOZ = "Omni"
 SPOKEN_PY = HOME / "dotfiles/linux/voice/spoken.py"
+CEREBRO = Path(os.environ.get("OMNI_CEREBRO") or HOME / ".local/share/omni/cerebro")
+CONTEXTO = ESTADO / "contexto.txt"
+WHISPER = os.environ.get("OMNI_WHISPER") or "http://127.0.0.1:8090"
+VOICE_PI = str(HOME / ".local/bin/voice-pi")
 
 
 # ── limpieza para el oído (misma que usa el resto de la voz) ─────────────
@@ -156,6 +163,85 @@ def decir(texto: str, dry: bool = False) -> None:
         print(f"omni: no pude hablar: {exc}", file=sys.stderr)
 
 
+# ── oído ─────────────────────────────────────────────────────────────────
+def grabar(destino: str, maxseg: int = 25) -> bool:
+    """Una frase: corta por silencio (sox), no hace falta apretar nada más."""
+    if not shutil.which("rec"):
+        print("omni: falta sox (rec) para escuchar", file=sys.stderr)
+        return False
+    cmd = [
+        "rec", "-q", "-r", "16000", "-c", "1", "-b", "16", "-e", "signed-integer",
+        destino,
+        # arranca al primer ruido y corta cuando hay silencio sostenido
+        "silence", "1", "0.25", "2%", "1", "1.0", "2%",
+        "trim", "0", str(maxseg),
+    ]
+    try:
+        subprocess.run(cmd, check=True, timeout=maxseg + 10,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return os.path.getsize(destino) > 2000
+    except Exception:
+        return False
+
+
+def transcribir(wav: str) -> str:
+    """ASR local (sidecar de whisper en 8090). Sin nube."""
+    try:
+        with open(wav, "rb") as f:
+            datos = f.read()
+        req = urllib.request.Request(
+            f"{WHISPER}/transcribe?language=es&format=wav",
+            data=datos,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            out = json.loads(r.read().decode("utf-8", "replace"))
+        for clave in ("text", "transcript", "result"):
+            if isinstance(out.get(clave), str):
+                return out[clave].strip()
+        return str(out).strip()
+    except Exception as exc:
+        print(f"omni: no pude transcribir: {exc}", file=sys.stderr)
+        return ""
+
+
+# ── contexto (memoria corta, sin sesión) ─────────────────────────────────
+def leer_contexto(n: int = 2) -> str:
+    try:
+        intercambios = CONTEXTO.read_text(encoding="utf-8").strip().split("\n---\n")
+        return "\n---\n".join(intercambios[-n:])
+    except Exception:
+        return ""
+
+
+def guardar_contexto(yo: str, omni_dijo: str) -> None:
+    try:
+        ESTADO.mkdir(parents=True, exist_ok=True)
+        previo = leer_contexto(3)
+        with CONTEXTO.open("w", encoding="utf-8") as f:
+            f.write((previo + "\n---\n" if previo else "") + f"vos: {yo}\nomni: {omni_dijo}\n")
+    except Exception:
+        pass
+
+
+# ── cerebro (nube, con manos) ───────────────────────────────────────────
+def pensar(texto: str, timeout: int = 90) -> str:
+    """Manda el pedido al cerebro en la nube (Pi headless con bash)."""
+    contexto = leer_contexto()
+    prompt = texto if not contexto else f"Contexto reciente:\n{contexto}\n\nPedido: {texto}"
+    env = dict(os.environ)
+    env.setdefault("VOICE_PI_BRAIN_DIR", str(CEREBRO))
+    env.setdefault("VOICE_PI_TIMEOUT", str(timeout))
+    try:
+        r = subprocess.run(
+            [VOICE_PI, prompt], env=env, capture_output=True, text=True, timeout=timeout + 5
+        )
+        return (r.stdout or "").strip()
+    except Exception as exc:
+        print(f"omni: el cerebro no respondió: {exc}", file=sys.stderr)
+        return ""
+
+
 # ── comandos ─────────────────────────────────────────────────────────────
 def cmd_avisar(opts: dict) -> dict:
     if not opts["texto"]:
@@ -203,6 +289,45 @@ def cmd_decir(opts: dict) -> dict:
     return {"accion": "decir", "dicho": texto}
 
 
+def cmd_escuchar(opts: dict) -> dict:
+    """Habla y te responde: oído local, cerebro en la nube, boca local."""
+    wav = tempfile.mktemp(prefix="omni-", suffix=".wav")
+    try:
+        if opts.get("archivo"):
+            shutil.copy(opts["archivo"], wav)
+        elif not grabar(wav):
+            dicho = "No te escuché. Probá de nuevo."
+            decir(dicho, opts["dry"])
+            return {"accion": "escuchar", "dicho": dicho, "texto": "", "respuesta": ""}
+        texto = transcribir(wav)
+    finally:
+        try:
+            os.unlink(wav)
+        except Exception:
+            pass
+    if not texto:
+        dicho = "No te entendí. Probá de nuevo."
+        decir(dicho, opts["dry"])
+        return {"accion": "escuchar", "dicho": dicho, "texto": "", "respuesta": ""}
+    return _responder(texto, opts, accion="escuchar")
+
+
+def cmd_pedir(opts: dict) -> dict:
+    if not opts["texto"]:
+        print("omni pedir: falta el texto", file=sys.stderr)
+        return {"accion": "pedir", "dicho": "", "texto": ""}
+    return _responder(opts["texto"], opts, accion="pedir")
+
+
+def _responder(texto: str, opts: dict, accion: str) -> dict:
+    respuesta = pensar(texto)
+    dicho = limpiar(respuesta) if respuesta else "No supe qué contestar."
+    decir(dicho, opts["dry"])
+    if not opts["dry"]:
+        guardar_contexto(texto, dicho)
+    return {"accion": accion, "texto": texto, "respuesta": respuesta, "dicho": dicho}
+
+
 def cmd_perfil(opts: dict) -> dict:
     r = subprocess.run(
         [VOICE, "profile", "show", VOZ], capture_output=True, text=True, timeout=20
@@ -235,6 +360,9 @@ def main(argv: list[str]) -> int:
             opts["dry"] = True
         elif a == "--json":
             opts["json"] = True
+        elif a in ("--archivo", "-f"):
+            opts["archivo"] = args[i + 1] if i + 1 < len(args) else ""
+            i += 1
         elif a in ("--agente", "-a"):
             opts["agente"] = args[i + 1] if i + 1 < len(args) else "sistema"
             i += 1
@@ -247,7 +375,7 @@ def main(argv: list[str]) -> int:
             opts["texto"] = (opts["texto"] + " " + a).strip()
         i += 1
 
-    if not opts["texto"] and not sys.stdin.isatty() and args[0] in ("avisar", "decir"):
+    if not opts["texto"] and not sys.stdin.isatty() and args[0] in ("avisar", "decir", "pedir"):
         opts["texto"] = sys.stdin.read().strip()
 
     cmd = args[0]
@@ -256,6 +384,8 @@ def main(argv: list[str]) -> int:
         "dime": cmd_dime,
         "buzon": cmd_buzon,
         "decir": cmd_decir,
+        "escuchar": cmd_escuchar,
+        "pedir": cmd_pedir,
         "perfil": cmd_perfil,
     }.get(cmd)
     if not salida:
