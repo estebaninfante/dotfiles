@@ -20,11 +20,25 @@ export interface OpcionesVoz {
 
 /** Lanza `voice avisar` en segundo plano. Nunca tira ni rechaza. */
 export function avisarPorVoz(linea: string, opciones: OpcionesVoz = {}): boolean {
+  return lanzar(["avisar"], linea, opciones);
+}
+
+/**
+ * Lanza `voice say` en segundo plano: lectura directa, sin pasar por la entrega
+ * (`avisar` puede diferir al buzón; leer una respuesta es inmediato). Va por el
+ * mismo daemon, así la tecla de Windows (`voice stop`) corta la lectura igual
+ * que cualquier otro mensaje, y el micrófono de Omar espera a que termine.
+ */
+export function decirPorVoz(texto: string, opciones: OpcionesVoz = {}): boolean {
+  return lanzar(["say"], texto, opciones);
+}
+
+function lanzar(verbo: string[], texto: string, opciones: OpcionesVoz): boolean {
   const home = opciones.home ?? process.env.HOME ?? "";
   const bin = opciones.bin ?? process.env.PI_TTS_VOICE_BIN ?? `${home}/.local/bin/voice`;
   const source = opciones.source ?? "pi";
   try {
-    const hijo = spawn(bin, ["avisar", "--source", source, "--", linea], {
+    const hijo = spawn(bin, [...verbo, "--source", source, "--", texto], {
       detached: true,
       stdio: "ignore",
     });

@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# leer — prende o apaga la lectura en voz alta de las respuestas COMPLETAS de pi.
+#
+#   leer            estado
+#   leer on         que cada respuesta se diga entera (por audífonos, manos libres)
+#   leer off        solo el cierre de siempre (resumen de una frase)
+#   leer toggle
+#
+# El archivo es el mismo que lee la extensión de pi: hay que abrir una sesión
+# nueva (o recargarla) para que el cambio rija.
+# La lectura va por el daemon de voz, así que la tecla de Windows
+# (`voice stop`) la corta, y `voice tts off` la apaga del todo.
+set -euo pipefail
+
+FILE="${PI_LEER_CONFIG:-$HOME/.local/state/voice/leer-respuesta.json}"
+
+estado() {
+    "$PY" - "$FILE" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+try:
+    with open(p, encoding="utf-8") as f:
+        activado = json.load(f).get("activado", True) is not False
+except Exception:
+    activado = True  # sin archivo, la extensión arranca prendida
+print("leer: " + ("prendida" if activado else "apagada") + f" ({p})")
+PY
+}
+
+fijar() {
+    local valor="$1"
+    mkdir -p "${FILE%/*}"
+    "$PY" - "$FILE" "$valor" <<'PY'
+import json, sys
+p, valor = sys.argv[1], sys.argv[2] == "true"
+with open(p, "w", encoding="utf-8") as f:
+    json.dump({"activado": valor}, f)
+print("leer: " + ("prendida" if valor else "apagada"))
+PY
+}
+
+PY="$(command -v python3 || true)"
+[ -n "$PY" ] || { echo "leer: falta python3" >&2; exit 1; }
+
+case "${1:-estado}" in
+    on|si|sí|1|true)  fijar true ;;
+    off|no|0|false)   fijar false ;;
+    toggle)
+        actual=$("$PY" - "$FILE" <<'PY'
+import json, sys
+try:
+    print("false" if json.load(open(sys.argv[1], encoding="utf-8")).get("activado") is False else "true")
+except Exception:
+    print("true")
+PY
+)
+        [ "$actual" = "true" ] && fijar false || fijar true
+        ;;
+    estado|"") estado ;;
+    -h|--help|help) sed -n '2,14p' "$0" ;;
+    *) echo "leer: uso: leer [on|off|toggle|estado]" >&2; exit 2 ;;
+esac
