@@ -3,6 +3,7 @@
   "flujoPorDefecto": "main",
   "prefijoRama": "agente",
   "repos": {
+    "flakos-burguer": { "flujo": "main", "rama": "nota-2026-10-26" },
     "foldertinder": { "flujo": "main", "rama": "master" },
     "zentr0": { "flujo": "developing", "rama": "dev" },
     "agentes-platform": { "flujo": "developing", "rama": "developing" },
