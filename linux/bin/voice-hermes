@@ -10,7 +10,7 @@
 # interactiva: lo más liviano y rápido posible. La respuesta final sale por
 # stdout, igual que en `voice-pi`.
 #
-# Config: VOICE_HERMES_BRAIN_DIR, VOICE_HERMES_MODEL (vacío = default de Hermes),
+# Config: VOICE_HERMES_BRAIN_DIR, VOICE_HERMES_SESSION (default "omni"), VOICE_HERMES_MODEL (vacío = default de Hermes),
 #         VOICE_HERMES_PROVIDER (vacío = default de Hermes),
 #         VOICE_HERMES_TOOLSETS, VOICE_HERMES_TIMEOUT (segundos).
 
@@ -23,6 +23,9 @@ BRAIN_DIR="${VOICE_HERMES_BRAIN_DIR:-${VOICE_PI_BRAIN_DIR:-$HOME/.local/share/vo
 MODEL="${VOICE_HERMES_MODEL:-}"
 PROVIDER="${VOICE_HERMES_PROVIDER:-}"
 TOOLSETS="${VOICE_HERMES_TOOLSETS:-terminal}"
+# Misma sesión siempre: así el cerebro recuerda lo que se habló hace un rato.
+# Vacío (VOICE_HERMES_SESSION=) = una pasada suelta, sin memoria.
+SESSION="${VOICE_HERMES_SESSION-omni}"
 TIMEOUT="${VOICE_HERMES_TIMEOUT:-${VOICE_PI_TIMEOUT:-90}}"
 
 prompt="$*"
@@ -40,6 +43,7 @@ $prompt"
 fi
 
 args=(-z "$prompt")
+[ -n "$SESSION" ] && args+=(--continue "$SESSION")
 [ -n "$TOOLSETS" ] && args+=(--toolsets "$TOOLSETS")
 [ -n "$MODEL" ] && args+=(-m "$MODEL")
 [ -n "$PROVIDER" ] && args+=(--provider "$PROVIDER")

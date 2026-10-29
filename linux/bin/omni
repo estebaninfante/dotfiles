@@ -16,6 +16,7 @@
 #   omni decir "texto"                                       # boca (con limpieza para el oído)
 #   omni perfil                                              # identidad y voz
 #   omni web [--puerto 9932]                                 # página local: hablar o escribir
+#   omni memoria [texto] [--fijar "algo"]                    # qué recuerda y qué no
 #
 # Contrato de salida: --json imprime {dicho, avisos[], pendientes, accion}.
 # Reglas: nunca inventa; si no hay pendientes lo dice; el texto del agente va
@@ -43,6 +44,9 @@ VOZ = "Omni"
 SPOKEN_PY = HOME / "dotfiles/linux/voice/spoken.py"
 CEREBRO = Path(os.environ.get("OMNI_CEREBRO") or HOME / ".local/share/omni/cerebro")
 CONTEXTO = ESTADO / "contexto.txt"
+MEMORIA = ESTADO / "memoria.jsonl"
+NOTAS = ESTADO / "notas.md"
+CONTEXTO_TURNOS = int(os.environ.get("OMNI_CONTEXTO_TURNOS") or 6)
 WHISPER = os.environ.get("OMNI_WHISPER") or "http://127.0.0.1:8090"
 # Un solo modelo para casi todo: el Omni escucha y habla. El servidor local
 # (llama-server) expone /v1/chat/completions (audio entra) y /tts (audio sale).
@@ -513,22 +517,88 @@ def transcribir(wav: str) -> str:
 
 
 # ── contexto (memoria corta, sin sesión) ─────────────────────────────────
-def leer_contexto(n: int = 2) -> str:
+def leer_memoria(n: int = 0) -> list[dict]:
+    """Lo hablado, de lo más viejo a lo más nuevo. `n=0` devuelve todo."""
+    turnos = []
     try:
-        intercambios = CONTEXTO.read_text(encoding="utf-8").strip().split("\n---\n")
-        return "\n---\n".join(intercambios[-n:])
+        for linea in MEMORIA.read_text(encoding="utf-8", errors="replace").splitlines():
+            linea = linea.strip()
+            if not linea:
+                continue
+            try:
+                turnos.append(json.loads(linea))
+            except Exception:
+                continue
+    except Exception:
+        return []
+    return turnos[-n:] if n else turnos
+
+
+def leer_notas() -> str:
+    """Lo que el usuario pidió recordar siempre (no se olvida al cerrar)."""
+    try:
+        return NOTAS.read_text(encoding="utf-8").strip()
     except Exception:
         return ""
 
 
+def leer_contexto(n: int = 0) -> str:
+    """Memoria para el cerebro: las notas fijas primero, después lo último dicho."""
+    n = n or CONTEXTO_TURNOS
+    partes = []
+    notas = leer_notas()
+    if notas:
+        partes.append("Lo que el usuario pidió recordar:\n" + notas)
+    turnos = leer_memoria(n)
+    if turnos:
+        partes.append(
+            "\n---\n".join(f"vos: {t.get('vos','')}\nomni: {t.get('omni','')}" for t in turnos)
+        )
+    if not partes:  # memoria vieja (antes de memoria.jsonl)
+        try:
+            partes = [CONTEXTO.read_text(encoding="utf-8").strip()][-1:] if CONTEXTO.is_file() else []
+        except Exception:
+            partes = []
+    return "\n\n".join(p for p in partes if p)
+
+
 def guardar_contexto(yo: str, omni_dijo: str) -> None:
+    """Cada intercambio queda en disco: es la memoria que se puede leer y buscar."""
     try:
         ESTADO.mkdir(parents=True, exist_ok=True)
-        previo = leer_contexto(3)
-        with CONTEXTO.open("w", encoding="utf-8") as f:
-            f.write((previo + "\n---\n" if previo else "") + f"vos: {yo}\nomni: {omni_dijo}\n")
+        linea = {"t": ahora(), "vos": yo, "omni": omni_dijo}
+        with MEMORIA.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(linea, ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+def cmd_memoria(opts: dict) -> dict:
+    """Ver, buscar o fijar lo que Omni tiene que recordar."""
+    if opts.get("fijar"):
+        nota = str(opts["fijar"]).strip()
+        if nota:
+            ESTADO.mkdir(parents=True, exist_ok=True)
+            with NOTAS.open("a", encoding="utf-8") as f:
+                f.write(f"- {nota}\n")
+        return {"accion": "memoria", "dicho": f"Anotado: {nota}", "fijado": nota}
+    turnos = leer_memoria(0)
+    if opts.get("texto"):
+        aguja = opts["texto"].lower()
+        turnos = [
+            t for t in turnos
+            if aguja in f"{t.get('vos','')} {t.get('omni','')}".lower()
+        ]
+    ultimos = turnos[-20:]
+    if not ultimos:
+        dicho = "No hay nada guardado todavía."
+    else:
+        dicho = "\n".join(
+            f"{t.get('t','')[:16]}  vos: {t.get('vos','')}\n"
+            f"                  omni: {t.get('omni','')}"
+            for t in ultimos
+        )
+    return {"accion": "memoria", "dicho": dicho, "turnos": ultimos, "notas": leer_notas()}
 
 
 # ── cerebro (nube, con manos) ───────────────────────────────────────────
@@ -540,7 +610,7 @@ PARA_EL_OIDO = (
 
 def pensar(texto: str, timeout: int = 120) -> str:
     """Manda el pedido al cerebro en la nube (Pi headless con bash)."""
-    contexto = leer_contexto()
+    contexto = leer_contexto(CONTEXTO_TURNOS)
     prompt = (
         f"{PARA_EL_OIDO}\n\n"
         + (f"Contexto reciente:\n{contexto}\n\n" if contexto else "")
@@ -1156,6 +1226,7 @@ def main(argv: list[str]) -> int:
         "json": False,
         "puerto": "",
         "verboso": False,
+        "fijar": "",
     }
     i = 1
     while i < len(args):
@@ -1171,6 +1242,9 @@ def main(argv: list[str]) -> int:
             i += 1
         elif a in ("--verboso", "-v"):
             opts["verboso"] = True
+        elif a == "--fijar":
+            opts["fijar"] = args[i + 1] if i + 1 < len(args) else ""
+            i += 1
         elif a == "--json":
             opts["json"] = True
         elif a in ("--archivo", "-f"):
@@ -1204,6 +1278,7 @@ def main(argv: list[str]) -> int:
         "pedir": cmd_pedir,
         "perfil": cmd_perfil,
         "web": cmd_web,
+        "memoria": cmd_memoria,
     }.get(cmd)
     if not salida:
         print(f"omni: no conozco «{cmd}»", file=sys.stderr)
