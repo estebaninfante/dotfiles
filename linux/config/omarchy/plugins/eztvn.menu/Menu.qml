@@ -75,6 +75,26 @@ Item {
   property var providerQueue: []
   property int providerRevision: 0
 
+  // ------------------------------------------------------------ file search
+  //
+  // A query also looks for files, not just menu rows: the point is to hit
+  // SUPER+SPACE, type "*.py" (or "py") and land on the file. fd runs a beat
+  // after the last keystroke, the run in flight dies when the query moves on,
+  // and each row carries an `omarchy-launch-editor` action, so Enter opens it
+  // in the default editor (nvim) inside a floating terminal.
+  property var fileRows: []
+  property string fileQuery: ""
+  readonly property int fileSearchMinChars: 2
+  readonly property int fileSearchMaxResults: 40
+  // Trees that never hold something worth opening from the launcher, and the
+  // ones that make an fd run over all of $HOME slow.
+  readonly property var fileSearchExcludes: [
+    ".git", "node_modules", "__pycache__", ".venv", "site-packages",
+    ".cache", ".rustup", ".cargo", ".npm", ".nvm", ".local/share",
+    ".local/state", ".var", ".steam", ".Trash", ".mozilla",
+    ".config/Code", ".config/chromium", ".config/google-chrome"
+  ]
+
   // Shared application engine (entries, hidden filters, icons, launch,
   // removal), owned by the shell and also used by the standalone launcher.
   readonly property var appLibrary: root.shell ? root.shell.appLibrary : null
@@ -222,7 +242,14 @@ Item {
   }
   property bool deleteConfirmOpen: false
   property var deleteTarget: null
-  onOpenedChanged: if (!opened) { deleteConfirmOpen = false; deleteTarget = null }
+  onOpenedChanged: if (!opened) {
+    deleteConfirmOpen = false
+    deleteTarget = null
+    fileSearchDebounce.stop()
+    root.abortFileSearch()
+    root.fileQuery = ""
+    root.fileRows = []
+  }
   // Bound to the central [menu] section in shell.toml via Color.qml.
   // Each color already includes its alpha companion (composed in the
   // singleton), so consumers can drop them straight into a Rectangle.
@@ -330,7 +357,7 @@ Item {
     for (var i = 0; i < displayModel.count; i++) {
       var row = displayModel.get(i)
       if (i > 0) total += root.rowSpacing
-      if (row.section === "drilldown" && previousSection !== "drilldown") total += root.dividerHeight
+      if ((row.section === "drilldown" || row.section === "files") && previousSection !== row.section) total += root.dividerHeight
       total += root.rowHeightForDetail(row.detail)
       previousSection = row.section
       totals.push(total)
@@ -710,6 +737,136 @@ Item {
     })
   }
 
+  function fileSearchPattern(query) {
+    var q = String(query || "").trim()
+    if (q.length < root.fileSearchMinChars) return ""
+    // Glob characters are taken as written ("*.py", "src/*.lua"); anything
+    // else is wrapped so "py" finds every name carrying it.
+    if (q.indexOf("*") >= 0 || q.indexOf("?") >= 0 || q.indexOf("[") >= 0) return q
+    return "*" + q + "*"
+  }
+
+  function fileSearchScript(query) {
+    var home = Quickshell.env("HOME") || "/"
+    var pattern = root.fileSearchPattern(query)
+    if (!pattern) return ""
+    // A query with a slash is about a path, so match it against the whole
+    // path; anything else matches the file name only, which keeps "py" from
+    // dragging in every file parked under a ~/python directory.
+    var fullPath = query.indexOf("/") >= 0 ? " --full-path" : ""
+    var excludes = ""
+    for (var i = 0; i < root.fileSearchExcludes.length; i++)
+      excludes += " --exclude " + Util.shellQuote(root.fileSearchExcludes[i])
+    return "command -v fd >/dev/null || exit 0; fd --color=never --hidden --ignore-case"
+      + " --type f --max-results " + (root.fileSearchMaxResults * 2) + fullPath
+      + " --glob" + excludes + " -- " + Util.shellQuote(pattern) + " " + Util.shellQuote(home)
+  }
+
+  function abortFileSearch() {
+    fileSearchProc.pendingQuery = ""
+    if (fileSearchProc.running) fileSearchProc.running = false
+  }
+
+  function scheduleFileSearch(text) {
+    var q = String(text || "").trim()
+    if (q.length < root.fileSearchMinChars) {
+      root.fileQuery = q
+      fileSearchDebounce.stop()
+      root.abortFileSearch()
+      if (root.fileRows.length > 0) {
+        root.fileRows = []
+        if (root.opened && !root.dmenuActive) root.rebuildDisplay()
+      }
+      return
+    }
+    if (q === root.fileQuery) return
+    root.fileQuery = q
+    fileSearchDebounce.restart()
+  }
+
+  function startFileSearch(query) {
+    var q = String(query || "").trim()
+    if (q.length < root.fileSearchMinChars) return
+    // Process ignores a command change while it runs, and the output already
+    // read belongs to the previous pattern, so the run in flight is killed
+    // first and the newest query starts from its onExited.
+    if (fileSearchProc.running) {
+      fileSearchProc.pendingQuery = q
+      fileSearchProc.running = false
+      return
+    }
+    fileSearchProc.query = q
+    fileSearchProc.pendingQuery = ""
+    fileSearchProc.collected = ""
+    fileSearchProc.command = ["bash", "-c", root.fileSearchScript(q)]
+    fileSearchProc.running = true
+  }
+
+  // TEMP debug harness (removed after verification)
+  function debugSearch(query) { root.scheduleFileSearch(String(query || "")); root.startFileSearch(String(query || "")); return "ok" }
+  function debugRows() { return JSON.stringify(root.fileRows) }
+
+  function fileRowFor(index, path, name, detail) {
+    return {
+      itemId: "files." + index,
+      kind: "file",
+      icon: "",
+      iconFont: "",
+      appIcon: "",
+      appId: "",
+      label: name,
+      target: path,
+      detail: detail,
+      path: detail,
+      childCount: 0,
+      action: "omarchy-launch-editor " + Util.shellQuote(path),
+      provider: "",
+      score: 0,
+      section: "files"
+    }
+  }
+
+  function mergeFileRows(raw, query) {
+    if (query !== root.fileQuery) return
+
+    var home = Quickshell.env("HOME") || ""
+    var needle = String(query || "").toLowerCase().replace(/[*?\[\]]/g, "")
+    var lines = String(raw || "").split("\n")
+    var found = []
+    var seen = ({})
+
+    for (var i = 0; i < lines.length; i++) {
+      var path = String(lines[i] || "").trim()
+      if (!path || seen[path]) continue
+      seen[path] = true
+
+      var slash = path.lastIndexOf("/")
+      var name = slash >= 0 ? path.substring(slash + 1) : path
+      var lower = name.toLowerCase()
+      // A name hit beats a path hit: "py" should lead with app.py, not with
+      // every file parked under a ~/python directory.
+      var rank = lower === needle ? 0
+        : (lower.indexOf(needle) === 0 ? 1 : (lower.indexOf(needle) >= 0 ? 2 : 3))
+      var detail = (home && path.indexOf(home + "/") === 0)
+        ? "~/" + path.substring(home.length + 1) : path
+      found.push({ path: path, name: name, detail: detail, rank: rank })
+    }
+
+    found.sort(function(a, b) {
+      if (a.rank !== b.rank) return a.rank - b.rank
+      if (a.detail.length !== b.detail.length) return a.detail.length - b.detail.length
+      return a.detail < b.detail ? -1 : (a.detail > b.detail ? 1 : 0)
+    })
+
+    var rows = []
+    var limit = Math.min(found.length, root.fileSearchMaxResults)
+    for (var j = 0; j < limit; j++)
+      rows.push(root.fileRowFor(j, found[j].path, found[j].name, found[j].detail))
+
+    root.fileRows = rows
+    if (root.opened && !root.dmenuActive) root.rebuildDisplay()
+  }
+
   function rebuildDisplay() {
     if (root.dmenuActive) {
       root.rebuildDmenuDisplay()
@@ -754,6 +911,9 @@ Item {
         for (var d = 0; d < drilldownRows.length; d++) drilldownRows[d].section = "drilldown"
       }
       rows = currentRows.concat(drilldownRows)
+      // File rows trail the menu matches: the menu stays one keystroke away,
+      // and a query that matches nothing in the menu lands on a file at once.
+      if (root.fileRows.length > 0) rows = rows.concat(root.fileRows)
     } else {
       for (var j = 0; j < root.itemOrder.length; j++) {
         var child = root.item(root.itemOrder[j])
@@ -834,6 +994,7 @@ Item {
     root.disarmPointer()
     if (!root.dmenuActive && root.filterText.trim()) root.loadProvidersForSearch()
     root.rebuildDisplay()
+    if (!root.dmenuActive) root.scheduleFileSearch(root.filterText)
   }
 
   function setActiveMenu(id, pushHistory, fromPointer) {
@@ -849,6 +1010,7 @@ Item {
     root.rebuildDisplay()
     root.invalidateVolatileProvider(id)
     root.loadProviderForMenu(id)
+    root.scheduleFileSearch("")
   }
 
   function goBack() {
@@ -1048,6 +1210,38 @@ Item {
         if (root.filterText.trim()) root.loadProvidersForSearch()
       }
       root.startNextProvider()
+    }
+  }
+
+  Timer {
+    id: fileSearchDebounce
+    interval: 140
+    repeat: false
+    onTriggered: root.startFileSearch(root.fileQuery)
+  }
+
+  Process {
+    id: fileSearchProc
+    property string query: ""
+    property string collected: ""
+    property string pendingQuery: ""
+    stdout: SplitParser {
+      onRead: function(line) { fileSearchProc.collected += line + "\n" }
+    }
+    onExited: {
+      var finished = fileSearchProc.query
+      var output = fileSearchProc.collected
+      var superseded = fileSearchProc.pendingQuery !== ""
+      fileSearchProc.collected = ""
+      if (superseded) {
+        // The run was killed for a newer query: its output is partial, so
+        // only the newest one is allowed to land.
+        var next = fileSearchProc.pendingQuery
+        fileSearchProc.pendingQuery = ""
+        root.startFileSearch(next)
+      } else if (finished === root.fileQuery) {
+        root.mergeFileRows(output, finished)
+      }
     }
   }
 
@@ -1344,8 +1538,8 @@ Item {
               required property string section
 
               width: ListView.view.width
-              height: section === "drilldown" ? root.dividerHeight : 0
-              visible: section === "drilldown"
+              height: (section === "drilldown" || section === "files") ? root.dividerHeight : 0
+              visible: section === "drilldown" || section === "files"
 
               Rectangle {
                 anchors.left: parent.left

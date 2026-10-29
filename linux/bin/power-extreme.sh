@@ -65,7 +65,7 @@ STOP_USER_UNITS=(
   ohm.service foldertinder.service omarchy-crash-watch.service
   airbnb-trip-compare.service talk-command.service
   # audio de micrófono procesado, entrada e input automation
-  mic-bt-fx.service mic-gain.service audio-jack-guard.service
+  mic-gain.service audio-jack-guard.service
   ydotoold.service mnt-blackmagic.service
   # salida de voz (deja avisos sonoros apagados; queda el aviso de escritorio)
   voice-daemon.service omarchy-migrate-notify.service

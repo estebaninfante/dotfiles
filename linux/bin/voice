@@ -973,11 +973,7 @@ monitor_cmd() {  # monitor [on|off|toggle|estado]
       ;;
     on|toggle)
       monitor_cmd off >/dev/null
-      if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qx mic-bt-fx; then
-        src=mic-bt-fx
-      else
-        src=$(pactl get-default-source 2>/dev/null || echo "@DEFAULT_SOURCE@")
-      fi
+      src=$(pactl get-default-source 2>/dev/null || echo "@DEFAULT_SOURCE@")
       sink=$(pactl get-default-sink 2>/dev/null)
       [ -n "$sink" ] || { echo "monitor: no hay salida de audio" >&2; return 1; }
       id=$(pactl load-module module-loopback source="$src" sink="$sink" latency_msec=40 \
