@@ -55,11 +55,17 @@
           "id": "eztvn.lanmouse"
         },
         {
+          "id": "services",
+          "type": "qml"
+        },
+        {
           "id": "omarchy.agents"
         },
         {
-          "id": "services",
-          "type": "qml"
+          "id": "eztvn.pi-tts"
+        },
+        {
+          "id": "omar.status"
         },
         {
           "id": "omarchy.keyboard-layout"
@@ -71,22 +77,10 @@
           "id": "omarchy.bluetooth"
         },
         {
-          "id": "omarchy.microphone"
-        },
-        {
           "id": "eztvn.audio"
         },
         {
-          "id": "eztvn.modo-voz"
-        },
-        {
-          "id": "eztvn.pi-tts"
-        },
-        {
           "id": "eztvn.power"
-        },
-        {
-          "id": "omar.status"
         },
         {
           "id": "io.github.dragosol.better-displays-pro"

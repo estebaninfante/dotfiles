@@ -22,6 +22,11 @@ Panel {
   // ícono dice la verdad cuando el proceso se cae o queda trabado.
   readonly property int staleMs: 45000
 
+  // Apagado no se muestra: la barra ya tiene suficientes íconos y un micrófono
+  // tachado permanente solo confunde. Aparece cuando Omar escucha/piensa/actúa
+  // (el panel se sigue abriendo desde el menú: Voz → Omar).
+  visible: root.state !== "idle" && root.state !== "off"
+
   readonly property color foreground: bar ? bar.barForeground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.35)
