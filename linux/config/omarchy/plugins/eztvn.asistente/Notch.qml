@@ -8,7 +8,7 @@ import qs.Commons
 // Notch OSD) con un muñeco geométrico que cambia según lo que hace el
 // asistente. El proceso de ~/developing/asistente lo maneja por IPC:
 //   omarchy-shell asistente estado '{"estado":"escuchando","texto":"","tareas":0,"ahorro":false}'
-// Estados: dormido, escuchando, pensando, hablando, haciendo, error.
+// Estados: dormido, escuchando, pensando, hablando, haciendo, dictando, error.
 // Las animaciones sólo corren mientras el notch está a la vista y nunca en
 // ahorro extremo (`ahorro: true`), para no gastar batería.
 //
@@ -115,6 +115,7 @@ Item {
       case "escuchando": return "Te escucho…"
       case "pensando": return "Pensando…"
       case "haciendo": return "En eso…"
+      case "dictando": return "Dictando…"
       case "error": return "Algo falló"
       default: return ""
     }
@@ -138,6 +139,7 @@ Item {
       case "pensando": return "#b28cff"
       case "hablando": return "#7dffb3"
       case "haciendo": return "#ffd166"
+      case "dictando": return "#ff8fd1"
       case "error": return "#ff7a7a"
       default: return "#a9b4c6"
     }
@@ -235,6 +237,7 @@ Item {
               case "escuchando": return s * 0.32
               case "pensando": return s * 0.16
               case "haciendo": return s * 0.07
+              case "dictando": return s * 0.28
               case "hablando": return s * 0.24
               case "error": return s * 0.12
               default: return s * 0.07
