@@ -56,7 +56,7 @@ Panel {
 
   // Ícono de la barra: no es un altavoz más. Campana = avisos hablados
   // activos; altavoz solo mientras alguien habla; bocina tachada = apagado.
-  readonly property string glyph: root.pending > 0 ? "B1" : (root.speaking ? "B2" : (root.ttsEnabled ? "B3" : "B4"))
+  readonly property string glyph: root.pending > 0 ? "󰂚" : (root.speaking ? "󰕾" : (root.ttsEnabled ? "󰂞" : "󰖁"))
   readonly property string stateLabel: root.ttsEnabled ? "Activado" : "Desactivado"
   readonly property color stateColor: root.ttsEnabled ? root.accent : Qt.darker(root.foreground, 1.6)
   readonly property color speakerColor: {
