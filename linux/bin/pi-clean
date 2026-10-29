@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# pi-clean — arranca pi tal como vino: config de fábrica.
+#
+# No carga nada de ~/.pi/agent: ni skills, ni agentes, ni extensiones, ni
+# servidores MCP, ni AGENTS.md global, ni temas, ni model-fallback, ni ajustes.
+# Usá esto para comprobar si un problema viene de tu configuración o de pi.
+#
+# Uso:
+#   pi clean [args de pi...]        (atajo, vía el wrapper ~/.local/bin/pi)
+#   pi-clean [args de pi...]
+#
+# Variables:
+#   PI_CLEAN_DIR=<dir>   Usa esa carpeta como config limpia y la conserva
+#                        (por defecto: una temporal que se borra al salir).
+#   PI_CLEAN_AUTH=0      No copia las credenciales (pide login otra vez).
+#   PI_CLEAN_DEBUG=1     Muestra el entorno y el comando, sin lanzar pi.
+set -euo pipefail
+
+cleanup=""
+if [[ -n "${PI_CLEAN_DIR:-}" ]]; then
+  dir="$PI_CLEAN_DIR"
+  mkdir -p "$dir"
+else
+  dir="$(mktemp -d -t pi-clean-XXXXXX)"
+  cleanup="$dir"
+fi
+
+# Solo las credenciales viajan a la config limpia: sin ellas pi arranca en el
+# onboarding y hay que loguearse de nuevo en cada prueba.
+auth_src="$HOME/.pi/agent/auth.json"
+if [[ "${PI_CLEAN_AUTH:-1}" != "0" && -f "$auth_src" && ! -e "$dir/auth.json" ]]; then
+  cp "$auth_src" "$dir/auth.json"
+  chmod 600 "$dir/auth.json"
+fi
+
+export PI_CODING_AGENT_DIR="$dir"
+export PI_CODING_AGENT_SESSION_DIR="$dir/sessions"
+
+if [[ -n "$cleanup" ]]; then
+  trap 'rm -rf "$cleanup"' EXIT INT TERM
+fi
+
+if [[ "${PI_CLEAN_DEBUG:-0}" == "1" ]]; then
+  printf 'PI_CODING_AGENT_DIR=%s\n' "$PI_CODING_AGENT_DIR"
+  printf 'PI_CODING_AGENT_SESSION_DIR=%s\n' "$PI_CODING_AGENT_SESSION_DIR"
+  printf 'contenido: %s\n' "$(ls -A "$dir" | tr '\n' ' ')"
+  printf 'comando: pi %s\n' "$*"
+  exit 0
+fi
+
+# Sin config pi no sabe qué modelo usar y puede caer en uno que el proveedor
+# rechaza. Si no pidieron modelo, tomamos el que ya usás normalmente: el modelo
+# no es parte de la configuración que estamos probando.
+args=("$@")
+pide_modelo=false
+for a in "$@"; do
+  case "$a" in --model|--model=*|--provider|--provider=*|-m) pide_modelo=true ;; esac
+done
+if ! $pide_modelo && command -v jq >/dev/null && [[ -f "$HOME/.pi/agent/settings.json" ]]; then
+  prov="$(jq -r '.defaultProvider // empty' "$HOME/.pi/agent/settings.json" 2>/dev/null)"
+  mod="$(jq -r '.defaultModel // empty' "$HOME/.pi/agent/settings.json" 2>/dev/null)"
+  if [[ -n "$prov" && -n "$mod" ]]; then
+    args=(--provider "$prov" --model "$mod" "${args[@]}")
+  fi
+fi
+
+pi "${args[@]}"

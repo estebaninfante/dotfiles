@@ -1,0 +1,17 @@
+#!/bin/bash
+# Lanzador de pi para esta máquina (mise fija la última versión).
+#
+# "pi clean" delega en pi-clean: arranca pi con configuración de fábrica,
+# sin skills, agentes, extensiones, MCP ni AGENTS.md global.
+set -u
+if [ "${1:-}" = "clean" ]; then
+  shift
+  self_dir="$(dirname "$(readlink -f "$0")")"
+  if [ -x "${self_dir}/pi-clean" ]; then
+    exec "${self_dir}/pi-clean" "$@"
+  fi
+  exec pi-clean "$@"
+fi
+export MISE_MINIMUM_RELEASE_AGE=0
+mise use -g --quiet "pi" || exit 1
+exec mise x "pi" -- "pi" "$@"

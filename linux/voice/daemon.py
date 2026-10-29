@@ -564,20 +564,6 @@ def _run(argv: list[str], text: str | None) -> bool:
         return False
 
 
-def _salida_preferida() -> str | None:
-    """El audífono Bluetooth, si está conectado: la voz va al oído y la música sigue en los parlantes."""
-    try:
-        salida = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True,
-                                text=True, timeout=2).stdout
-    except Exception:
-        return None
-    for linea in salida.splitlines():
-        campos = linea.split("\t")
-        if len(campos) > 1 and campos[1].startswith("bluez_output."):
-            return campos[1]
-    return None
-
-
 def _duck_enabled() -> bool:
     """Si pausar la musica/video mientras habla el TTS."""
     try:
@@ -774,13 +760,8 @@ def _play(wav: str, text: str | None = None, source: str = "",
     # Nombre propio para el stream de la voz: asi el mute de "lo demás"
     # (module-stream-restore guarda el estado por application.name) nunca
     # deja muda a la propia voz en la proxima reproduccion.
-    # La voz va al audífono Bluetooth si está conectado (el oído del usuario);
-    # la música y el resto siguen por la salida por defecto.
-    destino = _salida_preferida()
-    argv = ["pw-play", "-P", '{ application.name = "Voice TTS" }']
-    if destino:
-        argv += ["--target", destino]
-    argv += [f"--volume={vol:.3f}", wav]
+    argv = ["pw-play", "-P", '{ application.name = "Voice TTS" }',
+            f"--volume={vol:.3f}", wav]
     # Ducking: mientras habla, pausa la musica/video (MPRIS) y acalla cualquier
     # otro audio que playerctl no maneje; al terminar, restaura todo.
     duck = _duck_enabled()

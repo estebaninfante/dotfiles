@@ -55,5 +55,6 @@
   // Voz: escuchar lo que manda el micrófono (depurar el sonido y la calidad).
   // Apagado por defecto: sólo suena mientras alguien lo prende.
   "voz": {"icon":"󰍬","label":"Voz"},
-  "voz.monitor": {"icon":"󰕾","label":"Escuchar el micrófono","aliases":["monitor","escuchar mic","mic monitor","escuchar microfono"],"description":"Oír por los parlantes lo que manda el micrófono (depuración). Apagalo con el mismo ítem.","checked":"test -f ~/.local/state/voice/monitor.json","action":"~/.local/bin/voice monitor toggle"}
+  "voz.monitor": {"icon":"󰕾","label":"Escuchar el micrófono","aliases":["monitor","escuchar mic","mic monitor","escuchar microfono"],"description":"Oír por los parlantes lo que manda el micrófono (depuración). Apagalo con el mismo ítem.","checked":"test -f ~/.local/state/voice/monitor.json","action":"~/.local/bin/voice monitor toggle"},
+  "voz.arreglar": {"icon":"󰓃","label":"Arreglar el micrófono","aliases":["arreglar audio","mic mudo","reiniciar mic","audio roto"],"description":"Si el audífono sigue conectado pero Orión y el dictado no te oyen: reinicia el transporte y deja todo escuchando (unos 15 s).","action":"~/.local/bin/arreglar-audio"}
 }
