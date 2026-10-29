@@ -802,10 +802,6 @@ Item {
     fileSearchProc.running = true
   }
 
-  // TEMP debug harness (removed after verification)
-  function debugSearch(query) { root.scheduleFileSearch(String(query || "")); root.startFileSearch(String(query || "")); return "ok" }
-  function debugRows() { return JSON.stringify(root.fileRows) }
-
   function fileRowFor(index, path, name, detail) {
     return {
       itemId: "files." + index,
@@ -913,7 +909,17 @@ Item {
       rows = currentRows.concat(drilldownRows)
       // File rows trail the menu matches: the menu stays one keystroke away,
       // and a query that matches nothing in the menu lands on a file at once.
-      if (root.fileRows.length > 0) rows = rows.concat(root.fileRows)
+      if (root.fileRows.length > 0) {
+        var fileRows = root.fileRows
+        if (rows.length === 0) {
+          // No divider above a list that starts with files.
+          var head = ({})
+          for (var f in fileRows[0]) head[f] = fileRows[0][f]
+          head.section = ""
+          fileRows = [head].concat(fileRows.slice(1))
+        }
+        rows = rows.concat(fileRows)
+      }
     } else {
       for (var j = 0; j < root.itemOrder.length; j++) {
         var child = root.item(root.itemOrder[j])
@@ -1057,6 +1063,18 @@ Item {
     } else {
       root.applySelected(row.itemId, row.action)
     }
+  }
+
+  function openSelectedFileLocation() {
+    if (root.dmenuActive || !root.cursorActive) return false
+    if (root.selectedIndex < 0 || root.selectedIndex >= displayModel.count) return false
+    var row = displayModel.get(root.selectedIndex)
+    if (!row || row.kind !== "file") return false
+    applySerial = requestSerial
+    opened = false
+    filterText = ""
+    Util.execDetached("setsid uwsm-app -- nautilus --select " + Util.shellQuote(String(row.target || "")))
+    return true
   }
 
   function requestDeleteSelected() {
@@ -1459,7 +1477,9 @@ Item {
             root.select(6)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Right) {
-            if (root.dmenuActive) {
+            if (event.modifiers === Qt.ShiftModifier && root.openSelectedFileLocation()) {
+              // Shift+Enter on a file: show it in Files instead of the editor.
+            } else if (root.dmenuActive) {
               if (root.mode === "input") root.applyDmenuSelection(root.filterText)
               else if (displayModel.count > 0) root.activateIndex(root.cursorActive ? root.selectedIndex : 0)
             } else if (root.cursorActive) root.activateIndex(root.selectedIndex)
