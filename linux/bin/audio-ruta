@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 ESTADO = Path.home() / ".local/state/wireplumber/stream-properties"
+RUTAS = Path.home() / ".config/audio-rutas.json"
 
 # Apps que interesan siempre, aunque no estén sonando en este momento.
 CONOCIDAS = {
@@ -47,6 +48,19 @@ SALIDA_CORTA = {
     "hdmi": "HDMI",
     "usb": "USB",
 }
+
+
+def cargar_rutas() -> dict[str, str]:
+    """Salida elegida para cada app (la leen también Orión y la voz del sistema)."""
+    try:
+        return json.loads(RUTAS.read_text()) or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def guardar_rutas(rutas: dict[str, str]) -> None:
+    RUTAS.parent.mkdir(parents=True, exist_ok=True)
+    RUTAS.write_text(json.dumps(rutas, indent=2, ensure_ascii=False) + "\n")
 
 
 def pactl(*args: str) -> str:
@@ -124,9 +138,14 @@ def apps() -> list[dict]:
     for s in activas:
         indexadas.setdefault(s["app"], []).append(s["index"])
     guardadas = sink_de_apps_guardadas()
+    reales = {x["nombre"] for x in salidas()} | set(cargar_rutas().values())
+    # Sólo apps con una salida que exista de verdad (los restos de "ducking" y
+    # sinks virtuales no son una aplicación que el usuario quiera enrutar).
+    guardadas = {app: sink for app, sink in guardadas.items() if sink in reales}
     nombres = list(dict.fromkeys([*CONOCIDAS, *indexadas, *guardadas]))
     # La salida actual de un stream activo: la del primer índice.
     actual: dict[str, str] = dict(guardadas)
+    actual.update(cargar_rutas())
     for app, indices in indexadas.items():
         for linea in pactl("list", "short", "sink-inputs").splitlines():
             campos = linea.split("\t")
@@ -179,37 +198,6 @@ def mover_activas(app: str, sink: str) -> int:
     return movidas
 
 
-def probar_y_guardar(app: str, sink: str) -> bool:
-    """Deja guardada la salida de una app que no está sonando.
-
-    Crea un stream de silencio con ese `application.name` y lo mueve a la salida
-    elegida: WirePlumber aprende el destino y lo aplica la próxima vez.
-    """
-    destino = sink or pactl("get-default-sink").strip()
-    if not destino:
-        return False
-    argv = [
-        "pw-cat", "--playback", "--raw", "--format", "s16", "--rate", "48000",
-        "--channels", "2", "-P", f'{{ application.name = "{app}" }}',
-        "--target", destino, "-",
-    ]
-    try:
-        p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
-        p.communicate(b"\0" * 19200, timeout=3)  # 100 ms de silencio
-    except (OSError, subprocess.TimeoutExpired):
-        try:
-            p.kill()
-        except Exception:
-            pass
-        return False
-    # El movimiento explícito es lo que WirePlumber recuerda.
-    for s in streams():
-        if s["app"] == app:
-            pactl("move-sink-input", str(s["index"]), destino)
-    return True
-
-
 def main() -> int:
     accion = sys.argv[1] if len(sys.argv) > 1 else "listar"
     if accion == "salidas":
@@ -225,11 +213,13 @@ def main() -> int:
             return 2
         app = resolver_app(sys.argv[2])
         sink = resolver_salida(sys.argv[3])
+        rutas = cargar_rutas()
+        if sink:
+            rutas[app] = sink
+        else:
+            rutas.pop(app, None)
+        guardar_rutas(rutas)
         movidas = mover_activas(app, sink)
-        if not movidas and sink:
-            probar_y_guardar(app, sink)
-        elif not movidas and not sink:
-            return 0
         etiqueta = etiqueta_salida(sink) if sink else "la salida por defecto"
         print(f"{CONOCIDAS.get(app, app)} → {etiqueta}" + (" (ya sonando)" if movidas else " (guardado)"))
         return 0

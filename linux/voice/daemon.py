@@ -564,6 +564,15 @@ def _run(argv: list[str], text: str | None) -> bool:
         return False
 
 
+def _salida_de_app(app: str) -> str | None:
+    """La salida que el usuario eligió para esta app en el menú de sonido."""
+    try:
+        with open(os.path.expanduser("~/.config/audio-rutas.json")) as f:
+            return json.load(f).get(app) or None
+    except Exception:
+        return None
+
+
 def _duck_enabled() -> bool:
     """Si pausar la musica/video mientras habla el TTS."""
     try:
@@ -760,8 +769,12 @@ def _play(wav: str, text: str | None = None, source: str = "",
     # Nombre propio para el stream de la voz: asi el mute de "lo demás"
     # (module-stream-restore guarda el estado por application.name) nunca
     # deja muda a la propia voz en la proxima reproduccion.
-    argv = ["pw-play", "-P", '{ application.name = "Voice TTS" }',
-            f"--volume={vol:.3f}", wav]
+    # Salida elegida para esta app en el menú de sonido (~/.config/audio-rutas.json).
+    destino = _salida_de_app("Voice TTS")
+    argv = ["pw-play", "-P", '{ application.name = "Voice TTS" }']
+    if destino:
+        argv += ["--target", destino]
+    argv += [f"--volume={vol:.3f}", wav]
     # Ducking: mientras habla, pausa la musica/video (MPRIS) y acalla cualquier
     # otro audio que playerctl no maneje; al terminar, restaura todo.
     duck = _duck_enabled()
