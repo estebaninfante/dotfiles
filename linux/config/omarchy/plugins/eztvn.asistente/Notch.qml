@@ -11,6 +11,11 @@ import qs.Commons
 // Estados: dormido, escuchando, pensando, hablando, haciendo, error.
 // Las animaciones sólo corren mientras el notch está a la vista y nunca en
 // ahorro extremo (`ahorro: true`), para no gastar batería.
+//
+// Tareas delegadas: lee ~/.local/state/asistente/tareas.json (inotify, sin
+// sondeo). Mientras haya tareas en curso o resultados sin mirar, queda una
+// píldora compacta; un clic (o `omarchy-shell asistente tareas`) despliega la
+// lista con su estado y resultado.
 Item {
   id: root
 
@@ -18,6 +23,79 @@ Item {
   property string texto: ""
   property int tareas: 0
   property bool ahorro: false
+
+  // ---------- tareas delegadas ----------
+  readonly property string archivoTareas: Quickshell.env("HOME") + "/.local/state/asistente/tareas.json"
+  property var lista: []
+  property int vistas: -1          // mayor # de tarea terminada que ya miraste
+  property bool abierto: false
+  property int abiertaN: -1        // tarea con el resultado desplegado
+  property real ahora: Date.now() / 1000
+  readonly property int activas: {
+    var c = 0
+    for (var i = 0; i < lista.length; i++) if (lista[i].estado === "en cola" || lista[i].estado === "corriendo") c++
+    return Math.max(c, root.tareas)
+  }
+  readonly property int nuevas: {
+    var c = 0
+    for (var i = 0; i < lista.length; i++) if ((lista[i].estado === "lista" || lista[i].estado === "error") && lista[i].n > vistas) c++
+    return c
+  }
+  readonly property string resumen: {
+    var partes = []
+    if (activas > 0) partes.push(activas + (activas === 1 ? " tarea en curso" : " tareas en curso"))
+    if (nuevas > 0) partes.push(nuevas + (nuevas === 1 ? " lista ✓" : " listas ✓"))
+    return partes.join(" · ")
+  }
+
+  function cargarTareas(texto) {
+    try {
+      var d = JSON.parse(texto || "{}")
+      var t = (d.tareas || []).slice().reverse()   // más recientes arriba
+      if (root.vistas < 0) {                        // al arrancar, lo viejo ya cuenta como visto
+        var m = 0
+        for (var i = 0; i < t.length; i++) if (t[i].estado === "lista" || t[i].estado === "error") m = Math.max(m, t[i].n)
+        root.vistas = m
+      }
+      root.lista = t
+    } catch (e) {}
+    root.actualizarReveal()
+  }
+
+  function marcarVistas() {
+    var m = root.vistas
+    for (var i = 0; i < lista.length; i++) if (lista[i].estado === "lista" || lista[i].estado === "error") m = Math.max(m, lista[i].n)
+    root.vistas = m
+  }
+
+  function alternarLista() {
+    root.abierto = !root.abierto
+    if (root.abierto) { root.marcarVistas(); root.ahora = Date.now() / 1000; cierre.restart() }
+    root.actualizarReveal()
+    return root.abierto ? "abierta" : "cerrada"
+  }
+
+  function actualizarReveal() {
+    root.reveal = (root.activo || root.activas > 0 || root.nuevas > 0 || root.abierto) ? 1 : 0
+  }
+
+  function hace(seg) {
+    seg = Math.max(0, Math.round(seg))
+    if (seg < 60) return seg + " s"
+    if (seg < 3600) return Math.round(seg / 60) + " min"
+    return Math.round(seg / 3600) + " h"
+  }
+
+  FileView {
+    path: root.archivoTareas
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.cargarTareas(text())
+    onFileChanged: reload()
+  }
+
+  Timer { id: reloj; interval: 1000; repeat: true; running: root.abierto; onTriggered: root.ahora = Date.now() / 1000 }
+  Timer { id: cierre; interval: 45000; onTriggered: { root.abierto = false; root.actualizarReveal() } }
 
   readonly property bool activo: estado !== "dormido"
   readonly property bool compacto: !activo
@@ -43,7 +121,7 @@ Item {
   }
   readonly property bool conTexto: !compacto && etiqueta !== ""
   readonly property int anchoTexto: conTexto ? Math.min(Math.ceil(medida.advanceWidth), maxTexto) : 0
-  readonly property int anchoTareas: compacto && tareas > 0 ? Math.ceil(medidaTareas.advanceWidth) + gap : 0
+  readonly property int anchoTareas: compacto && resumen !== "" ? Math.ceil(medidaTareas.advanceWidth) + gap : 0
   readonly property int anchoTotal: pad * 2 + lado + (conTexto ? gap + anchoTexto : 0) + anchoTareas + (compacto ? 0 : Style.space(6))
 
   property real reveal: 0
@@ -77,7 +155,7 @@ Item {
     } catch (e) {
       return "json inválido"
     }
-    root.reveal = (root.activo || root.tareas > 0) ? 1 : 0
+    root.actualizarReveal()
     vigia.restart()
     return "ok"
   }
@@ -90,12 +168,13 @@ Item {
   }
 
   TextMetrics { id: medida; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; text: root.etiqueta }
-  TextMetrics { id: medidaTareas; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; text: String(root.tareas) }
+  TextMetrics { id: medidaTareas; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; text: root.resumen }
 
   IpcHandler {
     target: "asistente"
     function estado(json: string): string { return root.aplicar(json) }
     function ocultar(): string { return root.aplicar('{"estado":"dormido"}') }
+    function tareas(): string { return root.alternarLista() }
     function ping(): string { return "ok" }
   }
 
@@ -108,7 +187,11 @@ Item {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
-    mask: Region {}
+    // sólo la píldora y la lista reciben clics; el resto de la pantalla pasa de largo
+    mask: Region {
+      item: notch
+      Region { item: listaCard }
+    }
 
     Item {
       id: notch
@@ -294,14 +377,128 @@ Item {
           maximumLineCount: 1
         }
 
-        // tareas delegadas en marcha (modo compacto)
+        // tareas delegadas (modo compacto)
         Text {
-          visible: root.compacto && root.tareas > 0
+          visible: root.compacto && root.resumen !== ""
           anchors.verticalCenter: parent.verticalCenter
           textFormat: Text.PlainText
-          text: String(root.tareas)
+          text: root.resumen
           font: medidaTareas.font
-          color: Qt.rgba(1, 1, 1, 0.75)
+          color: root.nuevas > 0 ? "#7dffb3" : Qt.rgba(1, 1, 1, 0.75)
+        }
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.alternarLista()
+      }
+    }
+
+    // ---------------- lista de tareas ----------------
+    Rectangle {
+      id: listaCard
+      visible: root.abierto
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.top: notch.bottom
+      anchors.topMargin: Style.space(8)
+      width: Style.space(460)
+      height: visible ? columna.implicitHeight + Style.space(24) : 0
+      radius: Style.space(18)
+      color: "#000000"
+      border.width: 1
+      border.color: Qt.rgba(1, 1, 1, 0.08)
+
+      MouseArea { anchors.fill: parent; onClicked: cierre.restart() }
+
+      Column {
+        id: columna
+        x: Style.space(14); y: Style.space(12)
+        width: parent.width - Style.space(28)
+        spacing: Style.space(10)
+
+        Text {
+          textFormat: Text.PlainText
+          text: root.lista.length === 0 ? "Sin tareas delegadas todavía" : "Tareas delegadas · un solo hilo de Hermes por día"
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          color: Qt.rgba(1, 1, 1, 0.5)
+        }
+
+        Repeater {
+          model: root.lista.slice(0, 8)
+          delegate: Item {
+            required property var modelData
+            readonly property var t: modelData
+            readonly property bool desplegada: root.abiertaN === t.n
+            width: columna.width
+            height: fila.implicitHeight
+
+            Column {
+              id: fila
+              width: parent.width
+              spacing: Style.space(3)
+
+              Row {
+                width: parent.width
+                spacing: Style.space(8)
+                Text {
+                  id: icono
+                  textFormat: Text.PlainText
+                  text: t.estado === "en cola" ? "◷" : t.estado === "corriendo" ? "◐" : t.estado === "lista" ? "✓" : "✕"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                  color: t.estado === "lista" ? "#7dffb3" : t.estado === "error" ? "#ff7a7a" : t.estado === "corriendo" ? "#b28cff" : Qt.rgba(1, 1, 1, 0.5)
+                  RotationAnimation on rotation {
+                    running: t.estado === "corriendo" && root.abierto && !root.ahorro
+                    from: 0; to: 360; duration: 1200; loops: Animation.Infinite
+                  }
+                }
+                Text {
+                  width: parent.width - icono.width - tiempo.width - Style.space(16)
+                  textFormat: Text.PlainText
+                  text: "#" + t.n + "  " + t.tarea
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                  color: "#ffffff"
+                  elide: Text.ElideRight
+                  maximumLineCount: 1
+                }
+                Text {
+                  id: tiempo
+                  textFormat: Text.PlainText
+                  text: t.estado === "en cola" ? "en cola"
+                      : t.estado === "corriendo" ? root.hace(root.ahora - t.inicio)
+                      : "hace " + root.hace(root.ahora - (t.fin || t.creada))
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  color: Qt.rgba(1, 1, 1, 0.5)
+                }
+              }
+
+              Text {
+                visible: t.resultado !== ""
+                x: icono.width + Style.space(8)
+                width: parent.width - x
+                textFormat: Text.PlainText
+                text: t.resultado
+                wrapMode: Text.Wrap
+                maximumLineCount: desplegada ? 40 : 2
+                elide: Text.ElideRight
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                color: t.estado === "error" ? "#ffb3b3" : Qt.rgba(1, 1, 1, 0.72)
+              }
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: { root.abiertaN = desplegada ? -1 : t.n; cierre.restart() }
+            }
+          }
         }
       }
     }
