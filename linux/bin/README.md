@@ -70,6 +70,28 @@ Campo opcional `area` por ticket; es el eje de agrupacion de `agent-os-cli board
 Estados y forma del store, worktrees y metricas: ver el `AGENTS.md` de `~/.config/opencode/`
 (seccion "Tablero de tickets en vivo"). Verificacion: `verify run agent-os-cli` + `agent-os-cli --selftest`.
 
+## `pi clean` — pi tal como vino
+
+Arranca pi con una configuración de fábrica, sin nada de `~/.pi/agent`: ni skills,
+ni agentes, ni extensiones, ni MCP, ni `AGENTS.md` global, ni temas, ni model-fallback,
+ni ajustes. Sirve para saber si un problema es de pi o de nuestra configuración.
+
+```bash
+pi clean                      # sesión limpia y efímera
+pi clean -p "probá esto"      # en modo no interactivo
+pi clean --list-models        # cualquier argumento de pi
+```
+
+- `pi-clean` es el script; `pi` (el lanzador de mise) deriva `clean` a él.
+- Solo viajan las credenciales (`auth.json`), para no pedir login en cada prueba.
+  `PI_CLEAN_AUTH=0` arranca sin credenciales (onboarding real).
+- Si no pedís modelo, usa el `defaultProvider`/`defaultModel` de tu `settings.json`:
+  el modelo no es parte de lo que se está probando. `--model`/`--provider` mandan.
+- La config vive en una carpeta temporal que se borra al salir; las sesiones también.
+  `PI_CLEAN_DIR=<dir>` usa esa carpeta y la conserva.
+- `PI_CLEAN_DEBUG=1` muestra el entorno y el comando sin lanzar pi.
+- Verificación: `scripts/verify/pi-clean.sh`.
+
 ## Agentes pi: un color por vivo, un ticket por agente
 
 La extensión `linux/pi/agent/extensions/agent-os-cli.ts` captura solo el árbol de trabajo:
