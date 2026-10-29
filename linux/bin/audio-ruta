@@ -128,7 +128,10 @@ def sink_de_apps_guardadas() -> dict[str, str]:
         except ValueError:
             continue
         if props.get("target"):
-            guardadas[m.group(1)] = props["target"]
+            # WirePlumber escapa los espacios al escribir la clave ("Voice\sTTS").
+            app = m.group(1).replace("\\s", " ").strip()
+            if app and app != "pw-cat":  # "pw-cat" es el reproductor, no una app
+                guardadas[app] = props["target"]
     return guardadas
 
 

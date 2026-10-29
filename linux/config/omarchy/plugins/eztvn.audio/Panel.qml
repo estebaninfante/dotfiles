@@ -109,6 +109,48 @@ Panel {
   property var displayAudioSources: []
   property var displayAudioStreams: []
 
+  // ---------- salida por aplicación ----------
+  // Cada app (Orión, la voz del sistema, Spotify…) puede ir a una salida
+  // distinta. La elección la guarda `audio-ruta`; Orión y la voz la leen al
+  // sonar, así que el cambio aplica desde la próxima frase.
+  property var rutasApps: []
+  property var rutasSalidas: []
+
+  function cargarRutas() {
+    if (!rutasProc.running) rutasProc.running = true
+  }
+
+  function aplicarRutas(texto) {
+    try {
+      var d = JSON.parse(String(texto || "{}"))
+      root.rutasSalidas = d.salidas || []
+      root.rutasApps = d.apps || []
+    } catch (e) {}
+  }
+
+  function etiquetaSalida(nombre) {
+    for (var i = 0; i < root.rutasSalidas.length; i++)
+      if (root.rutasSalidas[i].nombre === nombre) return root.rutasSalidas[i].etiqueta
+    return "por defecto"
+  }
+
+  function ciclarSalida(app) {
+    if (root.rutasSalidas.length === 0) return
+    var actual = ""
+    for (var i = 0; i < root.rutasApps.length; i++)
+      if (root.rutasApps[i].app === app) actual = root.rutasApps[i].salida
+    var idx = -1
+    for (var j = 0; j < root.rutasSalidas.length; j++)
+      if (root.rutasSalidas[j].nombre === actual) idx = j
+    // por defecto → salida 1 → salida 2 → … → por defecto
+    var siguiente = (idx + 1 < root.rutasSalidas.length) ? root.rutasSalidas[idx + 1].nombre : "auto"
+    moverRuta.command = [root.rutaBin, "mover", app, siguiente]
+    moverRuta.running = true
+  }
+
+  readonly property string rutaBin: Quickshell.env("HOME") + "/.local/bin/audio-ruta"
+
+
   // A DSP sink -- a speaker tuning, or EasyEffects -- can be the selected output
   // without being where loudness lives: changing its volume alters the level going
   // *into* the processing, so the slider would move while the speakers did not,
@@ -310,6 +352,7 @@ Panel {
   onOpenedChanged: {
     if (opened) {
       refreshDisplayAudioModels()
+      cargarRutas()
       focusSection = "output"
       selectedIndex = -1  // first keyboard cursor reveal starts on the output slider
       cursorActive = false
@@ -618,6 +661,25 @@ Panel {
     repeat: true
     triggeredOnStart: true
     onTriggered: root.resolveVolumeSink()
+  }
+
+  Process {
+    id: rutasProc
+    command: [root.rutaBin, "listar"]
+    stdout: StdioCollector { onStreamFinished: root.aplicarRutas(text) }
+  }
+
+  Process {
+    id: moverRuta
+    command: [root.rutaBin, "listar"]
+    onExited: root.cargarRutas()
+  }
+
+  Timer {
+    interval: 2500
+    running: root.opened
+    repeat: true
+    onTriggered: root.cargarRutas()
   }
 
   Timer {
@@ -997,6 +1059,73 @@ Panel {
                 width: panelColumn.width
                 node: modelData
                 rowIndex: index
+              }
+            }
+          }
+
+          // ---- Salida por aplicación ----
+          PanelSeparator {
+            visible: root.rutasApps.length > 0
+            foreground: root.bar.foreground
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(4)
+            visible: root.rutasApps.length > 0
+
+            PanelSectionHeader {
+              text: "SALIDA POR APLICACIÓN"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            Repeater {
+              model: root.rutasApps
+
+              Item {
+                id: filaRuta
+                required property var modelData
+                width: panelColumn.width
+                height: filaRutaInner.implicitHeight + Style.spacing.controlGap
+
+                Row {
+                  id: filaRutaInner
+                  width: parent.width - Style.space(12)
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(6)
+                  spacing: Style.space(8)
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: filaRuta.modelData.etiqueta
+                    width: parent.width * 0.46
+                    elide: Text.ElideRight
+                    color: root.bar.foreground
+                    opacity: filaRuta.modelData.activa ? 1.0 : 0.75
+                    font.family: root.bar.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: root.etiquetaSalida(filaRuta.modelData.salida) + "  ›"
+                    width: parent.width * 0.54 - Style.space(8)
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideRight
+                    color: Qt.darker(root.bar.foreground, 1.35)
+                    font.family: root.bar.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.ciclarSalida(filaRuta.modelData.app)
+                }
               }
             }
           }
