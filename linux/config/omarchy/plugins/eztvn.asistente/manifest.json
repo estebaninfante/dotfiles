@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.asistente",
+  "name": "Asistente",
+  "version": "0.1.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Notch del asistente de voz (~/developing/asistente): un muñeco geométrico que baja de la barra cuando lo llamas con la tecla Windows y muestra si escucha, piensa, habla o tiene tareas en marcha.",
+  "kinds": [
+    "panel"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Notch.qml"
+  }
+}
