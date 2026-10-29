@@ -8,7 +8,9 @@ import qs.Commons
 // Notch OSD) con un muñeco geométrico que cambia según lo que hace el
 // asistente. El proceso de ~/developing/asistente lo maneja por IPC:
 //   omarchy-shell asistente estado '{"estado":"escuchando","texto":"","tareas":0,"ahorro":false}'
-// Estados: dormido, escuchando, pensando, hablando, haciendo, dictando, error.
+// Estados: dormido, escuchando, procesando, pensando, hablando, haciendo, dictando, error.
+// Mientras escucha, en vez de "Te escucho…" van barras de sonido que siguen tu voz: el nivel llega
+// por ~/.local/state/asistente/nivel.txt (12 Hz, sólo mientras escucha; en ahorro extremo queda en 0).
 // Las animaciones sólo corren mientras el notch está a la vista y nunca en
 // ahorro extremo (`ahorro: true`), para no gastar batería.
 //
@@ -23,6 +25,7 @@ Item {
   property string texto: ""
   property int tareas: 0
   property bool ahorro: false
+  property real nivel: 0            // 0..1: nivel del micrófono mientras escucha
 
   // ---------- tareas delegadas ----------
   readonly property string archivoTareas: Quickshell.env("HOME") + "/.local/state/asistente/tareas.json"
@@ -94,6 +97,15 @@ Item {
     onFileChanged: reload()
   }
 
+  readonly property string archivoNivel: Quickshell.env("HOME") + "/.local/state/asistente/nivel.txt"
+  FileView {
+    path: root.archivoNivel
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.leerNivel(text())
+    onFileChanged: reload()
+  }
+
   Timer { id: reloj; interval: 1000; repeat: true; running: root.abierto; onTriggered: root.ahora = Date.now() / 1000 }
   Timer { id: cierre; interval: 45000; onTriggered: { root.abierto = false; root.actualizarReveal() } }
 
@@ -109,10 +121,14 @@ Item {
   readonly property int lado: alto - pad * 2          // tamaño del muñeco
   readonly property int maxTexto: Style.space(380)
 
+  readonly property bool conBarras: !compacto && root.estado === "escuchando" && root.texto === ""
+  readonly property int anchoBarras: Math.round(root.lado * 0.85)
+
   readonly property string etiqueta: {
     if (root.texto !== "") return root.texto
     switch (root.estado) {
-      case "escuchando": return "Te escucho…"
+      case "escuchando": return ""          // las barras de sonido hablan por él
+      case "procesando": return "Procesando…"
       case "pensando": return "Pensando…"
       case "haciendo": return "En eso…"
       case "dictando": return "Dictando…"
@@ -123,7 +139,7 @@ Item {
   readonly property bool conTexto: !compacto && etiqueta !== ""
   readonly property int anchoTexto: conTexto ? Math.min(Math.ceil(medida.advanceWidth), maxTexto) : 0
   readonly property int anchoTareas: compacto && resumen !== "" ? Math.ceil(medidaTareas.advanceWidth) + gap : 0
-  readonly property int anchoTotal: pad * 2 + lado + (conTexto ? gap + anchoTexto : 0) + anchoTareas + (compacto ? 0 : Style.space(6))
+  readonly property int anchoTotal: pad * 2 + lado + (conBarras ? gap + anchoBarras : 0) + (conTexto ? gap + anchoTexto : 0) + anchoTareas + (compacto ? 0 : Style.space(6))
 
   property real reveal: 0
   readonly property real eased: Math.max(0, Math.min(1.05, reveal))
@@ -136,6 +152,7 @@ Item {
   readonly property color tinte: {
     switch (root.estado) {
       case "escuchando": return "#5ee7ff"
+      case "procesando": return "#8ab4ff"
       case "pensando": return "#b28cff"
       case "hablando": return "#7dffb3"
       case "haciendo": return "#ffd166"
@@ -146,6 +163,11 @@ Item {
   }
   property color cuerpo: tinte
   Behavior on cuerpo { ColorAnimation { duration: 260 } }
+
+  function leerNivel(texto) {
+    var v = parseFloat(texto)
+    root.nivel = isNaN(v) ? 0 : Math.max(0, Math.min(1, v))
+  }
 
   function aplicar(json) {
     try {
@@ -206,12 +228,36 @@ Item {
 
       Behavior on width { enabled: root.reveal > 0.98; SpringAnimation { spring: 18; damping: 0.7; epsilon: 0.3 } }
 
+      // al irse se desvanece mientras se mete en la barra, en vez de desaparecer de golpe
+      opacity: Math.min(1, root.eased * 1.9)
+      transform: Scale { origin.y: 0; yScale: 0.86 + 0.14 * Math.min(1, root.eased) }
+
       Rectangle {
         anchors.fill: parent
         radius: Math.min(root.alto / 2, height / 2)
         color: "#000000"
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.08)
+      }
+
+      // "procesando": una línea cruza la píldora mientras Whisper transcribe lo que dijiste
+      Rectangle {
+        id: barrido
+        visible: root.estado === "procesando" && root.animar
+        width: Math.max(Style.space(40), notch.width * 0.28)
+        height: 2
+        radius: 1
+        color: root.cuerpo
+        opacity: 0.75
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 2
+        NumberAnimation on x {
+          running: barrido.visible
+          from: -barrido.width
+          to: notch.width
+          duration: 850
+          loops: Animation.Infinite
+        }
       }
 
       Row {
@@ -235,6 +281,7 @@ Item {
           readonly property real ojoAlto: {
             switch (root.estado) {
               case "escuchando": return s * 0.32
+              case "procesando": return s * 0.11
               case "pensando": return s * 0.16
               case "haciendo": return s * 0.07
               case "dictando": return s * 0.28
@@ -365,6 +412,33 @@ Item {
             NumberAnimation { target: muneco; property: "salto"; to: -muneco.s * 0.06; duration: 240; easing.type: Easing.OutQuad }
             NumberAnimation { target: muneco; property: "salto"; to: 0; duration: 260; easing.type: Easing.InQuad }
             onRunningChanged: if (!running) muneco.salto = 0
+          }
+        }
+
+        // barras de sonido: siguen tu voz mientras hablás (misma idea que las del modo voz)
+        Item {
+          id: barras
+          visible: root.conBarras
+          width: root.anchoBarras
+          height: Math.round(root.lado * 0.9)
+          anchors.verticalCenter: parent.verticalCenter
+          readonly property real barra: Math.max(2, Math.round(root.lado * 0.09))
+          readonly property real hueco: Math.max(2, Math.round(root.lado * 0.10))
+          readonly property var forma: [0.45, 0.80, 1.0, 0.72, 0.42]
+          Repeater {
+            model: 5
+            Rectangle {
+              readonly property real alto: Math.max(barras.barra,
+                barras.height * Math.min(1, Math.max(0.06, root.nivel)) * barras.forma[index])
+              x: index * (barras.barra + barras.hueco)
+              y: (barras.height - height) / 2
+              width: barras.barra
+              height: alto
+              radius: width / 2
+              color: root.cuerpo
+              opacity: 0.55 + 0.45 * barras.forma[index]
+              Behavior on height { NumberAnimation { duration: root.animar ? 90 : 0; easing.type: Easing.OutQuad } }
+            }
           }
         }
 

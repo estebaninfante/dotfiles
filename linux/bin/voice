@@ -951,7 +951,14 @@ monitor_cmd() {  # monitor [on|off|toggle|estado]
   case "$accion" in
     estado|status)
       if [ -f "$MONITOR_STATE" ]; then
-        echo "monitor: encendido ($(sed -n 's/.*"source": *"\([^"]*\)".*/\1/p' "$MONITOR_STATE" 2>/dev/null))"
+        id=$(sed -n 's/.*"id": *\([0-9]*\).*/\1/p' "$MONITOR_STATE" 2>/dev/null)
+        # Si PipeWire se reinició, el módulo ya no existe: el estado viejo miente.
+        if [ -n "$id" ] && pactl list short modules 2>/dev/null | awk '{print $1}' | grep -qx "$id"; then
+          echo "monitor: encendido ($(sed -n 's/.*"source": *"\([^"]*\)".*/\1/p' "$MONITOR_STATE" 2>/dev/null))"
+        else
+          rm -f "$MONITOR_STATE"
+          echo "monitor: apagado"
+        fi
       else
         echo "monitor: apagado"
       fi
