@@ -37,6 +37,8 @@ VIRTUAL = "mic-bt-fx"
 CALL_PROFILE = os.environ.get("MIC_BT_CALL_PROFILE", "headset-head-unit")
 HOLD_S = float(os.environ.get("MIC_BT_HOLD", "12"))
 CARD = "bluez_card." + MAC.replace(":", "_")
+# Nombre de nuestra propia captura: así no se cuenta como "otra app usando el micrófono".
+CAPTURA = "mic-bt-fx-captura"
 
 CONF_DIR = Path(os.environ.get("MIC_LAB_CONF", Path.home() / ".config" / "mic-lab"))
 CONF = CONF_DIR / "fx.json"
@@ -114,6 +116,22 @@ def virtual_in_use() -> bool:
         if len(parts) > 1 and parts[1] == idx:
             return True
     return False
+
+
+def raw_in_use() -> bool:
+    """¿Alguna app (que no sea nuestra captura) lee el micrófono crudo del audífono?
+
+    Si se vuelve a A2DP mientras eso pasa, el nodo desaparece y esa app queda sorda (le pasó al
+    asistente de voz y al dictado). Mientras haya alguien así, el perfil de llamada se mantiene.
+    """
+    try:
+        fuentes = json.loads(run(["pactl", "-f", "json", "list", "sources"]).stdout or "[]")
+        salidas = json.loads(run(["pactl", "-f", "json", "list", "source-outputs"]).stdout or "[]")
+    except ValueError:
+        return False
+    idx = {f.get("index") for f in fuentes if f.get("name") == SRC}
+    return any(o.get("source") in idx and o.get("properties", {}).get("application.name") != CAPTURA
+               for o in salidas)
 
 
 def device_connected() -> bool:
@@ -206,7 +224,7 @@ def restore_profile(prev: str) -> None:
 def pipeline() -> subprocess.Popen:
     fx = build_filter(load_conf())
     cap = (
-        f"pw-record --target {SRC} --rate {RATE} --channels 1 --raw "
+        f"pw-record -P '{{ application.name = {CAPTURA} }}' --target {SRC} --rate {RATE} --channels 1 --raw "
         f"--format f32 --latency 20ms -"
     )
     ff = (
@@ -272,6 +290,10 @@ def main() -> int:
             proc = pipeline()
             active = True
             follow_sink(old_sink)
+        elif not want and active and raw_in_use():
+            # Nadie usa la fuente limpia, pero otra app lee el micrófono crudo:
+            # volver a A2DP la dejaría sorda. Se mantiene el perfil de llamada.
+            idle_since = None
         elif not want and active:
             # Esperar a que la app realmente suelte el micrófono: si vuelve a
             # abrirlo enseguida, no tocamos el perfil (ver docstring).
