@@ -148,7 +148,8 @@ def apps() -> list[dict]:
     nombres = list(dict.fromkeys([*CONOCIDAS, *indexadas, *guardadas]))
     # La salida actual de un stream activo: la del primer índice.
     actual: dict[str, str] = dict(guardadas)
-    actual.update(cargar_rutas())
+    guardadas_propias = cargar_rutas()
+    actual.update(guardadas_propias)
     for app, indices in indexadas.items():
         for linea in pactl("list", "short", "sink-inputs").splitlines():
             campos = linea.split("\t")
@@ -156,6 +157,7 @@ def apps() -> list[dict]:
                 for sink in pactl("list", "short", "sinks").splitlines():
                     if int(sink.split("\t")[0]) == int(campos[1]):
                         actual[app] = sink.split("\t")[1]
+    defecto = pactl("get-default-sink").strip()
     salida, vistas = [], {}
     for app in nombres:
         etiqueta = CONOCIDAS.get(app, app)
@@ -163,7 +165,11 @@ def apps() -> list[dict]:
             if app in indexadas and vistas[etiqueta]["app"] not in indexadas:
                 vistas[etiqueta]["app"] = app
             continue
-        fila = {"app": app, "etiqueta": etiqueta, "salida": actual.get(app, ""),
+        elegida = actual.get(app, "")
+        # Si la salida guardada es la de por defecto, se muestra como "por defecto".
+        if elegida == defecto and app not in guardadas_propias:
+            elegida = ""
+        fila = {"app": app, "etiqueta": etiqueta, "salida": elegida,
                 "activa": app in indexadas}
         vistas[etiqueta] = fila
         salida.append(fila)
