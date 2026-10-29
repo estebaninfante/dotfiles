@@ -33,6 +33,7 @@
 #   voice gpu                            estado GPU NVIDIA
 #   voice battery                        estado bateria/AC
 #   voice tts [on|off|toggle]            activar/desactivar/toggle anuncios de opencode
+#   voice monitor [on|off|toggle|estado] escuchar lo que manda el microfono (depurar; apagado por defecto)
 #   voice voice [nombre]                 ver/cambiar voz (por-idioma segun lang)
 #   voice voices                         listar voces piper instaladas
 #   voice lang [es|en]                   ver/cambiar idioma (voz principal)
@@ -940,12 +941,59 @@ send_agent() {  # send_agent --agent <nombre> --text "texto" [--key K] [--voice 
   speak "${args[@]}" "${extra[@]}" "$text"
 }
 
+# monitor: escuchar por los parlantes lo que manda el micrófono (depuración).
+# Apagado por defecto: no existe hasta que alguien lo prende. Un module-loopback
+# de PipeWire, con el estado en disco para poder apagarlo desde el menú de voz.
+MONITOR_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/voice/monitor.json"
+
+monitor_cmd() {  # monitor [on|off|toggle|estado]
+  local accion="${1:-toggle}" src sink id
+  case "$accion" in
+    estado|status)
+      if [ -f "$MONITOR_STATE" ]; then
+        echo "monitor: encendido ($(sed -n 's/.*"source": *"\([^"]*\)".*/\1/p' "$MONITOR_STATE" 2>/dev/null))"
+      else
+        echo "monitor: apagado"
+      fi
+      ;;
+    off)
+      if [ -f "$MONITOR_STATE" ]; then
+        id=$(sed -n 's/.*"id": *\([0-9]*\).*/\1/p' "$MONITOR_STATE" 2>/dev/null)
+        [ -n "$id" ] && pactl unload-module "$id" >/dev/null 2>&1 || true
+      fi
+      rm -f "$MONITOR_STATE"
+      echo "monitor: apagado"
+      ;;
+    on|toggle)
+      monitor_cmd off >/dev/null
+      if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qx mic-bt-fx; then
+        src=mic-bt-fx
+      else
+        src=$(pactl get-default-source 2>/dev/null || echo "@DEFAULT_SOURCE@")
+      fi
+      sink=$(pactl get-default-sink 2>/dev/null)
+      [ -n "$sink" ] || { echo "monitor: no hay salida de audio" >&2; return 1; }
+      id=$(pactl load-module module-loopback source="$src" sink="$sink" latency_msec=40 \
+        source_dont_move=true sink_dont_move=true 2>/dev/null) \
+        || { echo "monitor: no pude crear el loopback" >&2; return 1; }
+      mkdir -p "$(dirname "$MONITOR_STATE")"
+      printf '{"id":%s,"source":"%s","sink":"%s"}\n' "$id" "$src" "$sink" >"$MONITOR_STATE"
+      echo "monitor: escuchando «$src» por «$sink» (apagalo con: voice monitor off)"
+      ;;
+    *)
+      echo "uso: voice monitor [on|off|toggle|estado]" >&2
+      return 2
+      ;;
+  esac
+}
+
 # ── despacho ────────────────────────────────────────────────────────────
 case "${1:-status}" in
   __speak_direct) shift; __speak_direct "$@" ;;
   status) "$PY" "$VOICE_DIR/engine.py" status ;;
   speak|say) shift; speak "$@" ;;
   avisar) shift; avisar "$@" ;;
+  monitor|escuchar) shift; monitor_cmd "$@" ;;
   notify) shift; notify_cmd "$@" ;;
   ingest-notify) ingest_notify ;;
   messages) shift; messages_cmd "$@" ;;

@@ -50,5 +50,10 @@
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
   "personal.investigaciones": {"icon":"󰎞","label":"Investigaciones","description":"Notas de investigacion del vault (abre en Logseq)","action":"omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""},
-  "personal.logseq": {"icon":"󰎞","label":"Notes and learning","description":"Notas y aprendizaje: abrir Logseq (grafo alicia)","action":"uwsm-app -- logseq"}
+  "personal.logseq": {"icon":"󰎞","label":"Notes and learning","description":"Notas y aprendizaje: abrir Logseq (grafo alicia)","action":"uwsm-app -- logseq"},
+
+  // Voz: escuchar lo que manda el micrófono (depurar el sonido y la calidad).
+  // Apagado por defecto: sólo suena mientras alguien lo prende.
+  "voz": {"icon":"󰍬","label":"Voz"},
+  "voz.monitor": {"icon":"󰕾","label":"Escuchar el micrófono","aliases":["monitor","escuchar mic","mic monitor","escuchar microfono"],"description":"Oír por los parlantes lo que manda el micrófono (depuración). Apagalo con el mismo ítem.","checked":"test -f ~/.local/state/voice/monitor.json","action":"~/.local/bin/voice monitor toggle"}
 }
