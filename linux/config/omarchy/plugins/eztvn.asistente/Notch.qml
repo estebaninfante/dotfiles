@@ -422,14 +422,14 @@ Item {
           width: root.anchoBarras
           height: Math.round(root.lado * 0.9)
           anchors.verticalCenter: parent.verticalCenter
-          readonly property real barra: Math.max(2, Math.round(root.lado * 0.09))
-          readonly property real hueco: Math.max(2, Math.round(root.lado * 0.10))
-          readonly property var forma: [0.45, 0.80, 1.0, 0.72, 0.42]
+          readonly property real barra: Math.max(2, Math.round(root.lado * 0.10))
+          readonly property real hueco: Math.max(2, Math.round(root.lado * 0.085))
+          readonly property var forma: [0.30, 0.90, 1.0, 0.80, 0.42]
           Repeater {
             model: 5
             Rectangle {
               readonly property real alto: Math.max(barras.barra,
-                barras.height * Math.min(1, Math.max(0.06, root.nivel)) * barras.forma[index])
+                barras.height * Math.min(1, 0.10 + root.nivel * 1.15) * barras.forma[index])
               x: index * (barras.barra + barras.hueco)
               y: (barras.height - height) / 2
               width: barras.barra
@@ -437,7 +437,7 @@ Item {
               radius: width / 2
               color: root.cuerpo
               opacity: 0.55 + 0.45 * barras.forma[index]
-              Behavior on height { NumberAnimation { duration: root.animar ? 90 : 0; easing.type: Easing.OutQuad } }
+              Behavior on height { NumberAnimation { duration: root.animar ? 55 + index * 14 : 0; easing.type: Easing.OutQuad } }
             }
           }
         }
