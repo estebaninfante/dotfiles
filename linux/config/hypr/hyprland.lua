@@ -1,3 +1,4 @@
+require("base.bindcollect")  -- debe ir ANTES de cualquier bind (lo usa dictado-submap)
 require("env")
 require("monitors")
 require("input")
@@ -22,3 +23,7 @@ require("ohm")
 -- Tira: workspace de scroll (pantallas completas en columnas). Estado en
 -- ~/.local/state/tira.conf; se maneja con el comando `tira`.
 require("tira")
+
+-- Después de TODOS los binds: el submap "dictado" replaysa los globales para
+-- que la transcripción no desactive los atajos.
+require("dictado-submap")

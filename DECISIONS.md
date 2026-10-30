@@ -894,3 +894,44 @@ atajo se "pierda" y el resto parezca deshabilitado.
   submaps (`dictado`, `moonlight`) que tampoco deben sobrevivir a un suspend.
 - **Resetear en el hook `pre`**: todavía hay que dejar que el cierre del
   overview corra después del resume; en `pre` el compositor se congela.
+
+## 2026-10-30 — El dictado ya no apaga los atajos del escritorio
+
+**Problema.** Con la transcripción activa (`Súper+I`, F7 o el gesto), no
+respondía ningún atajo: workspaces, fullscreen, mover/redimensionar ventanas, ni
+ninguna otra combinación. Mantener Súper sí abría la grilla y elegir ahí
+funcionaba, porque esa parte es un hook de teclado y el plugin cambia al submap
+`hyprexpo`.
+
+**Causa.** `omar dictate` entra al submap `dictado` mientras graba, y el submap
+sólo definía `RETURN`, `KP_Enter`, `Súper+I` y `F7`. Un submap de Hyprland
+**reemplaza** el mapa de atajos: todo lo que no esté declarado ahí deja de
+existir mientras dure. La intención era adueñarse sólo de Enter (para que no
+llegue a la app antes de pegar), pero el efecto colateral era apagar el teclado
+entero.
+
+**Elegido.**
+
+- `base/bindcollect.lua` envuelve `hl.bind` y `hl.define_submap` antes de que
+  cargue cualquier archivo: guarda todo bind global y no guarda los que se
+  registran dentro de otro submap (para no replicar `hyprexpo`/`moonlight`).
+- `dictado-submap.lua` se carga al final de `hyprland.lua` y define el submap
+  `dictado` con Enter + un replay de todos los binds globales. Así el dictado
+  sólo cambia Enter; el resto sigue funcionando, y cualquier atajo nuevo entra
+  solo sin duplicar listas.
+- Verificado en vivo: en `dictado`, `Súper+F` alterna fullscreen, `Súper+M`
+  cambia al workspace 1 y `Súper+Y` abre la grilla; al cerrarla se vuelve a
+  `dictado`. En `hyprexpo` los binds propios siguen ganando (no se marcan como
+  universales, que los pisarían).
+
+**Descartado.**
+
+- **Duplicar a mano los atajos importantes dentro de `dictado`**: se
+  desactualiza en cuanto se agrega uno nuevo, que es exactamente cómo se llegó a
+  este bug.
+- **`submap_universal` en todos los binds globales**: probado en vivo; el bind
+  universal gana sobre el del submap y rompería la navegación de `hyprexpo`
+  (las flechas y las teclas de workspace dejarían de elegir en la grilla).
+- **Enter global sin submap**: `omar dictate --enter` inyecta un Enter con
+  `wtype`, que volvería a disparar el mismo bind (recursión). Además obligaría a
+  lanzar un proceso en cada Enter del sistema.
