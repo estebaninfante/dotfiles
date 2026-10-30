@@ -4,7 +4,7 @@ set -uo pipefail
 KEYD_UNIT="${KEYD_UNIT:-keyd.service}"
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
 HYPRCTL="${HYPRCTL:-hyprctl}"
-RUNUSER="${RUNUSER:-runuser}"
+SETPRIV="${SETPRIV:-setpriv}"
 HEAL_HYPR="${HEAL_HYPR:-1}"
 
 restart_keyd() {
@@ -22,19 +22,23 @@ restart_keyd() {
 # El reset va después del cierre a propósito: el plugin restaura el submap que
 # capturó al abrir, y si ese valor quedó contaminado el nuestro debe ganar.
 heal_hypr_submap() {
-  local rt inst sig uid rc=0
+  local rt inst sig uid gid rc=0
   command -v "$HYPRCTL" >/dev/null 2>&1 || return 0
+  command -v "$SETPRIV" >/dev/null 2>&1 || return 0
   for rt in /run/user/[0-9]*; do
     [ -d "$rt/hypr" ] || continue
     uid="${rt##*/}"
+    gid="$(id -g "$uid" 2>/dev/null)" || continue
     for inst in "$rt"/hypr/*/; do
       [ -S "${inst%/}/.socket.sock" ] || continue
       sig="$(basename "$inst")"
-      "$RUNUSER" -u "#$uid" -- env XDG_RUNTIME_DIR="$rt" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
+      timeout 5 "$SETPRIV" --reuid="$uid" --regid="$gid" --init-groups \
+        env XDG_RUNTIME_DIR="$rt" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
         "$HYPRCTL" eval 'if hl.plugin ~= nil and hl.plugin.hyprexpo ~= nil then hl.plugin.hyprexpo.expo("cancel") end' \
         >/dev/null 2>&1 || rc=1
       sleep 1
-      "$RUNUSER" -u "#$uid" -- env XDG_RUNTIME_DIR="$rt" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
+      timeout 5 "$SETPRIV" --reuid="$uid" --regid="$gid" --init-groups \
+        env XDG_RUNTIME_DIR="$rt" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
         "$HYPRCTL" dispatch 'hl.dsp.submap("reset")' >/dev/null 2>&1 || rc=1
     done
   done

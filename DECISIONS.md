@@ -860,3 +860,37 @@ que no van. Necesita memoria externa, no que el agente decida por él.
   idea llena la fábrica de ruido y le quita sentido a la lista.
 - **Borrar ideas**: el valor de la fábrica es la colección. Sin la idea
   descartada y su motivo, se vuelve a discutir lo mismo en tres meses.
+
+## 2026-10-30 — Suspender con la grilla abierta ya no deja el teclado muerto
+
+**Problema.** Al volver de suspensión el escritorio quedaba sin atajos: no se
+podía cambiar de workspace, ni mover/redimensionar ventanas, ni usar los gestos
+con Súper. `hyprctl submap` respondía `hyprexpo` sin que hubiera grilla en
+pantalla. El compositor (no el overview) conserva el submap al suspender; el
+overview sí muere, así que su cierre normal —que restaura el submap— nunca
+ocurre. Con `submap=hyprexpo`, todos los binds del escritorio son ocultados por
+el submap y sólo queda el `catchall` que lo resetea, lo que hace que el primer
+atajo se "pierda" y el resto parezca deshabilitado.
+
+**Elegido.**
+
+- `system-sleep/keyd-resume.sh`: después de reiniciar keyd, cerrar el overview
+  si quedó abierto (`hyprexpo.expo("cancel")`), esperar a que termine su
+  animación y recién entonces `hl.dsp.submap("reset")`. El orden importa: el
+  plugin restaura el submap que capturó al abrir y puede volver a pisarlo.
+- El reset se hace `setpriv --reuid=<uid>` sobre cada instancia de Hyprland viva
+  en `/run/user/*/hypr/*` (con `timeout 5`): el hook corre como root, sin el
+  entorno del usuario. `runuser -u '#uid'` no acepta uids numéricos.
+- `asistente/scripts/tecla.sh`: al reconectar `keyd monitor` (keyd se reinicia
+  en cada resume) mandar `soltar`. Si la tecla estaba apretada y el `up` se
+  perdió, el asistente quedaba escuchando para siempre.
+
+**Descartado.**
+
+- **Resetear el submap sólo con un bind manual**: el usuario tendría que saber
+  que existe y acordarse justo cuando ningún atajo responde.
+- **Parchear el plugin para que nunca restaure `hyprexpo`**: también
+  corresponde, pero exige rebuild y reiniciar Hyprland, y no cubre los otros
+  submaps (`dictado`, `moonlight`) que tampoco deben sobrevivir a un suspend.
+- **Resetear en el hook `pre`**: todavía hay que dejar que el cierre del
+  overview corra después del resume; en `pre` el compositor se congela.
