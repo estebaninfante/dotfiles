@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# reboot-to-windows — reinicia y arranca Windows en el próximo boot.
+#
+# Usa BootNext de la UEFI, así que NO cambia el orden de arranque permanente:
+# el siguiente reinicio entra a Windows y el posterior vuelve a rEFInd/Omarchy.
+# Pensado para el menú de Omarchy (Super+Space > System).
+set -euo pipefail
+
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "Reiniciar en Windows" "$1" "${2:-}" 2>/dev/null || true
+    fi
+}
+
+# Busca la entrada "Windows Boot Manager" en la NVRAM (lectura no requiere root).
+win_boot="$(efibootmgr 2>/dev/null \
+    | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\? Windows Boot Manager.*/\1/p' \
+    | head -n1 || true)"
+
+if [[ -z "$win_boot" ]]; then
+    notify "Windows no encontrado" "No hay una entrada «Windows Boot Manager» en la UEFI."
+    exit 1
+fi
+
+# BootNext: solo para el próximo arranque.
+if ! sudo --non-interactive efibootmgr --bootnext "$win_boot" >/dev/null 2>&1; then
+    notify "No se pudo preparar el arranque" "efibootmgr no pudo fijar BootNext."
+    exit 1
+fi
+
+if command -v omarchy-osd >/dev/null 2>&1; then
+    omarchy-osd -i reboot -m "Reiniciando en Windows" -d 4000 2>/dev/null || true
+fi
+
+# Mismo apagado ordenado que usa Omarchy para reiniciar.
+if command -v omarchy-system-reboot >/dev/null 2>&1; then
+    exec omarchy-system-reboot
+fi
+
+exec systemctl reboot

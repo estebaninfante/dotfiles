@@ -52,6 +52,10 @@
   "personal.investigaciones": {"icon":"󰎞","label":"Investigaciones","description":"Notas de investigacion del vault (abre en Logseq)","action":"omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""},
   "personal.logseq": {"icon":"󰎞","label":"Notes and learning","description":"Notas y aprendizaje: abrir Logseq (grafo alicia)","action":"uwsm-app -- logseq"},
 
+  // Arranque directo a Windows desde Omarchy (BootNext UEFI, solo el próximo boot).
+  // Se oculta solo si la máquina no tiene una entrada «Windows Boot Manager».
+  "system.reboot-windows": {"icon":"","label":"Reiniciar en Windows","aliases":["windows","reiniciar windows","arrancar windows","boot windows"],"description":"Reinicia y arranca Windows directamente (próximo arranque, sin cambiar el orden)","when":"efibootmgr 2>/dev/null | grep -qi 'Windows Boot Manager'","action":"~/.local/bin/reboot-to-windows"},
+
   // Voz: escuchar lo que manda el micrófono (depurar el sonido y la calidad).
   // Apagado por defecto: sólo suena mientras alguien lo prende.
   "voz": {"icon":"󰍬","label":"Voz"},
