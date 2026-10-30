@@ -54,7 +54,7 @@
 
   // Arranque directo a Windows desde Omarchy (BootNext UEFI, solo el próximo boot).
   // Se oculta solo si la máquina no tiene una entrada «Windows Boot Manager».
-  "system.reboot-windows": {"icon":"","label":"Reiniciar en Windows","aliases":["windows","reiniciar windows","arrancar windows","boot windows"],"description":"Reinicia y arranca Windows directamente (próximo arranque, sin cambiar el orden)","when":"efibootmgr 2>/dev/null | grep -qi 'Windows Boot Manager'","action":"~/.local/bin/reboot-to-windows"},
+  "system.reboot-windows": {"icon":"","label":"Reiniciar en Windows","aliases":["windows","reiniciar windows","arrancar windows","boot windows"],"description":"Reinicia y arranca Windows directamente (próximo arranque, sin cambiar el orden)","when":"efibootmgr 2>/dev/null | grep -qi 'Windows Boot Manager'","action":"~/dotfiles/linux/bin/reboot-to-windows"},
 
   // Voz: escuchar lo que manda el micrófono (depurar el sonido y la calidad).
   // Apagado por defecto: sólo suena mientras alguien lo prende.
