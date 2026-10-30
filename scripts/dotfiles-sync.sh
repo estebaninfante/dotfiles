@@ -261,6 +261,7 @@ RECONCILE_INPUTS=(
     linux/system/systemd-user/kokoro-tts.service
     linux/system/systemd-user
     linux/bin/audio-jack-guard
+    linux/bin/file-open
     scripts/install-user-units.sh
     scripts/setup-kokoro-reader.sh scripts/reconcile-machine.sh
 )

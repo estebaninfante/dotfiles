@@ -158,3 +158,11 @@ idea, con la idea, las dudas y la conversación append-only (fecha + agente). En
 `/ideas` lista, `/idea IDEA-7K2P` la muestra en el panel.
 
 Verificación: `scripts/verify/ideas.sh`.
+
+## `file-open` — abrir según el contenido, no la extensión
+
+`file-open ARCHIVO` clasifica el archivo (extensión + MIME + codificación real) y elige la app:
+texto/código/config/notas a `omarchy-launch-editor`; imagen, audio, video, PDF, documentos,
+comprimidos, fuentes y binarios a `xdg-open`. `file-open --kind ARCHIVO...` imprime
+`tipo<TAB>ruta` y es lo que usa el buscador del launcher para etiquetar cada resultado.
+Los `.ts` y otros formatos ambiguos se deciden por contenido, no por nombre.
