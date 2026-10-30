@@ -6,6 +6,9 @@ AGENT="${RIG_KEEP_AGENT:-main}"
 MODEL="${RIG_KEEP_MODEL:-opencode-go/deepseek-v4.1-flash}"
 CWD_DIR="${RIG_KEEP_CWD:-$HOME}"
 INTERVAL="${RIG_KEEP_INTERVAL:-30}"
+# Segundos para declarar wedgeado el server de tmux y el spawn de la silla.
+ALIVE_TIMEOUT="${RIG_KEEP_ALIVE_TIMEOUT:-10}"
+SPAWN_TIMEOUT="${RIG_KEEP_SPAWN_TIMEOUT:-60}"
 SELFTEST=0
 
 usage() {
@@ -22,17 +25,62 @@ while [ $# -gt 0 ]; do
 done
 
 [[ "$INTERVAL" =~ ^[0-9]+$ ]] || INTERVAL=30
+[[ "$ALIVE_TIMEOUT" =~ ^[0-9]+$ ]] || ALIVE_TIMEOUT=10
+[[ "$SPAWN_TIMEOUT" =~ ^[0-9]+$ ]] || SPAWN_TIMEOUT=60
 export PATH="$HOME/.local/bin:$PATH"
+
+# Estado del server de tmux: 0 = responde; 1 = no hay server o esta wedgeado.
+# tmux has-session SIN timeout se traba para siempre si el server colgó sin
+# atender el socket (causa de la caída de terminales del 2026-10-30): el
+# keeper y todas las kitty shell=tmux quedan colgados. Por eso el timeout,
+# y si el server vive pero no responde, SIGKILL para que la próxima vuelta
+# del keeper lo reviva (tmux new-session crea un server fresco).
+notify_wedge() {
+  if [ "$SELFTEST" = "1" ]; then return 0; fi
+  local stamp now last
+  stamp="${XDG_RUNTIME_DIR:-/tmp}/rig-seat-keep.wedge-notice"
+  command -v notify >/dev/null 2>&1 || return 0
+  now=$(date +%s)
+  last=$(cat "$stamp" 2>/dev/null || echo 0)
+  # Cooldown: si sigue mal, no repetir el aviso cada vuelta del loop.
+  [ $((now - last)) -lt 300 ] && return 0
+  echo "$now" >"$stamp" 2>/dev/null || true
+  notify -g "󰆍" -u normal -t 6000 --app-name rig-server \
+    "tmux no respondía: server reiniciado" \
+    "El server de tmux colgó; lo mató rig-seat-keep para revivir la silla $SEAT. Los paneles de ese server se perdieron." \
+    >/dev/null 2>&1
+}
+
+kill_wedged_servers() {
+  # arg (opcional): comm exacto del/os procesos a matar. Default: el server
+  # de tmux (su nombre de proceso es "tmux: server"). El selftest pasa un
+  # comm propio para no tocar servers sanos.
+  local target="${1:-tmux: server}" p comm killed=0
+  for p in /proc/[0-9]*; do
+    comm=$(cat "$p/comm" 2>/dev/null) || continue
+    [ "$comm" = "$target" ] || continue
+    kill -9 "${p#/proc/}" 2>/dev/null && killed=$((killed + 1))
+  done
+  [ "$killed" -gt 0 ] && notify_wedge
+  return 0
+}
 
 seat_alive() {
   command -v tmux >/dev/null 2>&1 || return 1
-  tmux has-session -t "$SEAT" 2>/dev/null
+  timeout "$ALIVE_TIMEOUT" tmux has-session -t "$SEAT" 2>/dev/null
+  case $? in
+    0) return 0 ;;
+    124) kill_wedged_servers; return 1 ;; # wedgeado: muerto, la próxima vuelta lo revive
+    *) return 1 ;;                        # sin server o sin esa sesión
+  esac
 }
 
 keep_once() {
   seat_alive && return 0
   command -v rig >/dev/null 2>&1 || return 1
-  rig spawn "$SEAT" --agent "$AGENT" --model "$MODEL" --cwd "$CWD_DIR" --no-focus >/dev/null 2>&1 || return 1
+  # spawn con timeout: si tmux se colga a mitad del spawn, el keeper no queda
+  # para siempre pegado al rig; la próxima vuelta reintenta.
+  timeout "$SPAWN_TIMEOUT" rig spawn "$SEAT" --agent "$AGENT" --model "$MODEL" --cwd "$CWD_DIR" --no-focus >/dev/null 2>&1 || return 1
 }
 
 selftest() {
@@ -71,6 +119,39 @@ selftest() {
     rc=1
     echo "rig-seat-keep selftest FAIL: spawneo una silla que ya estaba viva" >&2
   fi
+  # Wedge: un proceso de mentira con comm propio es el unico que muere; el
+  # guard (server vivo de verdad) debe sobrevivir intacto.
+  local fakepid="" comm_ok=0 guard="_keep_guard_$$"
+  tmux kill-session -t "$guard" 2>/dev/null || true
+  if ! tmux new-session -d -s "$guard"; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: no pude crear el guard" >&2
+  fi
+  printf 'import ctypes, time\nctypes.CDLL("libc.so.6").prctl(15, b"_keep_fake_server", 0, 0, 0)\ntime.sleep(600)\n' >"$tmp/fake-server.py"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$tmp/fake-server.py" >/dev/null 2>&1 &
+    fakepid=$!
+    sleep 0.3
+    [ "$(cat "/proc/$fakepid/comm" 2>/dev/null)" = "_keep_fake_server" ] && comm_ok=1
+    if [ "$comm_ok" = "1" ]; then
+      kill_wedged_servers "_keep_fake_server"
+      sleep 0.2
+      if kill -0 "$fakepid" 2>/dev/null; then
+        kill -9 "$fakepid" 2>/dev/null
+        rc=1
+        echo "rig-seat-keep selftest FAIL: el server falso wedgeado sobrevivio" >&2
+      fi
+    fi
+  else
+    echo "rig-seat-keep selftest AVISO: sin python3, el kill de wedge no se probaron" >&2
+  fi
+  kill -9 "$fakepid" 2>/dev/null || true
+  kill_wedged_servers "_keep_fake_server"
+  if ! tmux has-session -t "$guard" 2>/dev/null; then
+    rc=1
+    echo "rig-seat-keep selftest FAIL: el guard sano murio en el test de wedge" >&2
+  fi
+  tmux kill-session -t "$guard" 2>/dev/null || true
   tmux kill-session -t "$SEAT" 2>/dev/null || true
   PATH="$oldpath"
   rm -rf "$tmp"

@@ -672,7 +672,11 @@ documentada; WhatsApp documentado). Detalle completo en `docs/main-bridge.md`.
 - **`main` en silla**: `main` corre como silla tmux (`rig spawn main-seat --agent main`) para
   ser direccionable; el pane de herdr le hace attach para seguir viendolo en el escritorio.
   La unidad `rig-main-seat.service` la mantiene viva (la levanta al iniciar sesion y la
-  repone si muere) y `tmux-reap.sh` la exime del reaper.
+  repone si muere) y `tmux-reap.sh` la exime del reaper. El keepers tambien cubre el server
+  **wedgeado** de tmux (colgado sin atender el socket, kitty shell=tmux sin terminal:
+  caida de terminales del 2026-10-30): `rig-seat-keep` llama a tmux con timeout y, si no
+  responde, mata el server con SIGKILL y lo deja revivir en la siguiente vuelta (aviso de
+  escritorio con cooldown): ver `ALIVE_TIMEOUT`/`SPAWN_TIMEOUT` en `linux/bin/rig-seat-keep`.
 - **Sin puertos**: el bot abre conexion **saliente** al Gateway (`wss://gateway.discord.gg`);
   nada escucha en la LAN/internet. Bot Python3 stdlib (WebSocket propio), sin `discord.js`.
 - **Seguridad**: allowlist estricta de **user id**; token, allowlist y `channel_id` en
