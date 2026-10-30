@@ -188,6 +188,22 @@ else
     warn "no existe $PI_SRC"
 fi
 
+header "OMP agent (~/.omp/agent)"
+# Solo la config de OMP (oh-my-pi) vive en el repo. Las credenciales van al
+# store SQLite ~/.omp/agent/agent.db (local a la maquina, NUNCA al repo):
+# se recrean con `omp login <provider>` o `omp auth import`.
+OMP_SRC="${REPO}/linux/omp/agent"
+OMP_DST="${HOME}/.omp/agent"
+if [ -d "$OMP_SRC" ]; then
+    mkdir -p "$OMP_DST"
+    for f in "$OMP_SRC"/config.yml "$OMP_SRC"/config.yaml; do
+        [ -e "$f" ] || continue
+        link_path "$f" "${OMP_DST}/$(basename "$f")" true
+    done
+else
+    warn "no existe $OMP_SRC"
+fi
+
 header "Copias (no symlink)"
 for name in "${COPY_DIRS[@]}"; do
     src="${CONFIG_SRC}/${name}"

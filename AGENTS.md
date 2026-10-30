@@ -188,6 +188,20 @@ la tool `worktree` (`abrir` / `lista` / `cerrar`). Los worktrees viven en
 `rig work new` tambien saca su rama base de este archivo: un solo lugar decide el
 flujo de cada proyecto. Verificador: `scripts/verify/ramas.sh`.
 
+### OMP agent (`linux/omp/agent/` — symlink por archivo)
+
+OMP (oh-my-pi, fork de Pi, comando `omp`) usa `~/.omp/agent/`. Solo se versiona
+su config. Las credenciales viven en `~/.omp/agent/agent.db` (SQLite, local a la
+maquina) y **nunca** van al repo: se recrean con `omp login opencode-go` o
+`omp auth import creds.json`.
+
+| Archivo | Ruta destino |
+|---------|-------------|
+| config.yml | `~/.omp/agent/config.yml` |
+
+Proveedor por defecto: `opencode-go` (`modelRoles.default`). OMP escribe sobre el
+symlink sin romperlo, asi que `omp config set` desde la maquina termina en el repo.
+
 ### Home (`linux/home/`)
 
 | Archivo | Ruta destino |
@@ -198,6 +212,10 @@ flujo de cada proyecto. Verificador: `scripts/verify/ramas.sh`.
 ### Scripts (`linux/bin/`)
 
 Todos los scripts propios de `~/.local/bin/` (excluye ejecutables instalados por paquetes).
+
+`linux/bin/omp` es el wrapper de OMP: fija el pin global con `mise use -g` y
+ejecuta el binario (`github:can1357/oh-my-pi`). El binario en si lo instala mise,
+asi que una maquina nueva queda lista con solo correr `omp` una vez.
 
 **Avisos de escritorio:** usar `notify` (envuelve `omarchy-notification-send` y
 cae a `notify-send` si la maquina no lo tiene). Forma:
