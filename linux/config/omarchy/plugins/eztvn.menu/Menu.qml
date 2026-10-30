@@ -80,8 +80,10 @@ Item {
   // A query also looks for files, not just menu rows: the point is to hit
   // SUPER+SPACE, type "*.py" (or "py") and land on the file. fd runs a beat
   // after the last keystroke, the run in flight dies when the query moves on,
-  // and each row carries an `omarchy-launch-editor` action, so Enter opens it
-  // in the default editor (nvim) inside a floating terminal.
+  // and each hit is classified by `file-open --kind` before it reaches the
+  // list: text (code, configs, notes, logs, CSV...) opens in the editor,
+  // while images, audio, video, PDFs, documents, archives and binaries open
+  // in their default app. Ctrl+Enter forces a file into the editor anyway.
   property var fileRows: []
   property string fileQuery: ""
   readonly property int fileSearchMinChars: 2
@@ -757,9 +759,14 @@ Item {
     var excludes = ""
     for (var i = 0; i < root.fileSearchExcludes.length; i++)
       excludes += " --exclude " + Util.shellQuote(root.fileSearchExcludes[i])
-    return "command -v fd >/dev/null || exit 0; fd --color=never --hidden --ignore-case"
+    // fd emits NUL-separated paths so filenames with spaces survive the pipe;
+    // file-open turns each one into "kind<TAB>path" for the row builder.
+    var classifier = Util.shellQuote(home + "/.local/bin/file-open")
+    return "command -v fd >/dev/null || exit 0; [ -x " + classifier + " ] || exit 0;"
+      + " fd --color=never --hidden --ignore-case -0"
       + " --type f --max-results " + (root.fileSearchMaxResults * 2) + fullPath
       + " --glob" + excludes + " -- " + Util.shellQuote(pattern) + " " + Util.shellQuote(home)
+      + " | xargs -0 -r " + classifier + " --kind"
   }
 
   function abortFileSearch() {
@@ -802,20 +809,38 @@ Item {
     fileSearchProc.running = true
   }
 
-  function fileRowFor(index, path, name, detail) {
+  function fileKindLabel(kind) {
+    switch (kind) {
+      case "text": return "texto"
+      case "image": return "imagen"
+      case "audio": return "audio"
+      case "video": return "video"
+      case "pdf": return "PDF"
+      case "document": return "documento"
+      case "archive": return "comprimido"
+      case "font": return "fuente"
+      case "directory": return "carpeta"
+      case "executable": return "ejecutable"
+      case "binary": return "binario"
+      default: return "archivo"
+    }
+  }
+
+  function fileRowFor(index, path, name, detail, kind) {
     return {
       itemId: "files." + index,
       kind: "file",
+      fileKind: kind,
       icon: "",
       iconFont: "",
       appIcon: "",
       appId: "",
       label: name,
       target: path,
-      detail: detail,
+      detail: root.fileKindLabel(kind) + " · " + detail,
       path: detail,
       childCount: 0,
-      action: "omarchy-launch-editor " + Util.shellQuote(path),
+      action: "file-open " + Util.shellQuote(path),
       provider: "",
       score: 0,
       section: "files"
@@ -832,7 +857,14 @@ Item {
     var seen = ({})
 
     for (var i = 0; i < lines.length; i++) {
-      var path = String(lines[i] || "").trim()
+      var line = String(lines[i] || "")
+      if (!line) continue
+      // file-open prints "kind<TAB>path"; a malformed line (or a name with a
+      // newline) falls back to other instead of dropping the file.
+      var tab = line.indexOf("\t")
+      var kind = tab >= 0 ? line.substring(0, tab) : "other"
+      var path = tab >= 0 ? line.substring(tab + 1) : line
+      path = path.replace(/\r$/, "")
       if (!path || seen[path]) continue
       seen[path] = true
 
@@ -845,7 +877,7 @@ Item {
         : (lower.indexOf(needle) === 0 ? 1 : (lower.indexOf(needle) >= 0 ? 2 : 3))
       var detail = (home && path.indexOf(home + "/") === 0)
         ? "~/" + path.substring(home.length + 1) : path
-      found.push({ path: path, name: name, detail: detail, rank: rank })
+      found.push({ path: path, name: name, detail: detail, kind: kind, rank: rank })
     }
 
     found.sort(function(a, b) {
@@ -857,7 +889,7 @@ Item {
     var rows = []
     var limit = Math.min(found.length, root.fileSearchMaxResults)
     for (var j = 0; j < limit; j++)
-      rows.push(root.fileRowFor(j, found[j].path, found[j].name, found[j].detail))
+      rows.push(root.fileRowFor(j, found[j].path, found[j].name, found[j].detail, found[j].kind))
 
     root.fileRows = rows
     if (root.opened && !root.dmenuActive) root.rebuildDisplay()
@@ -1074,6 +1106,21 @@ Item {
     opened = false
     filterText = ""
     Util.execDetached("setsid uwsm-app -- nautilus --select " + Util.shellQuote(String(row.target || "")))
+    return true
+  }
+
+  // Ctrl+Enter on any file: override the classification and edit it as text.
+  // Useful for formats that look binary to `file` (rare) or for opening an
+  // SVG/CSV in nvim instead of its viewer.
+  function openSelectedFileInEditor() {
+    if (root.dmenuActive || !root.cursorActive) return false
+    if (root.selectedIndex < 0 || root.selectedIndex >= displayModel.count) return false
+    var row = displayModel.get(root.selectedIndex)
+    if (!row || row.kind !== "file") return false
+    applySerial = requestSerial
+    opened = false
+    filterText = ""
+    Util.execDetached("omarchy-launch-editor " + Util.shellQuote(String(row.target || "")))
     return true
   }
 
@@ -1477,7 +1524,9 @@ Item {
             root.select(6)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Right) {
-            if (event.modifiers === Qt.ShiftModifier && root.openSelectedFileLocation()) {
+            if (event.modifiers === Qt.ControlModifier && root.openSelectedFileInEditor()) {
+              // Ctrl+Enter on a file: force the text editor.
+            } else if (event.modifiers === Qt.ShiftModifier && root.openSelectedFileLocation()) {
               // Shift+Enter on a file: show it in Files instead of the editor.
             } else if (root.dmenuActive) {
               if (root.mode === "input") root.applyDmenuSelection(root.filterText)

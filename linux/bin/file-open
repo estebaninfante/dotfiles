@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# file-open — abre un archivo según su contenido real, no sólo su extensión.
+#
+# Lo usa el launcher de Omarchy para no mandar medios al editor: los archivos
+# de texto (código, configs, notas, logs, CSV, etc.) van a
+# omarchy-launch-editor; imágenes, audio, video, PDFs, documentos, comprimidos,
+# fuentes y binarios van a la aplicación por defecto (xdg-open).
+#
+# La extensión resuelve lo evidente sin invocar `file`; lo desconocido o
+# ambiguo (un .ts puede ser TypeScript o video MPEG-TS) se decide por MIME y
+# por la codificación real del contenido. Un archivo de texto con extensión
+# rara o sin extensión también cae en el editor.
+#
+# Uso:
+#   file-open --kind ARCHIVO...   # imprime "tipo<TAB>ruta" por archivo
+#   file-open ARCHIVO             # abre con la aplicación correcta
+#
+# Tipos: text image audio video pdf document archive font executable binary other
+
+set -u
+
+# Extensiones cuyo contenido manda: pueden ser texto o un contenedor de video.
+AMBIGUOUS_EXTS='ts|mts|m2ts'
+
+TEXT_EXTS='txt|text|md|markdown|mdown|mkd|mdx|rst|rest|org|adoc|asciidoc|tex|latex|ltx|sty|cls|bib|txt|textile|wiki|mediawiki|man|roff|nfo|srt|vtt|ass|ssa|sub|sbv|log|out|err|json|jsonc|json5|hjson|ndjson|jsonl|geojson|topojson|yaml|yml|toml|ini|cfg|conf|config|properties|props|env|editorconfig|gitconfig|gitignore|gitattributes|gitmodules|npmrc|yarnrc|nvmrc|dockerignore|service|socket|timer|target|mount|path|slice|scope|device|swap|netdev|network|link|netrule|rules|desktop|directory|hook|patch|diff|csv|tsv|psv|ipynb|sh|bash|zsh|fish|ksh|csh|tcsh|ash|dash|bat|cmd|ps1|psm1|psd1|py|pyw|pyi|rb|gemspec|rake|ru|pl|pm|pod|t|php|php3|php4|php5|phtml|lua|js|mjs|cjs|jsx|tsx|go|rs|c|h|cc|cpp|cxx|c++|hh|hpp|hxx|inl|ipp|tpp|ixx|java|kt|kts|scala|sc|groovy|gvy|clj|cljs|cljc|edn|cs|csx|fs|fsx|fsi|vb|vbs|swift|m|mm|dart|r|jl|ex|exs|eex|heex|leex|erl|hrl|hs|lhs|elm|ml|mli|nim|nims|zig|v|sv|svh|vhd|vhdl|asm|s|f|f77|f90|f95|f03|for|cob|cbl|pas|pp|d|di|vala|cr|coffee|ls|pde|sol|vy|move|cairo|hx|lisp|el|scm|rkt|sls|sql|graphql|gql|proto|thrift|avsc|html|htm|xhtml|xml|xsd|xsl|xslt|dtd|plist|css|scss|sass|less|styl|pcss|postcss|qml|qmltypes|ui|pro|pri|cmake|mk|mak|am|ac|m4|spec|ebuild|nix|build|jinja|jinja2|j2|erb|ejs|hbs|handlebars|mustache|twig|liquid|haml|slim|pug|jade|wat|wast|rego|tf|tfvars|hcl|bicep|ftl|po|pot|dot|gv|mermaid|mmd|ps|eps|pem|crt|key|pub|asc|gpg|texinfo|texi|info|1|2|3|4|5|6|7|8|9'
+
+IMAGE_EXTS='jpg|jpeg|jpe|png|gif|webp|avif|bmp|tif|tiff|ico|icns|heic|heif|jxl|psd|xcf|kra|svg|svgz|raw|cr2|cr3|nef|arw|dng|orf|rw2|raf|pef|srw'
+
+AUDIO_EXTS='mp3|flac|ogg|oga|opus|wav|wave|m4a|aac|wma|ape|alac|aiff|aif|au|mid|midi|mka|m3u|m3u8|pls|xspf|wv|tta|dsf|dff|amr|ac3|dts'
+
+VIDEO_EXTS='mp4|m4v|mkv|webm|avi|mov|qt|mpg|mpeg|mpe|wmv|flv|f4v|3gp|3g2|ogv|ts|mts|m2ts|m2t|vob|rm|rmvb|asf|divx|mxf|roq|nsv|f4p|f4a|f4b'
+
+DOCUMENT_EXTS='doc|docx|odt|ott|rtf|pages|numbers|key|xls|xlsx|xlsm|ods|pptx|ppt|pps|ppsx|odp|epub|mobi|azw|azw3|djvu|djv'
+
+ARCHIVE_EXTS='zip|tar|gz|tgz|bz2|tbz|tbz2|xz|txz|zst|tzst|7z|rar|lz|lzma|lzo|lz4|z|cab|iso|dmg|deb|rpm|apk|jar|war|ear|ar|cpio|pak|snap|flatpak|appx|msix|crx|xpi'
+
+FONT_EXTS='ttf|otf|woff|woff2|pfb|pfm|ttc|otc|eot|bdf|pcf'
+
+EXECUTABLE_EXTS='exe|dll|so|dylib|bin|appimage|msi|com|o|a|lib|ko|elf|out'
+
+# Nombres sin extensión que son texto por convención.
+TEXT_NAMES='makefile|gnumakefile|bsdmakefile|dockerfile|containerfile|justfile|brewfile|gemfile|rakefile|vagrantfile|procfile|cmakelists.txt|license|licence|copying|copyright|readme|changelog|changes|authors|contributors|contributing|todo|codeowners|install|configure|configure.ac|config|hosts|passwd|group|fstab|crontab|pkgbuild|apkbuild|ebuild|setup.py|pyproject.toml|requirements.txt|.env|.env.*|.bashrc|.bash_profile|.bash_login|.bash_logout|.bash_aliases|.profile|.zshrc|.zshenv|.zprofile|.zlogin|.zlogout|.kshrc|.cshrc|.tcshrc|.gitconfig|.gitignore|.gitattributes|.gitmodules|.gitkeep|.editorconfig|.npmrc|.yarnrc|.nvmrc|.prettierrc|.prettierrc.*|.eslintrc|.eslintrc.*|.stylelintrc|.pylintrc|.flake8|.clang-format|.clang-tidy|.inputrc|.wgetrc|.curlrc|.Xresources|.Xdefaults|.xinitrc|.xprofile|.vimrc|.gvimrc|.tmux.conf|.nanorc|.screenrc|.ssh/config|.ssh/authorized_keys|.ssh/known_hosts'
+
+kind_from_file() {
+  local path="$1" info mime enc
+  info=$(file -Lb --mime -- "$path" 2>/dev/null) || { printf 'other'; return; }
+  mime=${info%%;*}
+  enc=""
+  [[ $info == *charset=* ]] && enc=${info##*charset=}
+
+  case $mime in
+    text/*) printf 'text'; return ;;
+    application/csv) printf 'text'; return ;;
+    application/json | application/ld+json | application/*+json) printf 'text'; return ;;
+    application/xml | application/*+xml) printf 'text'; return ;;
+    application/javascript | application/ecmascript | application/x-javascript) printf 'text'; return ;;
+    application/x-shellscript | application/x-sh | application/x-csh | \
+      application/x-perl | application/x-python | application/x-ruby | \
+      application/x-php | application/x-lua | application/x-tcl | \
+      application/x-awk | application/x-sed | application/x-tex | \
+      application/x-desktop | application/x-makefile | application/x-cmake | \
+      application/x-yaml | application/yaml | application/toml | \
+      application/x-toml | application/sql | application/graphql | \
+      application/x-subrip | application/x-m4 | application/x-nfo)
+      printf 'text'; return ;;
+    application/x-empty | inode/x-empty) printf 'text'; return ;;
+    audio/*) printf 'audio'; return ;;
+    video/*) printf 'video'; return ;;
+    image/*) printf 'image'; return ;;
+    application/pdf) printf 'pdf'; return ;;
+    application/epub+zip | application/vnd.oasis.opendocument.* | \
+      application/vnd.openxmlformats-officedocument.* | application/msword | \
+      application/vnd.ms-* | application/rtf | application/x-abiword | \
+      application/x-mobipocket-ebook | application/vnd.amazon.ebook)
+      printf 'document'; return ;;
+    application/zip | application/x-tar | application/gzip | \
+      application/x-gzip | application/x-bzip2 | application/x-xz | \
+      application/x-zstd | application/x-7z-compressed | application/x-rar | \
+      application/vnd.rar | application/x-lzip | application/x-lz4 | \
+      application/x-lzma | application/x-cpio | application/x-iso9660-image | \
+      application/x-archive)
+      printf 'archive'; return ;;
+    font/* | application/font-* | application/x-font-* | application/vnd.ms-fontobject)
+      printf 'font'; return ;;
+    application/x-executable | application/x-sharedlib | \
+      application/x-pie-executable | application/x-mach-binary | \
+      application/vnd.microsoft.portable-executable | application/x-dosexec | \
+      application/x-elf | application/x-object)
+      printf 'executable'; return ;;
+  esac
+
+  # Sin MIME reconocido: manda la codificación. `file` sólo dice "binary"
+  # cuando encontró bytes que no son texto (NUL, secuencias inválidas), así que
+  # utf-8, latin1 o incluso unknown-8bit siguen siendo editables.
+  case $enc in
+    "" | binary) printf 'binary' ;;
+    *) printf 'text' ;;
+  esac
+}
+
+# in_list <aguja> <lista separada por |>: comparación literal, sin globs.
+in_list() {
+  local needle="$1" list="$2" item
+  local IFS='|'
+  for item in $list; do
+    [[ $needle == "$item" ]] && return 0
+  done
+  return 1
+}
+
+# name_matches <nombre> <lista separada por |>: acepta globs (readme*, .env.*).
+name_matches() {
+  local needle="$1" list="$2" pattern
+  local IFS='|'
+  for pattern in $list; do
+    [[ $needle == $pattern ]] && return 0
+  done
+  return 1
+}
+
+kind_by_extension() {
+  local ext="$1"
+  if in_list "$ext" "$IMAGE_EXTS"; then printf 'image'
+  elif in_list "$ext" "$AUDIO_EXTS"; then printf 'audio'
+  elif in_list "$ext" "$VIDEO_EXTS"; then printf 'video'
+  elif in_list "$ext" "$DOCUMENT_EXTS"; then printf 'document'
+  elif in_list "$ext" "$ARCHIVE_EXTS"; then printf 'archive'
+  elif in_list "$ext" "$FONT_EXTS"; then printf 'font'
+  elif in_list "$ext" "$EXECUTABLE_EXTS"; then printf 'executable'
+  elif [[ $ext == pdf ]]; then printf 'pdf'
+  elif in_list "$ext" "$TEXT_EXTS"; then printf 'text'
+  else return 1
+  fi
+}
+
+kind_of() {
+  local path="$1" name base ext
+  name=${path##*/}
+  base=${name#.}
+  ext=""
+  [[ $base == *.* ]] && ext=${base##*.}
+  ext=${ext,,}
+
+  # `file` decide los casos donde la extensión engaña.
+  if in_list "$ext" "$AMBIGUOUS_EXTS"; then
+    kind_from_file "$path"
+    return
+  fi
+
+  if [[ -n $ext ]] && kind_by_extension "$ext"; then return; fi
+
+  if name_matches "${name,,}" "$TEXT_NAMES"; then printf 'text'; return; fi
+
+  [[ -d $path ]] && { printf 'directory'; return; }
+  kind_from_file "$path"
+}
+
+open_path() {
+  local path="$1" kind
+  kind=$(kind_of "$path")
+
+  if [[ $kind == text ]]; then
+    if command -v omarchy-launch-editor >/dev/null 2>&1; then
+      exec omarchy-launch-editor -- "$path"
+    fi
+    exec "${EDITOR:-nvim}" -- "$path"
+  fi
+
+  if command -v xdg-open >/dev/null 2>&1; then
+    exec setsid uwsm-app -- xdg-open "$path" 2>/dev/null \
+      || exec setsid xdg-open "$path"
+  fi
+
+  if { [[ $kind == audio ]] || [[ $kind == video ]]; } && command -v mpv >/dev/null 2>&1; then
+    exec setsid mpv -- "$path"
+  fi
+
+  command -v notify-send >/dev/null 2>&1 \
+    && notify-send "file-open" "No hay aplicación para abrir: $path"
+  printf 'file-open: no hay aplicación para abrir %s\n' "$path" >&2
+  return 1
+}
+
+mode=open
+if [[ ${1:-} == --kind ]]; then
+  mode=kind
+  shift
+fi
+
+if [[ $# -eq 0 ]]; then
+  printf 'Uso: %s [--kind] ARCHIVO...\n' "${0##*/}" >&2
+  exit 2
+fi
+
+if [[ $mode == kind ]]; then
+  for path in "$@"; do
+    printf '%s\t%s\n' "$(kind_of "$path")" "$path"
+  done
+  exit 0
+fi
+
+open_path "$1"
