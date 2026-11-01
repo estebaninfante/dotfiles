@@ -225,7 +225,7 @@ quiet_policy() {
 session_trigger() {
   [ -S "$USER_RT/bus" ] || return 0
   runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$USER_RT" \
-    systemctl --user restart power-session-guard.service >/dev/null 2>&1 || true
+    systemctl --user --no-block restart power-session-guard.service >/dev/null 2>&1 || true
   runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$USER_RT" \
     systemctl --user --no-block start wallpaper-power-guard.service >/dev/null 2>&1 || true
 }
@@ -243,7 +243,8 @@ if low_power; then
   aspm_policy powersave
   nmi_watchdog off
   # En modo extremo el Wi-Fi power save ya no es opt-in: es parte del ahorro.
-  if [ -f "$GUARD_DIR/wifi-powersave" ] || extreme; then
+  # Salvo con Moonlight abierto: sus picos de latencia cortan el stream.
+  if [ -f "$GUARD_DIR/wifi-powersave" ] || { extreme && ! /usr/bin/pgrep -x moonlight >/dev/null; }; then
     wifi_powersave on
   fi
   systemctl stop syncthing.service >/dev/null 2>&1 || true

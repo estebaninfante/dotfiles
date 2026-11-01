@@ -51,8 +51,11 @@ STOP_USER_UNITS=(
   omar-surface.service omar-glow.service
   voice-key-listener.service voice-pi-shim.service
   kokoro-tts.service ollama.service
+  omni-oido.service omni-web.service dictado.service asistente-tecla.service
+  lh-leer.service
   # KVM, streaming y escritorio remoto
   lan-mouse.service lan-mouse-auto.service sunshine.service
+  app-dev.lizardbyte.app.Sunshine.service
   weylus.service weylus-tablet.service weylus-toques.service
   hypr-remote.service hypr-outline.service present-remote.service
   # agentes y servidores de desarrollo (incluida la silla del agente: sin ella
@@ -64,6 +67,7 @@ STOP_USER_UNITS=(
   openclaw-gateway.service speeedy.service vision-gui.service
   ohm.service foldertinder.service omarchy-crash-watch.service
   airbnb-trip-compare.service talk-command.service
+  kanvas.service pi-desktop.service
   # audio de micrófono procesado, entrada e input automation
   mic-gain.service audio-jack-guard.service
   ydotoold.service mnt-blackmagic.service
@@ -301,7 +305,9 @@ engage() {
 
   # 3) Perfil + palancas del kernel (las aplica el guard, que ya las conoce).
   "$BIN_DIR/power-mode.sh" power-saver >/dev/null 2>&1 || true
-  sudo -n systemctl start battery-power-guard.service >/dev/null 2>&1 || true
+  # --no-block: el guard espera a power-session-guard, y este puede estar
+  # esperando a este script. Bloquear acá los deja colgados a los tres.
+  sudo -n systemctl --no-block start battery-power-guard.service >/dev/null 2>&1 || true
 
   # 4) Voz en CPU (por si algo la arranca después), brillo, teclado, pantalla.
   #    Todo esto va ANTES de parar servicios: si el modo se lanza desde dentro
@@ -396,7 +402,9 @@ release() {
   fi
 
   # 3) Que el guard re-evalúe (batería: power-saver y cap normal de 50 %).
-  sudo -n systemctl start battery-power-guard.service >/dev/null 2>&1 || true
+  # --no-block: el guard espera a power-session-guard, y este puede estar
+  # esperando a este script. Bloquear acá los deja colgados a los tres.
+  sudo -n systemctl --no-block start battery-power-guard.service >/dev/null 2>&1 || true
 
   rm -f "$RUNNING" "$TIMERS_ON" "$SYSTEM_ON" "$BRIGHT_SAVE" "$LED_SAVE" "$IDLE_SAVE" "$HYPR_SAVE"
   log "off: restaurado"
