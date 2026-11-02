@@ -115,8 +115,9 @@ EOF
 configure_pam
 
 # ── 5. Inscripción ───────────────────────────────────────────────────────────
-if [[ -n "$(fprintd-list "$USER" 2>/dev/null | grep -i 'finger')" ]]; then
-    ok "Ya hay huellas inscritas: $(fprintd-list "$USER" | sed -n '/finger/ s/^ *//p' | tr '\n' '; ')"
+FINGERS=$(fprintd-list "$USER" 2>/dev/null | grep -E "^ +-" | sed 's/.*: //' || true)
+if [[ -n "$FINGERS" ]]; then
+    ok "Ya hay huellas inscritas: $(echo "$FINGERS" | tr '\n' '; ')"
 else
     echo
     read -rp "¿Inscribir huella ahora (índice derecho)? [y/N] " ans
