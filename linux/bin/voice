@@ -385,9 +385,9 @@ chime() {
   fi
   [ -f "$f" ] || return 0
   if [ "$esperar" = 1 ]; then
-    wait_mic_free && pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1
+    wait_mic_free && pw-play -P '{ application.name = "voice-chime" }' --volume="$(tts_volume)" "$f" >/dev/null 2>&1
   else
-    ( wait_mic_free; pw-play --volume="$(tts_volume)" "$f" >/dev/null 2>&1 ) &
+    ( wait_mic_free; pw-play -P '{ application.name = "voice-chime" }' --volume="$(tts_volume)" "$f" >/dev/null 2>&1 ) &
   fi
 }
 
