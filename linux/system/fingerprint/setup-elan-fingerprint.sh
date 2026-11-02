@@ -60,7 +60,9 @@ else
     fi
 
     info "Instalando libfprint-tod + driver ELAN (build de unos minutos)..."
-    bash "$TOD_REPO_DIR/scripts/install.sh"
+    # PATH de sistema primero: ~/bin/tar (busybox) pisa GNU tar y no soporta
+    # --zstd, que es como los steps 03/04 empaquetan (.pkg.tar.zst).
+    env PATH="/usr/bin:/usr/local/bin:/bin" bash "$TOD_REPO_DIR/scripts/install.sh"
 fi
 
 # ── 4. PAM estilo Omarchy ────────────────────────────────────────────────────

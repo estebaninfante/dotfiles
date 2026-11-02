@@ -935,3 +935,42 @@ entero.
 - **Enter global sin submap**: `omar dictate --enter` inyecta un Enter con
   `wtype`, que volvería a disparar el mismo bind (recursión). Además obligaría a
   lanzar un proceso en cada Enter del sistema.
+
+## 2026-11-02 — Huella ELAN 04f3:0c4b via driver TOD de Lenovo, no open-source
+
+**Contexto.** El laptop trae un lector ELAN `04f3:0c4b`. `omarchy setup
+security fingerprint` instala `libfprint-git`, reconoce el sensor y hasta
+avanza 3 etapas del enroll, pero muere con `enroll-disconnected` y "protocol
+error with the device" en el log de fprintd. El driver open-source de libfprint
+("claima" soportar el ID) habla un protocolo viejo; el protocolo real de este
+sensor no está ni reverse-engineered (src del registro: issue/guía
+`Abishek-Pechiappan/libfprint-elan-04f3-0c4b-tod`, r/omarchy, ThinkPad E14 G5).
+
+**Qué se eligió.** Driver propietario TOD de Lenovo (blob binario de sus ISOs
+Ubuntu) en lugar de los drivers open-source parcheados de AUR. La ruta completa
+quedó automatizada en
+`linux/system/fingerprint/setup-elan-fingerprint.sh` (idempotente; hace
+remoción del libfprint-git que entra en conflicto, build/instalación de libfprint-tod +
+driver ELAN, PAM estilo omarchy para sudo/polkit/lock con gate de clamshell,
+y inscripción). PAM replicado a mano porque NO se puede re-correr
+`omarchy setup security fingerprint` — reinstalaría libfprint-git con `--ask 4`
+y reemplazó el TOD.
+
+**Descartado.**
+
+- **Seguir con el driver open-source (libfprint-git) a la espera de reverse
+  engineering del protocolo**: el enroll NUNCA va a terminar; el fallback por
+  password ya lo cubre Omarchy igual, pero el usuario quiere huella.
+- **Driver AUR open-source parcheado (`libfprint-elanmoc2-newdrvs-git` /
+  `libfprint-elanmoc2-working-git`)**: los IDs confirmados en los parches son
+  0c4c/0c00/otros; el 0c4b no figura soportado. Se optó por la ruta con
+  confirmación para el ID exacto.
+- **Dejar que `omarchy setup security fingerprint` maneje el PAM después de
+  instalar TOD**: ese asistente reinstala libfprint-git y pisa el driver (ver
+  arriba). El PAM quedó replicado en el script (mismas líneas del asistente,
+  con el gate `omarchy-hw-laptop-closed` para tapa cerrada).
+
+**Limitación documentada.** La huella NO desbloquea el disco LUKS en el boot:
+el prompt corre en initramfs sin USB/fprintd/usuarios. Cualquier sistema
+es igual (Windows no desbloquea BitLocker pre-boot con Hello). Si el boot
+cansa, vía alternativa: TPM2 auto-unlock con `systemd-cryptenroll`.
