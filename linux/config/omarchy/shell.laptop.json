@@ -100,8 +100,8 @@
     "omarchy.osd"
   ],
   "idle": {
-    "lock": 180,
-    "screensaver": 60
+    "lock": 300,
+    "screensaver": 150
   },
   "plugins": [
     {
