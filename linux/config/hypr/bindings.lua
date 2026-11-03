@@ -102,6 +102,7 @@ hl.bind("F7", hl.dsp.exec_cmd("~/.local/bin/omar dictate --toggle"))
 hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 
 hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("~/.local/bin/omar dictate --toggle"))
+hl.bind(main_mod .. " + CTRL + I", hl.dsp.exec_cmd("omarchy-launch-or-focus-tui \"~/.local/bin/dictado-historial\""), { description = "Historial de dictado" })
 
 -- Submap "dictado": lo activa `omar dictate` mientras graba y lo quita al
 -- terminar. Ahí la tecla Enter no llega a la app: cierra el dictado, espera a
