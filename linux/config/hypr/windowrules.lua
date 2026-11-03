@@ -57,4 +57,12 @@ hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, workspace = "10" })
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
 hl.window_rule({ match = { class = "ssh-desktop" }, opacity = "1.0 1.0", border_color = "rgba(00ff99f2)" })
 
+-- Historial de dictado (Super+Ctrl+I): ventana flotante y centrada.
+hl.window_rule({
+  match = { class = "^org\\.omarchy\\.dictado-historial$" },
+  float = true,
+  center = true,
+  size = { 1100, 700 },
+})
+
 return true
