@@ -29,4 +29,12 @@ hl.layer_rule({
     animation = "none"
 })
 
+-- Overlay del dictado: franja al pie con subtítulos en vivo. Se mapea una vez
+-- y se queda; la entrada/salida la hace el fade del QML (sin popin del compositor).
+hl.layer_rule({
+    match = { namespace = "dictado-overlay" },
+    no_anim = true,
+    animation = "none"
+})
+
 return true

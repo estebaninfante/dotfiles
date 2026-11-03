@@ -84,6 +84,11 @@ _modelo: WhisperModel | None = None
 _modelo_real = ""
 _dispositivo_real = "?"
 _error_carga = ""
+# Motor rápido (small): transcribe los subtítulos en vivo mientras hablás, sin
+# pelear por el lock del modelo grande. Se carga sólo cuando se pide.
+_lock_rapido = threading.Lock()
+_rapido: WhisperModel | None = None
+_rapido_error = ""
 
 
 def log(msg: str) -> None:
@@ -148,6 +153,35 @@ def cargar_modelo() -> WhisperModel:
         raise RuntimeError(f"no pude cargar ningún modelo de voz ({_error_carga})")
 
 
+def cargar_rapido() -> WhisperModel:
+    """Modelo chico para subtítulos en vivo; si no entra en la GPU, va a CPU."""
+    global _rapido, _rapido_error
+    with _lock_rapido:
+        if _rapido is not None:
+            return _rapido
+        if _modelo_real == MODELO_RAPIDO and _modelo is not None:
+            _rapido = _modelo
+            return _rapido
+        libre = vram_libre_mb()
+        intentos = []
+        if DISPOSITIVO != "cpu" and (libre is None or libre >= VRAM_RAPIDO):
+            intentos.append(("cuda", COMPUTO))
+        intentos.append(("cpu", "int8"))
+        for dispositivo, computo in intentos:
+            try:
+                t0 = time.time()
+                _rapido = WhisperModel(
+                    MODELO_RAPIDO, device=dispositivo, compute_type=computo,
+                    download_root=MODELOS, cpu_threads=HILOS, num_workers=1,
+                )
+                log(f"modelo rápido cargado en {dispositivo}/{computo} ({time.time() - t0:.1f}s)")
+                return _rapido
+            except Exception as exc:  # noqa: BLE001
+                _rapido_error = f"{dispositivo}/{computo}: {exc}"
+                log(f"no pude cargar el modelo rápido en {dispositivo}/{computo}: {exc}")
+        raise RuntimeError(f"no pude cargar el modelo rápido ({_rapido_error})")
+
+
 def normalizar(texto: str) -> str:
     texto = texto.lower().strip()
     texto = re.sub(r"[\.,!¡¿?;:]+", " ", texto)
@@ -190,15 +224,16 @@ def remuestrear(pcm: np.ndarray, origen: int, destino: int) -> np.ndarray:
     ).astype(np.float32)
 
 
-def transcribir(pcm: np.ndarray, idioma: str) -> dict:
+def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False) -> dict:
     if pcm.size < SAMPLE_RATE // 4:
         return {"texto": "", "idioma": idioma, "motivo": "audio muy corto"}
     pico = float(np.abs(pcm).max()) if pcm.size else 0.0
     if pico < 0.002:  # silencio digital
         return {"texto": "", "idioma": idioma, "motivo": "silencio"}
-    modelo = cargar_modelo()
+    modelo = cargar_rapido() if rapido else cargar_modelo()
+    cerrojo = _lock_rapido if rapido else _lock
     t0 = time.time()
-    with _lock:
+    with cerrojo:
         segmentos, info = modelo.transcribe(
             pcm,
             language=None if idioma == "auto" else idioma,
@@ -232,6 +267,7 @@ def salud() -> dict:
         "ok": _modelo is not None,
         "modelo": _modelo_real or MODELO,
         "dispositivo": _dispositivo_real,
+        "rapido": (MODELO_RAPIDO if _rapido is None else getattr(_rapido, "model_id", MODELO_RAPIDO)),
         "error": _error_carga if _modelo is None else "",
     }
 
@@ -276,13 +312,14 @@ class Handler(BaseHTTPRequestHandler):
         consulta = parse_qs(url.query)
         idioma = (consulta.get("idioma") or [IDIOMA])[0] or IDIOMA
         formato = (consulta.get("formato") or ["raw"])[0].lower()
+        rapido = (consulta.get("rapido") or ["0"])[0] in ("1", "true", "si", "sí")
         try:
             pcm = wav_a_pcm(cuerpo) if formato == "wav" else np.frombuffer(cuerpo, dtype="<f4").copy()
         except Exception as exc:  # noqa: BLE001 — se informa al cliente
             self._json({"error": f"audio inválido: {exc}"}, 400)
             return
         try:
-            self._json(transcribir(pcm, idioma))
+            self._json(transcribir(pcm, idioma, rapido))
         except Exception as exc:  # noqa: BLE001
             log(f"error transcribiendo: {exc}")
             self._json({"error": str(exc)}, 500)

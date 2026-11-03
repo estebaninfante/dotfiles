@@ -98,6 +98,7 @@ Todo esto está en la máquina y funcionando (verificado el 2026-10-29).
 | Daemon de voz | `voice-daemon.service` | corriendo: cola, dedup, playback, fallback |
 | Motores | Kokoro-82M, Chatterbox, Piper, espeak | andando; servidores persistentes |
 | Voces/identidad | `linux/voice/identity.py`, `agents.json` | andando: voz, rol y color por agente |
+| Overlay del dictado | `dictado-overlay.service` (quickshell) | andando: sólo la píldora (punto, ondas, reloj / "pensando…") |
 | Historial de dictado | `dictado-historial` (`SUPER+CTRL+I`) | andando |
 | Cerebro de voz | `voice-pi-shim.service` → Hermes headless | corriendo (latencia 5–6 s) |
 

@@ -12,3 +12,6 @@ dev-sync.timer
 
 # Dictado del escritorio (servidor faster-whisper local). Cliente: `dictado`.
 dictado.service
+
+# Overlay de los subtítulos del dictado.
+dictado-overlay.service

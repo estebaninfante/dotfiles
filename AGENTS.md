@@ -461,8 +461,12 @@ la segunda la cierra y pega. Enter mientras dictás cierra, pega y presiona
 Enter (submap `dictado`, `linux/config/hypr/dictado-submap.lua`, que replaysa
 los binds globales). `SUPER+CTRL+I` abre el historial
 (`linux/bin/dictado-historial` sobre `~/.local/state/dictado/historial.jsonl`).
-`linux/voice/micguard.py` lee `$XDG_RUNTIME_DIR/dictado/mic-busy` para que el
-TTS no hable encima del dictado. Sin palabra clave ni píldora: el asistente
+La UI es sólo la **píldora** (`linux/config/quickshell/dictado-overlay.qml`,
+servicio `dictado-overlay.service`): cápsula flotante al pie con punto rojo,
+ondas que siguen tu voz y el tiempo; mientras transcribe pasa a "pensando…".
+Es click-through y no toma foco; lee `$XDG_RUNTIME_DIR/dictado/estado.json`,
+que publica el grabador. `linux/voice/micguard.py` lee
+`$XDG_RUNTIME_DIR/dictado/mic-busy` para que el TTS no hable encima del dictado. Sin palabra clave ni píldora: el asistente
 anterior (Omar) se retiró; su código queda en `~/developing/omar` sin servicios
 ni atajos.
 
