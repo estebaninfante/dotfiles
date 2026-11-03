@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.timer",
+  "name": "Temporizador y descanso visual",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Temporizador con cuenta atrás en la barra y aviso al terminar; modo de descanso visual que cubre las pantallas durante el tiempo configurado.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Temporizador",
+    "description": "Cuenta atrás con aviso al terminar y descanso visual a pantalla completa.",
+    "category": "Time",
+    "aliases": ["timer", "temporizador", "cuenta atras", "descanso", "ojos", "eye", "break"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "timerMinutes": 25,
+      "eyeMinutes": 20
+    },
+    "schema": [
+      {
+        "key": "timerMinutes",
+        "type": "integer",
+        "label": "Minutos por defecto",
+        "description": "Minutos que propone el panel al abrir el temporizador.",
+        "min": 1,
+        "max": 240,
+        "step": 1,
+        "defaultValue": 25
+      },
+      {
+        "key": "eyeMinutes",
+        "type": "integer",
+        "label": "Minutos de descanso visual",
+        "description": "Cuánto tiempo cubre la pantalla el modo de descanso visual.",
+        "min": 1,
+        "max": 180,
+        "step": 1,
+        "defaultValue": 20
+      }
+    ]
+  }
+}

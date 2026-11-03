@@ -80,6 +80,9 @@
           "id": "eztvn.pi-tts"
         },
         {
+          "id": "eztvn.timer"
+        },
+        {
           "id": "eztvn.power"
         },
         {
@@ -91,7 +94,7 @@
       ]
     },
     "position": "top",
-    "transparent": true
+    "transparent": false
   },
   "cloneSourceRestores": [
     "eztvn.menu",

@@ -1,6 +1,6 @@
--- Sin gaps: el usuario quiere todo pegado (barra y ventanas).
-local GAP_MAX = 0
-local GAP_MIN = 0
+-- Gaps dinámicos: más aire con una sola ventana, mínimo cuando la pantalla se llena.
+local GAP_MAX = 10
+local GAP_MIN = 5
 local GAP_DECAY = 2
 
 local function gaps_for(count)
