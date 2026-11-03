@@ -1,0 +1,15 @@
+[Unit]
+Description=Dictado STT local (faster-whisper; servidor de /usr/bin/dictado)
+Documentation=file://%h/dotfiles/linux/dictado/servidor.py
+After=pipewire.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/dictado-servidor
+Restart=always
+RestartSec=3
+# El modelo se carga al arrancar: cuando cierras el dictado ya está listo.
+Nice=-5
+
+[Install]
+WantedBy=default.target

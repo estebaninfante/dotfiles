@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+"""dictado — dictado por voz del escritorio: hablás y el texto aparece donde está el cursor.
+
+Reemplaza a `omar dictate` sin depender de Omar: graba con PipeWire (`parec`),
+transcribe contra el servidor local `dictado` (faster-whisper) y escribe con
+`wtype` en la ventana enfocada. El texto queda en el historial.
+
+Uso:
+    dictado                 alterna: primer gesto abre la grabación, el segundo la cierra y pega
+    dictado --toggle        lo mismo (explícito)
+    dictado --cancel        corta y descarta lo grabado
+    dictado --enter         si hay dictado abierto: cierra, pega y presiona Enter;
+                            si no hay: presiona Enter normal (lo llama el submap de Hyprland)
+    dictado --estado        "grabando" / "libre"
+    dictado --archivo WAV   transcribe un WAV y lo escribe (pruebas, sin micrófono)
+    dictado --no-escribir   transcribe e imprime, sin teclear (con --archivo, --enter o --toggle)
+
+Mientras graba escribe su PID en $XDG_RUNTIME_DIR/dictado/mic-busy, que es lo
+que lee `linux/voice/micguard.py` para que el TTS no hable encima del dictado.
+
+Variables:
+  DICTADO_PUERTO     puerto del servidor (default 8091)
+  DICTADO_IDIOMA     idioma (default es)
+  DICTADO_MAX_S      tope de grabación en segundos (default 180)
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+HOME = os.path.expanduser("~")
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+CARPETA = os.path.join(RUNTIME, "dictado")
+PID = os.path.join(CARPETA, "grabando.pid")
+CRUDO = os.path.join(CARPETA, "grabando.f32")
+MIC_BUSY = os.path.join(CARPETA, "mic-busy")
+ESTADO = os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local/state")
+HISTORIAL = os.path.join(ESTADO, "dictado", "historial.jsonl")
+PUERTO = int(os.environ.get("DICTADO_PUERTO", "8091"))
+IDIOMA = os.environ.get("DICTADO_IDIOMA", "es")
+MAX_S = int(os.environ.get("DICTADO_MAX_S", "180"))
+SAMPLE_RATE = 16000
+MIN_BYTES = SAMPLE_RATE * 4 // 4  # un cuarto de segundo
+
+
+# --- utilidades -----------------------------------------------------------
+
+def avisar(titulo: str, cuerpo: str, ms: int = 1800) -> None:
+    for cmd in (["notify-send", "-a", "Dictado", "-t", str(ms), titulo, cuerpo],):
+        try:
+            subprocess.run(cmd, check=False, timeout=2)
+            return
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+
+def hyprctl(*args: str) -> None:
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return
+    try:
+        subprocess.run(["hyprctl", *args], check=False, timeout=2,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def viva(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def grabando() -> int | None:
+    """PID de la grabación en curso, si sigue viva."""
+    try:
+        pid = int(open(PID, encoding="utf-8").read().strip())
+    except (OSError, ValueError):
+        return None
+    if pid > 0 and viva(pid):
+        return pid
+    limpiar()
+    return None
+
+
+def limpiar() -> None:
+    for ruta in (PID, MIC_BUSY):
+        try:
+            os.unlink(ruta)
+        except OSError:
+            pass
+
+
+def servidor_url(ruta: str) -> str:
+    return f"http://127.0.0.1:{PUERTO}{ruta}"
+
+
+def salud(espera: float = 0.0) -> dict | None:
+    fin = time.time() + espera
+    while True:
+        try:
+            with urllib.request.urlopen(servidor_url("/salud"), timeout=1.5) as r:
+                return json.load(r)
+        except (OSError, urllib.error.URLError, json.JSONDecodeError):
+            if time.time() >= fin:
+                return None
+            time.sleep(0.25)
+
+
+def asegurar_servidor(espera: float = 45.0) -> dict:
+    """El servidor tiene que estar arriba para transcribir; si no, se arranca."""
+    datos = salud()
+    if datos is not None:
+        return datos
+    try:
+        subprocess.run(["systemctl", "--user", "start", "dictado.service"],
+                       check=False, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    datos = salud(espera)
+    if datos is None:
+        raise SystemExit("dictado: el servidor STT no responde (systemctl --user status dictado.service)")
+    return datos
+
+
+def transcribir(crudo: bytes) -> str:
+    asegurar_servidor()
+    url = servidor_url(f"/transcribir?idioma={IDIOMA}")
+    pedido = urllib.request.Request(url, data=crudo, method="POST",
+                                   headers={"Content-Type": "application/octet-stream"})
+    with urllib.request.urlopen(pedido, timeout=120) as r:
+        datos = json.load(r)
+    if "error" in datos:
+        raise SystemExit(f"dictado: {datos['error']}")
+    return str(datos.get("texto") or "").strip()
+
+
+def guardar_historial(texto: str, modo: str) -> None:
+    os.makedirs(os.path.dirname(HISTORIAL), exist_ok=True)
+    linea = {"fecha": time.strftime("%Y-%m-%dT%H:%M:%S"), "texto": texto, "modo": modo}
+    with open(HISTORIAL, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(linea, ensure_ascii=False) + "\n")
+
+
+def escribir(texto: str) -> bool:
+    """Teclea en la ventana enfocada. False si wtype falló (sin foco, etc)."""
+    limpio = texto.replace("\n", " ").strip()
+    if not limpio:
+        return True
+    try:
+        hecho = subprocess.run(["wtype", "--", limpio], check=False, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return hecho.returncode == 0
+
+
+def pulsar_enter() -> None:
+    try:
+        subprocess.run(["wtype", "-k", "Return"], check=False, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+# --- grabación ------------------------------------------------------------
+
+def empezar() -> None:
+    if grabando():
+        print("dictado: ya está grabando")
+        return
+    os.makedirs(CARPETA, exist_ok=True)
+    try:
+        os.unlink(CRUDO)
+    except OSError:
+        pass
+    try:
+        grabador = subprocess.Popen(
+            ["timeout", "--signal=INT", str(MAX_S),
+             "parec", "--format=float32le", "--rate", str(SAMPLE_RATE),
+             "--channels=1", "--raw", "--latency-msec=50"],
+            stdout=open(CRUDO, "wb"), stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        raise SystemExit(f"dictado: no pude abrir el micrófono: {exc}")
+    with open(PID, "w", encoding="utf-8") as fh:
+        fh.write(str(grabador.pid))
+    with open(MIC_BUSY, "w", encoding="utf-8") as fh:
+        fh.write(str(grabador.pid))
+    hyprctl("keyword", "submap", "dictado")
+    # El servidor tarda en cargar el modelo: se arranca ya, sin bloquear la
+    # grabación, y para cuando cierres el dictado ya está listo.
+    if salud() is None:
+        try:
+            subprocess.run(["systemctl", "--user", "start", "--no-block", "dictado.service"],
+                           check=False, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    avisar("Dictado", "Escuchando… pulsa de nuevo para pegar", 1200)
+
+
+def terminar(enviar: bool = False, cancelar: bool = False, no_escribir: bool = False) -> int:
+    pid = grabando()
+    if not pid:
+        if enviar:  # Enter sin dictado abierto: que la tecla siga haciendo lo suyo
+            pulsar_enter()
+            return 0
+        print("dictado: no hay grabación en curso")
+        return 1
+    try:
+        os.kill(pid, signal.SIGINT)
+    except OSError:
+        pass
+    for _ in range(30):
+        if not viva(pid):
+            break
+        time.sleep(0.1)
+    else:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    limpiar()
+    hyprctl("keyword", "submap", "reset")
+
+    if cancelar:
+        avisar("Dictado", "Cancelado", 1200)
+        return 0
+    try:
+        with open(CRUDO, "rb") as fh:
+            crudo = fh.read()
+    except OSError:
+        crudo = b""
+    if len(crudo) < MIN_BYTES:
+        avisar("Dictado", "No se entendió nada", 1500)
+        return 1
+    try:
+        texto = transcribir(crudo)
+    except SystemExit as exc:
+        avisar("Dictado", str(exc), 3000)
+        print(exc, file=sys.stderr)
+        return 1
+    if not texto:
+        avisar("Dictado", "No se entendió nada", 1500)
+        return 1
+    guardar_historial(texto, "dictado")
+    if no_escribir:
+        print(texto)
+        return 0
+    if not escribir(texto):
+        avisar("Dictado", "No pude escribir (¿ventana con foco?)", 2500)
+        print(texto)
+        return 1
+    if enviar:
+        # Esperar a que la app procese lo tecleado: si el Enter llega pegado,
+        # algunas apps lo toman como salto de línea en vez de "enviar".
+        time.sleep(min(1.5, 0.25 + len(texto) * 0.003))
+        pulsar_enter()
+    return 0
+
+
+def archivo(ruta: str, no_escribir: bool = False) -> int:
+    """Transcribe un WAV/audio cualquiera: se normaliza a float32 mono 16 kHz."""
+    try:
+        crudo = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", ruta, "-ac", "1", "-ar", str(SAMPLE_RATE),
+             "-f", "f32le", "-"],
+            check=True, capture_output=True, timeout=180).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SystemExit(f"dictado: no pude convertir {ruta}: {exc}")
+    if not crudo:
+        raise SystemExit(f"dictado: {ruta} no tiene audio")
+    texto = transcribir(crudo)
+    if texto:
+        guardar_historial(texto, "archivo")
+    if no_escribir:
+        print(texto)
+        return 0 if texto else 1
+    if texto and not escribir(texto):
+        print(texto)
+        return 1
+    return 0 if texto else 1
+
+
+def main(argv: list[str]) -> int:
+    no_escribir = "--no-escribir" in argv
+    args = [a for a in argv if a != "--no-escribir"]
+    if "--estado" in args:
+        print("grabando" if grabando() else "libre")
+        return 0
+    if "--cancel" in args or "--cancelar" in args:
+        return terminar(cancelar=True)
+    if "--archivo" in args:
+        i = args.index("--archivo")
+        if i + 1 >= len(args):
+            raise SystemExit("dictado: falta la ruta del WAV")
+        return archivo(args[i + 1], no_escribir)
+    if "--enter" in args:
+        return terminar(enviar=True, no_escribir=no_escribir)
+    if grabando():
+        return terminar(no_escribir=no_escribir)
+    empezar()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

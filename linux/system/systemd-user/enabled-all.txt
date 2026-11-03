@@ -9,3 +9,6 @@ lan-mouse-sync.service
 
 dev-sync.service
 dev-sync.timer
+
+# Dictado del escritorio (servidor faster-whisper local). Cliente: `dictado`.
+dictado.service

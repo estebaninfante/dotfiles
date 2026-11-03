@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# dictado-servidor — arranca el servidor STT de `dictado` con un Python que
+# tenga faster-whisper. No hay venv propio: se reusa el de whisperx (ya trae
+# faster-whisper + torch con CUDA) y, si no está, el python3 del sistema.
+#
+# DICTADO_PY fuerza el intérprete.
+set -euo pipefail
+
+aqui="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+servidor="$(cd "$aqui/../dictado" && pwd)/servidor.py"
+
+puede() { "$1" -c 'import faster_whisper' >/dev/null 2>&1; }
+
+py="${DICTADO_PY:-}"
+if [ -z "$py" ]; then
+  for candidato in \
+    "$HOME/.local/share/uv/tools/whisperx/bin/python" \
+    "$HOME/.local/share/uv/tools/whisperx/bin/python3" \
+    "$(command -v python3 || true)"; do
+    [ -n "$candidato" ] && [ -x "$candidato" ] || continue
+    if puede "$candidato"; then py="$candidato"; break; fi
+  done
+fi
+
+if [ -z "$py" ]; then
+  echo "dictado-servidor: ningún Python tiene faster-whisper (probé $HOME/.local/share/uv/tools/whisperx/bin/python y python3)" >&2
+  exit 1
+fi
+
+# ctranslate2 abre `libcublas.so.12` y `libcudnn*` por soname; los trae torch
+# como paquetes `nvidia-*` dentro de site-packages, fuera del ldconfig. El
+# loader lee LD_LIBRARY_PATH al arrancar el proceso, así que hay que exportarlo
+# ACÁ, antes del exec (ponerlo desde Python ya es tarde).
+libs="$("$py" - <<'PY' 2>/dev/null || true
+import glob, os, sysconfig
+base = sysconfig.get_paths()["purelib"]
+print("\n".join(sorted(glob.glob(os.path.join(base, "nvidia", "*", "lib")))))
+PY
+)"
+if [ -n "$libs" ]; then
+  LD_LIBRARY_PATH="$(printf '%s' "$libs" | paste -sd: -)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export LD_LIBRARY_PATH
+fi
+
+exec "$py" "$servidor" "$@"

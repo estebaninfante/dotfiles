@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# dictado-historial — historial de dictados (más nuevo primero).
+#
+# Con fzf: elegís una entrada y queda en el portapapeles. Sin fzf: se pagina
+# con less. Lo abre el atajo Súper+Ctrl+I de Hyprland.
+set -uo pipefail
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}"
+historial="$state/dictado/historial.jsonl"
+
+if [ ! -s "$historial" ]; then
+  echo "Todavía no hay dictados en $historial"
+  exit 0
+fi
+
+listado="$(
+  python3 - "$historial" <<'PY'
+import json
+import sys
+
+ruta = sys.argv[1]
+filas = []
+with open(ruta, encoding="utf-8") as fh:
+    for linea in fh:
+        try:
+            datos = json.loads(linea)
+        except json.JSONDecodeError:
+            continue
+        texto = " ".join(str(datos.get("texto") or "").split())
+        if not texto:
+            continue
+        fecha = str(datos.get("fecha") or "").replace("T", " ")[5:16]
+        filas.append(f"{fecha}  {texto}")
+for i, fila in enumerate(reversed(filas), 1):
+    print(f"{i:>3}. {fila}")
+PY
+)"
+
+if command -v fzf >/dev/null 2>&1; then
+  elegido="$(printf '%s\n' "$listado" | fzf --ansi --exact --no-sort --prompt='dictado> ' \
+    --header='Enter: copiar al portapapeles · Esc: salir' 2>/dev/null || true)"
+  [ -z "$elegido" ] && exit 0
+  texto="${elegido#*. }"
+  printf '%s' "$texto" | wl-copy --no-newline
+  notify -a Dictado -t 1500 "Dictado copiado" "${texto:0:120}" 2>/dev/null || true
+else
+  printf '%s\n' "$listado" | less -R
+fi
