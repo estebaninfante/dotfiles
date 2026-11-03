@@ -6,26 +6,42 @@ import qs.Commons
 import qs.Ui
 import "Format.js" as Format
 
-// Temporizador compartido + descanso visual.
+// Temporizador compartido + recordatorio de descanso visual.
 //
 // La barra se instancia una vez por monitor, así que el estado (dos epoch en
 // milisegundos) vive en archivos bajo ~/.local/state/eztvn.timer y cada
 // instancia los observa con FileView. Eso mantiene la cuenta y el overlay
 // sincronizados entre pantallas y sobrevive a una recarga del shell.
 //
-// El aviso de fin lo programa systemd-run (unidad transitoria), no QML: si el
-// shell se reinicia a mitad de la cuenta, el aviso sigue llegando.
+// El descanso es periódico: con el modo encendido, cada `eyeIntervalMinutes`
+// aparece un overlay de `eyeDurationSeconds`; los dos tiempos se configuran
+// en shell.json. El estado guarda solo el instante del próximo descanso, así
+// que el modo sobrevive reinicios y saltarse un descanso no lo apaga.
+//
+// El aviso de fin del temporizador lo programa systemd-run (unidad
+// transitoria), no QML: si el shell se reinicia a mitad de la cuenta, el
+// aviso sigue llegando.
 BarWidget {
   id: root
   moduleName: "eztvn.timer"
 
   readonly property string stateDir: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/eztvn.timer"
   readonly property string timerPath: root.stateDir + "/timer-end"
-  readonly property string eyePath: root.stateDir + "/eye-end"
+  readonly property string eyePath: root.stateDir + "/eye-next"
   readonly property string notifyScript: Qt.resolvedUrl("notify.sh").toString().replace("file://", "")
 
-  readonly property int eyeMinutes: Math.max(1, Math.min(180, Math.round(Number(setting("eyeMinutes", 20)) || 20)))
-  property int timerMinutes: Math.max(1, Math.min(240, Math.round(Number(setting("timerMinutes", 25)) || 25)))
+  function clampInt(value, min, max, fallback) {
+    var number = Math.round(Number(value))
+    if (!isFinite(number)) number = fallback
+    return Math.max(min, Math.min(max, number))
+  }
+
+  readonly property int eyeIntervalMinutes: clampInt(setting("eyeIntervalMinutes", 20), 1, 240, 20)
+  readonly property int eyeDurationSeconds: clampInt(setting("eyeDurationSeconds", 30), 5, 300, 30)
+  readonly property double eyeIntervalMs: eyeIntervalMinutes * 60000
+  readonly property double eyeDurationMs: eyeDurationSeconds * 1000
+
+  property int timerMinutes: clampInt(setting("timerMinutes", 25), 1, 240, 25)
 
   readonly property var ownScreen: root.QsWindow.window ? root.QsWindow.window.screen : null
   // Un solo dueño del target IPC; el resto de instancias reciben los cambios
@@ -37,22 +53,35 @@ BarWidget {
 
   property double now: Date.now()
   property double timerEnd: 0
-  property double eyeEnd: 0
+  property double eyeNext: 0
 
   readonly property bool timerActive: root.timerEnd > root.now
-  readonly property bool eyeActive: root.eyeEnd > root.now
   readonly property double timerRemainingMs: Math.max(0, root.timerEnd - root.now)
-  readonly property double eyeRemainingMs: Math.max(0, root.eyeEnd - root.now)
 
-  readonly property string barLabel: root.eyeActive
-    ? "󰈈 " + Format.clock(root.eyeRemainingMs)
-    : (root.timerActive ? "󰔛 " + Format.clock(root.timerRemainingMs) : "󰔛")
+  readonly property bool eyeArmed: root.eyeNext > 0
+  readonly property bool eyeBreakActive: root.eyeArmed
+    && root.now >= root.eyeNext
+    && root.now < root.eyeNext + root.eyeDurationMs
+  readonly property double eyeBreakRemainingMs: root.eyeBreakActive
+    ? Math.max(0, root.eyeNext + root.eyeDurationMs - root.now) : 0
+  readonly property double eyeNextInMs: root.eyeArmed && !root.eyeBreakActive
+    ? Math.max(0, root.eyeNext - root.now) : 0
 
-  readonly property string tooltipText: root.eyeActive
-    ? "Descanso visual: quedan " + Format.clock(root.eyeRemainingMs) + "\nClic para gestionar"
-    : (root.timerActive
-      ? "Temporizador: quedan " + Format.clock(root.timerRemainingMs) + "\nClic para gestionar"
-      : "Temporizador y descanso visual\nClic para abrir")
+  readonly property string barLabel: root.timerActive
+    ? "󰔛 " + Format.clock(root.timerRemainingMs)
+    : (root.eyeArmed
+      ? (root.eyeBreakActive ? "󰈈 " + Format.clock(root.eyeBreakRemainingMs) : "󰈈")
+      : "󰔛")
+
+  readonly property string tooltipText: root.eyeBreakActive
+    ? "Descanso visual · quedan " + Format.clock(root.eyeBreakRemainingMs)
+    : (root.eyeArmed
+      ? "Protección visual activa\nCada " + root.eyeIntervalMinutes + " min · "
+        + root.eyeDurationSeconds + " s · próximo en " + Format.clock(root.eyeNextInMs)
+        + "\nClic para gestionar"
+      : (root.timerActive
+        ? "Temporizador: quedan " + Format.clock(root.timerRemainingMs) + "\nClic para gestionar"
+        : "Temporizador y descanso visual\nClic para abrir"))
 
   // ---------------------------------------------------------------- estado
 
@@ -62,13 +91,7 @@ BarWidget {
   }
 
   function applyTimer(raw) { root.timerEnd = parseEnd(raw) }
-  function applyEye(raw) { root.eyeEnd = parseEnd(raw) }
-
-  function clampMinutes(value, max) {
-    var minutes = Math.round(Number(value))
-    if (!isFinite(minutes)) minutes = 1
-    return Math.max(1, Math.min(max, minutes))
-  }
+  function applyEyeNext(raw) { root.eyeNext = parseEnd(raw) }
 
   // Escritura fuera de FileView: setText dispara el watcher antes de que el
   // contenido nuevo sea visible, y la lectura vieja (0) borraba el estado
@@ -83,7 +106,7 @@ BarWidget {
       return
     }
     root.pendingWrite = null
-    stateWriter.command = ["bash", "-c", "printf '%s' \"$2\" > \"$1\"", "--", item.path, item.value]
+    stateWriter.command = ["bash", "-c", "printf '%s' \"$2\" > \"$1.tmp\" && mv -f \"$1.tmp\" \"$1\"", "--", item.path, item.value]
     stateWriter.running = true
   }
 
@@ -100,65 +123,79 @@ BarWidget {
     root.writeStateFile(root.timerPath, root.timerEnd)
   }
 
-  function writeEyeEnd(ms) {
-    root.eyeEnd = Math.max(0, ms)
+  function writeEyeNext(ms) {
+    root.eyeNext = Math.max(0, ms)
     root.now = Date.now()
-    root.writeStateFile(root.eyePath, root.eyeEnd)
+    root.writeStateFile(root.eyePath, root.eyeNext)
   }
 
   function startTimer(minutes) {
-    var mins = clampMinutes(minutes, 240)
+    var mins = clampInt(minutes, 1, 240, root.timerMinutes)
     root.timerMinutes = mins
-    writeTimerEnd(Date.now() + mins * 60000)
-    scheduleAlert("timer", mins)
+    root.writeTimerEnd(Date.now() + mins * 60000)
+    root.scheduleAlert(mins)
   }
 
   function stopTimer() {
-    writeTimerEnd(0)
-    cancelAlert("timer")
+    root.writeTimerEnd(0)
+    root.cancelAlert()
   }
 
-  function startEye() {
-    writeEyeEnd(Date.now() + root.eyeMinutes * 60000)
-    scheduleAlert("eye", root.eyeMinutes)
+  // ------------------------------------------------------------- descanso
+
+  function enableEye() {
+    if (root.eyeArmed) return
+    root.writeEyeNext(Date.now() + root.eyeIntervalMs)
   }
 
-  function stopEye() {
-    writeEyeEnd(0)
-    cancelAlert("eye")
+  function disableEye() {
+    root.writeEyeNext(0)
   }
 
   function toggleEye() {
-    if (root.eyeActive) root.stopEye()
-    else root.startEye()
+    if (root.eyeArmed) root.disableEye()
+    else root.enableEye()
+  }
+
+  // Esc durante el descanso salta solo ese descanso; el modo sigue armado.
+  function skipEyeBreak() {
+    if (!root.eyeArmed) return
+    var next = root.eyeNext
+    if (root.now < next + root.eyeDurationMs) next += root.eyeIntervalMs
+    root.writeEyeNext(next)
+  }
+
+  // Solo una instancia avanza el calendario cuando el descanso ya terminó.
+  function advanceEyeSchedule() {
+    if (!root.eyeArmed || !root.ipcOwner) return
+    if (root.now < root.eyeNext + root.eyeDurationMs) return
+    var overdue = root.now - (root.eyeNext + root.eyeDurationMs)
+    var steps = Math.max(1, Math.ceil(overdue / root.eyeIntervalMs))
+    root.writeEyeNext(root.eyeNext + steps * root.eyeIntervalMs)
   }
 
   // ---------------------------------------------------------------- avisos
 
-  function unitPattern(kind) {
-    return "eztvn-timer-" + kind + "-*"
-  }
-
-  function stopUnitsCommand(kind) {
+  function stopUnitsCommand() {
     return "systemctl --user list-units --all --plain --no-legend "
-      + Util.shellQuote(unitPattern(kind))
+      + Util.shellQuote("eztvn-timer-timer-*")
       + " | awk '{print $1}' | xargs -r systemctl --user stop >/dev/null 2>&1 || true"
   }
 
-  function scheduleAlert(kind, minutes) {
-    var unit = "eztvn-timer-" + kind + "-" + Date.now()
+  function scheduleAlert(minutes) {
+    var unit = "eztvn-timer-timer-" + Date.now()
     var seconds = Math.max(1, Math.round(minutes * 60))
     alertProc.command = ["bash", "-c",
-      stopUnitsCommand(kind) + "; "
+      stopUnitsCommand() + "; "
       + "exec systemd-run --user --collect --unit=" + Util.shellQuote(unit)
       + " --on-active=" + seconds + " "
-      + Util.shellQuote(root.notifyScript) + " " + Util.shellQuote(kind) + " " + minutes]
+      + Util.shellQuote(root.notifyScript) + " " + minutes]
     if (!alertProc.running) alertProc.running = true
   }
 
-  function cancelAlert(kind) {
+  function cancelAlert() {
     if (alertProc.running) return
-    cancelProc.command = ["bash", "-c", stopUnitsCommand(kind)]
+    cancelProc.command = ["bash", "-c", stopUnitsCommand()]
     if (!cancelProc.running) cancelProc.running = true
   }
 
@@ -193,7 +230,7 @@ BarWidget {
     bar: root.bar
     text: root.barLabel
     tooltipText: root.tooltipText
-    active: root.timerActive || root.eyeActive
+    active: root.timerActive || root.eyeArmed
     activeColor: Color.accent
     horizontalMargin: 8.5
     onPressed: function(b) {
@@ -222,17 +259,19 @@ BarWidget {
     function hide(): void { root.broadcast("close") }
     function toggle(): void { root.broadcast("togglePanel") }
     function countdown(minutes: string): void { root.startTimer(Number(minutes)) }
-    function echo(text: string): string { return text }
     function stop(): void { root.stopTimer() }
     function eye(): void { root.toggleEye() }
-    function startEye(): void { root.startEye() }
-    function stopEye(): void { root.stopEye() }
+    function eyeOn(): void { root.enableEye() }
+    function eyeOff(): void { root.disableEye() }
+    function eyeSkip(): void { root.skipEyeBreak() }
     function status(): string {
       return JSON.stringify({
         timerActive: root.timerActive,
         timerRemainingMs: Math.round(root.timerRemainingMs),
-        eyeActive: root.eyeActive,
-        eyeRemainingMs: Math.round(root.eyeRemainingMs)
+        eyeArmed: root.eyeArmed,
+        eyeBreakActive: root.eyeBreakActive,
+        eyeBreakRemainingMs: Math.round(root.eyeBreakRemainingMs),
+        eyeNextInMs: Math.round(root.eyeNextInMs)
       })
     }
   }
@@ -244,7 +283,7 @@ BarWidget {
 
   PanelWindow {
     id: eyeOverlay
-    visible: root.eyeActive && root.ownScreen !== null
+    visible: root.eyeBreakActive && root.ownScreen !== null
     screen: root.ownScreen
     color: Color.background
     exclusionMode: ExclusionMode.Ignore
@@ -273,7 +312,7 @@ BarWidget {
     PanelKeyCatcher {
       id: eyeKeys
       anchors.fill: parent
-      onCloseRequested: root.stopEye()
+      onCloseRequested: root.skipEyeBreak()
 
       Column {
         anchors.centerIn: parent
@@ -311,7 +350,7 @@ BarWidget {
         Text {
           width: parent.width
           horizontalAlignment: Text.AlignHCenter
-          text: Format.clock(root.eyeRemainingMs)
+          text: Format.clock(root.eyeBreakRemainingMs)
           color: Color.foreground
           font.family: Style.font.family
           font.pixelSize: Math.round(Style.font.displayLarge * 2.4)
@@ -321,7 +360,7 @@ BarWidget {
         Text {
           width: parent.width
           horizontalAlignment: Text.AlignHCenter
-          text: "Vuelve a la pantalla cuando llegue a cero · Esc para terminar antes"
+          text: root.eyeDurationSeconds + " s · se cierra solo · Esc para saltarlo"
           color: Qt.darker(Color.foreground, 1.7)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -339,7 +378,7 @@ BarWidget {
     atomicWrites: true
     printErrors: false
     onLoaded: root.applyTimer(text())
-    onFileChanged: root.applyTimer(text())
+    onFileChanged: reload()
     onLoadFailed: root.applyTimer("0")
   }
 
@@ -347,17 +386,16 @@ BarWidget {
     id: eyeFile
     path: root.eyePath
     watchChanges: true
-    atomicWrites: true
     printErrors: false
-    onLoaded: root.applyEye(text())
-    onFileChanged: root.applyEye(text())
-    onLoadFailed: root.applyEye("0")
+    onLoaded: root.applyEyeNext(text())
+    onFileChanged: reload()
+    onLoadFailed: root.applyEyeNext("0")
   }
 
   Process {
     id: ensureState
     command: ["bash", "-c",
-      "mkdir -p \"$1\"; for f in timer-end eye-end; do [[ -e \"$1/$f\" ]] || printf 0 > \"$1/$f\"; done",
+      "mkdir -p \"$1\"; rm -f \"$1/eye-end\"; for f in timer-end eye-next; do [[ -e \"$1/$f\" ]] || printf 0 > \"$1/$f\"; done",
       "--", root.stateDir]
     onExited: {
       timerFile.reload()
@@ -374,10 +412,13 @@ BarWidget {
   }
 
   Timer {
-    interval: 250
+    interval: 1000
     repeat: true
-    running: root.timerActive || root.eyeActive
-    onTriggered: root.now = Date.now()
+    running: root.timerActive || root.eyeArmed
+    onTriggered: {
+      root.now = Date.now()
+      root.advanceEyeSchedule()
+    }
   }
 
   Component.onCompleted: {

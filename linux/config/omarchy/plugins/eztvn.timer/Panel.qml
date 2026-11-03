@@ -15,10 +15,13 @@ Panel {
 
   readonly property var widget: hostWidget
   readonly property bool timerActive: root.widget ? root.widget.timerActive === true : false
-  readonly property bool eyeActive: root.widget ? root.widget.eyeActive === true : false
   readonly property double timerRemainingMs: root.widget ? root.widget.timerRemainingMs : 0
-  readonly property double eyeRemainingMs: root.widget ? root.widget.eyeRemainingMs : 0
-  readonly property int eyeMinutes: root.widget ? root.widget.eyeMinutes : 20
+  readonly property bool eyeArmed: root.widget ? root.widget.eyeArmed === true : false
+  readonly property bool eyeBreakActive: root.widget ? root.widget.eyeBreakActive === true : false
+  readonly property double eyeBreakRemainingMs: root.widget ? root.widget.eyeBreakRemainingMs : 0
+  readonly property double eyeNextInMs: root.widget ? root.widget.eyeNextInMs : 0
+  readonly property int eyeIntervalMinutes: root.widget ? root.widget.eyeIntervalMinutes : 20
+  readonly property int eyeDurationSeconds: root.widget ? root.widget.eyeDurationSeconds : 30
 
   property int minutes: 25
 
@@ -33,7 +36,7 @@ Panel {
   }
 
   // El descanso cubre la pantalla: el panel sobra debajo del overlay.
-  onEyeActiveChanged: if (root.eyeActive) root.close()
+  onEyeBreakActiveChanged: if (root.eyeBreakActive) root.close()
 
   onOpenedChanged: {
     if (!root.opened || !root.widget) return
@@ -159,10 +162,14 @@ Panel {
         Toggle {
           width: parent.width
           label: "Descanso visual"
-          description: root.eyeActive
-            ? "Quedan " + Format.clock(root.eyeRemainingMs) + " · pantalla cubierta"
-            : "Cubre la pantalla " + root.eyeMinutes + " min para mirar lejos"
-          checked: root.eyeActive
+          description: root.eyeBreakActive
+            ? "Descanso en curso · quedan " + Format.clock(root.eyeBreakRemainingMs)
+            : (root.eyeArmed
+              ? "Cada " + root.eyeIntervalMinutes + " min · " + root.eyeDurationSeconds
+                + " s · próximo en " + Format.clock(root.eyeNextInMs)
+              : "Cubre la pantalla " + root.eyeDurationSeconds + " s cada "
+                + root.eyeIntervalMinutes + " min")
+          checked: root.eyeArmed
           onClicked: root.toggleEye()
         }
       }

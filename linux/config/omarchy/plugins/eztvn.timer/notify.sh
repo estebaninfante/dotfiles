@@ -1,25 +1,14 @@
 #!/bin/bash
-# One-shot alert fired by systemd-run when a timer or an eye break ends.
-# Usage: notify.sh <timer|eye> <minutes>
+# One-shot alert fired by systemd-run when the countdown ends.
+# Usage: notify.sh <minutes>
 set -u
 
-kind=${1:-timer}
-minutes=${2:-20}
+minutes=${1:-20}
 
-case $kind in
-eye)
-  glyph="󰈈"
-  headline="Descanso visual terminado"
-  body="$minutes minutos mirando lejos. Vuelve a la pantalla."
-  sound="complete"
-  ;;
-*)
-  glyph="󰔛"
-  headline="Temporizador"
-  body="$minutes minutos completados."
-  sound="alarm-clock-elapsed"
-  ;;
-esac
+glyph="󰔛"
+headline="Temporizador"
+body="$minutes minutos completados."
+sound="alarm-clock-elapsed"
 
 if command -v pw-play >/dev/null 2>&1 && [[ -f /usr/share/sounds/freedesktop/stereo/$sound.oga ]]; then
   pw-play --volume 0.7 "/usr/share/sounds/freedesktop/stereo/$sound.oga" >/dev/null 2>&1 &

@@ -6,7 +6,9 @@
   "author": "eztvn",
   "license": "MIT",
   "description": "Temporizador con cuenta atrás en la barra y aviso al terminar; modo de descanso visual que cubre las pantallas durante el tiempo configurado.",
-  "kinds": ["bar-widget"],
+  "kinds": [
+    "bar-widget"
+  ],
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
@@ -14,12 +16,21 @@
     "displayName": "Temporizador",
     "description": "Cuenta atrás con aviso al terminar y descanso visual a pantalla completa.",
     "category": "Time",
-    "aliases": ["timer", "temporizador", "cuenta atras", "descanso", "ojos", "eye", "break"],
+    "aliases": [
+      "timer",
+      "temporizador",
+      "cuenta atras",
+      "descanso",
+      "ojos",
+      "eye",
+      "break"
+    ],
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
       "timerMinutes": 25,
-      "eyeMinutes": 20
+      "eyeIntervalMinutes": 20,
+      "eyeDurationSeconds": 30
     },
     "schema": [
       {
@@ -33,14 +44,24 @@
         "defaultValue": 25
       },
       {
-        "key": "eyeMinutes",
+        "key": "eyeIntervalMinutes",
         "type": "integer",
-        "label": "Minutos de descanso visual",
-        "description": "Cuánto tiempo cubre la pantalla el modo de descanso visual.",
+        "label": "Cada cuántos minutos descansar",
+        "description": "Intervalo entre descansos visuales.",
         "min": 1,
-        "max": 180,
+        "max": 240,
         "step": 1,
         "defaultValue": 20
+      },
+      {
+        "key": "eyeDurationSeconds",
+        "type": "integer",
+        "label": "Segundos de descanso",
+        "description": "Cuánto tiempo cubre la pantalla cada descanso visual.",
+        "min": 5,
+        "max": 300,
+        "step": 5,
+        "defaultValue": 30
       }
     ]
   }
