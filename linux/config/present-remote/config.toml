@@ -41,7 +41,7 @@ tap = "@voice"
 
 # 2 toques (Enter -> f17): dictado de Omar. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
 [buttons.f17]
-tap = "~/.local/bin/omar dictate"
+tap = "~/.local/bin/dictado"
 combo_with = "f14"
 combo = "omarchy-menu toggle"
 

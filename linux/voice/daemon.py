@@ -734,10 +734,10 @@ def _annotate_spoken(text: str) -> None:
     """Anota en spoken.log el momento REAL en que empieza a sonar una frase.
 
     `voice speak` ya anota al encolar. Cuando la frase esperó a que termine un
-    dictado, esa hora queda vieja y el oído de Omar podría tomar su propio eco
+    dictado, esa hora queda vieja y un dictado podría tomar su propio eco
     como voz del usuario: esta segunda anotación llega con la hora correcta.
     """
-    ruta = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "omar", "spoken.log")
+    ruta = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "voice", "spoken.log")
     try:
         os.makedirs(os.path.dirname(ruta), exist_ok=True)
         with open(ruta, "a", encoding="utf-8") as fh:

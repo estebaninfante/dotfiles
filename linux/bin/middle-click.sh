@@ -18,7 +18,7 @@ down)
         send "keyup rightctrl"
         send "keydown rightctrl"
     else
-        exec omar dictate --toggle
+        exec dictado
     fi
     ;;
 up)

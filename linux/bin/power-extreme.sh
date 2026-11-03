@@ -47,9 +47,7 @@ IDLE_LOCK=180       # antes 300
 # dbus, power-session-guard y NetworkManager.
 STOP_USER_UNITS=(
   # voz de entrada y modelos locales (lo más caro: micrófono + CUDA)
-  omar-listen.service omar-whisper.service omar-pill.service
-  omar-surface.service omar-glow.service
-  voice-key-listener.service voice-pi-shim.service
+  voice-pi-shim.service
   kokoro-tts.service ollama.service
   omni-oido.service omni-web.service dictado.service asistente-tecla.service
   lh-leer.service

@@ -47,21 +47,12 @@ CONFIG_PATH = os.environ.get(
     "PRESENT_CONFIG", os.path.join(HOME, ".config/present-remote/config.toml")
 )
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-PTT_PIDFILE = os.path.join(RUNTIME, "omar-ptt.pid")
-LISTEN_UNIT = "omar-listen.service"
-STATUS_FILE = os.path.join(RUNTIME, "omar", "status.json")
-# La píldora publica su estado en este archivo (lo mismo que lee el glow):
-# leerlo es instantáneo, sin arrancar un cliente de Quickshell.
-PILL_OPEN = os.path.join(RUNTIME, "omar", "pill-open")
+DICTATE_PID = os.path.join(RUNTIME, "dictado", "grabando.pid")
 # Lo escribe `linux/voice/daemon.py` mientras reproduce y lo borra al terminar.
 SPEAKING_FILE = os.path.join(
     os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache"),
     "voice", "speaking.json",
 )
-PILL = os.path.join(HOME, "developing/omar/packaging/quickshell/omar-pill.qml")
-GLOW = os.path.join(os.path.dirname(PILL), "omar-glow.qml")
-# El dictado (`omar dictate`) anota acá su turno; SIGINT = cancelar y descartar.
-DICTATE_PID = os.path.join(RUNTIME, "omar", "dictate.pid")
 # Shell de Omarchy: su IPC descarta el cartel de escritorio de un aviso.
 OMARCHY_SHELL = os.path.join(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy"), "shell")
 LOG = open(os.devnull, "w")
@@ -170,52 +161,6 @@ def arrow(action):
         _scroll("up" if action == "prev" else "down")
 
 
-def _is_voice_session(pid):
-    """¿El PID es de verdad una sesión `node …/dist/index.js listen --no-wake`?
-
-    No alcanza con buscar el texto en la línea de comandos: un shell o un
-    editor que mencionen el patrón también matchean, y matarlos es peligroso
-    (llegó a matar al propio toggle). Se valida el ejecutable y los argumentos.
-    """
-    try:
-        with open(f"/proc/{pid}/cmdline", "rb") as f:
-            argv = [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
-    except OSError:
-        return False
-    if len(argv) < 3 or "node" not in os.path.basename(argv[0]):
-        return False
-    try:
-        i = next(idx for idx, a in enumerate(argv) if a.endswith("dist/index.js"))
-    except StopIteration:
-        return False
-    rest = argv[i + 1:]
-    return "listen" in rest and "--no-wake" in rest
-
-
-def _ptt_pids():
-    """PIDs de sesiones de voz activas (push-to-talk)."""
-    pids = []
-    try:
-        with open(PTT_PIDFILE) as f:
-            pid = int(f.read().strip())
-        if pid > 0 and _is_voice_session(pid):
-            pids.append(pid)
-    except (FileNotFoundError, ValueError):
-        pass
-    try:
-        out = subprocess.check_output(
-            ["pgrep", "-f", r"dist/index\.js listen --no-wake"],
-            text=True, stderr=subprocess.DEVNULL,
-        )
-        for tok in out.split():
-            pid = int(tok)
-            if pid not in pids and _is_voice_session(pid):
-                pids.append(pid)
-    except Exception:  # noqa: BLE001
-        pass
-    return pids
-
-
 def _alive(pid):
     try:
         os.kill(pid, 0)
@@ -232,58 +177,6 @@ def _wait_dead(pids, timeout):
             return True
         time.sleep(0.1)
     return not any(_alive(pid) for pid in pids)
-
-
-def ptt_active():
-    return bool(_ptt_pids())
-
-
-
-
-def service_awake():
-    """¿El servicio siempre-vivo tiene una conversación abierta?
-
-    `status.json` lo publican tanto el loop como el dictado, así que sólo vale
-    si su `pid` es el del oído (que se anota en `listen.pid`). `idle` significa
-    que está esperando la palabra clave.
-    """
-    try:
-        with open(os.path.join(RUNTIME, "omar", "listen.pid"), encoding="utf-8") as f:
-            listen_pid = int(f.read().strip())
-        with open(STATUS_FILE, encoding="utf-8") as f:
-            snap = json.load(f)
-        if int(snap.get("pid") or 0) != listen_pid:
-            return False  # lo publicó otro (p. ej. el dictado)
-        if time.time() * 1000 - float(snap.get("updatedAt") or 0) > 45_000:
-            return False
-        return snap.get("state") not in (None, "idle")
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def pill_is_open():
-    """¿La píldora está abierta?
-
-    La píldora publica `pill-open` ("1"/"0") en el runtime cada vez que abre o
-    cierra —el mismo archivo que lee el glow—, así que el caso normal se
-    resuelve leyendo un byte, sin arrancar Quickshell. El IPC queda de respaldo
-    para cuando el archivo todavía no existe (arranque, píldora nunca abierta).
-    """
-    try:
-        with open(PILL_OPEN, encoding="utf-8") as f:
-            return f.read(1) == "1"
-    except OSError:
-        pass
-    for _ in range(2):
-        try:
-            out = subprocess.check_output(
-                ["qs", "ipc", "-p", PILL, "call", "omar-pill", "isOpen"],
-                text=True, stderr=subprocess.DEVNULL, timeout=2.5,
-            ).strip().lower()
-            return out == "true"
-        except Exception:  # noqa: BLE001
-            time.sleep(0.15)
-    return False
 
 
 def speaking_snapshot():
@@ -317,17 +210,18 @@ def speaking_snapshot():
 def voice_is_speaking():
     """¿El daemon de voz está reproduciendo algo AHORA?
 
-    Sirve para que la tecla calle también el TTS de otro agente aunque Omar
-    esté apagado.
+    Sirve para que la tecla calle también el TTS de otro agente aunque el
+    dictado esté inactivo.
     """
     return speaking_snapshot() is not None
 
 
 def dictate_pid():
-    """Pid del dictado que está grabando (`omar dictate`), o None.
+    """Pid del grabador de `dictado`, o None.
 
-    El turno vive en `dictate.pid`; se valida que el pid siga vivo y que su
-    línea de comandos sea de verdad un dictado, porque un pid se puede reusar.
+    El turno vive en `dictado/grabando.pid`; se valida que el pid siga vivo y
+    que su línea de comandos sea de verdad el dictado, porque un pid se puede
+    reusar.
     """
     try:
         with open(DICTATE_PID, encoding="utf-8") as f:
@@ -341,7 +235,7 @@ def dictate_pid():
             argv = f.read()
     except OSError:
         return None
-    return pid if b"dictate" in argv else None
+    return pid if b"dictado" in argv else None
 
 
 def dictate_active():
@@ -352,39 +246,17 @@ def dictate_active():
 def cancel_dictation():
     """Corta el dictado en curso descartando lo grabado.
 
-    SIGINT es "cancelá" para `omar dictate` (SIGTERM, en cambio, significa
-    "pegá lo que dije"). Sin esto, apretar la tecla mientras dictabas seguía
-    grabando y el texto terminaba escrito en la ventana enfocada.
+    `dictado --cancel` es el camino del cliente nuevo: escribe la bandera de
+    cancelación y corta el grabador, que descarta el audio en vez de pegarlo.
+    Sin esto, apretar la tecla mientras dictabas seguía grabando y el texto
+    terminaba escrito en la ventana enfocada.
     """
     pid = dictate_pid()
     if pid is None:
         return False
     log(f"voice: corto el dictado ({pid})")
-    try:
-        os.kill(pid, signal.SIGINT)
-    except OSError:
-        return False
-    if _wait_dead([pid], 0.5):
-        return True
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        return True
-    if not _wait_dead([pid], 0.4):
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
-        _wait_dead([pid], 0.2)
-    return True
-
-
-def hide_surfaces():
-    """Cierra la píldora y apaga el glow YA, sin esperar a ningún proceso."""
-    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "close")
-    # El glow además se apaga solo: si no, la franja y el subrayado quedan
-    # visibles vacíos durante el "poso" del último texto.
-    _spawn("qs", "ipc", "-p", GLOW, "call", "omar-glow", "hide")
+    _run_cmd(["dictado", "--cancel"])
+    return _wait_dead([pid], 2.0)
 
 
 def dismiss_voice_card(snap):
@@ -401,240 +273,42 @@ def dismiss_voice_card(snap):
 
 
 def cut_speaking():
-    """Corta el TTS que esté sonando, sea de Omar o de otro agente.
+    """Corta el TTS que esté sonando, sea de un agente o de un aviso.
 
-    Se lleva también lo que lo acompaña en pantalla: los subtítulos (glow) y el
-    cartel de escritorio del aviso. Callar sólo el audio dejaba el mensaje
-    visible y con la sensación de que la tecla no había hecho nada.
+    Se lleva también el cartel de escritorio del aviso. Callar sólo el audio
+    dejaba el mensaje visible y con la sensación de que la tecla no había hecho
+    nada.
     """
     snap = speaking_snapshot()
     if snap is None:
         return False
     log("voice: corto el TTS que estaba sonando")
     _spawn("voice", "stop")
-    _spawn("qs", "ipc", "-p", GLOW, "call", "omar-glow", "hide")
     dismiss_voice_card(snap)
     return True
 
 
-def omar_active():
-    """Omar está encendido si hay conversación, píldora, dictado o voz viva."""
-    return pill_is_open() or service_awake() or ptt_active() or dictate_active()
-
-
-# Clientes que capturan el micrófono sin ser una conversación de voz con el
-# usuario: cava (visualizador), los `parec` del propio Omar y los nodos del
-# grafo de PipeWire. Cualquier OTRA captura es alguien hablando por su cuenta.
-MIC_BENIGN = {"parec", "pacat", "cava", "node", "ee_soe_plugins", "easyeffects"}
-
-
-def external_mic_owner():
-    """Qué app está capturando el micrófono, si no es de Omar (o None).
-
-    Sirve para no pisar una conversación speech-to-speech (STS) abierta en otra
-    app —el navegador, la plataforma de agentes—: al prender Omar, Omar abre
-    su propio `parec` y habla, y la sesión ajena se corta o se queda muda.
-    """
-    if os.environ.get("PRESENT_MIC_GUARD", "1") == "0":
-        return None
-    try:
-        out = subprocess.check_output(
-            ["pw-dump"], text=True, stderr=subprocess.DEVNULL, timeout=3,
-        )
-        nodes = json.loads(out)
-    except Exception:  # noqa: BLE001
-        return None
-    for node in nodes:
-        info = node.get("info") or {}
-        props = info.get("props") or {}
-        if props.get("media.class") != "Stream/Input/Audio":
-            continue
-        # Sólo cuenta una captura que está FLUYENDO. Los nodos del grafo propio
-        # de PipeWire (`input.mic-bt-fx`, `input.phone-mic`) existen siempre y
-        # quedan "idle" cuando nadie los usa; tomarlos por "otra app hablando"
-        # trababa la tecla ("no prendo Omar — el micrófono lo usa input.mic-bt-fx").
-        if (props.get("node.state") or info.get("state")) in (
-            "suspended", "idle", "error",
-        ):
-            continue
-        names = {
-            str(props.get(key) or "").lower()
-            for key in (
-                "application.name", "application.process.binary", "node.name",
-            )
-        }
-        if names & MIC_BENIGN:
-            continue
-        # Nodos virtuales de la cadena de micrófono propia (mic-bt-fx/mic-gain):
-        # son fuente de Omar, no una conversación ajena.
-        if any(name.startswith("input.") for name in names):
-            continue
-        return (
-            props.get("application.name")
-            or props.get("application.process.binary")
-            or props.get("node.name")
-            or "otra app"
-        )
-    return None
-
-
-def _systemctl(*args, timeout=6):
-    """systemctl --user best-effort: si no está, no rompe el gesto."""
-    try:
-        subprocess.run(
-            ["systemctl", "--user", *args],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout,
-        )
-        return True
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _is_listen_service(pid):
-    """¿Ese PID es el `node … dist/index.js listen` del servicio?
-
-    `listen.pid` puede quedar de un proceso muerto y el número reasignarse a
-    otra cosa: antes de mandarle una señal se mira la línea de comandos.
-    """
-    try:
-        with open(f"/proc/{pid}/cmdline", "rb") as f:
-            argv = [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
-    except OSError:
-        return False
-    if not argv or "node" not in os.path.basename(argv[0]):
-        return False
-    joined = " ".join(argv)
-    return "dist/index.js" in joined and " listen" in joined
-
-
-def _signal_service(sig):
-    """Manda una señal de control ("SIGUSR1"/"SIGUSR2") al único oído.
-
-    SIGUSR1 = abrir la conversación sin palabra clave; SIGUSR2 = cerrarla. El
-    servicio siempre corre (Restart=always) y el loop registra las señales antes
-    de cargar modelos, así que no hay que esperar a que esté "listo".
-
-    Se lee `listen.pid` y se usa kill(2): `systemctl kill` arrancaba un cliente
-    de systemd (~10-20 ms) y `start` podía esperar a que la unidad quedara
-    activa, justo en el camino que tiene que ser instantáneo.
-    """
-    try:
-        with open(os.path.join(RUNTIME, "omar", "listen.pid"), encoding="utf-8") as f:
-            pid = int(f.read().strip())
-    except (OSError, ValueError):
-        pid = 0
-    signum = getattr(signal, str(sig), None)
-    if pid > 0 and signum is not None and _is_listen_service(pid):
-        try:
-            os.kill(pid, signum)
-            return
-        except OSError:
-            pass
-    _systemctl("start", LISTEN_UNIT)
-    # --kill-whom=main: `systemctl kill` manda a TODO el cgroup por defecto y
-    # así le llegaba también a `parec` (el micrófono se cortaba y reiniciaba).
-    _systemctl("kill", "--kill-whom=main", "-s", sig, LISTEN_UNIT)
-
-
-def start_voice():
-    """Prende Omar: abre la conversación en el servicio que ya está corriendo.
-
-    No arranca otro proceso: el servicio omar-listen es el único oído y
-    SIGUSR1 le dice "escuchá directo, sin la palabra clave". La píldora se abre
-    ya para que el toque no se sienta muerto. Y le avisamos al glow que la
-    píldora está abierta para que no dibuje su franja encima del campo de texto.
-    """
-    log("voice: prendo Omar (conversación directa)")
-    _spawn("qs", "ipc", "-p", PILL, "call", "omar-pill", "open")
-    _signal_service("SIGUSR1")
-
-
 def cancel_voice():
-    """Cancela TODO lo que esté en curso: audio, conversación, dictado y UI.
-
-    La tecla no es "cerrá la píldora": es "apagá lo que sea que esté pasando".
-    El proceso de Omar NUNCA se mata: el servicio siempre vivo vuelve solo a
-    esperar la palabra clave (SIGUSR2). El audio y la UI van primero, porque es
-    lo que el usuario está esperando ver/oir; la limpieza de procesos viejos va
-    después.
-    """
-    # Se mira qué estaba sonando ANTES de cortar: la `source` identifica el
-    # cartel de escritorio que hay que sacar de pantalla.
+    """Cancela lo que esté en curso: TTS, cartel de la notificación y dictado."""
     snap = speaking_snapshot()
-
-    # 1) Callar YA, por los dos caminos a la vez: la señal cierra la
-    #    conversación en el oído y `voice stop` corta el audio sin esperar a que
-    #    el loop de Omar procese la señal (medido: ~80 ms). El daemon vacía la
-    #    cola, así que no queda nada encolado para después.
-    _signal_service("SIGUSR2")
     _spawn("voice", "stop")
-
-    # 2) La UI se apaga en el mismo instante: píldora con su fade y glow sin
-    #    esperar a ningún proceso. La píldora es la que tiene los subtítulos.
-    hide_surfaces()
-
-    # 3) Dictado/transcripción en curso: se descarta (SIGINT = cancelar), para
-    #    que no siga grabando ni escriba el texto después de la tecla.
     cancel_dictation()
-
-    # 4) El cartel de escritorio del aviso que sonaba se va con lo demás.
     dismiss_voice_card(snap)
-
-    try:
-        os.remove(PTT_PIDFILE)
-    except FileNotFoundError:
-        pass
-
-    # 3) Cortar cualquier proceso de voz que haya quedado suelto. Es limpieza:
-    #    la voz ya se cortó, así que los topes son cortos para no trabar la
-    #    próxima pulsación de la tecla.
-    pids = _ptt_pids()
-    if pids:
-        log(f"cancel: corto {pids}")
-        for pid in pids:
-            try:
-                os.kill(pid, signal.SIGINT)
-            except OSError:
-                pass
-        if not _wait_dead(pids, 1.0):
-            for pid in pids:
-                if _alive(pid):
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except OSError:
-                        pass
-            if not _wait_dead(pids, 0.6):
-                for pid in pids:
-                    if _alive(pid):
-                        try:
-                            os.kill(pid, signal.SIGKILL)
-                        except OSError:
-                            pass
-                _wait_dead(pids, 0.3)
-    else:
-        log("cancel: sin PTT suelto")
 
 
 def toggle_voice():
-    """La tecla cancela si hay algo en uso; si no hay nada, prende Omar.
+    """La tecla remota: corta el dictado si lo hay; si no, calla lo que suene.
 
-    La dirección la decide el estado real (conversación, píldora, dictado o
-    TTS), no la píldora: si lo abrió la palabra clave, la píldora puede no
-    estar abierta y aun así hay que cerrarla. Y si lo único que hay es un aviso
-    de otro agente sonando, la tecla lo calla junto con su cartel en vez de
-    prender a Omar encima de la voz.
+    Ya no hay asistente de voz con palabra clave (Omar se retiró): esta tecla
+    queda como "apagá lo que esté pasando", que es lo que el control remoto
+    necesita durante una presentación.
     """
-    if omar_active():
-        cancel_voice()
+    if dictate_active():
+        cancel_dictation()
         return
     if cut_speaking():
         return
-    owner = external_mic_owner()
-    if owner:
-        # Alguien ya está hablando (STS): prender Omar le cortaría el micrófono.
-        log(f"voice: no prendo Omar — el micrófono lo usa {owner}")
-        return
-    start_voice()
+    log("voice: no hay dictado ni voz sonando")
 
 
 def builtin(cmd):
@@ -741,9 +415,9 @@ def handle_event(out, buttons, settings, states):
         log(f"evt {key} {state}")
 
     if settings.get("cancel_key") and key == settings["cancel_key"] and state == "down":
-        # Escape cancela lo mismo que la tecla (Omar, dictado, TTS y su cartel),
+        # Escape cancela lo mismo que la tecla (dictado, TTS y su cartel),
         # pero sólo si hay algo que cancelar: Escape se usa en todas partes.
-        if omar_active() or voice_is_speaking():
+        if dictate_active() or voice_is_speaking():
             cancel_voice()
         return True
 

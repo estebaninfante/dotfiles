@@ -5,8 +5,8 @@ Una sola pregunta para que la voz no pise al dictado: mientras dictás, el TTS
 no habla ni empieza a hablar. La respuesta sale de los mismos turnos que ya
 usan los dictados, así que no hay que enterarse de cada herramienta nueva:
 
-    $XDG_RUNTIME_DIR/omar/mic-busy      lo escribe `omar dictate` y handy-dictado
-    $XDG_RUNTIME_DIR/omar/dictate.pid   el turno del gesto de dictado (toggle)
+    $XDG_RUNTIME_DIR/dictado/mic-busy     lo escribe `dictado` mientras graba
+    $XDG_RUNTIME_DIR/dictado/grabando.pid el grabador del dictado en curso
 
 Las dos anotaciones llevan el PID del que graba. Si ese proceso ya no está, la
 anotación es basura de una salida bruta y no cuenta; si tiene más de
@@ -28,19 +28,19 @@ import subprocess
 import sys
 import time
 
-# Mismo tope que usan `mic-busy` y el turno del dictado en Omar.
+# Mismo tope que usan `mic-busy` y `grabando.pid` del dictado.
 MAX_AGE_MS = 5 * 60 * 1000
 
-# Dictados que no siempre pasan por `handy-dictado`: si están capturando el
-# micrófono, también hay que callarse.
-_DICTATION_BINS = ("handy", "voxtype")
+# Dictados que no siempre se anuncian: si están capturando el micrófono,
+# también hay que callarse.
+_DICTATION_BINS = ("handy", "voxtype", "bin/dictado")
 _CACHE_MS = 1000
 _cache: dict = {"at": 0.0, "owner": (None, None)}
 
 
-def _omar_dir() -> str:
+def _dictado_dir() -> str:
     runtime = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-    return os.path.join(runtime, "omar")
+    return os.path.join(runtime, "dictado")
 
 
 def _alive(pid: int) -> bool:
@@ -101,14 +101,14 @@ def _pipewire_dictation() -> tuple[str | None, int | None]:
 
 def owner() -> tuple[str | None, int | None]:
     """(motivo, pid) del dictado en curso, o (None, None) si el mic está libre."""
-    folder = _omar_dir()
-    for nombre in ("mic-busy", "dictate.pid"):
+    folder = _dictado_dir()
+    for nombre in ("mic-busy", "grabando.pid"):
         pid = _pid_anotado(os.path.join(folder, nombre))
         if not pid or not _alive(pid):
             continue
         # PID reusado: la anotación dice dictado pero el proceso es otra cosa.
         cmd = _cmdline(pid)
-        if cmd and "dictate" not in cmd and "handy" not in cmd:
+        if cmd and not any(clave in cmd for clave in ("dictado", "dictate", *_DICTATION_BINS)):
             continue
         return (f"dictado en curso ({nombre}, pid {pid})", pid)
     ahora = time.time() * 1000

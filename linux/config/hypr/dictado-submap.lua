@@ -1,4 +1,4 @@
--- Submap "dictado": lo activa `omar dictate` mientras graba y lo quita al
+-- Submap "dictado": lo activa `dictado` mientras graba y lo quita al
 -- terminar. Enter no debe llegar a la app: cierra la grabación, espera a que se
 -- pegue todo y recién entonces presiona Enter. Sin dictado abierto, `--enter`
 -- presiona Enter normal (y sale del submap), así la tecla nunca queda muerta.
@@ -11,8 +11,8 @@
 local binds = require("base.bindcollect")
 
 hl.define_submap("dictado", function()
-    hl.bind("RETURN", hl.dsp.exec_cmd("~/.local/bin/omar dictate --enter"))
-    hl.bind("KP_Enter", hl.dsp.exec_cmd("~/.local/bin/omar dictate --enter"))
+    hl.bind("RETURN", hl.dsp.exec_cmd("~/.local/bin/dictado --enter"))
+    hl.bind("KP_Enter", hl.dsp.exec_cmd("~/.local/bin/dictado --enter"))
 
     for _, b in ipairs(binds.globales) do
         if b[3] ~= nil then

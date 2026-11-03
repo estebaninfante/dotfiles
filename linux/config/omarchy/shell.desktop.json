@@ -85,9 +85,7 @@
         {
           "id": "eztvn.power"
         },
-        {
-          "id": "omar.status"
-        },
+        null,
         {
           "id": "io.github.dragosol.better-displays-pro"
         }

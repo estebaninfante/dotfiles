@@ -644,7 +644,7 @@ def eco_reciente(texto: str) -> bool:
     """¿Esto es lo que acabamos de decir por los parlantes? (no despertar por eco)."""
     import time as _t
 
-    ruta = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "omar/spoken.log"
+    ruta = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice/spoken.log"
     if not ruta.is_file():
         return False
     try:

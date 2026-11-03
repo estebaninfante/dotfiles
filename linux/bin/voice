@@ -166,7 +166,7 @@ marcar_escuchado() {
 
 # ── dictado: la voz nunca se le encima ──────────────────────────────────
 # Mientras el usuario dicta, el TTS no habla: ni empieza ni sigue sonando.
-# El turno lo publican `omar dictate` y handy-dictado; la pregunta vive en
+# El turno lo publican `dictado` y handy-dictado; la pregunta vive en
 # linux/voice/micguard.py para que el daemon use exactamente la misma regla.
 # 0 = el micrófono está libre. Ojo: `micguard --busy` devuelve 1 cuando hay
 # dictado (es la pregunta "¿está ocupado?"), por eso el nombre es `mic_libre`.

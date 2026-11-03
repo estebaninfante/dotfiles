@@ -50,12 +50,12 @@ import time
 
 daemon_path, guard_path = sys.argv[1], sys.argv[2]
 
-# Un dictado falso: un proceso cuyo cmdline contiene "dictate" (así lo reconoce
+# Un dictado falso: un proceso cuyo cmdline contiene "dictado" (así lo reconoce
 # micguard) y que vive mientras dura el arnés.
 folder = tempfile.mkdtemp()
-omar = os.path.join(folder, "omar")
-os.makedirs(omar, exist_ok=True)
-falso = os.path.join(folder, "omar-dictate")
+dictado_dir = os.path.join(folder, "dictado")
+os.makedirs(dictado_dir, exist_ok=True)
+falso = os.path.join(folder, "dictado-falso")
 with open(falso, "w") as fh:
     fh.write("#!/bin/sh\nsleep 120\n")
 os.chmod(falso, 0o755)
@@ -88,8 +88,8 @@ def check(nombre, cond):
 # micguard: libre sin anotaciones
 check("micguard libre", g.busy() is False)
 
-bandera = os.path.join(omar, "mic-busy")
-turno = os.path.join(omar, "dictate.pid")
+bandera = os.path.join(dictado_dir, "mic-busy")
+turno = os.path.join(dictado_dir, "grabando.pid")
 
 # viva
 with open(bandera, "w") as fh:
@@ -124,7 +124,7 @@ os.remove(bandera)
 # el turno del gesto también cuenta
 with open(turno, "w") as fh:
     fh.write(str(dictado.pid))
-check("dictate.pid vivo = dictando", g.busy() is True)
+check("grabando.pid vivo = dictando", g.busy() is True)
 
 # ── daemon: no sintetiza mientras hay dictado ──────────────────────────
 d.load_config = lambda: {"tts": {"lang": "es"}}
