@@ -1,5 +1,9 @@
 # Consumo de energía — Lenovo Legion Slim 5 14APH8 (82Y5)
 
+> Nota (2026-11): las mediciones y los servicios `omar-*` que aparecen acá son
+> históricos. Omar se retiró; su lugar lo ocupa `dictado.service` (un solo
+> proceso, STT sólo al dictar).
+
 Investigación y plan para bajar el consumo en reposo. Objetivo fijado por el
 usuario: **< 20 W en reposo, recién arrancada y sin procesos de usuario**.
 

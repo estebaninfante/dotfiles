@@ -86,10 +86,10 @@ Todo esto está en la máquina y funcionando (verificado el 2026-10-29).
 |---|---|---|
 | Audio del sistema | PipeWire | andando; parlante y micrófono Bluetooth en uso |
 | STT batch | `handy` (whisper-medium Q8, Vulkan) | andando |
-| STT rápido | `omar-whisper.service` (faster-whisper en CUDA) | corriendo |
+| STT del dictado | `dictado.service` (faster-whisper en CUDA) | corriendo |
 | STT streaming | `voice-asr-stream` (Vosk) | existe, se usa para wake word |
 | Wake word | `talk-command.service`, KWS sherpa-onnx (OmniVoz) | corriendo |
-| Grabación PTT | `voice listen`, `SUPER+I`, `SUPER+ALT+P` | andando |
+| Dictado | `dictado` (`SUPER+I`, `F7`, gesto) | andando: graba, transcribe y escribe |
 
 ### 4.2 Salida de voz (TTS)
 
@@ -98,16 +98,15 @@ Todo esto está en la máquina y funcionando (verificado el 2026-10-29).
 | Daemon de voz | `voice-daemon.service` | corriendo: cola, dedup, playback, fallback |
 | Motores | Kokoro-82M, Chatterbox, Piper, espeak | andando; servidores persistentes |
 | Voces/identidad | `linux/voice/identity.py`, `agents.json` | andando: voz, rol y color por agente |
-| Superficie Omar | `omar-surface.service` | corriendo: se declara "un solo dueño del bloque al pie: glow, píldora, dictado y TTS" |
-| Glow / píldora | `omar-glow.service`, `omar-pill.service` | corriendo |
+| Historial de dictado | `dictado-historial` (`SUPER+CTRL+I`) | andando |
 | Cerebro de voz | `voice-pi-shim.service` → Hermes headless | corriendo (latencia 5–6 s) |
 
 ### 4.3 Superficies del escritorio (Omarchy / quickshell)
 
 Plugins vivos en `~/.config/omarchy/plugins/`:
 `eztvn.pi-tts` (interruptor y registro de voz), `eztvn.mic`, `eztvn.modo-voz`,
-`eztvn.asistente`, `eztvn.audio`, `eztvn.osd`, `omar.status`,
-`talk-command.status`.
+`eztvn.asistente`, `eztvn.audio`, `eztvn.osd`, `talk-command.status`.
+(`omar.status` se retiró junto con Omar.)
 
 ### 4.4 Agentes y enganches
 
@@ -124,12 +123,12 @@ Plugins vivos en `~/.config/omarchy/plugins/`:
 
 ### 4.5 Proyectos relacionados en `~/developing`
 
-`omar` (control del escritorio por voz + shell), `voz-agentes` (bus y
+`omar` (asistente anterior, hoy sin servicios), `voz-agentes` (bus y
 experimentos de conversación), `asistente`, `fluidez`, `speeedy`,
 `speeedy-hub`, `px0`, `protolab`, `alcaide`, `agentes-platform`, `pi-desktop`,
 `zentr0`.
 
-Scripts propios en `linux/bin/`: `voice*`, `omar-*`, `tts*`, `handy-dictado`,
+Scripts propios en `linux/bin/`: `voice*`, `dictado*`, `tts*`, `handy-dictado`,
 `voice-agent`, `voice-asr-stream`, `voice-duck`, `voice-hermes`, `voice-pi`,
 `voice-kokoro`, `voice-key-listener`, `voice-omarchy-index`.
 
@@ -175,8 +174,9 @@ privilegio de uno solo*.
 - **No** empezar otro proyecto desde cero. Se consolida sobre lo que ya anda.
 - **No** meter otro modelo entre el agente y mi oído.
 - **No** reescribir el TTS: los motores andan.
-- **No** borrar Omar, OmniVoz ni el shell. Dejan de tener voz propia; siguen
-  existiendo.
+- **No** borrar OmniVoz ni el shell. Dejan de tener voz propia; siguen
+  existiendo. (Omar sí se retiró: sus servicios y atajos ya no están; sólo
+  queda el código en `~/developing/omar`.)
 - **No** arreglar el síntoma de "responde tres veces" antes de tener el dueño
   único: se arregla solo cuando hay un solo camino de salida.
 
@@ -184,8 +184,9 @@ privilegio de uno solo*.
 
 ## 7. Decisiones pendientes
 
-1. Cuál es **el** dueño: `voice-daemon` (motor de audio) o `omar-surface`
-   (superficie). Hay que elegir uno, no los dos.
+1. Cuál es **el** dueño del bloque al pie: `voice-daemon` (motor de audio) o
+   la superficie que dibuja subtítulos/estado (hoy ya no hay píldora ni glow:
+   Omar se retiró y sólo queda el dictado, sin overlay).
 2. Si la conversación es **un agente en foco a la vez** o varios hilos con
    cambio por nombre.
 3. Si el adaptador universal es **tmux/PTY** (sirve para cualquier CLI) o se
@@ -214,4 +215,4 @@ privilegio de uno solo*.
 | `docs/bodega-agentica.md` | registro unificado de la actividad de agentes |
 | `docs/agents.md` | registro de agentes y skills |
 | `~/developing/voz-agentes/` | bus `agente` (README, ESTADO, ROADMAP) |
-| `~/developing/omar/` | control del escritorio por voz |
+| `~/developing/omar/` | asistente anterior (sin servicios ni atajos) |

@@ -90,7 +90,7 @@ La barra activa es la de **Omarchy**, no la de dotfiles. Su config vive en
 `~/.config/omarchy/` y se versiona aqui: `shell.json` (barra `eztvn.bar`, layout,
 `centerAnchor`), `shell.toml` (fuente/scrim), `bar/modules/services.qml`,
 `branding/`, `extensions/omarchy-menu.jsonc`, `backgrounds/` (fondos propios),
-`hooks/*.hook` y los plugins locales (`plugins/eztvn.*`, `omar.status`,
+`hooks/*.hook` y los plugins locales (`plugins/eztvn.*`,
 `talk-command.status`). Los plugins/temas instalados por git NO se copian (peso
 + `.git`): sus id+url viven en `plugins-git.txt` / `themes-git.txt` y se
 reinstalan con `omarchy plugin add` / `omarchy theme install`.
@@ -231,15 +231,15 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 | chatterbox_server.py | Server persistente Chatterbox (model in GPU memory) |
 | chatterbox_synth.py | Wrapper legacy (subprocess mode, fallback) |
 | asr_vosk.py | Streaming ASR (Vosk CPU) para el wake-word |
-| pi_shim.py | Puente Ollama->agente: cerebro de Omar sin tocar su código |
+| pi_shim.py | Puente Ollama->agente para la voz headless (`voice think`/`voice ptt`) |
 | spoken.py | Limpia la respuesta para oído (código/HTML/markdown) |
 | pi-brain/AGENTS.md | Guía del cerebro headless: cómo manejar el escritorio |
 | `linux/bin/voice-asr-stream` | Selector del motor del wake-word: GPU (`[wake] gpu_command`) o CPU (Vosk) |
 | `linux/bin/voice-hermes` | Hermes headless (una pasada, sólo terminal) para el cerebro de voz |
 | `linux/bin/voice-pi` | Variante Pi headless (sin razonamiento/extensiones) del cerebro |
-| `linux/bin/omar-hub` | CLI de Omar sobre la API local de agentes-platform (tickets/agentes) |
-| `linux/bin/omar-ptt` | Push-to-talk directo: una frase sin palabra clave |
-| `linux/bin/voice-key-listener` | Dispara el PTT desde keyd (tecla física de Windows → F13) |
+| `linux/bin/dictado` | Dictado del escritorio: graba, transcribe y escribe en la ventana enfocada |
+| `linux/bin/dictado-historial` | Historial de dictados (SUPER+CTRL+I) |
+| `linux/dictado/servidor.py` | Servidor STT local (faster-whisper) que usa `dictado` |
 | `scripts/setup-wake.sh` | Prepara el wake-word: venv + vosk + modelo + servicio `talk-command.service` |
 | `linux/voice/reader/kokoro_server.py` | Daemon Kokoro (modelo en memoria) para Read Aloud + lector standalone |
 | `linux/voice/reader/kokoro_speechd.py` | Cliente de speech-dispatcher: sintetiza y reproduce con aplay |
@@ -387,7 +387,7 @@ ya no se hablan al llegar: con la entrega `bell` (por defecto) suena la campana
 —una sola vez por ráfaga, nunca encima de un dictado— y el mensaje queda en el
 buzón con su autor. Cuando querés, decís **"dime"** (hotword propia) o corrés
 `voice dime`: **primero suena la campana** (la misma señal de "llegó algo",
-ahora de "te lo leo") y después Omar lee la cola en orden,
+ahora de "te lo leo") y después la voz lee la cola en orden,
 `"<agente> dice: <mensaje>"` (texto recortado), y avisa "Quedan N mensajes más".
 Si no hay nada, la hotword se calla (`--quiet-empty`).
 
@@ -402,18 +402,13 @@ Todo local (STT + TTS), nada de speech-to-speech. Verificador:
 
 **La tecla de Windows (F13).** `voice-key-listener` corre `present-remote
 toggle`; una pulsación, una acción (sin antirrebote por tiempo: el de 800 ms
-se comía la segunda pulsación rápida). La decisión es instantánea: la píldora se
-consulta por su archivo `pill-open` (no por IPC). **Si hay algo en uso, la tecla
-cancela TODO** y no prende nada: audio del TTS (`voice stop`), conversación
-(`SIGUSR2` al oído, por `listen.pid` + `kill(2)`, sin `systemctl`), dictado en
-curso (`SIGINT` a `dictate.pid` = descartar, no pegar), píldora y glow (IPC en
-el acto, con su fade) y el cartel de escritorio del aviso que sonaba (se
-descarta esa notificación por el nombre del agente, no todo el centro). Antes,
-con Omar apagado, la tecla sólo callaba el audio y el mensaje quedaba en
-pantalla; y mientras dictabas seguía grabando. Si no hay nada en curso, la
-tecla abre Omar. Escape (`cancel_key`) cancela lo mismo, pero sólo si hay algo
-que cancelar. Medido: ~60 ms de la pulsación al silencio. Verificador:
-`scripts/verify/cancelar-voz.sh`.
+se comía la segunda pulsación rápida). **Si hay algo en uso, la tecla cancela
+TODO** y no prende nada: audio del TTS (`voice stop`), dictado en curso
+(`dictado --cancel` = descartar, no pegar) y el cartel de escritorio del aviso
+que sonaba (se descarta esa notificación por el nombre del agente, no todo el
+centro). Ya no hay asistente que prender (Omar se retiró). Escape
+(`cancel_key`) cancela lo mismo, pero sólo si hay algo que cancelar.
+Verificador: `scripts/verify/cancelar-voz.sh`.
 
 **Registro unificado + API para cualquier proceso:** cada mensaje entregado
 (voz y notificaciones) queda en `~/.local/share/voice/tts/messages.jsonl`, con
@@ -457,33 +452,19 @@ lo elige `linux/bin/voice-asr-stream` según `[wake]`: GPU si hay `gpu_command`
 y AC, si no CPU (Vosk, sin VRAM). Servicio `talk-command.service` (unit en
 `linux/system/systemd-user/`); se prepara con `scripts/setup-wake.sh`.
 
-**Asistente y cerebro Hermes:** Omar (local, `~/developing/omar`, servicio
-`omar-listen`) hace wake word → VAD → STT → reglas → cerebro. El cerebro es
-**Hermes headless** (`linux/bin/voice-hermes`: una pasada `-z`, sólo terminal)
-vía `linux/voice/pi_shim.py` (traduce Ollama→agente; servicio
-`voice-pi-shim.service`, nombre histórico). Corre en `linux/voice/pi-brain/`
-con el `AGENTS.md` que le enseña el escritorio, y usa el modelo por defecto de
-Hermes (hoy gratis: `cat-jam-free`, con respaldos gratis). **Teclas**: Caps Lock = Super (`layer(meta)` en
-keyd); la tecla física de Windows se remapea a **F13** y `voice-key-listener.service`
-(lee `keyd monitor`) corre `linux/bin/omar-open`: abre la **píldora**
-(`omar-pill.service` + `packaging/quickshell/omar-pill.qml`: input de texto y
-subtítulos de lo que decís y de lo que responde Omar) y arranca el
-push-to-talk directo (`omar-ptt`) sin palabra clave. El modo manos libres
-(palabra clave "Omar") es `omar-listen`. Sin notificaciones de estado (RIP
-esa caja negra). `voice-duck.service` (`linux/bin/voice-duck`) **baja el volumen**
-del sink mientras está en "listening" y lo restaura. El bind de Hyprland resultó
-caprichoso, por eso se engancha en keyd. El **glow** tipo Google Assistant
-(`omar-glow.service`) va
-**solo en el borde inferior**, es sutil y **sigue el nivel del micrófono**
-(`level` en `status.json`): sube cuando hablás y baja al silencio; si el
-`status.json` queda viejo (más de 4 s) vuelve a idle solo. El STT usa **Whisper large-v3-turbo en GPU**
-(`omar-whisper.service`, faster-whisper + CUDA-12 en el venv; `stt.engine =
-"whisper"`) con **Parakeet CPU** de respaldo, mucho mejor en español que
-Parakeet solo. La CLI `linux/bin/omar-hub` (tickets/agentes sobre la API local de
-agentes-platform) es la primera skill del cerebro; el resto entra en
-`linux/voice/pi-brain/AGENTS.md`. El modelo del cerebro es el de Hermes
-(`~/.hermes/config.yaml`); `VOICE_HERMES_MODEL` / `VOICE_HERMES_PROVIDER`
-permiten pisarlo, y `VOICE_PI_*` sigue sirviendo para la variante Pi.
+**Dictado del escritorio:** `SUPER+I` / `F7` / gesto de trackpad →
+`linux/bin/dictado`. Graba con `parec`, transcribe contra `dictado.service`
+(`linux/dictado/servidor.py`: faster-whisper large-v3-turbo en GPU; si no hay
+VRAM libre cae a `small` en GPU y después a CPU) y escribe con `wtype` en la
+ventana enfocada. El gesto es alterno: la primera pulsación abre la grabación,
+la segunda la cierra y pega. Enter mientras dictás cierra, pega y presiona
+Enter (submap `dictado`, `linux/config/hypr/dictado-submap.lua`, que replaysa
+los binds globales). `SUPER+CTRL+I` abre el historial
+(`linux/bin/dictado-historial` sobre `~/.local/state/dictado/historial.jsonl`).
+`linux/voice/micguard.py` lee `$XDG_RUNTIME_DIR/dictado/mic-busy` para que el
+TTS no hable encima del dictado. Sin palabra clave ni píldora: el asistente
+anterior (Omar) se retiró; su código queda en `~/developing/omar` sin servicios
+ni atajos.
 
 **Archivos:**
 - `linux/voice/daemon.py` — daemon principal
