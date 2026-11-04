@@ -30,19 +30,19 @@ with open(ruta, encoding="utf-8") as fh:
         if not texto:
             continue
         fecha = str(datos.get("fecha") or "").replace("T", " ")[5:16]
-        filas.append(f"{fecha}  {texto}")
+        filas.append((fecha, texto))
 for i, fila in enumerate(reversed(filas), 1):
-    print(f"{i:>3}. {fila}")
+    print(f"{i:>3}. {fila[0]}\t{fila[1]}")
 PY
 )"
 
 if command -v fzf >/dev/null 2>&1; then
   elegido="$(printf '%s\n' "$listado" | fzf --ansi --exact --no-sort --prompt='dictado> ' \
+    --delimiter=$'\t' --accept-nth=2 \
     --header='Enter: copiar al portapapeles · Esc: salir' 2>/dev/null || true)"
   [ -z "$elegido" ] && exit 0
-  texto="${elegido#*. }"
-  printf '%s' "$texto" | wl-copy --no-newline
-  notify -a Dictado -t 1500 "Dictado copiado" "${texto:0:120}" 2>/dev/null || true
+  printf '%s' "$elegido" | wl-copy
+  notify -a Dictado -t 1500 "Dictado copiado" "${elegido:0:120}" 2>/dev/null || true
 else
   printf '%s\n' "$listado" | less -R
 fi

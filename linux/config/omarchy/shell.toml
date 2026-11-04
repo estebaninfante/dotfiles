@@ -8,3 +8,12 @@ base-size = 11
 [menu]
 scrim-alpha = 0.0
 background-alpha = 0.8
+
+# Notificaciones: fondo negro con un poco de transparencia y sin delineado.
+# `border-width = 0` es lo que apaga el outline (Border.surfaceSpec de
+# omarchy.notifications usa este ancho, con fallback a 1-2px).
+[notifications]
+background       = "#000000"
+background-alpha = 0.85
+border-width     = 0
+
