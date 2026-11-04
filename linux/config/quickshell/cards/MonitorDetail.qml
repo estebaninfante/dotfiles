@@ -73,14 +73,7 @@ Rectangle {
             }
         }
 
-        Text {
-            text: "PROCESOS RAM"
-            color: "#aaa"
-            font.family: Theme.fontFamily
-            font.pixelSize: 9
-            font.bold: true
-            visible: UIState.monitorDetail === "ram"
-        }
+        Text { text: "PROCESOS RAM"; color: "#aaa"; font.family: Theme.fontFamily; font.pixelSize: 9; font.bold: true; visible: UIState.monitorDetail === "ram" }
         Repeater {
             model: DashboardService.ramProcesses
             delegate: RowLayout {
@@ -89,6 +82,24 @@ Rectangle {
                 Text { text: processName; color: "white"; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
                 Text { text: memory + " MB"; color: "white"; font.family: Theme.fontFamily; font.pixelSize: 9 }
             }
+        }
+
+        Text { text: "PROCESOS VRAM"; color: "#aaa"; font.family: Theme.fontFamily; font.pixelSize: 9; font.bold: true; visible: UIState.monitorDetail === "gpu" }
+        Repeater {
+            model: DashboardService.gpuProcesses
+            delegate: RowLayout {
+                width: monitorDetail.menuWidth - 32
+                visible: UIState.monitorDetail === "gpu"
+                Text { text: processName; color: "white"; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
+                Text { text: memory; color: "white"; font.family: Theme.fontFamily; font.pixelSize: 9 }
+            }
+        }
+        Text {
+            text: "Sin procesos de c\u00f3mputo usando la GPU"
+            color: "#666"
+            font.family: Theme.fontFamily
+            font.pixelSize: 9
+            visible: UIState.monitorDetail === "gpu" && DashboardService.gpuProcesses.count === 0
         }
 
         Text { text: "USO POR HILO L\u00d3GICO"; color: "#aaa"; font.family: Theme.fontFamily; font.pixelSize: 10; font.bold: true; visible: UIState.monitorDetail === "cpu" }

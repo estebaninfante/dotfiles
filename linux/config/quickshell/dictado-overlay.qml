@@ -28,16 +28,16 @@ ShellRoot {
     property double actualizado: 0
     property double ahora: Date.now()
     property double ultimoCambio: 0
-    property real nivelSuave: 0
     property var ondas: []
-    readonly property int ondasMax: 26
+    readonly property int ondasMax: 24
+    readonly property int filas: 7
+    readonly property real paso: 4
 
-    // Altura de cada barra (nivel 0..1 → 3..23 px, dentro de la cápsula de
-    // siempre). La ganancia y la raíz hacen que la voz normal (nivel ~0.05–0.3)
-    // ya mueva las barras casi a tope, en vez de dejarlas como puntos.
-    function alturaBarra(nivel) {
-        const n = Math.min(1, Math.max(0, nivel || 0) * 2.2)
-        return 3 + 20 * Math.pow(n, 0.55)
+    // Cuántas filas de puntos se encienden a cada lado del centro. La ganancia
+    // (×3) y la raíz hacen que la voz normal ya llene casi toda la matriz.
+    function filasEncendidas(nivel) {
+        const n = Math.min(1, Math.max(0, nivel || 0) * 3.0)
+        return Math.round(Math.pow(n, 0.4) * (filas / 2))
     }
 
     readonly property bool fresco: actualizado > 0 && (ahora - actualizado) < 3000
@@ -48,57 +48,51 @@ ShellRoot {
     readonly property string reloj: {
         if (!grabando || desde <= 0) return ""
         const s = Math.max(0, Math.floor((ahora - desde) / 1000))
-        return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")
+        return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0")
     }
 
     onEstadoChanged: ultimoCambio = Date.now()
     onNivelChanged: {
-        nivelSuave = nivelSuave * 0.6 + nivel * 0.4
         const nuevo = ondas.slice()
         nuevo.push(nivel)
         while (nuevo.length > ondasMax) nuevo.shift()
         ondas = nuevo
     }
 
-    Timer {
-        interval: 100
-        running: true
-        repeat: true
-        onTriggered: root.ahora = Date.now()
-    }
-
-    Process {
+    // FileView vigila el archivo: sin lanzar `cat` 8 veces por segundo.
+    FileView {
         id: lector
-        command: ["sh", "-c", "cat \"$XDG_RUNTIME_DIR/dictado/estado.json\" 2>/dev/null"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let nuevo = null
-                try {
-                    nuevo = JSON.parse(this.text || "{}")
-                } catch (err) {
-                    nuevo = null
-                }
-                root.ahora = Date.now()
-                if (!nuevo || typeof nuevo.actualizado !== "number") {
-                    root.estado = "idle"
-                    root.microfono = ""
-                    root.nivel = 0
-                    return
-                }
-                root.estado = typeof nuevo.estado === "string" ? nuevo.estado : "idle"
-                root.microfono = typeof nuevo.microfono === "string" ? nuevo.microfono : ""
-                root.nivel = typeof nuevo.nivel === "number" ? nuevo.nivel : 0
-                root.desde = Number(nuevo.desde) || 0
-                root.actualizado = nuevo.actualizado
+        path: Quickshell.env("XDG_RUNTIME_DIR") + "/dictado/estado.json"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onTextChanged: {
+            let nuevo = null
+            try {
+                nuevo = JSON.parse(lector.text() || "{}")
+            } catch (err) {
+                nuevo = null
             }
+            root.ahora = Date.now()
+            if (!nuevo || typeof nuevo.actualizado !== "number") {
+                root.estado = "idle"
+                root.microfono = ""
+                root.nivel = 0
+                return
+            }
+            root.estado = typeof nuevo.estado === "string" ? nuevo.estado : "idle"
+            root.microfono = typeof nuevo.microfono === "string" ? nuevo.microfono : ""
+            root.nivel = typeof nuevo.nivel === "number" ? nuevo.nivel : 0
+            root.desde = Number(nuevo.desde) || 0
+            root.actualizado = nuevo.actualizado
         }
     }
 
     Timer {
-        interval: 120
+        interval: 250
         running: true
         repeat: true
-        onTriggered: { if (!lector.running) lector.running = true }
+        onTriggered: root.ahora = Date.now()
     }
 
     Variants {
@@ -126,64 +120,86 @@ ShellRoot {
 
                 Rectangle {
                     id: pildora
-                    width: contenido.width + 34
-                    height: 42
-                    radius: height / 2
-                    color: Qt.rgba(0.06, 0.06, 0.07, 0.92)
+                    width: contenido.width + 26
+                    height: 34
+                    radius: 10
+                    color: Qt.rgba(0.04, 0.04, 0.05, 0.94)
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.10)
+                    border.color: Qt.rgba(1, 1, 1, 0.09)
+                    clip: true
                     opacity: root.visiblePildora ? 1 : 0
                     visible: opacity > 0.01
                     // Entra con fade y sale en el acto cuando dejás de dictar.
                     Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
+                    // Retícula tenue de puntos, como un panel LED.
+                    Canvas {
+                        anchors.fill: parent
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.clearRect(0, 0, width, height)
+                            ctx.fillStyle = "rgba(255,255,255,0.07)"
+                            const paso = 5
+                            for (let y = paso / 2; y < height; y += paso) {
+                                for (let x = paso / 2; x < width; x += paso) {
+                                    ctx.beginPath()
+                                    ctx.arc(x, y, 0.8, 0, Math.PI * 2)
+                                    ctx.fill()
+                                }
+                            }
+                        }
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                    }
+
                     Row {
                         id: contenido
                         anchors.centerIn: parent
-                        spacing: 12
+                        spacing: 10
 
-                        Rectangle {
+                        // Onda en matriz de puntos: columnas de puntos encendidos
+                        // simétricos respecto al centro.
+                        Canvas {
+                            id: matriz
+                            width: root.ondasMax * root.paso
+                            height: root.filas * root.paso
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 8; height: 8; radius: 4
-                            color: root.grabando ? "#f38ba8" : "#ffd866"
-                            SequentialAnimation on opacity {
-                                running: pildora.visible
-                                loops: Animation.Infinite
-                                NumberAnimation { to: 0.3; duration: 700; easing.type: Easing.InOutSine }
-                                NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutSine }
-                            }
-                        }
 
-                        Row {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 4
-                            opacity: root.pensando ? 0 : 1
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-                            Repeater {
-                                model: root.ondasMax
-                                Item {
-                                    required property int index
-                                    width: 4
-                                    height: 24
-                                    Rectangle {
-                                        anchors.centerIn: parent
-                                        width: 4
-                                        radius: 2
-                                        color: "#a6f3e4"
-                                        opacity: 0.55 + 0.45 * (index / (root.ondasMax - 1))
-                                        height: root.alturaBarra(root.ondas[index])
-                                        Behavior on height { NumberAnimation { duration: 80; easing.type: Easing.OutQuad } }
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                const columnas = root.ondasMax
+                                const filas = root.filas
+                                const paso = root.paso
+                                const centro = (filas - 1) / 2
+                                for (let c = 0; c < columnas; c++) {
+                                    const encendidas = root.pensando ? 0 : root.filasEncendidas(root.ondas[c])
+                                    for (let f = 0; f < filas; f++) {
+                                        const encendido = encendidas > 0 && Math.abs(f - centro) <= encendidas - 0.5
+                                        ctx.globalAlpha = encendido ? 1 : 0.13
+                                        ctx.fillStyle = "#ffffff"
+                                        ctx.beginPath()
+                                        ctx.arc(c * paso + paso / 2, f * paso + paso / 2, encendido ? 1.25 : 0.9, 0, Math.PI * 2)
+                                        ctx.fill()
                                     }
                                 }
+                                ctx.globalAlpha = 1
+                            }
+
+                            Connections {
+                                target: root
+                                function onOndasChanged() { matriz.requestPaint() }
+                                function onPensandoChanged() { matriz.requestPaint() }
                             }
                         }
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: root.pensando ? "pensando…" : root.reloj
-                            color: root.pensando ? "#9aa3b5" : Qt.rgba(1, 1, 1, 0.85)
+                            color: root.pensando ? "#9aa3b5" : Qt.rgba(1, 1, 1, 0.92)
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 14
+                            font.pixelSize: 13
+                            font.letterSpacing: 0.5
                             font.features: { "tnum": 1 }
                             Behavior on color { ColorAnimation { duration: 150 } }
                         }
