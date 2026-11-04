@@ -33,11 +33,13 @@ ShellRoot {
     readonly property real pasoX: 4
     readonly property real pasoY: 3
 
-    // Filas encendidas a cada lado del centro. Con raíz 0.85 la voz normal deja
-    // 1–3 filas por lado; sólo los picos llenan la matriz completa.
+    // Filas encendidas a cada lado del centro. Calibrado con el RMS real de
+    // `dictado`: voz normal (0.15–0.30) deja 5–7 filas; el mínimo audible son
+    // 3 filas, para que nunca se vea como una línea de puntos.
     function filasEncendidas(nivel) {
         const n = Math.min(1, Math.max(0, nivel || 0))
-        return Math.round(Math.pow(n, 0.85) * (filas / 2))
+        if (n < 0.03) return 0
+        return Math.min(filas / 2, Math.max(2, Math.round(n * 13)))
     }
 
     readonly property bool fresco: actualizado > 0 && (ahora - actualizado) < 3000

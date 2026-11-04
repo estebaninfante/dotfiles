@@ -167,12 +167,12 @@ def publicar(estado: str, nivel: float = 0.0, desde: float = 0,
 
 
 def nivel_del_audio(ruta: str, desde: int) -> float:
-    """RMS del último ~0.4 s grabado, normalizado para el glow (0..1)."""
+    """RMS del último ~0.15 s grabado, normalizado para el overlay (0..1)."""
     try:
         with open(ruta, "rb") as fh:
             fh.seek(0, os.SEEK_END)
             largo = fh.tell()
-            tramo = SAMPLE_RATE * 4 * 4 // 10  # 0.4 s
+            tramo = SAMPLE_RATE * 4 * 15 // 100  # 0.15 s
             fh.seek(max(desde, largo - tramo))
             crudo = fh.read()
     except OSError:
