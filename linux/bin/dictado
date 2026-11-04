@@ -112,12 +112,44 @@ def pid_grabador() -> int | None:
     return None
 
 
-def publicar(estado: str, nivel: float = 0.0, desde: float = 0) -> None:
+def microfono_actual() -> str:
+    """Nombre legible del micrófono por defecto (el que abre `parec`).
+
+    Se resuelve una sola vez al empezar a grabar: el overlay lo muestra chiquito
+    al pie y así no se lanza `pactl` en cada refresco (cada 100 ms).
+    """
+    try:
+        nombre = subprocess.run(
+            ["pactl", "get-default-source"], check=True, capture_output=True,
+            text=True, timeout=2).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if not nombre:
+        return ""
+    try:
+        salida = subprocess.run(
+            ["pactl", "list", "sources"], check=True, capture_output=True,
+            text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return nombre
+    es_el_bueno = False
+    for linea in salida.splitlines():
+        limpia = linea.strip()
+        if limpia.startswith("Name:"):
+            es_el_bueno = limpia[len("Name:"):].strip() == nombre
+        elif es_el_bueno and limpia.startswith("Description:"):
+            return limpia[len("Description:"):].strip() or nombre
+    return nombre
+
+
+def publicar(estado: str, nivel: float = 0.0, desde: float = 0,
+             microfono: str = "") -> None:
     """Estado para el overlay de quickshell (`dictado-overlay.qml`).
 
     Archivo y no IPC: el overlay lo lee cada ~120 ms y así no hay carreras ni
     un socket más que mantener. `actualizado` permite que el overlay se apague
-    solo si el grabador muere de golpe.
+    solo si el grabador muere de golpe. `microfono` es la descripción del source
+    de PipeWire que está escuchando (vacío si no se pudo resolver).
     """
     datos = {
         "estado": estado,
@@ -125,6 +157,8 @@ def publicar(estado: str, nivel: float = 0.0, desde: float = 0) -> None:
         "desde": int(desde * 1000) if desde else 0,
         "actualizado": int(time.time() * 1000),
     }
+    if microfono:
+        datos["microfono"] = microfono
     try:
         with open(ESTADO_JSON, "w", encoding="utf-8") as fh:
             json.dump(datos, fh)
@@ -326,7 +360,8 @@ def grabar(no_escribir: bool = False) -> int:
         except (OSError, subprocess.SubprocessError):
             pass
     arranque = time.time()
-    publicar("grabando", 0.0, arranque)
+    microfono = microfono_actual()
+    publicar("grabando", 0.0, arranque, microfono)
 
     try:
         grabador = subprocess.Popen(
@@ -341,7 +376,7 @@ def grabar(no_escribir: bool = False) -> int:
 
     tope = time.time() + MAX_S
     while pedido["valor"] == "" and grabador.poll() is None and time.time() < tope:
-        publicar("grabando", nivel_del_audio(CRUDO, 0), arranque)
+        publicar("grabando", nivel_del_audio(CRUDO, 0), arranque, microfono)
         time.sleep(0.1)
     if grabador.poll() is None:
         grabador.terminate()
