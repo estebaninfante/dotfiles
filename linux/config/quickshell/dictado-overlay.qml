@@ -29,14 +29,15 @@ ShellRoot {
     property double ahora: Date.now()
     property var ondas: []
     readonly property int ondasMax: 24
-    readonly property int filas: 7
-    readonly property real paso: 4
+    readonly property int filas: 9
+    readonly property real pasoX: 4
+    readonly property real pasoY: 3
 
-    // Cuántas filas de puntos se encienden a cada lado del centro. La ganancia
-    // (×3) y la raíz hacen que la voz normal ya llene casi toda la matriz.
+    // Filas encendidas a cada lado del centro. Con raíz 0.85 la voz normal deja
+    // 1–3 filas por lado; sólo los picos llenan la matriz completa.
     function filasEncendidas(nivel) {
-        const n = Math.min(1, Math.max(0, nivel || 0) * 3.0)
-        return Math.round(Math.pow(n, 0.4) * (filas / 2))
+        const n = Math.min(1, Math.max(0, nivel || 0))
+        return Math.round(Math.pow(n, 0.85) * (filas / 2))
     }
 
     readonly property bool fresco: actualizado > 0 && (ahora - actualizado) < 3000
@@ -57,33 +58,43 @@ ShellRoot {
         ondas = nuevo
     }
 
-    // FileView vigila el archivo: sin lanzar `cat` 8 veces por segundo.
-    FileView {
-        id: lector
-        path: Quickshell.env("XDG_RUNTIME_DIR") + "/dictado/estado.json"
-        watchChanges: true
-        printErrors: false
-        onFileChanged: reload()
-        onTextChanged: {
-            let nuevo = null
-            try {
-                nuevo = JSON.parse(lector.text() || "{}")
-            } catch (err) {
-                nuevo = null
-            }
-            root.ahora = Date.now()
-            if (!nuevo || typeof nuevo.actualizado !== "number") {
-                root.estado = "idle"
-                root.microfono = ""
-                root.nivel = 0
-                return
-            }
-            root.estado = typeof nuevo.estado === "string" ? nuevo.estado : "idle"
-            root.microfono = typeof nuevo.microfono === "string" ? nuevo.microfono : ""
-            root.nivel = typeof nuevo.nivel === "number" ? nuevo.nivel : 0
-            root.desde = Number(nuevo.desde) || 0
-            root.actualizado = nuevo.actualizado
+    // Lee `estado.json` (lo escribe `dictado`) y vuelca el estado al overlay.
+    function aplicarEstado(texto) {
+        let nuevo = null
+        try {
+            nuevo = JSON.parse(texto || "{}")
+        } catch (err) {
+            nuevo = null
         }
+        root.ahora = Date.now()
+        if (!nuevo || typeof nuevo.actualizado !== "number") {
+            root.estado = "idle"
+            root.microfono = ""
+            root.nivel = 0
+            return
+        }
+        root.estado = typeof nuevo.estado === "string" ? nuevo.estado : "idle"
+        root.microfono = typeof nuevo.microfono === "string" ? nuevo.microfono : ""
+        root.nivel = typeof nuevo.nivel === "number" ? nuevo.nivel : 0
+        root.desde = Number(nuevo.desde) || 0
+        root.actualizado = nuevo.actualizado
+    }
+
+    // Sondeo liviano (5/s) en vez de un proceso por cuadro; el archivo puede
+    // desaparecer y volver, así que `cat` es más robusto que un watcher.
+    Process {
+        id: lector
+        command: ["sh", "-c", "cat \"$XDG_RUNTIME_DIR/dictado/estado.json\" 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: root.aplicarEstado(this.text)
+        }
+    }
+
+    Timer {
+        interval: 200
+        running: true
+        repeat: true
+        onTriggered: { if (!lector.running) lector.running = true }
     }
 
     Timer {
@@ -121,9 +132,9 @@ ShellRoot {
                     width: contenido.width + 26
                     height: 34
                     radius: 10
-                    color: Qt.rgba(0.04, 0.04, 0.05, 0.94)
+                    color: "#0a0a0c"
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.09)
+                    border.color: "#2a2a30"
                     clip: true
                     opacity: root.visiblePildora ? 1 : 0
                     visible: opacity > 0.01
@@ -159,8 +170,8 @@ ShellRoot {
                         // simétricos respecto al centro.
                         Canvas {
                             id: matriz
-                            width: root.ondasMax * root.paso
-                            height: root.filas * root.paso
+                            width: root.ondasMax * root.pasoX
+                            height: root.filas * root.pasoY
                             anchors.verticalCenter: parent.verticalCenter
 
                             onPaint: {
@@ -168,7 +179,8 @@ ShellRoot {
                                 ctx.clearRect(0, 0, width, height)
                                 const columnas = root.ondasMax
                                 const filas = root.filas
-                                const paso = root.paso
+                                const pasoX = root.pasoX
+                                const pasoY = root.pasoY
                                 const centro = (filas - 1) / 2
                                 for (let c = 0; c < columnas; c++) {
                                     const encendidas = root.pensando ? 0 : root.filasEncendidas(root.ondas[c])
@@ -177,7 +189,7 @@ ShellRoot {
                                         ctx.globalAlpha = encendido ? 1 : 0.13
                                         ctx.fillStyle = "#ffffff"
                                         ctx.beginPath()
-                                        ctx.arc(c * paso + paso / 2, f * paso + paso / 2, encendido ? 1.25 : 0.9, 0, Math.PI * 2)
+                                        ctx.arc(c * pasoX + pasoX / 2, f * pasoY + pasoY / 2, encendido ? 1.05 : 0.7, 0, Math.PI * 2)
                                         ctx.fill()
                                     }
                                 }
