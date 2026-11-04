@@ -1,28 +1,54 @@
 #!/usr/bin/env bash
-# PrintScreen: un solo overlay para elegir entre capturar imagen o grabar.
-# Si ya hay una grabación en curso, la primera fila pasa a "Detener grabación".
-# Usa el menú de Omarchy (Quickshell), el mismo que Súper+Espacio.
+# PrintScreen: barra flotante arriba al centro (plugin eztvn.capture-menu)
+# para elegir entre capturar imagen o grabar. Sin scrim ni blur: sólo la
+# barra se dibuja y recibe clics.
+#
+# El plugin sólo devuelve la tecla; acá se espera a que el overlay salga de
+# pantalla antes de capturar, para que wayfreeze no congele un cuadro con la
+# barra o el fondo todavía encima.
 
 set -uo pipefail
 
-recording() { pgrep -f '^gpu-screen-recorder' >/dev/null; }
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/capture-menu"
+mkdir -p "$STATE_DIR"
+selection_file="$STATE_DIR/selection"
+done_file="$STATE_DIR/done"
+rm -f "$selection_file" "$done_file"
 
-rows=()
-if recording; then
-    rows+=("󰓛	Detener grabación")
-else
-    rows+=("󰻂	Grabar pantalla")
+recording=false
+pgrep -f '^gpu-screen-recorder' >/dev/null && recording=true
+
+payload=$(printf '{"selectionFile":"%s","doneFile":"%s","recording":%s}' \
+    "$selection_file" "$done_file" "$recording")
+
+if ! omarchy-shell shell summon eztvn.capture-menu "$payload" >/dev/null 2>&1; then
+    notify -u critical -g "󰅚" --app-name capture-menu \
+        "Overlay no disponible" "Revisá: omarchy plugin enable eztvn.capture-menu" 2>/dev/null || true
+    exit 1
 fi
-rows+=("󰹑	Captura de imagen")
-rows+=("󰖲	Captura de ventana")
-rows+=("󰹹	Captura de pantalla completa")
 
-selection=$(omarchy-menu-select "Capturar" "${rows[@]}" -- --width 460) || exit 0
-label=${selection##*$'\t'}
+# Espera la tecla (o la cancelación) desde el plugin.
+for _ in $(seq 1 600); do
+    [[ -e $done_file ]] && break
+    sleep 0.05
+done
+[[ -e $done_file ]] || exit 0
 
-case "$label" in
-    "Detener grabación"|"Grabar pantalla") exec ~/.local/bin/screenrecord-toggle ;;
-    "Captura de imagen")                   exec ~/.local/bin/shot ;;
-    "Captura de ventana")                  exec ~/.local/bin/shot active ;;
-    "Captura de pantalla completa")        exec ~/.local/bin/shot full ;;
+# Escape / clic fuera: el plugin deja el archivo de selección vacío.
+[[ -s $selection_file ]] || exit 0
+key=$(<"$selection_file")
+
+# El overlay ya se ocultó, pero el compositor puede tardar un frame en
+# sacarlo de la capa: esperar a que desaparezca antes de congelar la pantalla.
+for _ in $(seq 1 100); do
+    hyprctl layers -j 2>/dev/null | grep -q '"namespace": *"capture-menu"' || break
+    sleep 0.02
+done
+sleep 0.12
+
+case "$key" in
+    stop|record) exec ~/.local/bin/screenrecord-toggle ;;
+    region)      exec ~/.local/bin/shot ;;
+    window)      exec ~/.local/bin/shot active ;;
+    full)        exec ~/.local/bin/shot full ;;
 esac

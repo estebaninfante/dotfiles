@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.capture-menu",
+  "name": "Capture menu",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Barra flotante de PrintScreen: capturar imagen (región, ventana, pantalla) o grabar pantalla, sin scrim ni blur",
+  "kinds": ["menu"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "menu": "CaptureMenu.qml"
+  }
+}
