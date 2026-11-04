@@ -4,6 +4,9 @@
 
 audio-jack-guard.service
 
+# Un sink Bluetooth nunca reaparece muteado (WirePlumber restaura el mute por ruta).
+audio-bt-unmute.service
+
 lan-mouse-sync.path
 lan-mouse-sync.service
 

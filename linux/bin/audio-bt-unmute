@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# audio-bt-unmute — un auricular Bluetooth nunca aparece muteado.
+#
+# WirePlumber guarda el mute de cada ruta de dispositivo en
+# ~/.local/state/wireplumber/default-routes y lo vuelve a aplicar sobre la placa
+# en cuanto reaparece. El auricular se convierte enseguida en la salida por
+# defecto, así que un mute que quedó guardado (de una tecla de mute, del panel
+# de audio o de lo que mande el propio auricular por AVRCP al encenderse) deja
+# TODO el audio en silencio en cada reconexión, sin que se escuche nada aunque
+# el volumen esté al 31%.
+#
+# Este guardián vigila las salidas Bluetooth y desmutea cada una la primera vez
+# que la ve: al arrancar, al conectar el auricular y al cambiar de perfil (A2DP
+# <-> manos libres), que recrea el nodo con otro id. Un mute puesto a mano
+# después no se toca: el nodo ya está visto y no vuelve a aparecer hasta la
+# próxima conexión.
+#
+# Se sondea en vez de escuchar `pactl subscribe` a propósito: mute y volumen
+# son propiedades de la ruta, así que cualquier cambio genera un evento de
+# placa (incluso el mute manual) y reaccionar a esos eventos haría que el
+# guardián pelease con vos. El id del nodo distingue "acaba de aparecer" de
+# "estás tocando el slider".
+set -u
+
+INTERVAL="${AUDIO_BT_UNMUTE_INTERVAL:-1}"
+
+# Salidas Bluetooth actuales, como "<id>:<nombre>".
+bluez_sinks() {
+  pactl list sinks short 2>/dev/null | awk '$2 ~ /^bluez_output/ {print $1 ":" $2}'
+}
+
+# Desmutea la salida pedida si está muteada.
+unmute() {  # unmute <nombre-del-sink>
+  pactl get-sink-mute "$1" 2>/dev/null | grep -q yes || return 0
+  pactl set-sink-mute "$1" 0 >/dev/null 2>&1 || true
+}
+
+seen=""
+while true; do
+  current="$(bluez_sinks)"
+  next=""
+  for entry in $current; do
+    case " $seen " in
+      *" $entry "*) ;;                           # ya lo conocíamos
+      *) unmute "${entry#*:}" ;;                 # apareció: desmutear
+    esac
+    next="$next $entry"
+  done
+  seen="$next"
+  sleep "$INTERVAL"
+done
