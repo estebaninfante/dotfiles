@@ -2,12 +2,11 @@
 # Toggle de grabación de pantalla completa (pantalla completa + audio del escritorio).
 #
 # Primera pulsada: arranca la grabación y muestra un aviso breve para que se
-# note que está grabando. Segunda pulsada: frena y deja que Omarchy muestre la
-# notificación de "grabación guardada" con la miniatura.
+# note que está grabando. Segunda pulsada: frena, deja que Omarchy muestre la
+# notificación de "grabación guardada" con la miniatura y copia la ruta del
+# video al portapapeles.
 #
-# Segunda pulsada: además de detener, deja la ruta del video en el portapapeles.
-#
-# Se usa desde los atajos Súper+Mayús+K, F4 y F6/F10 (ver hypr/bindings.lua).
+# Se usa desde los atajos Súper+Mayús+K y F10 (sólo desktop) — ver hypr/bindings.lua.
 
 set -u
 
@@ -43,5 +42,5 @@ if pgrep -f "^gpu-screen-recorder" >/dev/null; then
     omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u normal -t 5000 \
         "Grabando pantalla" \
         "Pantalla completa + audio del escritorio.
-Detener: Súper + Mayús + K (o F4)."
+Detener: Súper + Mayús + K."
 fi

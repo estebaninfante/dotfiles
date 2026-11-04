@@ -106,9 +106,7 @@ hl.bind("F11", hl.dsp.exec_cmd("~/.local/bin/theme-toggle.sh toggle"))
 -- Grabar pantalla completa (con audio del escritorio) en un solo atajo: la
 -- primera pulsada arranca y la segunda detiene. El aviso al arrancar y el
 -- guardado los maneja ~/.local/bin/screenrecord-toggle (ver ese script).
--- Mismo toggle en laptop y desktop. Teclas: F6, F4 y SUPER+SHIFT+K.
-hl.bind("F6", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar escritorio (toggle)" })
-hl.bind("F4", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar pantalla completa (toggle)" })
+-- Teclas: F10 (sólo desktop) y SUPER+SHIFT+K.
 -- K queda libre en Dvorak: g,c,r,h,t,n,m,w,v (y s) son las de workspaces
 -- (workspace_keys en base/variables.lua).
 hl.bind(main_mod .. " + SHIFT + K", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar pantalla completa (toggle)" })
