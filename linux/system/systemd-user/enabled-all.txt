@@ -7,10 +7,6 @@ audio-jack-guard.service
 # Un sink Bluetooth nunca reaparece muteado (WirePlumber restaura el mute por ruta).
 audio-bt-unmute.service
 
-# Wireless Control: tablet o celular como tableta gráfica (motor: weylus).
-wireless-control.service
-wireless-control-tablet.service
-
 lan-mouse-sync.path
 lan-mouse-sync.service
 

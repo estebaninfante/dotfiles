@@ -237,7 +237,7 @@ Al arrancar hay, entre otros: `ollama`, `omar-listen` (wake word escuchando
 micrófono 100 % del tiempo), `omar-whisper`, `kokoro-tts`, `voice-daemon`,
 `agentes-platform-main`/`developing` (dos Next.js), `ohm`, `speeedy`,
 `openclaw-gateway`, `rig-*`, `syncthing` (se apaga en batería), spotify,
-`lan-mouse`, `weylus`, docker.
+`lan-mouse`, `wireless-control`, docker.
 
 Cada uno suma: microfonía constante, dos servidores Node, un LLM local y dos
 modelos ocupando la dGPU. Para el objetivo "<20 W sin procesos" el punto de
@@ -456,7 +456,7 @@ activarlo tiene que ser una decisión explícita.
   micrófono abierto 24/7), `omar-pill`, `omar-surface`, `omar-glow`,
   `voice-key-listener`, `voice-pi-shim`.
 - **KVM / streaming / remoto:** `lan-mouse`, `lan-mouse-auto`, `sunshine`,
-  `weylus`, `weylus-tablet`, `hypr-remote`, `hypr-outline`, `present-remote`.
+  `wireless-control`, `wireless-control-tablet`, `hypr-remote`, `hypr-outline`, `present-remote`.
 - **Agentes y servidores:** `rig-main-seat` (la silla del agente), `rig-discord-bot`,
   `rig-telegram-bot`, `dsh-web`, `agentes-platform-*`, `zentro-developing`,
   `openclaw-gateway`, `speeedy`, `vision-gui`, `ohm`, `foldertinder`,
