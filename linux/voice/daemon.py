@@ -64,6 +64,9 @@ SYNTH_SOCK = os.environ.get("VOICE_SYNTH_SOCK", os.path.join(CACHE_DIR, "synth.s
 # Estado de lo que se está hablando AHORA (para subtítulos karaoke en el glow).
 SPEAKING_FILE = os.environ.get("VOICE_SPEAKING_FILE", os.path.join(CACHE_DIR, "speaking.json"))
 DEDUP_TTL = float(os.environ.get("VOICE_DEDUP_TTL", "20"))
+# Apps que el ducking acalló y todavía no se pudieron restaurar (su stream se
+# cerró mientras la voz sonaba): ver _restore_streams y _vigilar_acallados.
+ACALLADOS_FILE = os.path.join(CACHE_DIR, "acallados.json")
 
 _last_key: dict[str, float] = {}
 _queue: list[dict] = []
@@ -624,30 +627,30 @@ def _resume_players(paused: list[str]) -> None:
             pass
 
 
-def _sink_inputs() -> list[tuple[int, bool]]:
-    """(index, muteado) de cada stream de salida (sink-input).
+def _sink_inputs() -> list[dict]:
+    """Cada stream de salida (sink-input): {index, muted, app}.
 
     Sirve para acallar TODO lo que este sonando, incluso lo que playerctl no
-    controla (video del navegador, apps sin MPRIS, juegos...).
+    controla (video del navegador, apps sin MPRIS, juegos...). `app` es
+    application.name (o el binario): es lo que identifica al stream entre
+    pausas y recargas, y lo que el restore de WirePlumber usa para recordar el
+    mute. El index no sirve para eso: cambia cada vez que la app abre otro stream.
     """
     try:
         r = subprocess.run(["pactl", "list", "sink-inputs"],
                            capture_output=True, text=True, timeout=5)
     except Exception:
         return []
-    items: list[tuple[int, bool]] = []
-    idx: int | None = None
-    muted = False
-    for line in (r.stdout or "").splitlines():
-        m = re.match(r"Sink Input #(\d+)", line)
-        if m:
-            if idx is not None:
-                items.append((idx, muted))
-            idx, muted = int(m.group(1)), False
-        elif idx is not None and re.match(r"\s*Mute:\s*yes", line):
-            muted = True
-    if idx is not None:
-        items.append((idx, muted))
+    items: list[dict] = []
+    for bloque in re.split(r"(?m)^(?=Sink Input #)", r.stdout or ""):
+        m = re.match(r"Sink Input #(\d+)", bloque)
+        if not m:
+            continue
+        nombre = re.search(r'application\.name = "([^"]*)"', bloque) \
+            or re.search(r'application\.process\.binary = "([^"]*)"', bloque)
+        items.append({"index": int(m.group(1)),
+                      "muted": bool(re.search(r"(?m)^\s*Mute:\s*yes", bloque)),
+                      "app": nombre.group(1) if nombre else ""})
     return items
 
 
@@ -659,23 +662,109 @@ def _set_stream_mute(index: int, muted: bool) -> None:
         pass
 
 
-def _mute_other_streams() -> list[tuple[int, bool]]:
-    """Acalla lo que ya estaba sonando; devuelve el estado para restaurar.
+# Apps acalladas por el ducking que esperan volver a sonar para quitarles el
+# mute. Se guarda en disco: si el daemon muere con la voz sonando, al arrancar
+# sigue sabiendo a quién devolverle el sonido.
+_acallados_lock = threading.Lock()
+_hablando = threading.Event()
+
+
+def _leer_acallados() -> set[str]:
+    try:
+        with open(ACALLADOS_FILE, encoding="utf-8") as fh:
+            return set(json.load(fh))
+    except Exception:
+        return set()
+
+
+def _guardar_acallados(apps: set[str]) -> None:
+    try:
+        tmp = ACALLADOS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(sorted(apps), fh)
+        os.replace(tmp, ACALLADOS_FILE)
+    except OSError:
+        pass
+
+
+def _mute_other_streams() -> list[dict]:
+    """Acalla lo que ya estaba sonando; devuelve los streams que acalló.
 
     Se hace ANTES de arrancar pw-play, asi el stream de la voz nace sin mutear
     y no hay que identificarlo. Red de seguridad ademas del pause via MPRIS:
     cubre el audio que playerctl no puede pausar (p.ej. video en el navegador).
+    Lo que el usuario ya tenía en mute no se toca (ni se restaura después).
     """
-    saved = _sink_inputs()
-    for index, muted in saved:
-        if not muted:
-            _set_stream_mute(index, True)
-    return saved
+    acallados = [s for s in _sink_inputs() if not s["muted"] and s["app"] != "Voice TTS"]
+    if acallados:
+        with _acallados_lock:
+            _guardar_acallados(_leer_acallados() | {s["app"] for s in acallados if s["app"]})
+    for s in acallados:
+        _set_stream_mute(s["index"], True)
+    return acallados
 
 
-def _restore_streams(saved: list[tuple[int, bool]]) -> None:
-    for index, muted in saved:
-        _set_stream_mute(index, muted)
+def _restore_streams(acallados: list[dict]) -> None:
+    """Devuelve el sonido a lo que se acalló, buscándolo por app y no por index.
+
+    Mientras la voz sonaba la app pudo cerrar su stream y abrir otro (pausa,
+    recarga, otro video): el nuevo nace muteado porque WirePlumber recuerda el
+    mute por application.name. Se desmutea todo stream vivo de esas apps; las
+    que no tienen ninguno quedan pendientes y _vigilar_acallados las desmutea
+    apenas vuelvan a sonar (si no, quedarían mudas para siempre).
+    """
+    apps = {s["app"] for s in acallados if s["app"]}
+    vivos = _sink_inputs()
+    indices = {v["index"] for v in vivos}
+    for s in acallados:  # los sin nombre: solo por index, si sigue vivo
+        if not s["app"] and s["index"] in indices:
+            _set_stream_mute(s["index"], False)
+    restaurados = set()
+    for v in vivos:
+        if v["app"] in apps:
+            if v["muted"]:
+                _set_stream_mute(v["index"], False)
+            restaurados.add(v["app"])
+    with _acallados_lock:
+        pendientes = _leer_acallados() - restaurados
+        _guardar_acallados(pendientes)
+    if apps - restaurados:
+        log(f"duck: sin stream para restaurar ahora (se desmutean al volver a sonar): {sorted(apps - restaurados)}")
+
+
+def _desmutear_pendientes() -> None:
+    """A las apps pendientes que ya tienen un stream vivo, les quita el mute."""
+    with _acallados_lock:
+        pendientes = _leer_acallados()
+        if not pendientes:
+            return
+        for v in _sink_inputs():
+            if v["app"] in pendientes:
+                if v["muted"]:
+                    _set_stream_mute(v["index"], False)
+                    log(f"duck: {v['app']} volvió a sonar, le quito el mute")
+                pendientes.discard(v["app"])
+        _guardar_acallados(pendientes)
+
+
+def _vigilar_acallados() -> None:
+    """Quita el mute a las apps pendientes en cuanto abren un stream nuevo.
+
+    Escucha `pactl subscribe`. Mientras la voz suena no hace nada: eso lo
+    resuelve _restore_streams al terminar. Al arrancar revisa una vez lo que
+    quedó pendiente (el daemon pudo morir con la voz sonando).
+    """
+    _desmutear_pendientes()
+    while True:
+        try:
+            proc = subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, text=True)
+            for linea in proc.stdout:
+                if "'new' on sink-input" in linea and not _hablando.is_set():
+                    _desmutear_pendientes()
+        except Exception as e:
+            log(f"vigilar acallados: {e}")
+        time.sleep(2)
 
 
 def _wav_duration_ms(wav: str) -> int:
@@ -779,9 +868,11 @@ def _play(wav: str, text: str | None = None, source: str = "",
     # otro audio que playerctl no maneje; al terminar, restaura todo.
     duck = _duck_enabled()
     paused = _pause_players() if duck else []
+    if duck:
+        _hablando.set()
     muted = _mute_other_streams() if duck else []
-    if duck and (paused or len([m for _, m in muted if not m]) > 0):
-        log(f"duck: pausados={paused or '[]'} acallados={len([m for _, m in muted if not m])}")
+    if duck and (paused or muted):
+        log(f"duck: pausados={paused or '[]'} acallados={[m['app'] for m in muted]}")
     published = False
     proc: subprocess.Popen | None = None
     try:
@@ -831,6 +922,7 @@ def _play(wav: str, text: str | None = None, source: str = "",
             _clear_speaking()
         if muted:
             _restore_streams(muted)
+        _hablando.clear()
         if paused:
             _resume_players(paused)
 
@@ -956,6 +1048,7 @@ def main() -> None:
 
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=serve_synth_socket, daemon=True).start()
+    threading.Thread(target=_vigilar_acallados, daemon=True).start()
 
     # read loop bloqueante
     while True:
