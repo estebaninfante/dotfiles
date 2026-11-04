@@ -40,7 +40,7 @@ ip_tail() {
 }
 
 urls() {
-  local ip tail
+  local ip tail dns
   ip="$(ip_lan)"
   tail="$(ip_tail)"
   if [ -n "$ip" ]; then
@@ -49,6 +49,10 @@ urls() {
     echo "USB:        http://localhost:$WEB_PORT"
   fi
   [ -n "$tail" ] && echo "Tailscale:  http://$tail:$WEB_PORT"
+  # HTTPS (proxy de tailscale): única forma de que el celular mantenga la
+  # pantalla encendida, porque el Wake Lock exige contexto seguro.
+  dns="$(tailscale status --json 2>/dev/null | jq -r '.Self.DNSName // empty' 2>/dev/null | sed 's/\.$//')"
+  [ -n "$dns" ] && echo "HTTPS:      https://$dns:8443   (pantalla encendida)"
 }
 
 activar() {
