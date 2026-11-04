@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# PrintScreen: un solo overlay para elegir entre capturar imagen o grabar.
+# Si ya hay una grabación en curso, la primera fila pasa a "Detener grabación".
+# Usa el menú de Omarchy (Quickshell), el mismo que Súper+Espacio.
+
+set -uo pipefail
+
+recording() { pgrep -f '^gpu-screen-recorder' >/dev/null; }
+
+rows=()
+if recording; then
+    rows+=("󰓛"$'\t'"Detener grabación"$'\t'"Guarda el video y copia su ruta")
+else
+    rows+=("󰻂"$'\t'"Grabar pantalla"$'\t'"Pantalla completa con audio; se detiene con la misma opción")
+fi
+rows+=("󰹑"$'\t'"Captura de imagen"$'\t'"Elegí la región con el mouse")
+rows+=("󰖲"$'\t'"Captura de ventana"$'\t'"Ventana activa")
+rows+=("󰹹"$'\t'"Captura de pantalla completa"$'\t'"Todo el escritorio")
+
+selection=$(omarchy-menu-select "Capturar" "${rows[@]}" -- --width 520) || exit 0
+label=${selection%%$'\t'*}
+
+case "$label" in
+    "Detener grabación"|"Grabar pantalla") exec ~/.local/bin/screenrecord-toggle ;;
+    "Captura de imagen")                  exec ~/.local/bin/shot ;;
+    "Captura de ventana")                 exec ~/.local/bin/shot active ;;
+    "Captura de pantalla completa")       exec ~/.local/bin/shot full ;;
+esac

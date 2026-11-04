@@ -4,13 +4,13 @@
 background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
-active           = "#57a156"
+active           = "#d63341"
 scale-with-font  = true
 size-horizontal  = 26
 size-vertical    = 28
 
 [hyprland]
-active-border            = "#57a156 #3a3a3e 45deg"
+active-border            = "#d63341 #3a3a3e 45deg"
 active-border-foreground = "#f0f0f0 #a0a0a8 45deg"
 
 [controls]
@@ -26,15 +26,15 @@ hover-cursor-border       = "#f0f0f0"
 hover-cursor-border-width = 1
 hover-cursor-border-alpha = 0.25
 
-focus-color        = "#57a156"
+focus-color        = "#d63341"
 focus-fill-alpha   = 0.08
-focus-border       = "#57a156"
+focus-border       = "#d63341"
 focus-border-width = 1
 focus-border-alpha = 0.35
 
 selected-color        = "#f0f0f0"
 selected-fill-alpha   = 0.18
-selected-border       = "#57a156"
+selected-border       = "#d63341"
 selected-border-width = 0
 selected-border-alpha = 1.0
 
@@ -45,50 +45,50 @@ selection-fill-alpha = 0.35
 background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
-border           = "#57a156"
+border           = "#d63341"
 border-alpha     = 1.0
 
 [tooltip]
 background       = "#1e1e20"
 background-alpha = 0.97
 text             = "#f0f0f0"
-border           = "#57a156"
+border           = "#d63341"
 border-alpha     = 1.0
 
 [notifications]
 background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
-border           = "#57a156"
+border           = "#d63341"
 border-alpha     = 1.0
-countdown        = "#57a156"
+countdown        = "#d63341"
 
 [menu]
 background                = "#1e1e20"
 background-alpha          = 1.0
 text                      = "#f0f0f0"
-border                    = "#57a156"
+border                    = "#d63341"
 border-alpha              = 1.0
 scrim                     = "#1e1e20"
 scrim-alpha               = 0.5
-selected-background       = "#57a156"
+selected-background       = "#d63341"
 selected-background-alpha = 0.16
 selected-text             = "#e8e8e8"
-selected-border           = "#57a156"
+selected-border           = "#d63341"
 selected-border-alpha     = 0.25
 
 [launcher]
 background                = "#1e1e20"
 background-alpha          = 0.95
 text                      = "#f0f0f0"
-border                    = "#57a156"
+border                    = "#d63341"
 border-alpha              = 1.0
 scrim                     = "#1e1e20"
 scrim-alpha               = 0.5
-selected-background       = "#57a156"
+selected-background       = "#d63341"
 selected-background-alpha = 0.16
 selected-text             = "#e8e8e8"
-selected-border           = "#57a156"
+selected-border           = "#d63341"
 selected-border-alpha     = 0.25
 
 [polkit]
@@ -96,12 +96,12 @@ background       = "#1e1e20"
 background-alpha = 1.0
 text             = "#f0f0f0"
 text-error       = "#e85a4a"
-border           = "#57a156"
+border           = "#d63341"
 border-error     = "#e85a4a"
 border-alpha     = 1.0
 scrim            = "#1e1e20"
 scrim-alpha      = 0.5
-accent           = "#57a156"
+accent           = "#d63341"
 
 [lock]
 background       = "#1e1e20"
@@ -109,18 +109,18 @@ background-alpha = 0.8
 text             = "#f0f0f0"
 placeholder      = "#a0a0a8"
 text-error       = "#e85a4a"
-border           = "#57a156"
-border-active    = "#57a156"
+border           = "#d63341"
+border-active    = "#d63341"
 border-error     = "#e85a4a"
 border-alpha     = 1.0
-selection        = "#57a156"
+selection        = "#d63341"
 selection-alpha  = 0.45
 
 [image-picker]
 scrim                   = "#1e1e20"
 scrim-alpha             = 0.5
 text                    = "#f0f0f0"
-selected-border         = "#57a156"
+selected-border         = "#d63341"
 selected-border-alpha   = 1.0
 unselected-border       = "#f0f0f0"
 unselected-border-alpha = 0.28

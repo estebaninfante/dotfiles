@@ -68,7 +68,9 @@ hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true 
 hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("omarchy brightness display +3%"), { repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("omarchy brightness display 3%-"), { repeating = true })
 
-hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/shot"))
+-- PrintScreen abre un único overlay (capture-menu): imagen (región, ventana o
+-- pantalla completa) o grabar pantalla. Ver linux/bin/capture-menu.
+hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/capture-menu"), { description = "Capturar: imagen o grabación" })
 hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("~/.local/bin/shot full"))
 hl.bind("CTRL + Print",    hl.dsp.exec_cmd("~/.local/bin/shot -s"))
 hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("~/.local/bin/shot -s full"))
@@ -103,7 +105,6 @@ hl.bind(main_mod .. " + CTRL + I", hl.dsp.exec_cmd("omarchy-launch-or-focus-tui 
 
 hl.bind("F8",  hl.dsp.exec_cmd("kitty --directory ~/dotfiles tmux new-session -A -s opencode opencode --agent dotfiles"))
 hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
-hl.bind("F11", hl.dsp.exec_cmd("~/.local/bin/theme-toggle.sh toggle"))
 
 -- Grabar pantalla completa (con audio del escritorio) en un solo atajo: la
 -- primera pulsada arranca y la segunda detiene. El aviso al arrancar y el
