@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# bar-position — mueve la barra de Omarchy a otro borde de la pantalla.
+#
+# Sin argumento cicla: top -> right -> bottom -> left -> top (es el atajo
+# SUPER+ALT+SHIFT+B). Con argumento salta directo a ese borde. El shell
+# recarga shell.json solo, así que el cambio se ve sin reiniciar nada.
+#
+#   bar-position              # cicla
+#   bar-position right        # barra a la derecha
+#   bar-position cycle        # igual que sin argumento
+#   bar-position              # imprime además la posición resultante
+set -euo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json"
+
+current_position() {
+    jq -r '.bar.position // "top"' "$CONFIG" 2>/dev/null || echo top
+}
+
+next_position() {
+    case "$(current_position)" in
+        top)    echo right  ;;
+        right)  echo bottom ;;
+        bottom) echo left   ;;
+        *)      echo top    ;;
+    esac
+}
+
+case "${1:-cycle}" in
+    top|bottom|left|right)
+        target="$1"
+        ;;
+    cycle)
+        target="$(next_position)"
+        ;;
+    -h|--help|help)
+        sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+        exit 0
+        ;;
+    *)
+        echo "uso: bar-position [top|bottom|left|right|cycle]" >&2
+        exit 2
+        ;;
+esac
+
+omarchy bar position "$target" >/dev/null
+echo "$target"

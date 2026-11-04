@@ -65,7 +65,9 @@ BarWidget {
 
   visible: true
   implicitWidth: root.vertical ? Style.bar.statusSlot : root.fixedWidth
-  implicitHeight: root.barSize
+  // En vertical el contenido es una columna (ícono + ganancia), así que alto
+  // fijo de barra lo recortaba.
+  implicitHeight: root.vertical ? (vcol.implicitHeight + Style.space(6)) : root.barSize
 
   // Modo ahorro extremo (power-extreme.sh): sin monitor (parec + pactl cada
   // segundo). Se consulta el flag al arrancar y el script avisa por IPC.

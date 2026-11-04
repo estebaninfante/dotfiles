@@ -25,8 +25,17 @@ BarWidget {
   readonly property int cellSize: Math.max(3, Math.min(10, Number(setting("cellSize", 4)) || 4))
   readonly property int cellGap: 1
 
-  readonly property real gridW: columns > 0 ? columns * cellSize + (columns - 1) * cellGap : 0
-  readonly property real gridH: rows * cellSize + (rows - 1) * cellGap
+  readonly property real gridW: root.layoutColumns > 0 ? root.layoutColumns * cellSize + (root.layoutColumns - 1) * cellGap : 0
+  readonly property real gridH: root.layoutRows > 0 ? root.layoutRows * cellSize + (root.layoutRows - 1) * cellGap : 0
+
+  // En una barra vertical el slot mide ~19px: la grilla no puede crecer a lo
+  // ancho, así que se limita a pocas columnas y crece a lo alto.
+  readonly property int verticalColumns: Math.max(1, Math.min(3,
+    Math.floor((Style.bar.statusSlot + cellGap) / (cellSize + cellGap))))
+  readonly property int layoutColumns: root.vertical ? root.verticalColumns : root.columns
+  readonly property int layoutRows: root.vertical
+    ? (coreCount > 0 ? Math.ceil(coreCount / root.layoutColumns) : 0)
+    : root.rows
 
   // Aire lateral: la grilla es un bloque denso, así que necesita más margen
   // que un widget de ícono para respirar al mismo ritmo que sus vecinos.
@@ -127,7 +136,7 @@ BarWidget {
 
   // La grilla en sí. Opacidad y color salen del uso de cada núcleo.
   component HeatmapCells: Grid {
-    columns: root.columns
+    columns: root.layoutColumns
     rowSpacing: root.cellGap
     columnSpacing: root.cellGap
 

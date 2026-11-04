@@ -149,6 +149,10 @@ hl.bind(main_mod .. " + down",  hl.dsp.window.resize({ x = 0, y = 20, relative =
 -- Ahorro extremo de batería (docs/energia-laptop-82y5.md §8)
 hl.bind(main_mod .. " + SHIFT + B", hl.dsp.exec_cmd("~/.local/bin/power-extreme.sh toggle"), { description = "Ahorro extremo (batería)" })
 
+-- Barra de Omarchy: cicla el borde (top -> right -> bottom -> left). También se
+-- puede arrastrar la barra o usar `omarchy bar position <borde>`.
+hl.bind(main_mod .. " + ALT + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/bar-position"), { description = "Barra: cambiar de posición" })
+
 hl.bind(main_mod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/ohm"), { description = "Ohm" })
 hl.bind(main_mod .. " + SHIFT + Y", hl.dsp.exec_cmd("~/.local/bin/ohm https://youtube.com/"), { description = "Ohm: YouTube" })
 

@@ -13,7 +13,11 @@ BarWidget {
   readonly property int barCount: Math.max(6, Math.min(32, Number(setting("bars", 14)) || 14))
   readonly property int barWidth: 2
   readonly property int barGap: 1
-  readonly property real maxBarHeight: Math.max(8, Math.round(root.barSize * 0.62))
+  // Amplitud máxima: en horizontal es el 62% del alto de la barra; en vertical
+  // el ancho del slot, porque las barras crecen a lo ancho.
+  readonly property real maxBarLevel: root.vertical
+    ? Math.max(6, Style.bar.statusSlot - 6)
+    : Math.max(8, Math.round(root.barSize * 0.62))
 
   // Current frame, one value per band (0..100). Fixed length so the Repeater
   // is built once and only the bar heights animate.
@@ -69,8 +73,12 @@ BarWidget {
   }
 
   visible: true
-  implicitWidth: root.barCount * root.barWidth + (root.barCount - 1) * root.barGap + 12
-  implicitHeight: root.barSize
+  implicitWidth: root.vertical
+    ? Style.bar.statusSlot
+    : root.barCount * root.barWidth + (root.barCount - 1) * root.barGap + 12
+  implicitHeight: root.vertical
+    ? root.barCount * (root.barWidth + root.barGap) - root.barGap + 12
+    : root.barSize
 
   Process {
     id: cava
@@ -116,7 +124,7 @@ BarWidget {
       model: root.barCount
       Rectangle {
         width: root.barWidth
-        height: Math.max(2, Math.round(((root.levels[index] || 0) / 100) * root.maxBarHeight))
+        height: Math.max(2, Math.round(((root.levels[index] || 0) / 100) * root.maxBarLevel))
         radius: root.barWidth / 2
         color: Color.accent
         anchors.verticalCenter: parent.verticalCenter
@@ -136,7 +144,7 @@ BarWidget {
       model: root.barCount
       Rectangle {
         height: root.barWidth
-        width: Math.max(2, Math.round(((root.levels[index] || 0) / 100) * root.maxBarHeight))
+        width: Math.max(2, Math.round(((root.levels[index] || 0) / 100) * root.maxBarLevel))
         radius: root.barWidth / 2
         color: Color.accent
         anchors.horizontalCenter: parent.horizontalCenter
