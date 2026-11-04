@@ -75,8 +75,10 @@ hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("~/.local/bin/shot -s full"))
 hl.bind(main_mod .. " + Print",       hl.dsp.exec_cmd("~/.local/bin/shot active"))
 hl.bind(main_mod .. " + SHIFT + Print", hl.dsp.exec_cmd("~/.local/bin/shot -e"))
 
-hl.bind("mouse:275", hl.dsp.exec_cmd("wtype -M ctrl -M shift c -m shift -m ctrl"))
-hl.bind("mouse:276", hl.dsp.exec_cmd("wtype -M ctrl -M shift v -m shift -m ctrl"))
+-- Botones laterales del mouse: copiar/pegar. El script decide el atajo según
+-- la ventana enfocada (Ctrl+Shift+C/V en terminales, Ctrl+C/V en el resto).
+hl.bind("mouse:275", hl.dsp.exec_cmd("~/.local/bin/clip-key copy"), { description = "Copiar (Shift en terminal)" })
+hl.bind("mouse:276", hl.dsp.exec_cmd("~/.local/bin/clip-key paste"), { description = "Pegar (Shift en terminal)" })
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh down"))
 hl.bind("mouse:274", hl.dsp.exec_cmd("~/.local/bin/middle-click.sh up"), { release = true })
 
