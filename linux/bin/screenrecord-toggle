@@ -5,6 +5,8 @@
 # note que está grabando. Segunda pulsada: frena y deja que Omarchy muestre la
 # notificación de "grabación guardada" con la miniatura.
 #
+# Segunda pulsada: además de detener, deja la ruta del video en el portapapeles.
+#
 # Se usa desde los atajos Súper+Mayús+K, F4 y F6/F10 (ver hypr/bindings.lua).
 
 set -u
@@ -12,8 +14,23 @@ set -u
 # Ruta del binario de Omarchy (por si cambia de nombre en el futuro).
 REC="omarchy-capture-screenrecording"
 
+# Deja la ruta absoluta del video como texto plano. wl-copy sólo puede ofrecer
+# un MIME a la vez, así que se copia la ruta (se pega en cualquier lado) en vez
+# del archivo (que sólo entienden apps que aceptan text/uri-list).
+copy_path() {
+    local file="$1"
+    [[ -n $file && -f $file ]] || return 0
+    printf '%s' "$file" | wl-copy --type text/plain || return 0
+    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u normal -t 5000 \
+        "Ruta copiada al portapapeles" "$file"
+}
+
 if pgrep -f "^gpu-screen-recorder" >/dev/null; then
-    "$REC" --stop-recording
+    # --stop-recording imprime la ruta final (ya reencodeada) en stdout cuando
+    # termina de guardar; nos quedamos con la última línea no vacía.
+    saved=$("$REC" --stop-recording)
+    saved=$(printf '%s\n' "$saved" | awk 'NF { last = $0 } END { print last }')
+    copy_path "$saved"
     exit 0
 fi
 
