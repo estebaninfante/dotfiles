@@ -27,21 +27,30 @@ por pulsación), sin límite.
 **Implementación**:
 
 - `linux/bin/shot`: `STATE_DIR`, `exec 9>lock` + `flock -n 9`, flag `active` con
-  PID y traps de limpieza (antes de `wayfreeze`).
+  PID y traps de limpieza (antes de `wayfreeze`). Los hijos que pueden
+  sobrevivir al script corren con `nofd` (`"$@" 9>&-`): `wl-copy` daemoniza un
+  servidor que sirve el portapapeles y, si heredaba el fd 9, retenía el lock
+  para siempre y TODAS las capturas siguientes salían mudas (detectado y
+  corregido en la misma verificación). Igual `wayfreeze`, `swappy` y `notify`.
 - `linux/config/hypr/navigation.lua`: `SHOT_ACTIVE` + `shot_in_progress()`
   (lectura de `/proc/<pid>/cmdline`) y rama `if shot_in_progress() then
   hot_armed = false` en el timer del hot corner.
 
 **Verificado** (sesión viva, `hyprctl reload` + `hyprctl configerrors` vacío,
-`luac -p` y `bash -n` OK):
+`luac -p` y `bash -n` OK; puntero movido con
+`hyprctl dispatch 'hl.dsp.cursor.move({x=…,y=…})'`):
 
-- `shot area` abierto → `shot full` concurrente: rc=0 en 4 ms, sin nuevo
-  `wayfreeze`/`slurp` ni PNG; puntero en (1,1) → `hyprctl submap` = `default`
-  (grilla NO abre con captura activa).
+- Sin captura: esquina (1,1) → `hyprctl submap` = `hyprexpo` (hot corner abre).
+- `shot area` abierto: puntero en (1,1) → `submap` = `default` (NO abre);
+  `shot full` concurrente: rc=0 en 4 ms, sin nuevo `wayfreeze`/`slurp` ni PNG.
 - `kill -TERM` del script → `$XDG_RUNTIME_DIR/shot/` queda sólo `lock` (flag
-  borrado); puntero a la esquina → `submap` = `hyprexpo` (hot corner vuelve).
-- `shot full` end-to-end: PNG 2560x1440 + `image/png` en el portapapeles, flag
-  limpiado.
+  borrado) y la esquina vuelve a abrir la grilla.
+- Flag con PID muerto (`999999`): se ignora → la grilla abre (no queda
+  desactivada para siempre).
+- Tres `shot full` seguidos: los tres capturan (PNG 2560x1440) y el
+  portapapeles queda con `image/png`; ningún proceso quedó reteniendo el lock.
+- `shot -e full` con `swappy` abierto: segunda captura bloqueada en 4 ms; al
+  cerrar `swappy` se liberan lock y flag, y la captura siguiente funciona.
 
 **Revertir**: borrar el bloque `STATE_DIR…flock` y el flag de `shot`, y quitar
 `shot_in_progress()` + su rama en `navigation.lua`.

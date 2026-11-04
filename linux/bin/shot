@@ -71,7 +71,7 @@ case "$MODE" in
     active)
         GEOMETRY=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
         if [ -z "$GEOMETRY" ] || [[ "$GEOMETRY" == null* ]]; then
-            notify -u critical -g "󰅚" --app-name shot \
+            nofd notify -u critical -g "󰅚" --app-name shot \
                 "Captura fallida" "No se pudo obtener la ventana activa."
             exit 1
         fi
@@ -89,7 +89,7 @@ esac
 
 WAYFREEZE=$(command -v /usr/local/bin/wayfreeze || command -v wayfreeze)
 if [ -n "$WAYFREEZE" ]; then
-    "$WAYFREEZE" --hide-cursor --after-freeze-cmd "$CAPTURE; killall wayfreeze"
+    nofd "$WAYFREEZE" --hide-cursor --after-freeze-cmd "$CAPTURE; killall wayfreeze"
 else
     eval "$CAPTURE"
 fi
@@ -98,8 +98,8 @@ fi
 
 case "$ACTION" in
     copy)
-        wl-copy --type image/png < "$OUT"
-        notify -g "󰹑" -t 3000 --app-name shot \
+        nofd wl-copy --type image/png < "$OUT"
+        nofd notify -g "󰹑" -t 3000 --app-name shot \
             "Captura copiada" "Al portapapeles"
         ;;
     save)
@@ -107,11 +107,11 @@ case "$ACTION" in
         mkdir -p "$SAVE_DIR"
         FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
         cp "$OUT" "$FILE"
-        wl-copy --type image/png < "$FILE"
-        notify -g "󰉉" -t 4000 --app-name shot \
+        nofd wl-copy --type image/png < "$FILE"
+        nofd notify -g "󰉉" -t 4000 --app-name shot \
             "Captura guardada" "$FILE"
         ;;
     edit)
-        swappy -f "$OUT"
+        nofd swappy -f "$OUT"
         ;;
 esac
