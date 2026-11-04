@@ -25,7 +25,8 @@ BarWidget {
     text: "✕"
     tooltipText: root.windowTitle !== "" ? "Cerrar " + root.windowTitle : "Cerrar ventana"
     onPressed: function(b) {
-      if (b === Qt.LeftButton && root.toplevel) root.toplevel.close()
+      if (b !== Qt.LeftButton || !root.toplevel) return
+      root.toplevel.close()
     }
   }
 }
