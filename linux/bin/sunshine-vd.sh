@@ -79,6 +79,16 @@ lua() { hypr eval "$1" >/dev/null 2>&1; }
 
 snapshot() { hypr monitors all -j >"$MONS" 2>/dev/null; [ -s "$MONS" ]; }
 
+# --- layout del teclado -------------------------------------------------------
+# El cliente (Moonlight en el celular) manda posiciones QWERTY, así que mientras
+# dura el stream todos los teclados tienen que estar en 'es'. Al terminar vuelve
+# el dvk_prog del teclado físico. Índices de switch-layout.sh: 0=dvk_prog, 1=es.
+LAYOUT_SH="${HOME}/.local/bin/switch-layout.sh"
+switch_layout() {
+    [ -x "$LAYOUT_SH" ] || return 0
+    "$LAYOUT_SH" "$1" || log "switch-layout.sh $1 falló"
+}
+
 # --- estado del host ----------------------------------------------------------
 save_state() {
     snapshot || return 1
@@ -216,6 +226,9 @@ do_start() {
         return 0
     fi
 
+    # El cliente escribe con posiciones QWERTY; el teclado físico usa dvk_prog.
+    switch_layout 1
+
     local W="${SUNSHINE_CLIENT_WIDTH:-1920}"
     local H="${SUNSHINE_CLIENT_HEIGHT:-1080}"
     local FPS="${SUNSHINE_CLIENT_FPS:-60}"
@@ -316,6 +329,7 @@ do_stop() {
         log "Hyprland no disponible; nada que restaurar"
         return 0
     fi
+    switch_layout 0
     if [ -r "$STATE" ]; then
         restore_state
         sleep 0.6
