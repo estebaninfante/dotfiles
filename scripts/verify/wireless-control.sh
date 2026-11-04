@@ -85,7 +85,7 @@ if [ "$encendido" = 1 ]; then
         && ok "la piel de Wireless Control está servida" \
         || fail "style.css servido no es la piel de Wireless Control (falta --custom-style-css)"
     curl -fsS --connect-timeout 1 --max-time 2 http://localhost:1701/lib.js 2>/dev/null \
-        | grep -q 'wireless-control.solo' \
+        | grep -q 'hyo-pista' \
         && ok "la interfaz (overlay) está inyectada" \
         || fail "lib.js servido no tiene el overlay de Wireless Control"
 else
@@ -106,6 +106,22 @@ if systemctl is-active --quiet ufw 2>/dev/null; then
         fail "ufw activo y sin regla para 1701/tcp: el celular no va a conectar"
     fi
 fi
+
+# --- touchpad: depende de ydotool ---
+if command -v ydotool >/dev/null 2>&1; then
+    ok "ydotool instalado (touchpad nativo)"
+else
+    fail "falta ydotool: el modo touchpad no puede mover el puntero"
+fi
+if pgrep -x ydotoold >/dev/null 2>&1; then
+    ok "ydotoold corriendo"
+else
+    warn "ydotoold no está corriendo: el touchpad no va a mover el puntero"
+fi
+curl -fsS --connect-timeout 1 --max-time 2 \
+    "http://127.0.0.1:1781/api/pointer?dx=0&dy=0" >/dev/null 2>&1 \
+    && ok "el API del puntero responde" \
+    || fail "el API del puntero no responde en 1781"
 
 # --- fila en el menú de Omarchy -------------------------------------------
 for menu in "$MENU_LIVE" "$MENU_REPO"; do
