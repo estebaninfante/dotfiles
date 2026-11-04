@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Prepara la tablet Lenovo por USB para usarla como tableta gráfica.
+# El servicio de Wireless Control corre de fondo; acá solo se arma el túnel USB.
+set -euo pipefail
+
+WEB_PORT=1701
+WS_PORT=9001
+
+if ! command -v adb >/dev/null 2>&1; then
+  echo "Falta adb (paquete android-tools)." >&2
+  exit 1
+fi
+
+linea="$(adb devices | awk 'NR>1 && NF>=2 {print $1" "$2; exit}')"
+estado="${linea##* }"
+
+if [ -z "$linea" ]; then
+  echo "No hay ninguna tablet conectada por USB. Enchufá el cable." >&2
+  exit 1
+fi
+
+if [ "$estado" = "unauthorized" ]; then
+  echo "La tablet está conectada pero sin autorizar." >&2
+  echo "Mirá la pantalla de la tablet y tocá 'Permitir' / 'Siempre permitir'." >&2
+  exit 1
+fi
+
+if [ "$estado" != "device" ]; then
+  echo "La tablet está en estado inesperado: $estado" >&2
+  exit 1
+fi
+
+echo "Tablet detectada. Armando túnel USB en los puertos $WEB_PORT y $WS_PORT..."
+adb reverse "tcp:$WEB_PORT" "tcp:$WEB_PORT"
+adb reverse "tcp:$WS_PORT" "tcp:$WS_PORT"
+
+systemctl --user start wireless-control.service
+
+echo
+echo "Todo listo. En la tablet abrí:   http://localhost:$WEB_PORT"
+echo

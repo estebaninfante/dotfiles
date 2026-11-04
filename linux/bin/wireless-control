@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# wireless-control — prende o apaga Wireless Control (la tablet o el celular
+# como tableta gráfica / touchpad de esta compu).
+#
+#   wireless-control            alterna
+#   wireless-control on|off     enciende / apaga
+#   wireless-control status     imprime on u off
+#   wireless-control url        muestra las direcciones para abrir en el celular
+#
+# Encendido deja el servicio y el vigilante del USB habilitados (se levantan
+# solos al iniciar sesión) y el estado en ~/.local/state/wireless-control/on,
+# que es lo que mira el menú de Omarchy para mostrar el ✓.
+#
+# El motor sigue siendo weylus (binario y paquete); Wireless Control es el
+# nombre del proyecto: los comandos, los servicios y la interfaz que armamos
+# encima.
+set -u
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/wireless-control"
+STATE="$STATE_DIR/on"
+WEB_PORT=1701
+WS_PORT=9001
+UI_PORT=1781
+UNITS="wireless-control.service wireless-control-tablet.service"
+
+notify() { notify-send -a "Wireless Control" -i input-tablet -t 2400 "$@" 2>/dev/null || true; }
+
+# IP de la red local (prefiere Wi-Fi): es la que la tablet y el celular abren
+# por WiFi.
+ip_lan() {
+  ip -4 -o addr show scope global 2>/dev/null | awk '
+    $2 == "wlo1" && !w { split($4, a, "/"); w = a[1] }
+    $2 !~ /^(lo|tailscale)/ && !f { split($4, a, "/"); f = a[1] }
+    END { print (w != "" ? w : f) }'
+}
+
+# IP del tailnet: sirve para el celular fuera de casa (aunque esté con datos).
+ip_tail() {
+  command -v tailscale >/dev/null 2>&1 || return 0
+  tailscale ip -4 2>/dev/null | head -1
+}
+
+urls() {
+  local ip tail
+  ip="$(ip_lan)"
+  tail="$(ip_tail)"
+  if [ -n "$ip" ]; then
+    echo "WiFi:       http://$ip:$WEB_PORT"
+  else
+    echo "USB:        http://localhost:$WEB_PORT"
+  fi
+  [ -n "$tail" ] && echo "Tailscale:  http://$tail:$WEB_PORT"
+}
+
+activar() {
+  mkdir -p "$STATE_DIR" && touch "$STATE"
+  systemctl --user enable --now $UNITS 2>/dev/null
+  local ip tail msg
+  ip="$(ip_lan)"
+  tail="$(ip_tail)"
+  if [ -n "$ip" ]; then
+    msg="Tablet o celular: http://$ip:$WEB_PORT"
+  else
+    msg="Tablet o celular: http://localhost:$WEB_PORT (USB)"
+  fi
+  [ -n "$tail" ] && msg="$msg - fuera de casa: http://$tail:$WEB_PORT"
+  notify "Wireless Control: activo" "$msg"
+}
+
+desactivar() {
+  rm -f "$STATE"
+  systemctl --user disable --now $UNITS 2>/dev/null
+  for puerto in "$WEB_PORT" "$WS_PORT" "$UI_PORT"; do
+    adb reverse --remove "tcp:$puerto" >/dev/null 2>&1
+  done
+  notify "Wireless Control: apagado" "La tablet y el celular ya no se conectan"
+}
+
+case "${1:-toggle}" in
+  on|activar)     activar ;;
+  off|desactivar) desactivar ;;
+  toggle)
+    if [ -e "$STATE" ]; then desactivar; else activar; fi ;;
+  status)
+    if [ -e "$STATE" ]; then echo on; else echo off; fi ;;
+  url)
+    urls ;;
+  *)
+    echo "uso: wireless-control [on|off|toggle|status|url]" >&2
+    exit 2 ;;
+esac
