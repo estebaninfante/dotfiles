@@ -9,20 +9,20 @@ recording() { pgrep -f '^gpu-screen-recorder' >/dev/null; }
 
 rows=()
 if recording; then
-    rows+=("󰓛"$'\t'"Detener grabación"$'\t'"Guarda el video y copia su ruta")
+    rows+=("󰓛	Detener grabación")
 else
-    rows+=("󰻂"$'\t'"Grabar pantalla"$'\t'"Pantalla completa con audio; se detiene con la misma opción")
+    rows+=("󰻂	Grabar pantalla")
 fi
-rows+=("󰹑"$'\t'"Captura de imagen"$'\t'"Elegí la región con el mouse")
-rows+=("󰖲"$'\t'"Captura de ventana"$'\t'"Ventana activa")
-rows+=("󰹹"$'\t'"Captura de pantalla completa"$'\t'"Todo el escritorio")
+rows+=("󰹑	Captura de imagen")
+rows+=("󰖲	Captura de ventana")
+rows+=("󰹹	Captura de pantalla completa")
 
-selection=$(omarchy-menu-select "Capturar" "${rows[@]}" -- --width 520) || exit 0
-label=${selection%%$'\t'*}
+selection=$(omarchy-menu-select "Capturar" "${rows[@]}" -- --width 460) || exit 0
+label=${selection##*$'\t'}
 
 case "$label" in
     "Detener grabación"|"Grabar pantalla") exec ~/.local/bin/screenrecord-toggle ;;
-    "Captura de imagen")                  exec ~/.local/bin/shot ;;
-    "Captura de ventana")                 exec ~/.local/bin/shot active ;;
-    "Captura de pantalla completa")       exec ~/.local/bin/shot full ;;
+    "Captura de imagen")                   exec ~/.local/bin/shot ;;
+    "Captura de ventana")                  exec ~/.local/bin/shot active ;;
+    "Captura de pantalla completa")        exec ~/.local/bin/shot full ;;
 esac
