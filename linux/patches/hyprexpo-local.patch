@@ -549,10 +549,10 @@ index 4675867..04c8c4e 100644
      bool                         m_closeCommitted = false;
 diff --git c/Overview3D.cpp w/Overview3D.cpp
 new file mode 100644
-index 0000000..429abc0
+index 0000000..6f918cd
 --- /dev/null
 +++ w/Overview3D.cpp
-@@ -0,0 +1,502 @@
+@@ -0,0 +1,507 @@
 +#include "Overview3D.hpp"
 +
 +#include <hyprland/src/render/OpenGL.hpp>
@@ -683,9 +683,13 @@ index 0000000..429abc0
 +        // Border ring: keep only a band near the quad's UV edges. Warps with
 +        // the tile so the outline follows the perspective correctly. A glow
 +        // spreads an additive bloom outward from the ring.
-+        vec2  e    = min(uv, vec2(1.0) - uv);
-+        float edge = min(e.x, e.y);
-+        if (edge > uThick + uGlowUV)
++        // Same rounded-rect SDF as the tile texture, so the ring follows the
++        // tile's rounded corners instead of sticking out past them.
++        vec2  r    = vec2(uRadius);
++        vec2  q    = abs(uv - vec2(0.5)) - (vec2(0.5) - r);
++        float d    = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r.x;
++        float edge = -d;
++        if (edge < 0.0 || edge > uThick + uGlowUV)
 +            discard;
 +        float ring = 1.0 - smoothstep(uThick * 0.55, uThick, edge);
 +        float halo = 1.0 - smoothstep(uThick, uThick + max(uGlowUV, 0.0001), edge);
@@ -1028,8 +1032,9 @@ index 0000000..429abc0
 +        renderQuad(tex, d);
 +    }
 +
-+    void renderBorder(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float thicknessUV, float glow) {
++    void renderBorder(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float thicknessUV, float glow, float radiusUV) {
 +        SQuadDraw d;
++        d.radiusUV = radiusUV;
 +        d.h3      = h3RowMajor;
 +        d.mode    = EMode::Border;
 +        d.color[0] = r;
@@ -1057,7 +1062,7 @@ index 0000000..429abc0
 +} // namespace Hyprexpo3D
 diff --git c/Overview3D.hpp w/Overview3D.hpp
 new file mode 100644
-index 0000000..21884a5
+index 0000000..9882297
 --- /dev/null
 +++ w/Overview3D.hpp
 @@ -0,0 +1,98 @@
@@ -1147,7 +1152,7 @@ index 0000000..21884a5
 +    void renderWarped(const SP<Render::ITexture>& tex, const std::array<float, 9>& h3RowMajor, float alpha, float radiusUV, float roundPow, bool flipV, float glow = 0.f);
 +
 +    // Convenience: a perspective-warped border ring in the given rgba colour.
-+    void renderBorder(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float thicknessUV, float glow = 0.f);
++    void renderBorder(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float thicknessUV, float glow = 0.f, float radiusUV = 0.f);
 +
 +    // Convenience: a perspective-warped solid-filled (optionally rounded) quad.
 +    void renderSolid(const std::array<float, 9>& h3RowMajor, float r, float g, float b, float a, float radiusUV, float roundPow);
@@ -1630,7 +1635,7 @@ index 6984d59..a59e32b 100644
  
  ePassElementType COverviewPassElement::type() {
 diff --git c/OverviewRender.cpp w/OverviewRender.cpp
-index e73c8f6..935d82a 100644
+index e73c8f6..85d601e 100644
 --- c/OverviewRender.cpp
 +++ w/OverviewRender.cpp
 @@ -2,6 +2,7 @@
@@ -1776,7 +1781,7 @@ index e73c8f6..935d82a 100644
  
      static auto* const* PTILEROUND  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding")->getDataStaticPtr();
      static auto* const* PTOUNDPWR   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding_power")->getDataStaticPtr();
-@@ -289,18 +319,178 @@ void COverview::fullRender() {
+@@ -289,18 +319,179 @@ void COverview::fullRender() {
      const int   HOVER_ROUND_SCALED   = **PTILEROUNDH >= 0 ? std::max(0, (int)std::lround((double)**PTILEROUNDH * MON->m_scale)) : BASE_ROUND_SCALED;
      const float ROUND_PWR            = **PTOUNDPWR;
  
@@ -1798,6 +1803,7 @@ index e73c8f6..935d82a 100644
 +    static auto* const* P3YAW   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_yaw")->getDataStaticPtr();
 +    static auto* const* P3DIST  = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_distance")->getDataStaticPtr();
 +    static auto* const* P3RAD   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_radius")->getDataStaticPtr();
++    static auto* const* P3BROUND = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_border_round")->getDataStaticPtr();
 +    static auto* const* P3FLIPV = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_flip_v")->getDataStaticPtr();
 +    static auto* const* P3FISH  = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_fisheye")->getDataStaticPtr();
 +    static auto* const* P3FISHP = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:threed_fisheye_pow")->getDataStaticPtr();
@@ -1958,7 +1964,7 @@ index e73c8f6..935d82a 100644
              texbox.round();
              tileBoxes[id] = texbox;
  
-@@ -325,7 +515,23 @@ void COverview::fullRender() {
+@@ -325,7 +516,23 @@ void COverview::fullRender() {
              }
  
              CRegion damage{0, 0, INT16_MAX, INT16_MAX};
@@ -1983,7 +1989,7 @@ index e73c8f6..935d82a 100644
          }
      }
  
-@@ -359,6 +565,7 @@ void COverview::fullRender() {
+@@ -359,6 +566,7 @@ void COverview::fullRender() {
      static auto const*  PBCOLCUR    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_current")->getDataStaticPtr();
      static auto const*  PBCOLFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_focus")->getDataStaticPtr();
      static auto const*  PBCOLHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_hover")->getDataStaticPtr();
@@ -1991,7 +1997,7 @@ index e73c8f6..935d82a 100644
      static auto const*  PBGRCUR     = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_current")->getDataStaticPtr();
      static auto const*  PBGREFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_focus")->getDataStaticPtr();
      static auto const*  PBGREHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_hover")->getDataStaticPtr();
-@@ -458,15 +665,29 @@ void COverview::fullRender() {
+@@ -458,15 +666,29 @@ void COverview::fullRender() {
                  bg.round();
                  lb.round();
              }
@@ -2024,7 +2030,7 @@ index e73c8f6..935d82a 100644
          };
  
          if (**PLBGEN)
-@@ -491,9 +712,23 @@ void COverview::fullRender() {
+@@ -491,9 +713,23 @@ void COverview::fullRender() {
  
          const std::string effectiveSpec = Hyprexpo::resolveBorderSpec(borderSpec, deprecatedGradSpec);
  
@@ -2035,7 +2041,7 @@ index e73c8f6..935d82a 100644
 +                return false;
 +            const float thick = std::clamp((float)BWIDTH / (float)std::max(1.0, std::min(box.w, box.h)), 0.001f, 0.5f);
 +            const float glow  = (id >= 0 && id < (int)tileGlowVal.size()) ? tileGlowVal[id] : 0.0f;
-+            Hyprexpo3D::renderBorder(tileH3s[id], r, g, b, a, thick, glow);
++            Hyprexpo3D::renderBorder(tileH3s[id], r, g, b, a, thick, glow, **P3BROUND != 0 ? std::clamp((float)**P3RAD, 0.0f, 0.5f) : 0.0f);
 +            return true;
 +        };
 +
@@ -2048,7 +2054,7 @@ index e73c8f6..935d82a 100644
                  Config::CGradientValueData grad;
                  grad.m_colors.clear();
                  grad.m_colors.push_back(spec.c1);
-@@ -505,6 +740,9 @@ void COverview::fullRender() {
+@@ -505,6 +741,9 @@ void COverview::fullRender() {
          } else if (!effectiveSpec.empty()) {
              Hyprexpo::SColorRGBA parsedColor;
              if (Hyprexpo::parseSolidColorSpec(effectiveSpec, parsedColor)) {
@@ -2058,7 +2064,7 @@ index e73c8f6..935d82a 100644
                  CHyprColor color{parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a};
                  Render::GL::g_pHyprOpenGL->renderBorder(box, color, {.round = roundScaled, .roundingPower = ROUND_PWR, .borderSize = BWIDTH});
              } else {
-@@ -644,6 +882,18 @@ void COverview::fullRender() {
+@@ -644,6 +883,18 @@ void COverview::fullRender() {
      const std::string currentFallback   = Hyprexpo::resolveBorderSpec(std::string{*PBGRCUR}, currentLegacySpec);
      const std::string hoverFallback     = Hyprexpo::resolveBorderSpec(std::string{*PBGREHOV}, hoverLegacySpec);
  
@@ -2078,7 +2084,7 @@ index e73c8f6..935d82a 100644
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
 diff --git c/PluginConfig.cpp w/PluginConfig.cpp
-index af2b27a..24e5c84 100644
+index af2b27a..26a7fa8 100644
 --- c/PluginConfig.cpp
 +++ w/PluginConfig.cpp
 @@ -42,6 +42,14 @@ void registerHyprexpoConfigValues() {
@@ -2096,7 +2102,7 @@ index af2b27a..24e5c84 100644
  
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
-@@ -52,6 +60,39 @@ void registerHyprexpoConfigValues() {
+@@ -52,6 +60,40 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
  
@@ -2113,6 +2119,7 @@ index af2b27a..24e5c84 100644
 +    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_distance", "3D camera distance in monitor heights", 1.6f));
 +    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_radius", "3D tile corner radius as a fraction of the short side", 0.06f));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:threed_flip_v", "flip the 3D tile texture vertically", 0));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:threed_border_round", "round the 3D border ring to match the tile corners (0 = square ring)", 1));
 +    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_fisheye", "radial lens distortion strength on the 3D grid (0 = off, higher curves the edges)", HyprexpoConfig::THREED_FISHEYE_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:threed_fisheye_pow", "radial falloff exponent for the fisheye distortion", HyprexpoConfig::THREED_FISHEYE_POW_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:glass_glow_enable", "draw a neon bloom around 3D tiles/borders", HyprexpoConfig::GLASS_GLOW_ENABLE_DEFAULT));
@@ -2136,7 +2143,7 @@ index af2b27a..24e5c84 100644
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
                                                           Config::Values::SIntValueOptions{.min = 0, .max = 9}));
-@@ -80,6 +121,10 @@ void registerHyprexpoConfigValues() {
+@@ -80,6 +122,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_current", "current border color", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_focus", "focus border color", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_hover", "hover border color", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT));
@@ -2282,7 +2289,7 @@ index 302ed07..abe9e34 100644
 +    }
 +
 +    // El pass del overview se dibuja por encima de las capas normales, asi que
-+    // las OVERLAY (pildora de Omar, glow de Omar, TTS) hay que repintarlas a
++    // las OVERLAY (pildora de Omar, glow de OmniVoz, TTS) hay que repintarlas a
 +    // mano despues de las TOP para que sigan visibles con la grilla abierta.
 +    if (keepLayers) {
 +        for (auto& w : pMonitor->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY]) {

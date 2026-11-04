@@ -66,6 +66,8 @@ local style = {
     threed_yaw = 0,
     threed_distance = 1.3,
     threed_radius = 0.04,
+    -- 1 = el borde sigue la esquina redondeada de la miniatura; 0 = borde recto (el de antes)
+    threed_border_round = 1,
     threed_flip_v = 0,
     threed_fisheye = 0.1,
     threed_fisheye_pow = 2,
@@ -110,6 +112,9 @@ if hl.plugin.hyprexpo ~= nil then
         config.threed_yaw = style.threed_yaw
         config.threed_distance = style.threed_distance
         config.threed_radius = style.threed_radius
+        if hl.get_config("plugin:hyprexpo:threed_border_round") ~= nil then
+            config.threed_border_round = style.threed_border_round
+        end
         config.threed_flip_v = style.threed_flip_v
         config.threed_fisheye = style.threed_fisheye
         config.threed_fisheye_pow = style.threed_fisheye_pow
