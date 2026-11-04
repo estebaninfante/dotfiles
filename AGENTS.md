@@ -463,7 +463,9 @@ los binds globales). `SUPER+CTRL+I` abre el historial
 (`linux/bin/dictado-historial` sobre `~/.local/state/dictado/historial.jsonl`).
 La UI es sólo la **píldora** (`linux/config/quickshell/dictado-overlay.qml`,
 servicio `dictado-overlay.service`): cápsula flotante al pie con punto rojo,
-ondas que siguen tu voz y el tiempo; mientras transcribe pasa a "pensando…".
+ondas que siguen tu voz y el tiempo; mientras transcribe pasa a "pensando…" y,
+mientras grabás, debajo en chiquito va el micrófono que está escuchando
+(descripción del source por defecto de PipeWire, la misma que abre `parec`).
 Es click-through y no toma foco; lee `$XDG_RUNTIME_DIR/dictado/estado.json`,
 que publica el grabador. `linux/voice/micguard.py` lee
 `$XDG_RUNTIME_DIR/dictado/mic-busy` para que el TTS no hable encima del dictado. Sin palabra clave ni píldora: el asistente
