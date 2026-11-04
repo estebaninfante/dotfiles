@@ -1,7 +1,7 @@
 // dictado-overlay — la píldora del dictado. Nada más.
 //
-// Una cápsula flotante al pie con el punto rojo, las ondas que siguen tu voz y
-// el tiempo que llevás. Mientras se transcribe pasa a "pensando…" en el mismo
+// Una cápsula flotante al pie con una matriz de puntos que sigue tu voz y el
+// tiempo que llevás. Mientras se transcribe pasa a "pensando…" en el mismo
 // lugar; cuando termina desaparece.
 //
 // Lo publica `~/dotfiles/linux/bin/dictado` en
@@ -27,7 +27,6 @@ ShellRoot {
     property double desde: 0
     property double actualizado: 0
     property double ahora: Date.now()
-    property double ultimoCambio: 0
     property var ondas: []
     readonly property int ondasMax: 24
     readonly property int filas: 7
@@ -51,7 +50,6 @@ ShellRoot {
         return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0")
     }
 
-    onEstadoChanged: ultimoCambio = Date.now()
     onNivelChanged: {
         const nuevo = ondas.slice()
         nuevo.push(nivel)

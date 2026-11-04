@@ -21,13 +21,10 @@ Item {
     property bool gpuTelemetryAvailable: false
     property var cpuThreads: ListModel {}
     property var ramProcesses: ListModel {}
-    property var gpuProcesses: ListModel {}
 
     function refreshMonitoring() {
         if (UIState.activeSection === "monitoreo" && !telemetryStatus.running)
             telemetryStatus.running = true;
-        if (UIState.monitorDetail === "gpu" && !gpuProcessesStatus.running)
-            gpuProcessesStatus.running = true;
     }
 
     function openMonitorDetail(detail) {
@@ -37,13 +34,6 @@ Item {
             ramOpen();
         if (detail === "cpu")
             cpuThreadsOpen();
-        if (detail === "gpu")
-            gpuProcessesOpen();
-    }
-
-    function gpuProcessesOpen() {
-        gpuProcesses.clear();
-        gpuProcessesStatus.running = true;
     }
 
     function ramOpen() {
@@ -103,20 +93,6 @@ Item {
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: line => { const p = line.trim().split("|"); if (p.length === 2) dashboardService.ramProcesses.append({ processName: p[0], memory: p[1] }); }
-        }
-    }
-
-    Process {
-        id: gpuProcessesStatus
-        command: ["bash", "-c", "nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits 2>/dev/null | while IFS=, read -r pid mem; do pid=${pid// /}; mem=${mem// /}; [ -n \"$pid\" ] || continue; name=$(cat /proc/$pid/comm 2>/dev/null || echo desconocido); printf '%s|%s\\n' \"$mem\" \"$name\"; done | sort -rn | while IFS='|' read -r mem name; do printf '%s|%s MB\\n' \"$name\" \"$mem\"; done"]
-        running: false
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
-                const p = line.trim().split("|");
-                if (p.length === 2 && p[0] !== "")
-                    dashboardService.gpuProcesses.append({ processName: p[0], memory: p[1] });
-            }
         }
     }
 
