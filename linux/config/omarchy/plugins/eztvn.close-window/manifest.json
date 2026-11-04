@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.close-window",
+  "name": "Cerrar ventana",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "description": "Un ✕ que cierra la ventana activa con un toque",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "CloseWindow.qml"
+  },
+  "barWidget": {
+    "displayName": "Cerrar ventana",
+    "description": "Cierra la ventana activa con un toque (para el celular)",
+    "category": "Compositor",
+    "allowMultiple": false
+  }
+}

@@ -52,6 +52,9 @@
       ],
       "right": [
         {
+          "id": "eztvn.close-window"
+        },
+        {
           "id": "eztvn.lanmouse"
         },
         {
@@ -85,7 +88,6 @@
         {
           "id": "eztvn.power"
         },
-        null,
         {
           "id": "io.github.dragosol.better-displays-pro"
         }
