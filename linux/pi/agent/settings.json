@@ -2,18 +2,5 @@
   "theme": "omarchy-system",
   "lastChangelogVersion": "1.3.0",
   "defaultProvider": "opencode-go",
-  "defaultModel": "deepseek-v4.1-flash",
-  "defaultThinkingLevel": "low",
-  "modelThinkingLevels": {
-    "deepseek/deepseek-flash": "low",
-    "opencode-go/deepseek-v4.1-flash": "low",
-    "opencode/deepseek-v4.1-flash-free": "low",
-    "opencode/deepseek-v4.1-flash": "low"
-  },
-  "packages": [
-    "npm:pi-model-fallback",
-    "npm:pi-thinking-box"
-  ],
-  "hideThinkingBlock": true,
-  "httpIdleTimeoutMs": 90000
+  "defaultModel": "deepseek-v4.1-flash"
 }
