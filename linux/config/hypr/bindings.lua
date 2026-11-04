@@ -109,7 +109,8 @@ hl.bind("F9",  hl.dsp.exec_cmd("~/.local/bin/tv-toggle.sh"))
 -- Grabar pantalla completa (con audio del escritorio) en un solo atajo: la
 -- primera pulsada arranca y la segunda detiene. El aviso al arrancar y el
 -- guardado los maneja ~/.local/bin/screenrecord-toggle (ver ese script).
--- Teclas: F10 (sólo desktop) y SUPER+SHIFT+K.
+-- Teclas: F10 (sólo desktop), Súper+Mayús+K y la barra de PrintScreen
+-- (capture-menu, donde la primera fila pasa a "Detener" al estar grabando).
 -- K queda libre en Dvorak: g,c,r,h,t,n,m,w,v (y s) son las de workspaces
 -- (workspace_keys en base/variables.lua).
 hl.bind(main_mod .. " + SHIFT + K", hl.dsp.exec_cmd("~/.local/bin/screenrecord-toggle"), { description = "Grabar pantalla completa (toggle)" })

@@ -30,7 +30,15 @@ ShellRoot {
     property double ultimoCambio: 0
     property real nivelSuave: 0
     property var ondas: []
-    readonly property int ondasMax: 28
+    readonly property int ondasMax: 26
+
+    // Altura de cada barra (nivel 0..1 → 3..23 px, dentro de la cápsula de
+    // siempre). La ganancia y la raíz hacen que la voz normal (nivel ~0.05–0.3)
+    // ya mueva las barras casi a tope, en vez de dejarlas como puntos.
+    function alturaBarra(nivel) {
+        const n = Math.min(1, Math.max(0, nivel || 0) * 2.2)
+        return 3 + 20 * Math.pow(n, 0.55)
+    }
 
     readonly property bool fresco: actualizado > 0 && (ahora - actualizado) < 3000
     readonly property bool grabando: fresco && estado === "grabando"
@@ -148,23 +156,23 @@ ShellRoot {
 
                         Row {
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 3
+                            spacing: 4
                             opacity: root.pensando ? 0 : 1
                             Behavior on opacity { NumberAnimation { duration: 150 } }
                             Repeater {
                                 model: root.ondasMax
                                 Item {
                                     required property int index
-                                    width: 3
+                                    width: 4
                                     height: 24
                                     Rectangle {
                                         anchors.centerIn: parent
-                                        width: 3
-                                        radius: 1.5
-                                        color: "#94e2d5"
-                                        opacity: 0.35 + 0.65 * (index / root.ondasMax)
-                                        height: 3 + 20 * (root.ondas[index] || 0)
-                                        Behavior on height { NumberAnimation { duration: 80 } }
+                                        width: 4
+                                        radius: 2
+                                        color: "#a6f3e4"
+                                        opacity: 0.55 + 0.45 * (index / (root.ondasMax - 1))
+                                        height: root.alturaBarra(root.ondas[index])
+                                        Behavior on height { NumberAnimation { duration: 80; easing.type: Easing.OutQuad } }
                                     }
                                 }
                             }
