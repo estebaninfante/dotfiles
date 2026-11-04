@@ -23,6 +23,14 @@ hl.layer_rule({
     animation = "none"
 })
 
+-- Overlay de PrintScreen: debe aparecer y desaparecer instantáneo, sin
+-- animación de capa (el contenido ya viene congelado).
+hl.layer_rule({
+    match = { namespace = "capture-menu" },
+    no_anim = true,
+    animation = "none"
+})
+
 hl.layer_rule({
     match = { namespace = "hypr-outline-menu" },
     no_anim = true,

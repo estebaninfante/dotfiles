@@ -45,7 +45,7 @@ Item {
     root.doneFile = String(p.doneFile || "")
     root.imagePath = String(p.imagePath || "")
     root.mode = "menu"
-    root.selectedIndex = 0
+    root.selectedIndex = String(p.defaultAction || "image") === "record" ? 0 : 1
     root.dragging = false
     root.opened = true
     Qt.callLater(function() { if (root.opened) keyCatcher.forceActiveFocus() })

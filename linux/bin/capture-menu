@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # PrintScreen: congela la pantalla al instante y recién ahí abre la barra
 # flotante (plugin eztvn.capture-menu) para elegir imagen o grabación.
+# Print deja Región (imagen) preseleccionada; Shift+Print deja Grabar.
 #
 # La imagen congelada es un PNG que saca este script ANTES de mostrar el
 # overlay, así que ni la barra ni el resaltado entran en la captura: las
@@ -8,6 +9,13 @@
 # se espera a que el compositor lo saque de pantalla antes de arrancar.
 
 set -uo pipefail
+
+# Opción preseleccionada: "image" (Print) o "record" (Shift+Print).
+default_action="${1:-image}"
+case "$default_action" in
+    image|record) ;;
+    *) default_action=image ;;
+esac
 
 STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/capture-menu"
 mkdir -p "$STATE_DIR"
@@ -54,7 +62,8 @@ payload=$(jq -cn \
     --arg selectionFile "$selection_file" \
     --arg doneFile "$done_file" \
     --arg imagePath "$frame" \
-    '{selectionFile: $selectionFile, doneFile: $doneFile, imagePath: $imagePath}')
+    --arg defaultAction "$default_action" \
+    '{selectionFile: $selectionFile, doneFile: $doneFile, imagePath: $imagePath, defaultAction: $defaultAction}')
 
 if ! omarchy-shell shell summon eztvn.capture-menu "$payload" >/dev/null 2>&1; then
     nofd notify -u critical -g "󰅚" --app-name capture-menu \

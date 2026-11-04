@@ -69,9 +69,10 @@ hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("omarchy brightness display +3%
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("omarchy brightness display 3%-"), { repeating = true })
 
 -- PrintScreen abre un único overlay (capture-menu): imagen (región, ventana o
--- pantalla completa) o grabar pantalla. Ver linux/bin/capture-menu.
-hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/capture-menu"), { description = "Capturar: imagen o grabación" })
-hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("~/.local/bin/shot full"))
+-- pantalla completa) o grabar pantalla. Print deja Imagen/Región listo para
+-- Enter; Shift+Print abre el overlay con Grabar seleccionado.
+hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/capture-menu image"), { description = "Capturar: imagen (o grabar)" })
+hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("~/.local/bin/capture-menu record"), { description = "Capturar: grabar (o imagen)" })
 hl.bind("CTRL + Print",    hl.dsp.exec_cmd("~/.local/bin/shot -s"))
 hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("~/.local/bin/shot -s full"))
 hl.bind(main_mod .. " + Print",       hl.dsp.exec_cmd("~/.local/bin/shot active"))
