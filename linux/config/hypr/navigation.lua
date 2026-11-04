@@ -500,12 +500,36 @@ local HOT_REARM = 60
 local HOT_POLL_MS = 120
 local hot_armed = true
 
+-- Captura en curso (~/.local/bin/shot): el script deja su PID en
+-- $XDG_RUNTIME_DIR/shot/active mientras tiene una selección/editor abiertos.
+-- Si el PID ya no existe (script matado con SIGKILL) el flag es viejo y se
+-- ignora, así el hot corner no queda desactivado para siempre.
+local SHOT_ACTIVE = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/shot/active"
+
+local function shot_in_progress()
+    local f = io.open(SHOT_ACTIVE, "r")
+    if not f then return false end
+    local pid = f:read("*l")
+    f:close()
+    if not pid or not pid:match("^%d+$") then return false end
+    local probe = io.open("/proc/" .. pid .. "/cmdline", "r")
+    if not probe then return false end
+    local cmdline = probe:read(4096) or ""
+    probe:close()
+    return cmdline:find("shot", 1, true) ~= nil
+end
+
 if plugin ~= nil then
     hl.timer(function()
         local ok, p = pcall(hl.get_cursor_pos)
         if not ok or not p or not p.x or not p.y then return end
         if p.x <= HOT_SIZE and p.y <= HOT_SIZE then
-            if hot_armed and not expo_fly.open and not expo_hold.open and expo_fly.busy == 0 then
+            if shot_in_progress() then
+                -- Capturando: ni abrir la grilla ni dejar armado el gesto, para
+                -- que al salir de la captura con el puntero en la esquina no
+                -- salte el overview.
+                hot_armed = false
+            elseif hot_armed and not expo_fly.open and not expo_hold.open and expo_fly.busy == 0 then
                 hot_armed = false
                 reset_ws_style()
                 expo_fly.deliberate = true

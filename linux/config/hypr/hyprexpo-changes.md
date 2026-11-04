@@ -1,5 +1,51 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-03 — hot corner apagado durante una captura + una captura a la vez
+
+**Motivo**: (1) con el hot corner activo (mouse a la esquina superior izquierda
+abre la grilla), al seleccionar una región para capturar el puntero pasaba por la
+esquina y saltaba el overview encima de `wayfreeze`/`slurp`; (2) pulsar la tecla
+de captura varias veces apilaba instancias de `wayfreeze` + `slurp` (y un `swappy`
+por pulsación), sin límite.
+
+**Comportamiento nuevo**:
+
+- `~/.local/bin/shot` toma un `flock` no bloqueante sobre
+  `$XDG_RUNTIME_DIR/shot/lock`: si ya hay una captura en curso, la nueva
+  invocación sale en silencio (código 0) sin congelar la pantalla ni abrir otro
+  selector. El lock se libera al terminar el script, incluida la espera de
+  `swappy` (`shot -e`).
+- Mientras corre, `shot` deja su PID en `$XDG_RUNTIME_DIR/shot/active` (lo borra
+  con un trap `EXIT/INT/TERM/HUP`). El timer del hot corner en `navigation.lua`
+  (poll de 120 ms, radio 3 px) lo consulta: si hay captura activa no abre la
+  grilla y además deja `hot_armed = false`, así al terminar la captura con el
+  puntero en la esquina el overview no salta hasta mover el mouse (>60 px).
+- Un flag huérfano (script matado con SIGKILL, que no corre traps) se detecta
+  como viejo: se valida que el PID exista en `/proc` y que su `cmdline` mencione
+  `shot`. Si no, se ignora y el hot corner sigue funcionando.
+
+**Implementación**:
+
+- `linux/bin/shot`: `STATE_DIR`, `exec 9>lock` + `flock -n 9`, flag `active` con
+  PID y traps de limpieza (antes de `wayfreeze`).
+- `linux/config/hypr/navigation.lua`: `SHOT_ACTIVE` + `shot_in_progress()`
+  (lectura de `/proc/<pid>/cmdline`) y rama `if shot_in_progress() then
+  hot_armed = false` en el timer del hot corner.
+
+**Verificado** (sesión viva, `hyprctl reload` + `hyprctl configerrors` vacío,
+`luac -p` y `bash -n` OK):
+
+- `shot area` abierto → `shot full` concurrente: rc=0 en 4 ms, sin nuevo
+  `wayfreeze`/`slurp` ni PNG; puntero en (1,1) → `hyprctl submap` = `default`
+  (grilla NO abre con captura activa).
+- `kill -TERM` del script → `$XDG_RUNTIME_DIR/shot/` queda sólo `lock` (flag
+  borrado); puntero a la esquina → `submap` = `hyprexpo` (hot corner vuelve).
+- `shot full` end-to-end: PNG 2560x1440 + `image/png` en el portapapeles, flag
+  limpiado.
+
+**Revertir**: borrar el bloque `STATE_DIR…flock` y el flag de `shot`, y quitar
+`shot_in_progress()` + su rama en `navigation.lua`.
+
 ## Cambio 2026-10-17 — barra y overlays de voz fijos sobre el overview (`keep_layers`)
 
 **Motivo**: al abrir la grilla (`SUPER+Y`) desaparecían la barra de Omarchy y los

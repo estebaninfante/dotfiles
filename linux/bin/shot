@@ -5,6 +5,24 @@ OUT="/tmp/shot.png"
 MODE="area"
 ACTION="copy"
 
+# Una sola captura a la vez: pulsar Print sobre una selección ya abierta
+# apilaba wayfreeze+slurp (y un swappy por pulsación). El lock se libera al
+# terminar el script (incluye la espera de swappy).
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/shot"
+mkdir -p "$STATE_DIR" 2>/dev/null
+exec 9>"$STATE_DIR/lock"
+flock -n 9 || exit 0
+
+# Marca de "captura en curso" para el hot corner de hyprexpo
+# (navigation.lua): mientras exista, acercar el mouse a la esquina superior
+# izquierda no abre la grilla. Lleva el PID para que un flag huérfano (script
+# matado con SIGKILL) se detecte como viejo y se ignore.
+ACTIVE="$STATE_DIR/active"
+printf '%s\n' "$$" > "$ACTIVE"
+trap 'rm -f "$ACTIVE"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
 usage() {
     cat <<EOF
 Uso: shot [opciones] [full|active|area]
@@ -43,6 +61,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 rm -f "$OUT"
+
+# Los hijos que pueden sobrevivir al script (wl-copy daemoniza un servidor que
+# sirve el portapapeles) NO deben heredar el fd 9 del lock: si lo heredan, el
+# daemon retiene el lock para siempre y las capturas siguientes salen mudas.
+nofd() { "$@" 9>&-; }
 
 case "$MODE" in
     active)
