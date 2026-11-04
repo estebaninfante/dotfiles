@@ -61,6 +61,10 @@ ensure_unit() {
 ensure_server() {
   alive_url && return 0
   ensure_unit
+  # El arranque en frío tarda ~20 s: sin aviso, el click en el launcher parece
+  # no hacer nada.
+  command -v notify-send >/dev/null \
+    && notify-send -a "DeepSeek Harness" "Levantando el harness…" "La ventana se abre cuando el servidor responde"
   # systemd corta los arranques repetidos (start-limit-hit) y deja el unit en
   # failed: se limpia el contador y se reintenta una vez. Sin esto, abrir la
   # UI dos veces seguidas podía quedar bloqueado cinco minutos.
