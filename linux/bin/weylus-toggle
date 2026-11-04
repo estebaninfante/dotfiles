@@ -17,7 +17,8 @@ UI_PORT=1781
 
 notify() { notify-send -a Weylus -i input-tablet -t 1800 "$@" 2>/dev/null || true; }
 
-# IP de la red local (prefiere Wi-Fi): es la que la tablet abre por WiFi.
+# IP de la red local (prefiere Wi-Fi): es la que la tablet y el celular abren
+# por WiFi.
 ip_lan() {
   ip -4 -o addr show scope global 2>/dev/null | awk '
     $2 == "wlo1" && !w { split($4, a, "/"); w = a[1] }
@@ -25,16 +26,25 @@ ip_lan() {
     END { print (w != "" ? w : f) }'
 }
 
+# IP del tailnet: sirve para el celular fuera de casa (aunque esté con datos).
+ip_tail() {
+  command -v tailscale >/dev/null 2>&1 || return 0
+  tailscale ip -4 2>/dev/null | head -1
+}
+
 activar() {
   mkdir -p "$STATE_DIR" && touch "$STATE"
   systemctl --user enable --now weylus.service weylus-tablet.service 2>/dev/null
-  local ip
+  local ip tail msg
   ip="$(ip_lan)"
+  tail="$(ip_tail)"
   if [ -n "$ip" ]; then
-    notify "Weylus: activo" "En la tablet: http://$ip:$WEB_PORT (WiFi)"
+    msg="Tablet o celular: http://$ip:$WEB_PORT"
   else
-    notify "Weylus: activo" "En la tablet: http://localhost:$WEB_PORT (USB)"
+    msg="Tablet o celular: http://localhost:$WEB_PORT (USB)"
   fi
+  [ -n "$tail" ] && msg="$msg - fuera de casa: http://$tail:$WEB_PORT"
+  notify "Weylus: activo" "$msg"
 }
 
 desactivar() {
