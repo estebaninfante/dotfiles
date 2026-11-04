@@ -7,9 +7,11 @@ import Quickshell.Wayland
 import qs.Commons
 
 // PrintScreen: congela la pantalla al instante (el PNG lo toma capture-menu
-// antes de abrir esto) y muestra una barra flotante arriba al centro para
-// elegir qué capturar. La imagen congelada y la barra viven en esta capa: no
-// entran en el archivo porque la captura se recorta del PNG original.
+// antes de abrir esto) y entra directo en la selección de región: arrastrás el
+// recuadro y queda copiado, sin pasar por ninguna barra. Un clic sin arrastre
+// abre la barra (región, ventana, pantalla, grabar). La imagen congelada y el
+// recuadro viven en esta capa: no entran en el archivo porque la captura se
+// recorta del PNG original.
 Item {
   id: root
 
@@ -44,8 +46,11 @@ Item {
     root.selectionFile = String(p.selectionFile || "")
     root.doneFile = String(p.doneFile || "")
     root.imagePath = String(p.imagePath || "")
-    root.mode = "menu"
-    root.selectedIndex = String(p.defaultAction || "image") === "record" ? 0 : 1
+    // Print (imagen) abre directo en selección de región: arrastrás y listo,
+    // sin pasar por la barra. Un clic sin arrastre abre la barra; Shift+Print
+    // (grabar) abre la barra directamente.
+    root.mode = String(p.defaultAction || "image") === "record" ? "menu" : "region"
+    root.selectedIndex = root.mode === "menu" ? 0 : 1
     root.dragging = false
     root.opened = true
     Qt.callLater(function() { if (root.opened) keyCatcher.forceActiveFocus() })
@@ -144,10 +149,7 @@ Item {
       anchors.fill: parent
       focus: root.opened
 
-      Keys.onEscapePressed: {
-        if (root.mode === "region") root.mode = "menu"
-        else root.finish(null)
-      }
+      Keys.onEscapePressed: root.finish(null)
       Keys.onLeftPressed: if (root.mode === "menu") root.move(-1)
       Keys.onRightPressed: if (root.mode === "menu") root.move(1)
       Keys.onReturnPressed: if (root.mode === "menu") root.activate(root.selectedIndex)
@@ -286,7 +288,7 @@ Item {
         Text {
           id: hint
           anchors.centerIn: parent
-          text: "Arrastrá para elegir la región · Esc cancela"
+          text: "Arrastrá para elegir la región · Esc cancela · clic abre el menú"
           color: Color.menu.text
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.bodySmall

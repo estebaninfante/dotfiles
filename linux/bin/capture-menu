@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# PrintScreen: congela la pantalla al instante y recién ahí abre la barra
-# flotante (plugin eztvn.capture-menu) para elegir imagen o grabación.
-# Print deja Región (imagen) preseleccionada; Shift+Print deja Grabar.
+# PrintScreen: congela la pantalla al instante y entra directo en la selección
+# de región (plugin eztvn.capture-menu); arrastrás el recuadro y queda copiado.
+# Un clic sin arrastre abre la barra (región, ventana, pantalla, grabar);
+# Shift+Print abre la barra con Grabar seleccionado.
 #
 # La imagen congelada es un PNG que saca este script ANTES de mostrar el
 # overlay, así que ni la barra ni el resaltado entran en la captura: las
