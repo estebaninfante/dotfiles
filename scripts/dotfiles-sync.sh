@@ -296,16 +296,29 @@ if [[ -n "$RECONCILE_CURRENT" && "$(cat "$RECONCILE_STATE" 2>/dev/null)" != "$RE
     fi
 fi
 
-# 5) Subir.
+# 5) Subir. Un rechazo del servidor puede ser pasajero (GitHub devuelve
+# "fatal error in commit_refs_rules" y se cura solo en segundos), asi que se
+# reintenta con espera corta antes de despertar al resolutor.
 if [[ "$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo 0)" -gt 0 ]]; then
-    if git_net push --quiet origin "$BRANCH"; then
-        log "OK push"
-    elif net_error "${GIT_NET_ERR:-}"; then
-        # Sin red no hay nada que un agente resuelva: el commit queda local y
-        # sube solo en el proximo ciclo del timer.
-        log "WARN push sin red — queda local, se reintenta el proximo ciclo"
-        exit 0
-    else
+    pushed=0
+    for intento in 1 2 3; do
+        if git_net push --quiet origin "$BRANCH"; then
+            log "OK push (intento $intento)"
+            pushed=1
+            break
+        fi
+        net_error "${GIT_NET_ERR:-}" && break
+        if (( intento < 3 )); then
+            sleep $((intento * 10))
+        fi
+    done
+    if (( ! pushed )); then
+        if net_error "${GIT_NET_ERR:-}"; then
+            # Sin red no hay nada que un agente resuelva: el commit queda local
+            # y sube solo en el proximo ciclo del timer.
+            log "WARN push sin red — queda local, se reintenta el proximo ciclo"
+            exit 0
+        fi
         log "WARN push rechazado — llamado al resolutor"
         spawn_resolver "git push rechazado: ${GIT_NET_ERR:-sin detalle}"
         exit 1
