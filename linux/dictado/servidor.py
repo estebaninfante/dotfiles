@@ -8,7 +8,7 @@ puede probar a mano:
     curl --data-binary @audio.f32 'http://127.0.0.1:8091/transcribir?idioma=es'
 
 Entradas:
-  POST /transcribir?idioma=es&formato=raw|wav
+  POST /transcribir?idioma=es&formato=raw|wav[&prompt=vocabulario]
        raw  (por defecto): float32 little-endian, mono, 16 kHz, sin cabecera.
        wav              : archivo WAV mono 16 kHz.
        -> {"texto": str, "idioma": str, "segundos": float}
@@ -224,7 +224,7 @@ def remuestrear(pcm: np.ndarray, origen: int, destino: int) -> np.ndarray:
     ).astype(np.float32)
 
 
-def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False) -> dict:
+def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False, prompt: str | None = None) -> dict:
     if pcm.size < SAMPLE_RATE // 4:
         return {"texto": "", "idioma": idioma, "motivo": "audio muy corto"}
     pico = float(np.abs(pcm).max()) if pcm.size else 0.0
@@ -240,7 +240,7 @@ def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False) -> dict:
             beam_size=1,
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 400},
-            initial_prompt=PROMPT,
+            initial_prompt=prompt or PROMPT,
             condition_on_previous_text=False,
         )
         textos = [s.text.strip() for s in segmentos]
@@ -313,13 +313,14 @@ class Handler(BaseHTTPRequestHandler):
         idioma = (consulta.get("idioma") or [IDIOMA])[0] or IDIOMA
         formato = (consulta.get("formato") or ["raw"])[0].lower()
         rapido = (consulta.get("rapido") or ["0"])[0] in ("1", "true", "si", "sí")
+        prompt = (consulta.get("prompt") or [""])[0] or None  # vocabulario del cliente (p. ej. Estudio)
         try:
             pcm = wav_a_pcm(cuerpo) if formato == "wav" else np.frombuffer(cuerpo, dtype="<f4").copy()
         except Exception as exc:  # noqa: BLE001 — se informa al cliente
             self._json({"error": f"audio inválido: {exc}"}, 400)
             return
         try:
-            self._json(transcribir(pcm, idioma, rapido))
+            self._json(transcribir(pcm, idioma, rapido, prompt))
         except Exception as exc:  # noqa: BLE001
             log(f"error transcribiendo: {exc}")
             self._json({"error": str(exc)}, 500)
