@@ -40,8 +40,10 @@ sunshine_streaming() {
     pactl get-default-sink 2>/dev/null | grep -q '^sink-sunshine'
 }
 
-moonlight_open() {
-    hypr clients -j | grep -q '"class": "com.moonlight_stream.Moonlight"'
+# Rol cliente: la ventana del gui se llama "Moonlight"; la del stream,
+# "<equipo> - Moonlight". Mismo criterio que moonlight.lua, para no pelearse.
+moonlight_streaming() {
+    hypr clients -j | grep -q '"title": "[^"]* - Moonlight"'
 }
 
 apply() {
@@ -51,7 +53,7 @@ apply() {
         return 0
     fi
     local want
-    if sunshine_streaming || moonlight_open; then want=off; else want=on; fi
+    if sunshine_streaming || moonlight_streaming; then want=off; else want=on; fi
     [ "$want" = "$applied" ] && return 0
     applied="$want"
     "$CAPTURE" "$want" >/dev/null 2>&1 || true

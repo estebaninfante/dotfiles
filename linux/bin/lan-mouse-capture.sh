@@ -46,6 +46,15 @@ set_capture() {
         *)   usage ;;
     esac
 
+    # Con Sunshine streameando, armar la captura es siempre un error: el
+    # puntero que inyecta Moonlight entra en la zona del borde, lan-mouse se lo
+    # queda y el ratón "desaparece" del stream. Sunshine deja sink-sunshine-*
+    # como sink por defecto sólo mientras dura la sesión.
+    if [ "$want" = on ] && pactl get-default-sink 2>/dev/null | grep -q '^sink-sunshine'; then
+        printf 'sunshine streaming; capture stays released\n'
+        exit 0
+    fi
+
     if ! daemon_up; then
         printf 'lan-mouse daemon not running; capture stays %s\n' "$(capture_state)"
         exit 0

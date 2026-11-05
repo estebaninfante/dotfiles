@@ -29,13 +29,14 @@ local function set_lan_mouse(off)
         return
     end
     lan_mouse_applied = off
-    hl.exec_cmd("lan-mouse-streaming " .. (off and "on" or "off"))
+    hl.exec_cmd("lan-mouse-capture.sh " .. (off and "off" or "on"))
 end
 
 local function off()
     grab(false)
     modes.streaming = false
-    set_lan_mouse(false)
+    -- lan-mouse lo decide sync (por ventana abierta), no este teardown: si los
+    -- dos escriben, se activa y desactiva la captura en el mismo tick.
     if hl.get_current_submap() == MOONLIGHT_SUBMAP then
         hl.dispatch(hl.dsp.submap("reset"))
     end
@@ -108,22 +109,33 @@ local function enter()
 end
 
 local function leave()
-    hl.dispatch(hl.dsp.workspace.toggle_special(MOONLIGHT_SPECIAL))
+    -- Sólo se oculta el special si el stream estaba ahí: streameando en un
+    -- workspace normal, togglear lo mostraría (justo al revés).
+    local w = active_moonlight()
+    if w ~= nil and w.workspace ~= nil and w.workspace.name == SPECIAL_SELECTOR then
+        hl.dispatch(hl.dsp.workspace.toggle_special(MOONLIGHT_SPECIAL))
+    end
     guard = true
     off()
 end
 
--- El submap sólo vale mientras se está streameando de verdad: la ventana
--- activa es Moonlight y vive en el special visible. Con sólo "clase enfocada"
--- se comía todos los atajos de Súper apenas el cliente quedaba en foco
--- (incluso sin conectar), y no había forma de salir sin pasar por el special.
+-- El submap vale mientras el stream esté en foco: o la ventana vive en el
+-- special visible, o es una conexión viva (el título pasa a "<equipo> -
+-- Moonlight"). Con la sola clase enfocada se comía todos los atajos de Súper
+-- apenas el cliente quedaba en foco, incluso sin conectar.
 --
 -- Ojo: `monitor.active_special_workspace` llega SIEMPRE nil al Lua aunque
 -- `hyprctl monitors` lo muestre, así que la visibilidad se deduce de la
 -- ventana activa: sólo puede estar en el special si el special está visible.
 local function streaming()
     local w = active_moonlight()
-    return w ~= nil and w.workspace ~= nil and w.workspace.name == SPECIAL_SELECTOR
+    if w == nil then
+        return false
+    end
+    if w.workspace ~= nil and w.workspace.name == SPECIAL_SELECTOR then
+        return true
+    end
+    return w.title ~= nil and w.title:find("%- Moonlight$") ~= nil
 end
 
 local function toggle()
@@ -134,12 +146,26 @@ local function toggle()
     end
 end
 
+-- Con el gui abierto y sin conectar la ventana se llama sólo "Moonlight"; al
+-- streamear se suma otra ("<equipo> - Moonlight"). Sólo en ese caso hay que
+-- soltar la captura de lan-mouse: si se mira la mera existencia de la ventana,
+-- dejar el gui abierto deja el KVM apagado sin que se entienda por qué.
+local function moonlight_streaming()
+    for _, w in ipairs(hl.get_windows({ class = MOONLIGHT_CLASS })) do
+        if w.title ~= nil and w.title:find("%- Moonlight$") then
+            return true
+        end
+    end
+    return streaming()
+end
+
 local function sync()
     local cur = hl.get_current_submap() or ""
     modes.streaming = streaming()
     if modes.streaming then
         if cur ~= MOONLIGHT_SUBMAP and not guard then
             grab(true)
+            if modes.close_overview then modes.close_overview() end
             hl.dispatch(hl.dsp.submap(MOONLIGHT_SUBMAP))
             announce_submap()
         end
@@ -151,11 +177,10 @@ local function sync()
             grab(false)
         end
     end
-    -- lan-mouse se decide por la VENTANA, no por el foco ni por el special: si
-    -- se abre Moonlight desde el lanzador, la ventana todavía no está en el
-    -- special y la captura del borde ya se estaba comiendo el puntero. Con la
-    -- ventana abierta no se arma, aunque el foco vaya y venga.
-    set_lan_mouse(moonlight_window() ~= nil)
+    -- lan-mouse se decide por el stream (ventana de streaming o special), no
+    -- por el foco: si se abre Moonlight desde el lanzador la ventana todavía
+    -- no está en el special y la captura del borde ya se comía el puntero.
+    set_lan_mouse(moonlight_streaming())
 end
 
 hl.define_submap(MOONLIGHT_SUBMAP, function()

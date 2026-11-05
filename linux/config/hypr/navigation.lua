@@ -1,4 +1,5 @@
 local variables = require("base.variables")
+local modes = require("base.modes")
 local hyprexpo = require("plugins.hyprexpo")
 
 local main_mod = variables.main_mod
@@ -62,7 +63,28 @@ local function expo_hold_close()
     end
 end
 
+-- moonlight.lua lo llama al entrar en modo streaming: si el overview quedó
+-- abierto, se cierra antes de que los atajos vayan a la máquina remota.
+modes.close_overview = function()
+    if plugin ~= nil then
+        plugin.expo("cancel")
+    end
+    expo_hold.open = false
+    expo_hold_cancel_timer()
+    if expo_fly then
+        expo_fly.open = false
+        expo_fly.sel = nil
+        expo_fly.want = nil
+        expo_fly.pending = false
+        expo_fly.deliberate = false
+    end
+end
+
 local function expo_hold_arm()
+    -- Streameando, el hold de Súper es del sistema remoto.
+    if modes.streaming then
+        return
+    end
     if expo_hold.suppressed or expo_hold.open or plugin == nil then
         return
     end
@@ -523,6 +545,13 @@ if plugin ~= nil then
     hl.timer(function()
         local ok, p = pcall(hl.get_cursor_pos)
         if not ok or not p or not p.x or not p.y then return end
+        if modes.streaming then
+            -- Streameando, la esquina superior izquierda es del sistema
+            -- remoto (ahí viven sus menús). Se desarma hasta que el puntero
+            -- salga de la esquina, así al volver no salta el overview solo.
+            hot_armed = false
+            return
+        end
         if p.x <= HOT_SIZE and p.y <= HOT_SIZE then
             if shot_in_progress() then
                 -- Capturando: ni abrir la grilla ni dejar armado el gesto, para
