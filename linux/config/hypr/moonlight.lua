@@ -47,6 +47,21 @@ local function off()
     end
 end
 
+-- Salida de emergencia. Un submap reemplaza TODO el mapa de atajos: si queda
+-- armado (special visible con la ventana activa, o una transición rara), el
+-- único atajo vivo es el toggle y parece que "Super dejó de andar". Esta tecla
+-- fuerza la salida siempre y deja el guard puesto para que el poll de 3 s no
+-- vuelva a entrar hasta que Moonlight pierda el foco.
+local function force_out()
+    guard = true
+    off()
+end
+
+local function announce_submap()
+    hl.exec_cmd("omarchy-notification-send -u critical 'Moonlight' "
+        .. "'Atajos de Super bloqueados mientras streameás. Salir: SUPER+SHIFT+ESC'")
+end
+
 local SPECIAL_SELECTOR = "special:" .. MOONLIGHT_SPECIAL
 
 local function moonlight_window()
@@ -74,10 +89,15 @@ end
 
 local function enter()
     if not in_special() then
-        hl.dispatch(hl.dsp.window.move({
-            workspace = SPECIAL_SELECTOR,
-            window = "class:" .. MOONLIGHT_CLASS,
-        }))
+        -- Por dirección, no por clase: con dos instancias abiertas, el selector
+        -- por clase se llevaba las dos al special.
+        local w = active_moonlight() or moonlight_window()
+        if w ~= nil then
+            hl.dispatch(hl.dsp.window.move({
+                workspace = SPECIAL_SELECTOR,
+                window = "address:" .. w.address,
+            }))
+        end
     end
     hl.dispatch(hl.dsp.workspace.toggle_special(MOONLIGHT_SPECIAL))
     guard = false
@@ -85,6 +105,7 @@ local function enter()
     grab(true)
     if hl.get_current_submap() ~= MOONLIGHT_SUBMAP then
         hl.dispatch(hl.dsp.submap(MOONLIGHT_SUBMAP))
+        announce_submap()
     end
 end
 
@@ -118,24 +139,30 @@ end
 local function sync()
     local cur = hl.get_current_submap() or ""
     if streaming() then
-        release_lan_mouse(true)
         if cur ~= MOONLIGHT_SUBMAP and not guard then
             grab(true)
             hl.dispatch(hl.dsp.submap(MOONLIGHT_SUBMAP))
+            announce_submap()
         end
     else
         guard = false
-        release_lan_mouse(false)
         if cur == MOONLIGHT_SUBMAP then
             off()
         elseif cur == "" or cur == "default" then
             grab(false)
         end
     end
+    -- lan-mouse se decide por la VENTANA, no por el foco ni por el special: si
+    -- se abre Moonlight desde el lanzador, la ventana todavía no está en el
+    -- special y la captura del borde ya se estaba comiendo el puntero. Con la
+    -- ventana abierta no se arma, aunque el foco vaya y venga.
+    release_lan_mouse(moonlight_window() ~= nil)
 end
 
 hl.define_submap(MOONLIGHT_SUBMAP, function()
     hl.bind(MOONLIGHT_KEY, toggle)
+    hl.bind(variables.main_mod .. " + SHIFT + ESCAPE", force_out,
+        { description = "Moonlight: salir del submap" })
 end)
 
 hl.bind(MOONLIGHT_KEY, toggle)

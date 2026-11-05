@@ -6,8 +6,10 @@ set -euo pipefail
 echo "=== lan-mouse emergency escape ==="
 
 # Kill lan-mouse daemon
-if pgrep -x lan-mouse > /dev/null 2>&1; then
-    pkill -x lan-mouse
+# /usr/bin/... absoluto: ~/bin/pgrep y ~/bin/pkill son busybox y `-x` no
+# matchea contra el nombre de proceso, asi que este escape se auto-enganaba.
+if /usr/bin/pgrep -x lan-mouse > /dev/null 2>&1; then
+    /usr/bin/pkill -x lan-mouse
     echo "[OK] lan-mouse killed"
 else
     echo "[SKIP] lan-mouse not running"
