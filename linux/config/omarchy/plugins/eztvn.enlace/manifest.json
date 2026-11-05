@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.enlace",
+  "name": "Enlace",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Transiciones a pantalla completa para Moonlight/Sunshine (tapa el cambio de monitores al conectar y desconectar) y para lan-mouse (sincronización de pantallas y borde de cruce).",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Enlace.qml"
+  }
+}

@@ -45,4 +45,12 @@ hl.layer_rule({
     animation = "none"
 })
 
+-- Transiciones de enlace (Moonlight/Sunshine y lan-mouse): la animación la
+-- hace el QML; una animación de capa encima retrasa o se come la escena.
+hl.layer_rule({
+    match = { namespace = "eztvn-enlace" },
+    no_anim = true,
+    animation = "none"
+})
+
 return true
