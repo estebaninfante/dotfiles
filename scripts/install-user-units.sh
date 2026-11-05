@@ -46,7 +46,7 @@ for u in $(managed_units); do
 done
 
 # Drop-ins versionados: <unit>.d/*.conf en el repo se enlazan al mismo lugar.
-# Así un unit de Omarchy (p. ej. omarchy-crash-watch) se sobrescribe por
+# Así un unit de Omarchy (p. ej. voice-key-listener) se sobrescribe por
 # drop-in sin editar /usr/share, que se pisa en cada update.
 for d in "$SRC"/*.d; do
   [ -d "$d" ] || continue

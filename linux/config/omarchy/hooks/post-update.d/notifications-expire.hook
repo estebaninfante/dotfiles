@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# Los toasts con urgency=critical no vencen en Omarchy 4.0.4: durationFor()
+# devuelve 0 y el aviso se queda en pantalla hasta que alguien hace click.
+# Un crash manda justo eso, así que las notificaciones de crash quedaban
+# durante horas. Este hook le da a critical el mismo tope finito que al resto.
+#
+# El cambio vive en el paquete (/usr/share/omarchy): el plugin de
+# notificaciones es first-party y el registry no deja sombrearlo desde
+# ~/.config/omarchy/plugins (los ids "omarchy.*" de terceros se ignoran). Por
+# eso se parchea el archivo, y este hook —que corre después de cada
+# `omarchy update`— lo re-aplica cuando la actualización lo pisa.
+
+set -uo pipefail
+
+target="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins/notifications/Service.qml"
+[[ -f $target ]] || exit 0
+
+patch=$(mktemp)
+trap 'rm -f "$patch"' EXIT
+
+cat >"$patch" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    src = f.read()
+
+old = """    switch (urgency) {
+    case NotificationUrgency.Critical:
+      return 0
+"""
+
+new = """    switch (urgency) {
+    case NotificationUrgency.Critical:
+      // Un critical sin vencimiento solo se va con click: se quedaba en
+      // pantalla horas. Usa el máximo permitido y después pasa al historial.
+      return maxPopupDuration
+"""
+
+if new in src:
+    sys.exit(0)
+if old not in src:
+    print("notifications-expire: no encontré el bloque critical en " + path,
+          file=sys.stderr)
+    sys.exit(1)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(src.replace(old, new, 1))
+PY
+
+# El archivo es del paquete: escribible solo como root. El hook puede correr
+# como usuario, así que escala con sudo sin pedir contraseña (o sale en
+# silencio si no puede; la actualización no debe fallar por esto).
+if [[ -w $target ]]; then
+  python3 "$patch" "$target" || true
+elif sudo -n true 2>/dev/null; then
+  sudo -n python3 "$patch" "$target" || true
+fi

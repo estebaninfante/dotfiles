@@ -974,3 +974,42 @@ y reemplazó el TOD.
 el prompt corre en initramfs sin USB/fprintd/usuarios. Cualquier sistema
 es igual (Windows no desbloquea BitLocker pre-boot con Hello). Si el boot
 cansa, vía alternativa: TPM2 auto-unlock con `systemd-cryptenroll`.
+
+## 2026-11-05 — Fuera el autodiagnóstico de crashes; los toasts critical ya vencen
+
+**Contexto.** Dos problemas enlazados. (1) El autodiagnóstico de crashes lanzaba
+un agente en cada core dump sin que nadie lo pidiera. (2) Las notificaciones no
+se iban: el plugin `omarchy.notifications` de Omarchy 4.0.4 tenía
+`durationFor()` devolviendo `0` para `urgency=critical`, así que un toast
+critical no vencía nunca y solo se cerraba con click; los avisos de crash usan
+justo critical y quedaban horas en pantalla.
+
+**Elegido.**
+
+- **Quitar el autodiagnóstico.** Se borran `linux/bin/omarchy-crash-{autodiagnose,diagnose}`,
+  el drop-in de `omarchy-crash-watch`, su doc y `scripts/verify/crash.sh`. El
+  unit vuelve al `ExecStart` del paquete: avisa el crash y el agente solo corre
+  si el dueño clickea.
+- **critical caduca.** `durationFor()` en `shell/plugins/notifications/Service.qml`
+  devuelve `maxPopupDuration` (30 s) para critical; después el toast pasa al
+  historial como cualquier otro. Se parchea el archivo del paquete porque el
+  registry del shell ignora plugins de terceros con id `omarchy.*`, así que no
+  hay override de usuario posible.
+- **El parche se re-aplica solo.** `linux/config/omarchy/hooks/post-update.d/notifications-expire.hook`
+  (versionado y espejado en `~/.config/omarchy/hooks/post-update.d/`) reescribe
+  el bloque tras cada `omarchy update`, que reinstala el paquete. Es idempotente
+  y sale en silencio si el bloque ya no existe (upstream pudo arreglarlo).
+
+**Descartado.**
+
+- Clonar el plugin entero como plugin de usuario: mismo id `omarchy.notifications`
+  es rechazado por `PluginRegistry` (los `omarchy.*` de terceros se ignoran) y
+  copiar 1000+ líneas para un cambio de una línea es peor de mantener.
+- Bajar la urgencia de los avisos a `normal` en cada emisor: no arregla los
+  critical de terceros ni el toast de "Set your default agent", y el problema
+  real es la política del shell.
+
+**Verificación.** `omarchy-notification-send -u critical` → el archivo del popup
+existe y a los 30 s se movió a `history/` (antes se quedaba indefinidamente);
+`systemctl --user show omarchy-crash-watch -p ExecStart` apunta a
+`/usr/bin/omarchy-crash-watch` sin drop-ins.
