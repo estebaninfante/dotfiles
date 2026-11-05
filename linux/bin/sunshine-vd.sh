@@ -4,7 +4,8 @@
 # Modos:
 #   headless | off          host con la pantalla apagada: crea SUNSHINE-VD y
 #                           desactiva la salida física (el cliente ve solo la virtual)
-#   mirror | dup            host encendido y duplicando la pantalla virtual
+#   mirror | dup            host intacto: la pantalla virtual copia la física
+#                           (el cliente ve lo mismo que se muestra en el host)
 #   extend                  host encendido + pantalla extra a la derecha
 #   stop | restore          quita la virtual y devuelve el monitor a como estaba
 #   status                  imprime el estado actual
@@ -288,24 +289,18 @@ do_start() {
     sleep 0.3
 
     # 4) acciones según el modo
-    local ws
     case "$mode" in
         headless|off)
             [ -n "$PHYS" ] && lua "hl.monitor({ output=\"$PHYS\", disabled=true })"
             lua "hl.dispatch(hl.dsp.focus({ monitor = \"$OUTPUT\" }))"
             ;;
         mirror|dup|duplicar)
+            # El host no se toca: la virtual copia la física con su misma
+            # resolución, escala y posición. El cliente ve exactamente lo que
+            # hay en la pantalla del host y Moonlight lo escala a su tamaño.
             if [ -n "$PHYS" ]; then
-                ws=$(hypr activeworkspace -j 2>/dev/null | python3 -c 'import json,sys
-try: print(json.load(sys.stdin)["id"])
-except Exception: print("")' 2>/dev/null)
-                if [ -n "$ws" ]; then
-                    lua "hl.dispatch(hl.dsp.workspace.move({ workspace = $ws, monitor = \"$OUTPUT\" }))"
-                    sleep 0.2
-                fi
-                lua "hl.monitor({ output=\"$PHYS\", mode=\"$PMODE\", position=\"$PPOS\", scale=$PSCALE, mirror=\"$OUTPUT\", disabled=false })"
+                lua "hl.monitor({ output=\"$OUTPUT\", mode=\"$PMODE\", position=\"$PPOS\", scale=$PSCALE, mirror=\"$PHYS\" })"
             fi
-            lua "hl.dispatch(hl.dsp.focus({ monitor = \"$OUTPUT\" }))"
             ;;
         extend|extender)
             lua "hl.dispatch(hl.dsp.focus({ monitor = \"$OUTPUT\" }))"
