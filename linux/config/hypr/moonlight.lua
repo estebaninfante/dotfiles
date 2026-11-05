@@ -1,11 +1,11 @@
 local variables = require("base.variables")
+local modes = require("base.modes")
 
 local MOONLIGHT_CLASS  = "com.moonlight_stream.Moonlight"
 local MOONLIGHT_SUBMAP = "moonlight"
 local MOONLIGHT_KEY    = variables.main_mod .. " + " .. variables.workspace_keys[10]
 local MOONLIGHT_SPECIAL = "moonlight"
 
-local LAN_MOUSE_CAPTURE = "lan-mouse-capture.sh"
 local LAN_MOUSE_POLL_MS = 3000
 
 local guard = false
@@ -14,34 +14,28 @@ local function grab(on)
     hl.config({ binds = { disable_keybind_grabbing = on } })
 end
 
--- Sin daemon de lan-mouse no hay captura que soltar: el sync corre cada 3 s y
--- cada llamada al script son varios procesos. os.rename(p, p) comprueba que el
--- archivo existe sin crear ninguno. El socket queda huérfano al parar el
--- daemon, así que también se mira el flag del modo ahorro extremo (que lo para).
-local LAN_MOUSE_SOCKET = (os.getenv("XDG_RUNTIME_DIR") or "") .. "/lan-mouse-socket.sock"
-local POWER_EXTREME_FLAG = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state"))
-    .. "/power-extreme/on"
-
+-- Con Moonlight abierto, lan-mouse tiene que soltar el KVM: la captura del
+-- borde manda el puntero y el teclado a la otra máquina y, adentro del stream,
+-- eso se realimenta: el mouse "desaparece" y no hay forma de volver. Se para el
+-- daemon entero (no sólo la captura) para que no se re-arme ni por el borde ni
+-- por un reinicio del servicio.
+--
+-- `off = true` significa "lan-mouse afuera".
 local lan_mouse_applied = nil
 
-local function release_lan_mouse(on)
-    -- Sin memo el timer de 3 s vuelve a llamar al script aunque el estado no
-    -- cambie: lan-mouse recibía activate/deactivate repetidos (parpadeo de la
-    -- captura y reconexiones).
-    if lan_mouse_applied == on then
+local function set_lan_mouse(off)
+    -- Memo: el sync corre cada 3 s y cada llamada son varios procesos.
+    if lan_mouse_applied == off then
         return
     end
-    if not os.rename(LAN_MOUSE_SOCKET, LAN_MOUSE_SOCKET) or os.rename(POWER_EXTREME_FLAG, POWER_EXTREME_FLAG) then
-        lan_mouse_applied = nil
-        return
-    end
-    lan_mouse_applied = on
-    hl.exec_cmd(LAN_MOUSE_CAPTURE .. (on and " off" or " on"))
+    lan_mouse_applied = off
+    hl.exec_cmd("lan-mouse-streaming " .. (off and "on" or "off"))
 end
 
 local function off()
     grab(false)
-    release_lan_mouse(false)
+    modes.streaming = false
+    set_lan_mouse(false)
     if hl.get_current_submap() == MOONLIGHT_SUBMAP then
         hl.dispatch(hl.dsp.submap("reset"))
     end
@@ -101,7 +95,11 @@ local function enter()
     end
     hl.dispatch(hl.dsp.workspace.toggle_special(MOONLIGHT_SPECIAL))
     guard = false
-    release_lan_mouse(true)
+    -- Antes de armar el submap: navigation apaga sus gestos (esquina superior
+    -- izquierda y hold de Súper) mirando este flag.
+    modes.streaming = true
+    if modes.close_overview then modes.close_overview() end
+    set_lan_mouse(true)
     grab(true)
     if hl.get_current_submap() ~= MOONLIGHT_SUBMAP then
         hl.dispatch(hl.dsp.submap(MOONLIGHT_SUBMAP))
@@ -138,7 +136,8 @@ end
 
 local function sync()
     local cur = hl.get_current_submap() or ""
-    if streaming() then
+    modes.streaming = streaming()
+    if modes.streaming then
         if cur ~= MOONLIGHT_SUBMAP and not guard then
             grab(true)
             hl.dispatch(hl.dsp.submap(MOONLIGHT_SUBMAP))
@@ -156,7 +155,7 @@ local function sync()
     -- se abre Moonlight desde el lanzador, la ventana todavía no está en el
     -- special y la captura del borde ya se estaba comiendo el puntero. Con la
     -- ventana abierta no se arma, aunque el foco vaya y venga.
-    release_lan_mouse(moonlight_window() ~= nil)
+    set_lan_mouse(moonlight_window() ~= nil)
 end
 
 hl.define_submap(MOONLIGHT_SUBMAP, function()

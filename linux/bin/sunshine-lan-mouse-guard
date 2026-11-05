@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# sunshine-lan-mouse-guard — con un stream de Sunshine en marcha, lan-mouse no
+# debe tener la captura armada: el puntero que inyecta Moonlight entra en la
+# zona del borde, lan-mouse se lo queda y el ratón "desaparece" del stream (los
+# clics siguen yendo a lan-mouse, no a la ventana).
+#
+# Señal de stream: Sunshine crea sus sinks virtuales (sink-sunshine-stereo et
+# al) y los deja por defecto SÓLO mientras dura la sesión; al desconectar el
+# cliente los borra y vuelve el sink real. No sirve el prep-cmd de Sunshine:
+# las apps de escritorio se "reanudan" (resume) sin volver a ejecutarlo.
+#
+# También se libera si hay una ventana de Moonlight abierta (rol cliente, igual
+# que moonlight.lua), para que este guard y el de Hyprland no se peleen.
+set -uo pipefail
+
+CAPTURE="${LAN_MOUSE_CAPTURE:-$HOME/.local/bin/lan-mouse-capture.sh}"
+SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lan-mouse-socket.sock"
+REASSERT=30
+applied=""
+
+# hyprctl necesita la firma de la instancia; el user manager casi siempre la
+# tiene (UWSM), pero al arrancar la sesión puede no estar lista.
+SIG="${HYPRLAND_INSTANCE_SIGNATURE:-}"
+hypr() {
+    HYPRLAND_INSTANCE_SIGNATURE="$SIG" hyprctl "$@" 2>/dev/null
+}
+
+hypr_init() {
+    [ -n "$SIG" ] && hypr version >/dev/null && return 0
+    local d
+    for d in /run/user/"$(id -u)"/hypr/*/; do
+        SIG="$(basename "$d")"
+        hypr version >/dev/null && return 0
+    done
+    SIG=""
+    return 1
+}
+
+sunshine_streaming() {
+    pactl get-default-sink 2>/dev/null | grep -q '^sink-sunshine'
+}
+
+moonlight_open() {
+    hypr clients -j | grep -q '"class": "com.moonlight_stream.Moonlight"'
+}
+
+apply() {
+    # Sin daemon no hay captura que soltar (y el socket queda huérfano).
+    if [ ! -S "$SOCKET" ] || ! pgrep -x lan-mouse >/dev/null 2>&1; then
+        applied=""
+        return 0
+    fi
+    local want
+    if sunshine_streaming || moonlight_open; then want=off; else want=on; fi
+    [ "$want" = "$applied" ] && return 0
+    applied="$want"
+    "$CAPTURE" "$want" >/dev/null 2>&1 || true
+}
+
+hypr_init || true
+apply
+
+# Eventos de PipeWire (creación/borrado de sinks y cambio de default) y de
+# ventanas, con una re-evaluación periódica por si se pierde alguno o si el
+# compositor reinicia. Nada de polling cada segundo.
+while :; do
+    while read -r line; do
+        case "$line" in
+            *server*|*sink*) apply ;;
+        esac
+    done < <(timeout "$REASSERT" pactl subscribe 2>/dev/null)
+    hypr_init || true
+    apply
+done
