@@ -47,8 +47,11 @@ moonlight_streaming() {
 }
 
 apply() {
-    # Sin daemon no hay captura que soltar (y el socket queda huérfano).
-    if [ ! -S "$SOCKET" ] || ! pgrep -x lan-mouse >/dev/null 2>&1; then
+    # Liveness por RPC, NO por `pgrep -x`: ~/bin/pgrep es busybox y no matchea
+    # un comando con argumentos ("lan-mouse --capture-backend … daemon"), así
+    # que este guard se quedaba en applied="" y nunca soltaba nada. Sin daemon
+    # el socket huérfano no contesta y el timeout corta.
+    if [ ! -S "$SOCKET" ] || ! timeout 2 lan-mouse cli list >/dev/null 2>&1; then
         applied=""
         return 0
     fi

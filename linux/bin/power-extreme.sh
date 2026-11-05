@@ -196,7 +196,7 @@ idle_restore() {
 #                      a propósito) + sondeo cada 3 s → cada 60 s
 #   eztvn.cpu-heatmap  script + animación cada 1 s → cada 10 s
 #   vm.sysmem          script + nvidia-smi cada 2 s → cada 10 s
-SHELL_WIDGETS=(eztvn.wave eztvn.mic eztvn.hypr-outline eztvn.modo-voz eztvn.pi-tts
+SHELL_WIDGETS=(eztvn.wave eztvn.mic eztvn.hypr-outline eztvn.modo-voz eztvn.pi-tts eztvn.enlace
   services eztvn.cpu-heatmap vm.sysmem)
 shell_widgets() { # shell_widgets pause|resume
   local w

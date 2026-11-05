@@ -218,6 +218,47 @@ spawn_watch() {
     fi
 }
 
+# --- transición en pantalla (plugin eztvn.enlace del shell) -------------------
+# Antes de tocar monitores se cubre la pantalla con una escena (equipo y
+# cliente separándose); los cambios ocurren debajo y al final se pide el
+# reveal. Si el shell o el plugin no están, todo sigue igual que antes.
+ENLACE_READY=""
+enlace_ready() {
+    if [ -z "$ENLACE_READY" ]; then
+        ENLACE_READY=no
+        command -v omarchy-shell >/dev/null 2>&1 &&
+            [ "$(timeout 2 omarchy-shell eztvn.enlace ping 2>/dev/null)" = ok ] &&
+            ENLACE_READY=yes
+    fi
+    [ "$ENLACE_READY" = yes ]
+}
+
+# enlace_cover in MODO W H FPS RED | enlace_cover out
+enlace_cover() {
+    enlace_ready || return 0
+    local method=streamOut payload='{}'
+    if [ "$1" = in ]; then
+        method=streamIn
+        payload=$(python3 -c 'import json, sys
+a = sys.argv[1:]
+print(json.dumps({"mode": a[0], "width": int(a[1]), "height": int(a[2]),
+                  "fps": int(a[3]), "net": a[4], "app": a[5]}))' \
+            "$2" "$3" "$4" "$5" "$6" "${SUNSHINE_APP_NAME:-}" 2>/dev/null) || payload='{}'
+    fi
+    timeout 2 omarchy-shell -q eztvn.enlace "$method" "$payload" >/dev/null 2>&1
+    # La escena tiene que estar opaca antes del primer modeset (Tokens.slow +
+    # aire). Con animaciones apagadas el plugin tapa en seco.
+    if [ "$(cat "$HOME/.local/state/omarchy/animations-enabled" 2>/dev/null || echo 1)" != 0 ]; then
+        sleep 0.42
+    fi
+}
+
+# enlace_reveal [ms de espera antes de abrir]
+enlace_reveal() {
+    enlace_ready || return 0
+    timeout 2 omarchy-shell -q eztvn.enlace streamReveal "${1:-1}" >/dev/null 2>&1
+}
+
 # --- arranque -----------------------------------------------------------------
 do_start() {
     local mode="${1:-headless}" net="${2:-auto}"
@@ -243,6 +284,8 @@ do_start() {
     if [ "$net" = auto ]; then
         net=$(detect_net)
     fi
+
+    enlace_cover in "$mode" "$W" "$H" "$FPS" "$net"
 
     local maxw maxfps
     if [ "$net" = tailscale ]; then
@@ -307,6 +350,7 @@ do_start() {
             ;;
         *)
             log "modo desconocido: $mode"
+            enlace_reveal 1
             return 1
             ;;
     esac
@@ -315,6 +359,9 @@ do_start() {
     snapshot
     touch "$STATE" 2>/dev/null
     spawn_watch
+    # El cliente empieza a recibir video recién cuando este prep-cmd termina:
+    # se abre con un poco de demora para que también vea la apertura.
+    enlace_reveal 900
     log "modo=$mode red=$net cliente=${W}x${H}@${FPS} escala=$scale host=${PHYS:-ninguno} pos=$pos"
 }
 
@@ -325,6 +372,7 @@ do_stop() {
         return 0
     fi
     switch_layout 0
+    enlace_cover out
     if [ -r "$STATE" ]; then
         restore_state
         sleep 0.6
@@ -332,6 +380,7 @@ do_stop() {
     hypr output remove "$OUTPUT" >/dev/null 2>&1
     rm -f "$STATE"
     snapshot
+    enlace_reveal 150
     log "pantalla virtual eliminada; estado restaurado"
 }
 
