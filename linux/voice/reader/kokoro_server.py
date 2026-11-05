@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Servidor local de síntesis Kokoro para speech-dispatcher / Zotero Read Aloud.
 
-Mantiene el modelo cargado en memoria y sintetiza bajo demanda a través de un
-socket Unix. Protocolo:
+Carga el modelo en el primer pedido y lo libera tras un rato sin uso
+(KOKORO_IDLE_S, 900 s por defecto), así en reposo no ocupa RAM. Protocolo:
 
   petición:  una línea JSON  {"text": ..., "voice": ..., "rate": %, "volume": 0-100}
   respuesta: tramas [uint32 BE: largo][PCM s16le 24000 Hz mono] y una trama
@@ -10,12 +10,14 @@ socket Unix. Protocolo:
 """
 import errno
 import fcntl
+import gc
 import json
 import os
 import socket
 import struct
 import sys
 import threading
+import time
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -37,10 +39,49 @@ VOICE_MAP = {
 
 pipeline = None
 synth_lock = threading.Lock()
+last_use = time.monotonic()
+IDLE_S = float(os.environ.get("KOKORO_IDLE_S") or 900)
 
 
 def log(*args):
     print("kokoro-server:", *args, file=sys.stderr, flush=True)
+
+
+def cargar_modelo():
+    """Carga perezosa: sólo cuando alguien pide sintetizar."""
+    global pipeline
+    if pipeline is None:
+        from kokoro import KPipeline
+        pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
+    return pipeline
+
+
+def liberar_modelo():
+    global pipeline
+    if pipeline is None:
+        return
+    pipeline = None
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
+    log("modelo liberado tras inactividad")
+
+
+def vigilante():
+    """Suelta el modelo cuando pasó KOKORO_IDLE_S sin pedidos."""
+    while True:
+        time.sleep(30)
+        if pipeline is None or time.monotonic() - last_use < IDLE_S:
+            continue
+        if synth_lock.acquire(blocking=False):
+            try:
+                if pipeline is not None and time.monotonic() - last_use >= IDLE_S:
+                    liberar_modelo()
+            finally:
+                synth_lock.release()
 
 
 def resolve_voice(name: str) -> str:
@@ -73,6 +114,7 @@ def synthesize(text: str, voice: str, speed: float, volume: float):
 
 
 def handle(conn: socket.socket):
+    global last_use
     try:
         buf = b""
         while b"\n" not in buf:
@@ -91,8 +133,16 @@ def handle(conn: socket.socket):
         log(f"synth voz={voice} velocidad={speed:.2f} caracteres={len(text)}")
         if text:
             with synth_lock:
+                last_use = time.monotonic()
+                try:
+                    cargar_modelo()
+                except Exception as exc:  # noqa: BLE001
+                    log(f"no pude cargar el modelo: {exc}")
+                    conn.sendall(struct.pack(">I", 0))
+                    return
                 for pcm in synthesize(text, voice, speed, volume):
                     conn.sendall(struct.pack(">I", len(pcm)) + pcm)
+                last_use = time.monotonic()
         conn.sendall(struct.pack(">I", 0))
     except (BrokenPipeError, ConnectionResetError, OSError):
         pass
@@ -124,17 +174,13 @@ def main():
         except OSError:
             os.unlink(SOCKET_PATH)
 
-    log("cargando modelo Kokoro…")
-    from kokoro import KPipeline
-
-    pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-    log("modelo listo")
+    threading.Thread(target=vigilante, daemon=True).start()
 
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(SOCKET_PATH)
     os.chmod(SOCKET_PATH, 0o600)
     srv.listen(16)
-    log("escuchando en", SOCKET_PATH)
+    log(f"escuchando en {SOCKET_PATH} · modelo perezoso, se libera tras {IDLE_S:.0f}s sin uso")
 
     while True:
         try:

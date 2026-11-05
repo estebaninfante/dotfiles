@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# kokoro-server — daemon de síntesis Kokoro (modelo en memoria) para
-# speech-dispatcher y el lector standalone. Lo mantiene kokoro-tts.service.
+# kokoro-server — daemon de síntesis Kokoro (carga el modelo al primer pedido
+# y lo libera tras inactividad) para speech-dispatcher y el lector standalone.
+# Lo mantiene kokoro-tts.service.
 set -euo pipefail
 
 PY="${HOME}/.local/share/kokoro-venv/bin/python"
