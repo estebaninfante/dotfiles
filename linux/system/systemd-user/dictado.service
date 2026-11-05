@@ -8,7 +8,8 @@ Type=simple
 ExecStart=%h/.local/bin/dictado-servidor
 Restart=always
 RestartSec=3
-# El modelo se carga al arrancar: cuando cierras el dictado ya está listo.
+# El modelo se carga en el primer dictado (no en reposo): sin VRAM tomada
+# hasta que se usa. La primera transcripción tras arrancar tarda unos segundos.
 Nice=-5
 
 [Install]

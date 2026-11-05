@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # dictado-servidor — arranca el servidor STT de `dictado` con un Python que
-# tenga faster-whisper. No hay venv propio: se reusa el de whisperx (ya trae
-# faster-whisper + torch con CUDA) y, si no está, el python3 del sistema.
+# tenga faster-whisper. Usa el venv propio de dictado (con ctranslate2/CUDA y
+# los modelos en ~/.local/share/dictado/models) y, si no está, reusa whisperx
+# o el python3 del sistema.
 #
 # DICTADO_PY fuerza el intérprete.
 set -euo pipefail
@@ -14,6 +15,7 @@ puede() { "$1" -c 'import faster_whisper' >/dev/null 2>&1; }
 py="${DICTADO_PY:-}"
 if [ -z "$py" ]; then
   for candidato in \
+    "$HOME/.local/share/dictado/venv/bin/python" \
     "$HOME/.local/share/uv/tools/whisperx/bin/python" \
     "$HOME/.local/share/uv/tools/whisperx/bin/python3" \
     "$(command -v python3 || true)"; do
@@ -23,7 +25,7 @@ if [ -z "$py" ]; then
 fi
 
 if [ -z "$py" ]; then
-  echo "dictado-servidor: ningún Python tiene faster-whisper (probé $HOME/.local/share/uv/tools/whisperx/bin/python y python3)" >&2
+  echo "dictado-servidor: ningún Python tiene faster-whisper (probé ~/.local/share/dictado/venv, whisperx y python3)" >&2
   exit 1
 fi
 

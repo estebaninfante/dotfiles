@@ -331,13 +331,10 @@ def main(argv: list[str]) -> int:
         cargar_modelo()
         print(json.dumps(salud()))
         return 0
-    log(f"cargando {MODELO} ({DISPOSITIVO}/{COMPUTO}) · modelos en {MODELOS}")
-    try:
-        cargar_modelo()
-    except Exception as exc:  # noqa: BLE001
-        log(f"sin modelo: {exc}")
+    # Sin precarga: en reposo el servidor no ocupa VRAM ni RAM de modelo.
+    # `transcribir()` carga el modelo bajo lock en el primer dictado.
     servidor = ThreadingHTTPServer(("127.0.0.1", PUERTO), Handler)
-    log(f"escuchando en 127.0.0.1:{PUERTO}")
+    log(f"escuchando en 127.0.0.1:{PUERTO} · {MODELO} ({DISPOSITIVO}/{COMPUTO}) se carga al primer dictado · modelos en {MODELOS}")
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:

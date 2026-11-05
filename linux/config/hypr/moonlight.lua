@@ -10,11 +10,6 @@ local LAN_MOUSE_POLL_MS = 3000
 
 local guard = false
 
-local function focused()
-    local w = hl.get_active_window()
-    return w ~= nil and w.class == MOONLIGHT_CLASS
-end
-
 local function grab(on)
     hl.config({ binds = { disable_keybind_grabbing = on } })
 end
@@ -27,10 +22,20 @@ local LAN_MOUSE_SOCKET = (os.getenv("XDG_RUNTIME_DIR") or "") .. "/lan-mouse-soc
 local POWER_EXTREME_FLAG = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state"))
     .. "/power-extreme/on"
 
+local lan_mouse_applied = nil
+
 local function release_lan_mouse(on)
-    if not os.rename(LAN_MOUSE_SOCKET, LAN_MOUSE_SOCKET) or os.rename(POWER_EXTREME_FLAG, POWER_EXTREME_FLAG) then
+    -- Sin memo el timer de 3 s vuelve a llamar al script aunque el estado no
+    -- cambie: lan-mouse recibía activate/deactivate repetidos (parpadeo de la
+    -- captura y reconexiones).
+    if lan_mouse_applied == on then
         return
     end
+    if not os.rename(LAN_MOUSE_SOCKET, LAN_MOUSE_SOCKET) or os.rename(POWER_EXTREME_FLAG, POWER_EXTREME_FLAG) then
+        lan_mouse_applied = nil
+        return
+    end
+    lan_mouse_applied = on
     hl.exec_cmd(LAN_MOUSE_CAPTURE .. (on and " off" or " on"))
 end
 
@@ -51,8 +56,19 @@ local function moonlight_window()
     return nil
 end
 
+-- La ventana activa, no "una cualquiera de la clase": con dos instancias de
+-- Moonlight abiertas, la primera podía ser la del special oculto y la segunda
+-- la que tenía el foco.
+local function active_moonlight()
+    local w = hl.get_active_window()
+    if w ~= nil and w.class == MOONLIGHT_CLASS then
+        return w
+    end
+    return nil
+end
+
 local function in_special()
-    local w = moonlight_window()
+    local w = active_moonlight() or moonlight_window()
     return w ~= nil and w.workspace ~= nil and w.workspace.name == SPECIAL_SELECTOR
 end
 
@@ -78,18 +94,21 @@ local function leave()
     off()
 end
 
-local function special_visible()
-    for _, m in ipairs(hl.get_monitors()) do
-        local sp = m.active_special_workspace
-        if sp ~= nil and sp.name == SPECIAL_SELECTOR then
-            return true
-        end
-    end
-    return false
+-- El submap sólo vale mientras se está streameando de verdad: la ventana
+-- activa es Moonlight y vive en el special visible. Con sólo "clase enfocada"
+-- se comía todos los atajos de Súper apenas el cliente quedaba en foco
+-- (incluso sin conectar), y no había forma de salir sin pasar por el special.
+--
+-- Ojo: `monitor.active_special_workspace` llega SIEMPRE nil al Lua aunque
+-- `hyprctl monitors` lo muestre, así que la visibilidad se deduce de la
+-- ventana activa: sólo puede estar en el special si el special está visible.
+local function streaming()
+    local w = active_moonlight()
+    return w ~= nil and w.workspace ~= nil and w.workspace.name == SPECIAL_SELECTOR
 end
 
 local function toggle()
-    if special_visible() then
+    if streaming() then
         leave()
     else
         enter()
@@ -98,7 +117,7 @@ end
 
 local function sync()
     local cur = hl.get_current_submap() or ""
-    if focused() then
+    if streaming() then
         release_lan_mouse(true)
         if cur ~= MOONLIGHT_SUBMAP and not guard then
             grab(true)
