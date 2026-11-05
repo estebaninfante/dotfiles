@@ -21,14 +21,11 @@ end
 -- por un reinicio del servicio.
 --
 -- `off = true` significa "lan-mouse afuera".
-local lan_mouse_applied = nil
-
 local function set_lan_mouse(off)
-    -- Memo: el sync corre cada 3 s y cada llamada son varios procesos.
-    if lan_mouse_applied == off then
-        return
-    end
-    lan_mouse_applied = off
+    -- Sin memo: el script es idempotente, y el daemon
+    -- sunshine-lan-mouse-guard (o un reinicio de lan-mouse) puede cambiar el
+    -- estado por fuera. Con memo la decisión local se quedaba obsoleta y la
+    -- captura seguía armada en mitad de un stream.
     hl.exec_cmd("lan-mouse-capture.sh " .. (off and "off" or "on"))
 end
 
