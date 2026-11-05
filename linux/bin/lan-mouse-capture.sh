@@ -8,18 +8,26 @@ usage() {
     exit 2
 }
 
-# Liveness por RPC sobre el socket, NO por nombre de proceso: ~/bin/pgrep es el
-# de busybox y `pgrep -x lan-mouse` da falso negativo (el comando existe y
-# falla), asi `off` se negaba a soltar la captura y el teclado seguia yendo a
-# la otra maquina. Que `cli list` conteste ya prueba que el daemon esta vivo;
-# el socket huerfano (daemon muerto) no contesta y `timeout` lo corta.
+# Liveness por PID, con ruta ABSOLUTA: ~/bin/pgrep es busybox y su `-x` compara
+# contra la línea de comando completa, así que "lan-mouse --capture-backend …
+# daemon" daba falso negativo y `off` se negaba a soltar la captura (el teclado
+# seguía yendo a la otra máquina). No se usa `lan-mouse cli list` acá: llamarlo
+# de más lo hace abortar con core dump cuando hay llamadas concurrentes.
 daemon_up() {
     [ -S "$SOCKET" ] || return 1
-    timeout 2 lan-mouse cli list >/dev/null 2>&1
+    /usr/bin/pgrep -x lan-mouse >/dev/null 2>&1
 }
 
+# Una sola consulta al daemon por ejecución: cada `cli list` extra es una
+# llamada concurrente más (y el binario no es reentrante).
+CLIENT_LIST=""
+CLIENT_LIST_DONE=""
 client_lines() {
-    lan-mouse cli list 2>/dev/null
+    if [ -z "$CLIENT_LIST_DONE" ]; then
+        CLIENT_LIST="$(lan-mouse cli list 2>/dev/null)"
+        CLIENT_LIST_DONE=1
+    fi
+    printf '%s\n' "$CLIENT_LIST"
 }
 
 release_held_ids() {

@@ -47,11 +47,11 @@ moonlight_streaming() {
 }
 
 apply() {
-    # Liveness por RPC, NO por `pgrep -x`: ~/bin/pgrep es busybox y no matchea
-    # un comando con argumentos ("lan-mouse --capture-backend … daemon"), así
-    # que este guard se quedaba en applied="" y nunca soltaba nada. Sin daemon
-    # el socket huérfano no contesta y el timeout corta.
-    if [ ! -S "$SOCKET" ] || ! timeout 2 lan-mouse cli list >/dev/null 2>&1; then
+    # Liveness por PID con ruta absoluta: ~/bin/pgrep es busybox y compara -x
+    # contra la línea de comando completa ("lan-mouse --capture-backend …
+    # daemon"), así que este guard se quedaba en applied="" y nunca soltaba
+    # nada. Ruta absoluta = procps; el socket huérfano se descarta con -S.
+    if [ ! -S "$SOCKET" ] || ! /usr/bin/pgrep -x lan-mouse >/dev/null 2>&1; then
         applied=""
         return 0
     fi
