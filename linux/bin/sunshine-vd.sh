@@ -182,8 +182,14 @@ PY
 # Sunshine ejecuta el 'undo' al cerrar la app, pero si el cliente se cae (crash,
 # kill, pérdida de red) el host se quedaría con la pantalla virtual puesta.
 # Este vigilante restaura el monitor cuando no hay ninguna conexión de cliente.
+# Durante el stream no queda ninguna conexión TCP (video, audio y control van
+# por UDP sin conectar), así que el estado real sale del log de Sunshine: hay
+# cliente si la última línea CLIENT CONNECTED/DISCONNECTED es CONNECTED.
+SUNSHINE_LOG="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine/sunshine.log"
 client_present() {
-    ss -Htn state established '( sport = :47984 or sport = :47989 or sport = :48010 )' 2>/dev/null | grep -q .
+    ss -Htn state established '( sport = :47984 or sport = :47989 or sport = :48010 )' 2>/dev/null | grep -q . && return 0
+    pgrep -x sunshine >/dev/null 2>&1 || return 1
+    grep -oE 'CLIENT (CONNECTED|DISCONNECTED)' "$SUNSHINE_LOG" 2>/dev/null | tail -n1 | grep -q 'CLIENT CONNECTED$'
 }
 
 watch_loop() {
