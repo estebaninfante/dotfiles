@@ -29,9 +29,10 @@ ShellRoot {
     property double ahora: Date.now()
     property var ondas: []
     readonly property int ondasMax: 24
-    readonly property int filas: 9
+    readonly property int filas: 13
+    readonly property int medio: (filas - 1) / 2
     readonly property real pasoX: 4
-    readonly property real pasoY: 3
+    readonly property real pasoY: 2
     // Un bloque de audio cada 100 ms (= ritmo de `dictado`). La matriz es un
     // buffer circular por tiempo, no por "cuando cambió el nivel": si se
     // empujaba una muestra sólo al cambiar la propiedad, los silencios
@@ -40,14 +41,15 @@ ShellRoot {
     readonly property int muestreoMs: 100
     property real nivelSuave: 0
 
-    // Filas encendidas a cada lado del centro (0..4 → 1..9 filas totales).
-    // El RMS de `dictado` vive casi todo entre 0.05 y 0.35, así que el mapa
-    // es perceptual y satura arriba: lineal (n*13) aplastaba todo en el mismo
-    // escalón.
+    // Filas encendidas a cada lado del centro (0..6 → 1..13 filas totales).
+    // El RMS de `dictado` vive casi todo entre 0.05 y 0.35: el mapa es
+    // perceptual (raíz) y satura recién con voz fuerte. Un mapa lineal
+    // (n*13) aplastaba la mayoría de los bloques en el mismo escalón, que es
+    // lo que se veía como "rectángulos".
     function filasEncendidas(nivel) {
         const n = Math.min(1, Math.max(0, nivel || 0))
         if (n <= 0.012) return 0
-        return Math.max(1, Math.min(4, Math.round(4 * Math.pow(Math.min(1, n / 0.32), 0.55))))
+        return Math.max(1, Math.min(medio, Math.round(medio * Math.pow(Math.min(1, n / 0.40), 0.55))))
     }
 
     readonly property bool fresco: actualizado > 0 && (ahora - actualizado) < 3000
@@ -207,7 +209,7 @@ ShellRoot {
                                         ctx.globalAlpha = encendido ? 1 : 0.13
                                         ctx.fillStyle = "#ffffff"
                                         ctx.beginPath()
-                                        ctx.arc(c * pasoX + pasoX / 2, f * pasoY + pasoY / 2, encendido ? 1.05 : 0.7, 0, Math.PI * 2)
+                                        ctx.arc(c * pasoX + pasoX / 2, f * pasoY + pasoY / 2, encendido ? 0.9 : 0.55, 0, Math.PI * 2)
                                         ctx.fill()
                                     }
                                 }
