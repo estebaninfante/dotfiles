@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Súper+Mayús+Enter abre una sesión SSH a la OTRA máquina del par
+# laptop <-> desktop. El destino sale de ~/.config/machine-type, así el mismo
+# atajo y el mismo script sirven en las dos máquinas sin ramas en el binding.
+#
+# Primero prueba la LAN (rápida y sin depender de Tailscale) y si no hay ruta
+# cae a Tailscale. Sin esto, cualquier fallo terminaba el proceso y la terminal
+# se cerraba al instante sin mostrar nada: parecía que el atajo "no abría".
+MACHINE="$(tr -d '[:space:]' < "$HOME/.config/machine-type" 2>/dev/null || true)"
+
+if [[ "$MACHINE" == "desktop" ]]; then
+  LAN_ADDR=192.168.1.240
+  LAN_HOST=laptop-lan
+  TS_HOST=laptop-ts
+else
+  LAN_ADDR=192.168.1.241
+  LAN_HOST=desktop-lan
+  TS_HOST=desktop-ts
+fi
+
+LAN_PORT=22
+PROBE_SECONDS=2
+TS_CONNECT_TIMEOUT=10
+
+report_failure() {
+  local status=$1 target=$2
+  printf '\n[ssh-peer] No se pudo conectar a %s (código %s).\n' "$target" "$status" >&2
+  printf '[ssh-peer] Revisá ~/.ssh/config (host %s) y la red. Enter para cerrar.\n' "$target" >&2
+  read -r _ || true
+  exit "$status"
+}
+
+if timeout "$PROBE_SECONDS" bash -c "exec 3<>/dev/tcp/${LAN_ADDR}/${LAN_PORT}" 2>/dev/null; then
+  ssh "$LAN_HOST"
+  status=$?
+  [ "$status" -eq 0 ] && exit 0
+  report_failure "$status" "$LAN_HOST"
+fi
+
+ssh -o ConnectTimeout="$TS_CONNECT_TIMEOUT" "$TS_HOST"
+status=$?
+[ "$status" -eq 0 ] && exit 0
+report_failure "$status" "$TS_HOST"
