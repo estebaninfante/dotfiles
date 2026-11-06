@@ -541,15 +541,46 @@ local function shot_in_progress()
     return cmdline:find("shot", 1, true) ~= nil
 end
 
+local function hot_open()
+    hot_armed = false
+    reset_ws_style()
+    expo_fly.deliberate = true
+    plugin.expo("on")
+    expo_fly.open = true
+    local cur = hl.get_active_workspace()
+    expo_fly.sel = cur and ws_grid_index(cur.id) or nil
+    expo_fly.want = nil
+end
+
+-- Esquina inferior izquierda del monitor bajo el puntero, en coordenadas
+-- lógicas (el ancho/alto del monitor vienen en píxeles físicos).
+local function in_bottom_left(p)
+    local ok, m = pcall(hl.get_active_monitor)
+    if not ok or not m or not m.height then return false end
+    local scale = (m.scale and m.scale > 0) and m.scale or 1
+    local x0, y0 = m.x or 0, m.y or 0
+    local h = math.floor(m.height / scale)
+    return p.x <= x0 + HOT_SIZE and p.y >= y0 + h - 1 - HOT_SIZE
+end
+
 if plugin ~= nil then
     hl.timer(function()
         local ok, p = pcall(hl.get_cursor_pos)
         if not ok or not p or not p.x or not p.y then return end
         if modes.streaming then
             -- Streameando, la esquina superior izquierda es del sistema
-            -- remoto (ahí viven sus menús). Se desarma hasta que el puntero
-            -- salga de la esquina, así al volver no salta el overview solo.
-            hot_armed = false
+            -- remoto (ahí viven sus menús). La salida de vuelta a esta
+            -- máquina es la inferior izquierda: abre la grilla de acá y, al
+            -- elegir un workspace, Moonlight pierde el foco y suelta el
+            -- teclado. Necesita Moonlight en modo mouse absoluto: con el
+            -- puntero bloqueado el cursor de Hyprland no se mueve.
+            if in_bottom_left(p) then
+                if hot_armed and not expo_fly.open and expo_fly.busy == 0 then
+                    hot_open()
+                end
+            elseif p.x > HOT_REARM then
+                hot_armed = true
+            end
             return
         end
         if p.x <= HOT_SIZE and p.y <= HOT_SIZE then
@@ -559,14 +590,7 @@ if plugin ~= nil then
                 -- salte el overview.
                 hot_armed = false
             elseif hot_armed and not expo_fly.open and not expo_hold.open and expo_fly.busy == 0 then
-                hot_armed = false
-                reset_ws_style()
-                expo_fly.deliberate = true
-                plugin.expo("on")
-                expo_fly.open = true
-                local cur = hl.get_active_workspace()
-                expo_fly.sel = cur and ws_grid_index(cur.id) or nil
-                expo_fly.want = nil
+                hot_open()
             end
         elseif p.x > HOT_REARM or p.y > HOT_REARM then
             hot_armed = true
