@@ -121,9 +121,16 @@ end
 -- el último frame. Si se decide por título, el submap y la captura de
 -- lan-mouse se quedan armados para siempre. La señal buena es el canal de
 -- control de Sunshine (moonlight-live mira los puertos 47984/47989/48010).
+--
+-- Por io.popen y no os.execute: dentro de Hyprland os.execute devuelve nil
+-- siempre (no recupera el estado del hijo), así que el modo streaming no se
+-- armaba nunca. El código de salida se lee como texto.
 local function moonlight_live()
-    local ok = os.execute(os.getenv("HOME") .. "/.local/bin/moonlight-live >/dev/null 2>&1")
-    return ok == true or ok == 0
+    local p = io.popen(os.getenv("HOME") .. "/.local/bin/moonlight-live >/dev/null 2>&1; echo $?")
+    if not p then return false end
+    local rc = p:read("*l")
+    p:close()
+    return rc == "0"
 end
 
 -- El submap vale mientras el stream esté en foco y vivo. Con la sola clase

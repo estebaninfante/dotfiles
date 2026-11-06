@@ -18,6 +18,8 @@
 #   MAX_W_LOCAL=3840  MAX_FPS_LOCAL=0      # 0 = sin tope
 #   MAX_W_TAILSCALE=1920  MAX_FPS_TAILSCALE=60
 #   FORCE_SCALE=                           # vacío = automático (2 si alto >= 1600)
+#   CLIENTES_TECLADO="14:ac:60:ff:a4:15"   # MACs/IPs de clientes con teclado
+#                                          # físico propio: no se cambia el layout
 
 set -uo pipefail
 
@@ -47,6 +49,10 @@ MAX_FPS_LOCAL=0
 MAX_W_TAILSCALE=1920
 MAX_FPS_TAILSCALE=60
 FORCE_SCALE=""
+# Clientes en la red de casa que escriben con su propio teclado Dvorak (la
+# laptop): por MAC (wifi de laptopmarchy) o IP. Por Tailscale no hace falta
+# listarlos: se decide por el sistema operativo del nodo.
+CLIENTES_TECLADO="14:ac:60:ff:a4:15 192.168.1.240"
 # shellcheck disable=SC1090
 [ -r "$CONF" ] && . "$CONF"
 
@@ -143,19 +149,50 @@ PY
     log "monitores restaurados"
 }
 
-# --- detección de red del cliente ---------------------------------------------
-detect_net() {
-    local peer
-    peer=$(ss -Htn state established '( sport = :47989 or sport = :47984 or sport = :48010 )' 2>/dev/null \
-        | awk '{print $5}' \
-        | sed -E 's/^\[?([0-9.]+|.*%[^]]*)\]?:.*$/\1/' \
+# --- detección del cliente ---------------------------------------------------
+# Mientras corre el prep-cmd el cliente mantiene abierta la petición /launch
+# (HTTPS), así que su IP sale de esa conexión. Con 'state established' ss no
+# imprime la columna de estado: el par remoto es la 4ª columna.
+client_ip() {
+    ss -Htn state established '( sport = :47989 or sport = :47984 or sport = :48010 )' 2>/dev/null \
+        | awk '{print $4}' \
+        | sed -E 's/^\[?(::ffff:)?([0-9.]+)\]?:[0-9]+$/\2/' \
         | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' \
-        | grep -vE '^127\.' | head -1)
-    case "$peer" in
-        100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) echo tailscale ;;
-        '') echo local ;;
-        *) echo local ;;
+        | grep -vE '^127\.' | head -1
+}
+
+is_tailscale_ip() {
+    case "$1" in
+        100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) return 0 ;;
     esac
+    return 1
+}
+
+detect_net() {
+    if is_tailscale_ip "$(client_ip)"; then echo tailscale; else echo local; fi
+}
+
+# ¿El cliente trae su propio teclado físico? Un computador manda las teclas
+# ya en su layout y en el host tiene que seguir dvk_prog; un celular o una
+# tablet mandan posiciones QWERTY y necesitan 'es'.
+client_has_keyboard() {
+    local ip="$1" os mac entry
+    [ -n "$ip" ] || return 1
+    if is_tailscale_ip "$ip" && command -v tailscale >/dev/null 2>&1; then
+        os=$(timeout 3 tailscale whois --json "$ip" 2>/dev/null |
+            python3 -c 'import json,sys; print(json.load(sys.stdin)["Node"]["Hostinfo"].get("OS",""))' 2>/dev/null)
+        case "$os" in
+            linux|windows|macOS|freebsd) return 0 ;;
+            '') ;;
+            *) return 1 ;;
+        esac
+    fi
+    mac=$(ip neigh show "$ip" 2>/dev/null | awk '/lladdr/ {print tolower($5); exit}')
+    for entry in $CLIENTES_TECLADO; do
+        entry=$(printf '%s' "$entry" | tr 'A-Z' 'a-z')
+        [ "$entry" = "$ip" ] || { [ -n "$mac" ] && [ "$entry" = "$mac" ]; } && return 0
+    done
+    return 1
 }
 
 # --- monitor físico -----------------------------------------------------------
@@ -274,8 +311,16 @@ do_start() {
         return 0
     fi
 
-    # El cliente escribe con posiciones QWERTY; el teclado físico usa dvk_prog.
-    switch_layout 1
+    # Celular/tablet escriben con posiciones QWERTY; el teclado físico usa
+    # dvk_prog. Un cliente con teclado propio (la laptop) se queda en dvk_prog.
+    local cip kb
+    cip=$(client_ip)
+    if client_has_keyboard "$cip"; then
+        kb=dvk_prog
+    else
+        kb=es
+        switch_layout 1
+    fi
 
     local W="${SUNSHINE_CLIENT_WIDTH:-1920}"
     local H="${SUNSHINE_CLIENT_HEIGHT:-1080}"
@@ -368,7 +413,7 @@ do_start() {
     # El cliente empieza a recibir video recién cuando este prep-cmd termina:
     # se abre con un poco de demora para que también vea la apertura.
     enlace_reveal 900
-    log "modo=$mode red=$net cliente=${W}x${H}@${FPS} escala=$scale host=${PHYS:-ninguno} pos=$pos"
+    log "modo=$mode red=$net cliente=${cip:-?} teclado=$kb ${W}x${H}@${FPS} escala=$scale host=${PHYS:-ninguno} pos=$pos"
 }
 
 # --- parada -------------------------------------------------------------------

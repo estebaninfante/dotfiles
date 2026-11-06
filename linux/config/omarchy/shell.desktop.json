@@ -98,7 +98,7 @@
       ]
     },
     "position": "right",
-    "transparent": false
+    "transparent": true
   },
   "cloneSourceRestores": [
     "eztvn.menu",
