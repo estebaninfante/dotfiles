@@ -86,6 +86,9 @@
           "id": "eztvn.timer"
         },
         {
+          "id": "local.opencode-go"
+        },
+        {
           "id": "eztvn.power"
         },
         null,
