@@ -109,5 +109,11 @@ _(agregar aqui pendientes activos)_
 - **Nota**: nautilus 50.3.1, glycin-loaders = thumbnailers sandbox en bwrap. Fuga conocida del estilo. Recurrencia → desactivar thumbnails o actualizar paquete.
 - **Diagnostic**: no confiar en "exit 0" de launchers D-Bus; verificar ventana con `hyprctl clients -j`.
 
+### Sesión 2026-11-05: stream muerto dejaba el KVM y el mouse trabados
+- **Síntoma**: usando Moonlight laptop→desktop se cortó la conexión; el laptop quedó mostrando el último frame en pantalla completa, el mouse no respondía y no podía volver al laptop (el puntero quedó en el desktop). Al tocar el borde se veía la animación de cruce sin que el puntero cruzara.
+- **Causa**: el título de Moonlight queda pegado como `"astradeux - Moonlight"` cuando se cae la conexión. `moonlight.lua` y `sunshine-lan-mouse-guard` decidían "streaming" por ese título → mantenían la captura de lan-mouse desactivada y el submap `moonlight` armado (Súper bloqueado). Además el guard tenía memo `applied`: un deactivate externo (pruebas anteriores del propio agente) quedaba pegado y no rearmaba.
+- **Fix**: nuevo `linux/bin/moonlight-live` (0 si hay conexión establecida a 47984/47989/48010). `moonlight.lua` y el guard usan eso; el guard reconcilia el estado real de la captura en cada vuelta (10 s, eventos de default-sink sin ruido de volumen) sin memo; `lan-mouse-capture.sh` toma `flock` (el daemon no es reentrante para `cli list`). En vivo→muerto, `moonlight.lua` saca la ventana vieja de fullscreen para devolver el puntero. `Enlace.qml`: cruce sólo con ack/entrada real; `left remote client device region` espurio ya no anima; `deactivated client`/`no active client` muestran "desconectado".
+- **Evidencia**: `moonlight-live` 1/0 con socket simulado; captura rearmada en ≤2 s en laptop y desktop tras `lan-mouse-capture.sh off`; overlay `linkDown` con borde y "lan-mouse · desktop desconectado" (captura); plugin recargado y `debug` OK en ambas máquinas; desktop sincronizado por dotfiles.
+
 ---
-_Ultima actualización: 2026-10-15 (pi config completa en dotfiles + omar a GitHub + regla permanente de sync de developing)_
+_Ultima actualización: 2026-11-05 (arreglo del stream muerto de Moonlight + guard de lan-mouse con reconciliación)_

@@ -529,6 +529,17 @@ Sunshine = host de streaming Moonlight. Instalado en ambas maquinas.
 - Sunshine se arranca post-login desde `hyprland.lua`:
   `hl.exec_cmd("sleep 8 && systemctl --user start sunshine")`.
 
+**Stream muerto = título pegado:** si se corta la conexión, Moonlight se queda en
+pantalla completa con el último frame y el título `"<equipo> - Moonlight"`.
+Mirar el título para decidir si hay stream deja la captura de lan-mouse
+desactivada y el submap `moonlight` armado para siempre (sin mouse ni Súper).
+La señal buena es el canal de control de Sunshine: `moonlight-live` mira
+conexiones establecidas a los puertos 47984/47989/48010. `moonlight.lua` y
+`sunshine-lan-mouse-guard` lo usan; el guard además compara el estado real de
+la captura en cada vuelta (sin memo) para rearmarla si algo la desactivó. En la
+transición vivo→muerto, `moonlight.lua` saca de fullscreen la ventana vieja
+(dispatcher `fullscreen action=unset`) para devolver el puntero relativo.
+
 **Web UI:** `https://localhost:47990` (usuario `eztvn`, password en `~/.config/sunshine/.webui-password`).
 
 **Pairing Moonlight (celular):**
