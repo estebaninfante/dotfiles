@@ -161,6 +161,7 @@ local function release_stale_fullscreen()
 end
 
 local was_live = false
+local last_lan_off = nil
 
 local function sync()
     local cur = hl.get_current_submap() or ""
@@ -186,8 +187,13 @@ local function sync()
         end
     end
     -- lan-mouse se decide por el stream vivo, no por el título de la ventana:
-    -- el título queda pegado cuando se cae la conexión.
-    set_lan_mouse(live)
+    -- el título queda pegado cuando se cae la conexión. Sólo se toca en los
+    -- cambios: el guion cuesta ~250 ms y el poll es cada 3 s. El guard
+    -- reconcilia el estado real cada 30 s como red de seguridad.
+    if last_lan_off == nil or last_lan_off ~= live then
+        set_lan_mouse(live)
+        last_lan_off = live
+    end
 end
 
 hl.define_submap(MOONLIGHT_SUBMAP, function()

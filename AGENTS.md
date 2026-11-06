@@ -536,7 +536,7 @@ desactivada y el submap `moonlight` armado para siempre (sin mouse ni Súper).
 La señal buena es el canal de control de Sunshine: `moonlight-live` mira
 conexiones establecidas a los puertos 47984/47989/48010. `moonlight.lua` y
 `sunshine-lan-mouse-guard` lo usan; el guard además compara el estado real de
-la captura en cada vuelta (sin memo) para rearmarla si algo la desactivó. En la
+la captura cada 30 s (sin memo) para rearmarla si algo la desactivó. En la
 transición vivo→muerto, `moonlight.lua` saca de fullscreen la ventana vieja
 (dispatcher `fullscreen action=unset`) para devolver el puntero relativo.
 

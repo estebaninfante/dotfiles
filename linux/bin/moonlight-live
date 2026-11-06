@@ -11,11 +11,11 @@
 # Se filtra por puerto remoto: en el host esas conexiones son locales y no
 # cuentan como un stream saliente.
 #
-# Salida: 0 = hay stream, 1 = no hay. Sin dependencias fuera de procps/iproute2.
+# Salida: 0 = hay stream, 1 = no hay. Sin pgrep: se llama cada 3 s desde
+# moonlight.lua y un pgrep extra costaba 60 ms por vuelta (8 % de CPU).
 set -uo pipefail
 
 command -v ss >/dev/null 2>&1 || exit 1
-/usr/bin/pgrep -x moonlight >/dev/null 2>&1 || exit 1
 
 ss -Htn state established \
     '( dport = :47984 or dport = :47989 or dport = :48010 )' 2>/dev/null |

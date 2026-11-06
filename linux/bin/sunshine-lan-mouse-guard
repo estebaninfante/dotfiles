@@ -23,6 +23,9 @@ CAPTURE="${LAN_MOUSE_CAPTURE:-$HOME/.local/bin/lan-mouse-capture.sh}"
 MOONLIGHT_LIVE="${MOONLIGHT_LIVE:-$HOME/.local/bin/moonlight-live}"
 SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lan-mouse-socket.sock"
 REASSERT=10
+VERIFY_EVERY=30
+last_want=""
+last_verify=0
 
 # hyprctl necesita la firma de la instancia; el user manager casi siempre la
 # tiene (UWSM), pero al arrancar la sesión puede no estar lista.
@@ -51,19 +54,25 @@ moonlight_streaming() {
 }
 
 apply() {
-    # Liveness por PID con ruta absoluta: ~/bin/pgrep es busybox y compara -x
-    # contra la línea de comando completa ("lan-mouse --capture-backend …
-    # daemon"), así que este guard se quedaba en applied="" y nunca soltaba
-    # nada. Ruta absoluta = procps; el socket huérfano se descarta con -S.
-    if [ ! -S "$SOCKET" ] || ! /usr/bin/pgrep -x lan-mouse >/dev/null 2>&1; then
-        return 0
-    fi
-    local want want_state cur
+    # Sin daemon no hay nada que reconciliar. El socket es la señal barata;
+    # si está huérfano, lan-mouse-capture.sh responde "daemon: stopped" y no
+    # toca nada. Evitamos un pgrep por vuelta (60 ms).
+    [ -S "$SOCKET" ] || return 0
+    local want want_state cur now
     if sunshine_streaming || moonlight_streaming; then
         want=off; want_state=released
     else
         want=on; want_state=active
     fi
+    # `status` (cli list + pgrep) cuesta ~250 ms: con el estado estable se
+    # verifica cada VERIFY_EVERY s. Un cambio de want se aplica al toque, y la
+    # vuelta periódica repara cualquier deactivate externo.
+    now=$(date +%s)
+    if [ "$want" = "$last_want" ] && [ $((now - last_verify)) -lt "$VERIFY_EVERY" ]; then
+        return 0
+    fi
+    last_want="$want"
+    last_verify="$now"
     cur="$("$CAPTURE" status 2>/dev/null | sed -n 's/^capture: //p')"
     if [ "$want_state" != "$cur" ]; then
         "$CAPTURE" "$want" >/dev/null 2>&1 || true
