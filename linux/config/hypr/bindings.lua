@@ -4,15 +4,11 @@ local helpers = require("windowhelpers")
 local main_mod = variables.main_mod
 
 hl.bind(main_mod .. " + RETURN", hl.dsp.exec_cmd(variables.terminal))
--- Súper+Mayús+Enter: en la laptop abre una sesión SSH al desktop; en el desktop
--- (esta máquina) no tiene sentido conectarse a sí mismo, así que abre terminal.
--- Además el desktop no tiene ~/.ssh/config con los hosts desktop-lan/desktop-ts,
--- así que ese comando moría al instante y la ventana se cerraba sola.
-if variables.machine == "desktop" then
-    hl.bind(main_mod .. " + SHIFT + RETURN", hl.dsp.exec_cmd(variables.terminal))
-else
-    hl.bind(main_mod .. " + SHIFT + RETURN", hl.dsp.exec_cmd(variables.terminal .. " --class ssh-desktop --title \"SSH: desktop\" ~/.local/bin/ssh-desktop"))
-end
+-- Súper+Mayús+Enter: sesión SSH a la OTRA máquina del par laptop <-> desktop.
+-- El destino lo elige ~/.local/bin/ssh-peer leyendo ~/.config/machine-type, así
+-- que el atajo es el mismo en las dos máquinas.
+local peer = variables.machine == "desktop" and "laptop" or "desktop"
+hl.bind(main_mod .. " + SHIFT + RETURN", hl.dsp.exec_cmd(variables.terminal .. " --class ssh-peer --title \"SSH: " .. peer .. "\" ~/.local/bin/ssh-peer"))
 hl.bind(main_mod .. " + SPACE",  hl.dsp.exec_cmd("omarchy-menu toggle"))
 hl.bind(main_mod .. " + SHIFT + I", hl.dsp.exec_cmd("omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""), { description = "Investigaciones (Logseq)" })
 hl.bind(main_mod .. " + A", hl.dsp.exec_cmd("~/.local/bin/antigravity-ui.sh"))

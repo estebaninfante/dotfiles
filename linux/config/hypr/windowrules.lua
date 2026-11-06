@@ -55,7 +55,7 @@ hl.window_rule({ match = { class = "Spotify" }, workspace = "9" })
 hl.window_rule({ match = { class = "xdg-desktop-portal-gtk" }, max_size = "1260 560" })
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, workspace = "10" })
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
-hl.window_rule({ match = { class = "ssh-desktop" }, opacity = "1.0 1.0", border_color = "rgba(00ff99f2)" })
+hl.window_rule({ match = { class = "ssh-peer" }, opacity = "1.0 1.0", border_color = "rgba(00ff99f2)" })
 
 -- Historial de dictado (Super+Ctrl+I): ventana flotante y centrada.
 hl.window_rule({
