@@ -32,14 +32,22 @@ ShellRoot {
     readonly property int filas: 9
     readonly property real pasoX: 4
     readonly property real pasoY: 3
+    // Un bloque de audio cada 100 ms (= ritmo de `dictado`). La matriz es un
+    // buffer circular por tiempo, no por "cuando cambió el nivel": si se
+    // empujaba una muestra sólo al cambiar la propiedad, los silencios
+    // congelaban la onda y las repeticiones llenaban la ventana de columnas
+    // idénticas (eso era lo que se veía como rectángulos).
+    readonly property int muestreoMs: 100
+    property real nivelSuave: 0
 
-    // Filas encendidas a cada lado del centro. Calibrado con el RMS real de
-    // `dictado`: voz normal (0.15–0.30) deja 5–7 filas; el mínimo audible son
-    // 3 filas, para que nunca se vea como una línea de puntos.
+    // Filas encendidas a cada lado del centro (0..4 → 1..9 filas totales).
+    // El RMS de `dictado` vive casi todo entre 0.05 y 0.35, así que el mapa
+    // es perceptual y satura arriba: lineal (n*13) aplastaba todo en el mismo
+    // escalón.
     function filasEncendidas(nivel) {
         const n = Math.min(1, Math.max(0, nivel || 0))
-        if (n < 0.03) return 0
-        return Math.min(filas / 2, Math.max(2, Math.round(n * 13)))
+        if (n <= 0.012) return 0
+        return Math.max(1, Math.min(4, Math.round(4 * Math.pow(Math.min(1, n / 0.32), 0.55))))
     }
 
     readonly property bool fresco: actualizado > 0 && (ahora - actualizado) < 3000
@@ -53,28 +61,33 @@ ShellRoot {
         return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0")
     }
 
-    onNivelChanged: {
-        const nuevo = ondas.slice()
-        nuevo.push(nivel)
-        while (nuevo.length > ondasMax) nuevo.shift()
-        ondas = nuevo
+    // Envolvente con ataque instantáneo y caída suave. Sin esto, un bloque de
+    // silencio en medio de una palabra abre un hueco de una columna y la línea
+    // "se desconecta". Se llama una vez por tick, así que el buffer avanza
+    // siempre al mismo ritmo aunque el nivel no cambie.
+    function muestrear() {
+        const n = root.grabando ? root.nivel : 0
+        root.nivelSuave = n > root.nivelSuave ? n : root.nivelSuave * 0.72
+        const nuevo = root.ondas.slice()
+        nuevo.push(root.nivelSuave)
+        while (nuevo.length > root.ondasMax) nuevo.shift()
+        root.ondas = nuevo
     }
 
     // Lee `estado.json` (lo escribe `dictado`) y vuelca el estado al overlay.
+    // `dictado` trunca y reescribe el archivo 10 veces por segundo: una lectura
+    // que cae en medio queda vacía o a medias. Eso NO significa "se terminó el
+    // dictado", así que se ignora y el estado anterior sigue valiendo; la
+    // caducidad por `actualizado` apaga la píldora sólo si el grabador muere.
     function aplicarEstado(texto) {
         let nuevo = null
         try {
             nuevo = JSON.parse(texto || "{}")
         } catch (err) {
-            nuevo = null
-        }
-        root.ahora = Date.now()
-        if (!nuevo || typeof nuevo.actualizado !== "number") {
-            root.estado = "idle"
-            root.microfono = ""
-            root.nivel = 0
             return
         }
+        if (!nuevo || typeof nuevo.actualizado !== "number") return
+        root.ahora = Date.now()
         root.estado = typeof nuevo.estado === "string" ? nuevo.estado : "idle"
         root.microfono = typeof nuevo.microfono === "string" ? nuevo.microfono : ""
         root.nivel = typeof nuevo.nivel === "number" ? nuevo.nivel : 0
@@ -82,8 +95,9 @@ ShellRoot {
         root.actualizado = nuevo.actualizado
     }
 
-    // Sondeo liviano (5/s) en vez de un proceso por cuadro; el archivo puede
-    // desaparecer y volver, así que `cat` es más robusto que un watcher.
+    // Sondeo liviano (10/s, el mismo ritmo al que escribe `dictado`) en vez de
+    // un proceso por cuadro; el archivo puede desaparecer y volver, así que
+    // `cat` es más robusto que un watcher.
     Process {
         id: lector
         command: ["sh", "-c", "cat \"$XDG_RUNTIME_DIR/dictado/estado.json\" 2>/dev/null"]
@@ -93,17 +107,14 @@ ShellRoot {
     }
 
     Timer {
-        interval: 200
+        interval: root.muestreoMs
         running: true
         repeat: true
-        onTriggered: { if (!lector.running) lector.running = true }
-    }
-
-    Timer {
-        interval: 250
-        running: true
-        repeat: true
-        onTriggered: root.ahora = Date.now()
+        onTriggered: {
+            root.ahora = Date.now()
+            root.muestrear()
+            if (!lector.running) lector.running = true
+        }
     }
 
     Variants {
@@ -185,9 +196,14 @@ ShellRoot {
                                 const pasoY = root.pasoY
                                 const centro = (filas - 1) / 2
                                 for (let c = 0; c < columnas; c++) {
-                                    const encendidas = root.pensando ? 0 : root.filasEncendidas(root.ondas[c])
+                                    // Mientras grabás siempre hay al menos la fila
+                                    // central: un RMS bajo abre un hueco de una
+                                    // columna y la línea parece cortada.
+                                    const piso = root.grabando ? 1 : 0
+                                    const encendidas = root.pensando ? 0
+                                        : Math.max(piso, root.filasEncendidas(root.ondas[c]))
                                     for (let f = 0; f < filas; f++) {
-                                        const encendido = encendidas > 0 && Math.abs(f - centro) <= encendidas - 0.5
+                                        const encendido = encendidas > 0 && Math.abs(f - centro) <= encendidas
                                         ctx.globalAlpha = encendido ? 1 : 0.13
                                         ctx.fillStyle = "#ffffff"
                                         ctx.beginPath()
@@ -202,6 +218,7 @@ ShellRoot {
                                 target: root
                                 function onOndasChanged() { matriz.requestPaint() }
                                 function onPensandoChanged() { matriz.requestPaint() }
+                                function onGrabandoChanged() { matriz.requestPaint() }
                             }
                         }
 
