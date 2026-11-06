@@ -49,7 +49,7 @@ STOP_USER_UNITS=(
   # voz de entrada y modelos locales (lo más caro: micrófono + CUDA)
   voice-pi-shim.service
   kokoro-tts.service ollama.service
-  omni-oido.service omni-web.service dictado.service asistente-tecla.service
+  omni-oido.service omni-web.service dictado.service asistente-dictado.service asistente-tecla.service
   lh-leer.service
   # KVM, streaming y escritorio remoto
   lan-mouse.service lan-mouse-auto.service sunshine.service
@@ -389,6 +389,12 @@ release() {
   if [ -s "$RUNNING" ]; then
     # shellcheck disable=SC2046
     systemctl --user start $(read_list "$RUNNING") >/dev/null 2>&1 || true
+  fi
+  # El oído de Orión (proyecto asistente) puede haberse instalado después de
+  # entrar al modo, así que no está en RUNNING; si está habilitado, tiene que
+  # volver: sin él la palabra clave "Orión" no responde.
+  if systemctl --user is-enabled --quiet asistente-dictado.service 2>/dev/null; then
+    systemctl --user start --no-block asistente-dictado.service >/dev/null 2>&1 || true
   fi
   if [ -s "$TIMERS_ON" ]; then
     # shellcheck disable=SC2046
