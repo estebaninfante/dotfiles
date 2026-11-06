@@ -71,6 +71,13 @@ set_capture() {
         exit 0
     fi
 
+    # Fuera de la red de casa (wifi Familia Infante) el peer no está: armar la
+    # captura sólo deja el puntero atrapado en el borde.
+    if [ "$want" = on ] && ! "${LAN_MOUSE_MISMA_RED:-$(dirname "$(readlink -f "$0")")/lan-mouse-misma-red}"; then
+        printf 'not on the home network; capture stays released\n'
+        exit 0
+    fi
+
     if ! daemon_up; then
         printf 'lan-mouse daemon not running; capture stays %s\n' "$(capture_state)"
         exit 0

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# lan-mouse-misma-red — ¿están el desktop y la laptop en la red de casa?
+#
+# lan-mouse apunta a las IPs de la LAN (192.168.1.240/241). Fuera de casa la
+# captura del borde igual se arma: el puntero se va hacia un peer que no está
+# (o, peor, hacia otro equipo con la misma IP en una red ajena) y "desaparece".
+# Se exige las dos cosas:
+#   1. este equipo está en casa: wifi Familia Infante, o cable (el desktop va
+#      siempre por ethernet en casa);
+#   2. el peer responde en su IP de la LAN. Así el desktop sabe si la laptop
+#      está en el wifi de casa sin preguntarle por SSH.
+#
+# Salida: 0 = misma red, 1 = no. Override del SSID: LAN_MOUSE_SSID (regex).
+set -uo pipefail
+
+SSID_RE="${LAN_MOUSE_SSID:-^Familia[ _]Infante}"
+CFG="${LAN_MOUSE_CONFIG:-$HOME/.config/lan-mouse/config.toml}"
+
+en_casa() {
+    local wifi
+    wifi=$(LC_ALL=C nmcli -t -f active,ssid dev wifi list --rescan no 2>/dev/null |
+        awk -F: '$1 == "yes" { sub(/^yes:/, ""); print; exit }')
+    if [ -n "$wifi" ]; then
+        printf '%s' "$wifi" | grep -qiE "$SSID_RE"
+        return
+    fi
+    LC_ALL=C nmcli -t -f TYPE,STATE dev 2>/dev/null | grep -qx 'ethernet:connected'
+}
+
+peer_ip() {
+    sed -n 's/^ips[[:space:]]*=[[:space:]]*\["\([0-9.]*\)".*/\1/p' "$CFG" 2>/dev/null | head -1
+}
+
+en_casa || exit 1
+ip=$(peer_ip)
+[ -n "$ip" ] || exit 1
+ping -c1 -W1 "$ip" >/dev/null 2>&1

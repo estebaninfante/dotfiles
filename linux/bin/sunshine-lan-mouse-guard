@@ -17,10 +17,13 @@
 # No hay memo de lo aplicado: cada vuelta se compara el estado real con el
 # deseado. Con memo, cualquier deactivate externo (script, GUI, este mismo
 # guard al terminar un stream) dejaba la captura apagada para siempre.
+#
+# Fuera de la red de casa (lan-mouse-misma-red) la captura también va apagada.
 set -uo pipefail
 
 CAPTURE="${LAN_MOUSE_CAPTURE:-$HOME/.local/bin/lan-mouse-capture.sh}"
 MOONLIGHT_LIVE="${MOONLIGHT_LIVE:-$HOME/.local/bin/moonlight-live}"
+MISMA_RED="${LAN_MOUSE_MISMA_RED:-$(dirname "$(readlink -f "$0")")/lan-mouse-misma-red}"
 SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lan-mouse-socket.sock"
 REASSERT=10
 VERIFY_EVERY=30
@@ -53,13 +56,20 @@ moonlight_streaming() {
     [ -x "$MOONLIGHT_LIVE" ] && "$MOONLIGHT_LIVE"
 }
 
+# Desktop y laptop en la red de casa. Sin el script se asume que sí, para no
+# romper la máquina que todavía no lo tenga.
+misma_red() {
+    [ -x "$MISMA_RED" ] || return 0
+    "$MISMA_RED"
+}
+
 apply() {
     # Sin daemon no hay nada que reconciliar. El socket es la señal barata;
     # si está huérfano, lan-mouse-capture.sh responde "daemon: stopped" y no
     # toca nada. Evitamos un pgrep por vuelta (60 ms).
     [ -S "$SOCKET" ] || return 0
     local want want_state cur now
-    if sunshine_streaming || moonlight_streaming; then
+    if sunshine_streaming || moonlight_streaming || ! misma_red; then
         want=off; want_state=released
     else
         want=on; want_state=active
@@ -76,9 +86,10 @@ apply() {
     cur="$("$CAPTURE" status 2>/dev/null | sed -n 's/^capture: //p')"
     if [ "$want_state" != "$cur" ]; then
         "$CAPTURE" "$want" >/dev/null 2>&1 || true
-        printf 'captura %s (antes %s; sink=%s, moonlight=%s)\n' \
+        printf 'captura %s (antes %s; sink=%s, moonlight=%s, red=%s)\n' \
             "$want" "${cur:-?}" "$(pactl get-default-sink 2>/dev/null)" \
-            "$(moonlight_streaming && echo vivo || echo no)" >&2
+            "$(moonlight_streaming && echo vivo || echo no)" \
+            "$(misma_red && echo casa || echo fuera)" >&2
     fi
 }
 
