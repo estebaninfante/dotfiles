@@ -11,6 +11,13 @@
 # Se filtra por puerto remoto: en el host esas conexiones son locales y no
 # cuentan como un stream saliente.
 #
+# Pero esas conexiones TCP sólo viven durante el arranque: ya en el stream,
+# video, audio y control van por UDP sin conectar, así que el TCP solo daba
+# "no hay stream" a mitad de una sesión (y la esquina del overview quedaba
+# armada en el cliente). Durante el stream Moonlight tiene sockets UDP atados a
+# la IP local concreta de la interfaz (no a 0.0.0.0, como el mDNS); en cuanto
+# la conexión se termina, los cierra.
+#
 # Salida: 0 = hay stream, 1 = no hay. Sin pgrep: se llama cada 3 s desde
 # moonlight.lua y un pgrep extra costaba ~60 ms por vuelta (~2 % de CPU).
 set -uo pipefail
@@ -19,4 +26,7 @@ command -v ss >/dev/null 2>&1 || exit 1
 
 ss -Htn state established \
     '( dport = :47984 or dport = :47989 or dport = :48010 )' 2>/dev/null |
-    grep -q .
+    grep -q . && exit 0
+
+ss -Huanp 2>/dev/null |
+    awk '/"moonlight"/ && $4 !~ /^(0\.0\.0\.0|\[::\]|\*):/ { found = 1 } END { exit !found }'
