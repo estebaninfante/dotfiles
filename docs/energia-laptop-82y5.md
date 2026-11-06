@@ -517,7 +517,7 @@ la máquina quieta (medido con `/proc/stat` y ftrace `sched_process_exec`).
 | `eztvn.modo-voz`, `eztvn.pi-tts` | CLI `voice` (Python) cada 2 s | pausados en extremo |
 | `eztvn.cpu-heatmap` | script + animación cada 1 s | 10 s en extremo |
 | `eztvn.power` | `bash -l` (carga el `.bashrc`: starship, zoxide…) cada 5 s | `bash` sin login |
-| `moonlight.lua` | `lan-mouse-capture.sh` cada 3 s aunque lan-mouse esté parado | no lo llama sin socket o con el modo activo |
+| `moonlight.lua` | `lan-mouse-capture.sh` cada 3 s aunque lan-mouse esté parado | sólo en cambios de estado; el poll de 3 s mira sockets (`moonlight-live`, ~8 ms) |
 | `kvm-ensure.sh` | al volver de suspensión hacía `restart` de lan-mouse | respeta el flag del modo |
 | Hyprland | animaciones y sombras | apagadas en extremo (`hyprctl eval`, se restauran) |
 

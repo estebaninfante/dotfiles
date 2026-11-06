@@ -12,7 +12,7 @@
 # cuentan como un stream saliente.
 #
 # Salida: 0 = hay stream, 1 = no hay. Sin pgrep: se llama cada 3 s desde
-# moonlight.lua y un pgrep extra costaba 60 ms por vuelta (8 % de CPU).
+# moonlight.lua y un pgrep extra costaba ~60 ms por vuelta (~2 % de CPU).
 set -uo pipefail
 
 command -v ss >/dev/null 2>&1 || exit 1
