@@ -76,13 +76,14 @@ apply() {
 hypr_init || true
 apply
 
-# Eventos de PipeWire (creación/borrado de sinks y cambio de default) y de
-# ventanas, con una re-evaluación periódica por si se pierde alguno o si el
-# compositor reinicia. Nada de polling cada segundo.
+# Sólo importan los cambios que pueden cambiar el sink por defecto: cambio de
+# default (server), alta/baja de un sink. Los "change" de sink/sink-input son
+# volumen y streams de audio (uno por canción, por juego…): reevaluar en cada
+# uno gastaba CPU sin aportar nada. La vuelta periódica cubre lo que se pierda.
 while :; do
     while read -r line; do
         case "$line" in
-            *server*|*sink*) apply ;;
+            "Event 'change' on server"*|"Event 'new' on sink #"*|"Event 'remove' on sink #"*) apply ;;
         esac
     done < <(timeout "$REASSERT" pactl subscribe 2>/dev/null)
     hypr_init || true
