@@ -3,6 +3,14 @@ set -uo pipefail
 
 SOCKET="/run/user/$(id -u)/lan-mouse-socket.sock"
 
+# El daemon no es reentrante para `cli list`: dos invocaciones concurrentes
+# (guard cada 10 s + poll de moonlight.lua cada 3 s) lo hacían abortar con
+# core dump. Un lock por fd serializa todo el guion.
+if command -v flock >/dev/null 2>&1; then
+    exec 9>"${XDG_RUNTIME_DIR:-/tmp}/lan-mouse-capture.lock"
+    flock -w 5 9 || exit 0
+fi
+
 usage() {
     printf 'usage: %s on|off|status|toggle\n' "$(basename "$0")" >&2
     exit 2

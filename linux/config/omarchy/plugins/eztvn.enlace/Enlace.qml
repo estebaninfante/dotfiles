@@ -60,7 +60,10 @@ Item {
   property string peerName: "peer"
   property string localName: "este equipo"
   property bool linked: false
+  // true mientras el puntero está del lado del peer (salimos y no ha vuelto).
+  property bool sentPointer: false
   property double lastLinkUp: 0
+  property double lastLinkDown: 0
   property double lastCrossOut: 0
   property double lastCrossIn: 0
   property bool paused: false
@@ -166,20 +169,37 @@ Item {
     if (paused) return
     var s = String(line)
     var now = Date.now()
-    if (/client \(\d+\) connected @|dtls client connected/.test(s)) {
-      if (!linked || now - lastLinkUp > 15000) {
-        lastLinkUp = now
-        linkUp()
+    // "acknowledged" es la confirmación real de que el peer aceptó: el
+    // título/captura pueden existir sin conexión. Se repite por cada Enter,
+    // así que sólo anima al pasar de desconectado a conectado.
+    if (/acknowledged the connection!|dtls client connected/.test(s)) {
+      if (!linked) {
+        linked = true
+        if (now - lastLinkUp > 15000) { lastLinkUp = now; linkUp() }
       }
-      linked = true
-    } else if (/connection closed|active connections: \[\]/.test(s)) {
-      if (linked) linkDown()
-      linked = false
     } else if (/entering client/.test(s)) {
-      linked = true
+      // El puntero salió de este equipo hacia el peer. Sólo ocurre con la
+      // captura armada; los intentos fallidos loguean "no active client".
+      sentPointer = true
       if (now - lastCrossOut > 700) { lastCrossOut = now; cross("out") }
-    } else if (/left remote client device region/.test(s)) {
+    } else if (/entered this device/.test(s)) {
+      // El puntero llegó desde el peer a esta máquina.
+      linked = true
+      sentPointer = false
       if (now - lastCrossIn > 700) { lastCrossIn = now; cross("in") }
+    } else if (/left remote client device region/.test(s)) {
+      // El peer soltó la captura: el puntero volvió. Un Leave espurio (enlace
+      // caído, intento abortado) llega igual; si no habíamos salido, no anima.
+      if (sentPointer) {
+        sentPointer = false
+        if (now - lastCrossIn > 700) { lastCrossIn = now; cross("in") }
+      }
+    } else if (/connection closed|active connections: \[\]|deactivated client|compositor released mouse|no active client at this position/.test(s)) {
+      // Enlace caído o captura desactivada. "no active client at this
+      // position" es el borde tocado con el cliente apagado: avisar una vez,
+      // no fingir un cruce.
+      if (linked || sentPointer) { linked = false; sentPointer = false }
+      if (now - lastLinkDown > 15000) { lastLinkDown = now; linkDown() }
     }
   }
 

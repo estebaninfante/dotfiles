@@ -4,19 +4,25 @@
 # zona del borde, lan-mouse se lo queda y el ratón "desaparece" del stream (los
 # clics siguen yendo a lan-mouse, no a la ventana).
 #
-# Señal de stream: Sunshine crea sus sinks virtuales (sink-sunshine-stereo et
-# al) y los deja por defecto SÓLO mientras dura la sesión; al desconectar el
-# cliente los borra y vuelve el sink real. No sirve el prep-cmd de Sunshine:
-# las apps de escritorio se "reanudan" (resume) sin volver a ejecutarlo.
+# Sunshine crea sus sinks virtuales (sink-sunshine-stereo et al) y los deja por
+# defecto SÓLO mientras dura la sesión; al desconectar el cliente los borra y
+# vuelve el sink real. No sirve el prep-cmd de Sunshine: las apps de escritorio
+# se "reanudan" (resume) sin volver a ejecutarlo.
 #
-# También se libera si hay una ventana de Moonlight abierta (rol cliente, igual
-# que moonlight.lua), para que este guard y el de Hyprland no se peleen.
+# En el rol cliente la ventana de Moonlight no sirve como señal: el título
+# "<equipo> - Moonlight" se queda pegado si la conexión se cae. moonlight-live
+# mira el canal de control de Sunshine (47984/47989/48010) y sólo da vivo un
+# stream real.
+#
+# No hay memo de lo aplicado: cada vuelta se compara el estado real con el
+# deseado. Con memo, cualquier deactivate externo (script, GUI, este mismo
+# guard al terminar un stream) dejaba la captura apagada para siempre.
 set -uo pipefail
 
 CAPTURE="${LAN_MOUSE_CAPTURE:-$HOME/.local/bin/lan-mouse-capture.sh}"
+MOONLIGHT_LIVE="${MOONLIGHT_LIVE:-$HOME/.local/bin/moonlight-live}"
 SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lan-mouse-socket.sock"
-REASSERT=30
-applied=""
+REASSERT=10
 
 # hyprctl necesita la firma de la instancia; el user manager casi siempre la
 # tiene (UWSM), pero al arrancar la sesión puede no estar lista.
@@ -40,10 +46,8 @@ sunshine_streaming() {
     pactl get-default-sink 2>/dev/null | grep -q '^sink-sunshine'
 }
 
-# Rol cliente: la ventana del gui se llama "Moonlight"; la del stream,
-# "<equipo> - Moonlight". Mismo criterio que moonlight.lua, para no pelearse.
 moonlight_streaming() {
-    hypr clients -j | grep -q '"title": "[^"]* - Moonlight"'
+    [ -x "$MOONLIGHT_LIVE" ] && "$MOONLIGHT_LIVE"
 }
 
 apply() {
@@ -52,14 +56,21 @@ apply() {
     # daemon"), así que este guard se quedaba en applied="" y nunca soltaba
     # nada. Ruta absoluta = procps; el socket huérfano se descarta con -S.
     if [ ! -S "$SOCKET" ] || ! /usr/bin/pgrep -x lan-mouse >/dev/null 2>&1; then
-        applied=""
         return 0
     fi
-    local want
-    if sunshine_streaming || moonlight_streaming; then want=off; else want=on; fi
-    [ "$want" = "$applied" ] && return 0
-    applied="$want"
-    "$CAPTURE" "$want" >/dev/null 2>&1 || true
+    local want want_state cur
+    if sunshine_streaming || moonlight_streaming; then
+        want=off; want_state=released
+    else
+        want=on; want_state=active
+    fi
+    cur="$("$CAPTURE" status 2>/dev/null | sed -n 's/^capture: //p')"
+    if [ "$want_state" != "$cur" ]; then
+        "$CAPTURE" "$want" >/dev/null 2>&1 || true
+        printf 'captura %s (antes %s; sink=%s, moonlight=%s)\n' \
+            "$want" "${cur:-?}" "$(pactl get-default-sink 2>/dev/null)" \
+            "$(moonlight_streaming && echo vivo || echo no)" >&2
+    fi
 }
 
 hypr_init || true

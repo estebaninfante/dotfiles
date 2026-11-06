@@ -116,23 +116,25 @@ local function leave()
     off()
 end
 
--- El submap vale mientras el stream esté en foco: o la ventana vive en el
--- special visible, o es una conexión viva (el título pasa a "<equipo> -
--- Moonlight"). Con la sola clase enfocada se comía todos los atajos de Súper
--- apenas el cliente quedaba en foco, incluso sin conectar.
+-- ¿Hay un stream vivo? El título "<equipo> - Moonlight" se queda pegado
+-- cuando la conexión se cae: Moonlight sigue en pantalla completa mostrando
+-- el último frame. Si se decide por título, el submap y la captura de
+-- lan-mouse se quedan armados para siempre. La señal buena es el canal de
+-- control de Sunshine (moonlight-live mira los puertos 47984/47989/48010).
+local function moonlight_live()
+    local ok = os.execute(os.getenv("HOME") .. "/.local/bin/moonlight-live >/dev/null 2>&1")
+    return ok == true or ok == 0
+end
+
+-- El submap vale mientras el stream esté en foco y vivo. Con la sola clase
+-- enfocada se comía todos los atajos de Súper apenas el cliente quedaba en
+-- foco, incluso sin conectar.
 --
 -- Ojo: `monitor.active_special_workspace` llega SIEMPRE nil al Lua aunque
 -- `hyprctl monitors` lo muestre, así que la visibilidad se deduce de la
 -- ventana activa: sólo puede estar en el special si el special está visible.
 local function streaming()
-    local w = active_moonlight()
-    if w == nil then
-        return false
-    end
-    if w.workspace ~= nil and w.workspace.name == SPECIAL_SELECTOR then
-        return true
-    end
-    return w.title ~= nil and w.title:find("%- Moonlight$") ~= nil
+    return active_moonlight() ~= nil and moonlight_live()
 end
 
 local function toggle()
@@ -143,22 +145,31 @@ local function toggle()
     end
 end
 
--- Con el gui abierto y sin conectar la ventana se llama sólo "Moonlight"; al
--- streamear se suma otra ("<equipo> - Moonlight"). Sólo en ese caso hay que
--- soltar la captura de lan-mouse: si se mira la mera existencia de la ventana,
--- dejar el gui abierto deja el KVM apagado sin que se entienda por qué.
-local function moonlight_streaming()
+-- Si el stream murió con Moonlight en pantalla completa, la ventana se queda
+-- con el último frame y el puntero relativo: el ratón deja de responder aunque
+-- el resto del escritorio esté bien. Se sale de fullscreen (sin cerrar nada)
+-- en la transición vivo -> muerto para devolver el puntero.
+local function release_stale_fullscreen()
     for _, w in ipairs(hl.get_windows({ class = MOONLIGHT_CLASS })) do
-        if w.title ~= nil and w.title:find("%- Moonlight$") then
-            return true
+        if (w.fullscreen or 0) > 0 and w.title ~= nil and w.title:find("%- Moonlight$") then
+            hl.dispatch(hl.dsp.window.fullscreen({
+                action = "unset",
+                window = "address:" .. w.address,
+            }))
         end
     end
-    return streaming()
 end
+
+local was_live = false
 
 local function sync()
     local cur = hl.get_current_submap() or ""
-    modes.streaming = streaming()
+    local live = moonlight_live()
+    modes.streaming = active_moonlight() ~= nil and live
+    if was_live and not live then
+        release_stale_fullscreen()
+    end
+    was_live = live
     if modes.streaming then
         if cur ~= MOONLIGHT_SUBMAP and not guard then
             grab(true)
@@ -174,10 +185,9 @@ local function sync()
             grab(false)
         end
     end
-    -- lan-mouse se decide por el stream (ventana de streaming o special), no
-    -- por el foco: si se abre Moonlight desde el lanzador la ventana todavía
-    -- no está en el special y la captura del borde ya se comía el puntero.
-    set_lan_mouse(moonlight_streaming())
+    -- lan-mouse se decide por el stream vivo, no por el título de la ventana:
+    -- el título queda pegado cuando se cae la conexión.
+    set_lan_mouse(live)
 end
 
 hl.define_submap(MOONLIGHT_SUBMAP, function()

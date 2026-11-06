@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# moonlight-live — ¿hay una sesión de Moonlight realmente viva en esta máquina?
+#
+# El título "<equipo> - Moonlight" queda pegado cuando la conexión se cae
+# (Moonlight se queda en pantalla completa mostrando el último frame), así que
+# mirar sólo el título deja el KVM desarmado y el submap de atajos puesto para
+# siempre. La señal buena es el canal de control de Sunshine: Moonlight lo
+# mantiene establecido mientras dura el stream.
+#
+# Puertos de control del host (Sunshine): 47984 HTTPS, 47989 HTTP, 48010 RTSP.
+# Se filtra por puerto remoto: en el host esas conexiones son locales y no
+# cuentan como un stream saliente.
+#
+# Salida: 0 = hay stream, 1 = no hay. Sin dependencias fuera de procps/iproute2.
+set -uo pipefail
+
+command -v ss >/dev/null 2>&1 || exit 1
+/usr/bin/pgrep -x moonlight >/dev/null 2>&1 || exit 1
+
+ss -Htn state established \
+    '( dport = :47984 or dport = :47989 or dport = :48010 )' 2>/dev/null |
+    grep -q .
