@@ -72,11 +72,11 @@ hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true 
 hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("omarchy brightness display +3%"), { repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("omarchy brightness display 3%-"), { repeating = true })
 
--- PrintScreen y Shift+Print abren la misma barra de captura (capturar o grabar
--- pantalla, zona o ventana). Print deja preseleccionada la captura de zona;
--- Shift+Print, la grabación de pantalla.
-hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/capture-menu image"), { description = "Barra de captura: capturar zona" })
-hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("~/.local/bin/capture-menu record"), { description = "Barra de captura: grabar pantalla" })
+-- PrintScreen entra directo a capturar y Shift+Print a grabar: arrastrar toma
+-- la zona, un clic la ventana. La barra cambia de modo y ofrece ventana activa
+-- o pantalla completa.
+hl.bind("Print",           hl.dsp.exec_cmd("~/.local/bin/capture-menu image"), { description = "Capturar: zona, ventana o pantalla" })
+hl.bind("SHIFT + Print",   hl.dsp.exec_cmd("~/.local/bin/capture-menu record"), { description = "Grabar: zona, ventana o pantalla" })
 hl.bind("CTRL + Print",    hl.dsp.exec_cmd("~/.local/bin/shot -s"))
 hl.bind("CTRL + SHIFT + Print", hl.dsp.exec_cmd("~/.local/bin/shot -s full"))
 hl.bind(main_mod .. " + Print",       hl.dsp.exec_cmd("~/.local/bin/shot active"))

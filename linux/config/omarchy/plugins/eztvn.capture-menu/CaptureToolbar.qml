@@ -2,26 +2,27 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 
-// Barra flotante única del menú de captura: cada acción con icono, nombre y
-// para qué sirve; el cursor y las flechas mueven la selección y Enter (o 1-6)
-// la ejecuta. En modo región se oculta al arrastrar y su pie explica el gesto.
+// Barra mínima: conmutador Capturar/Grabar + las tres zonas de la pantalla.
+// Sin subtítulos ni pie de ayuda: el gesto (clic en ventana o arrastre) se
+// explica solo, y el conmutador deja claro en qué modo está.
 Item {
   id: root
 
   property var rows: []
   property int currentIndex: 0
+  property string intent: "image"
   property real reveal: 0
-  property bool regionMode: false
   signal activated(int index)
   signal hovered(int index)
+  signal modeToggled()
 
   implicitWidth: card.width
   implicitHeight: card.height
 
   Rectangle {
     id: card
-    width: layout.implicitWidth + Style.space(20)
-    height: layout.implicitHeight + Style.space(16)
+    width: layout.implicitWidth + Style.space(16)
+    height: layout.implicitHeight + Style.space(12)
     radius: Math.max(Style.space(8), Style.cornerRadius)
     color: Color.menu.background
     border.width: Math.max(1, Style.space(1))
@@ -31,105 +32,116 @@ Item {
     scale: 0.97 + 0.03 * root.reveal
     transformOrigin: Item.Top
 
-    ColumnLayout {
+    RowLayout {
       id: layout
       anchors.centerIn: parent
-      spacing: Style.space(8)
+      spacing: Style.space(4)
 
-      RowLayout {
-        Layout.alignment: Qt.AlignHCenter
-        spacing: Style.space(4)
+      // Conmutador del modo: el archivo sale como captura o como video.
+      Rectangle {
+        id: mode
+        readonly property bool recording: root.intent === "video"
 
-        Repeater {
-          model: root.rows
+        width: modeRow.implicitWidth + Style.space(18)
+        height: Style.space(34)
+        radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
+        color: modeArea.containsMouse
+          ? Util.alpha(Color.accent, 0.24)
+          : Util.alpha(Color.accent, 0.16)
+        border.width: Math.max(1, Style.space(1))
+        border.color: Util.alpha(Color.accent, 0.45)
 
-          delegate: Rectangle {
-            id: button
-            required property var modelData
-            required property int index
+        Behavior on color {
+          ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
 
-            readonly property bool current: index === root.currentIndex
+        RowLayout {
+          id: modeRow
+          anchors.centerIn: parent
+          spacing: Style.space(6)
 
-            width: Style.space(92)
-            height: Style.space(62)
-            radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
-            color: current
-              ? Util.alpha(Color.accent, 0.16)
-              : (hover.containsMouse ? Color.menu.selectedBackground : "transparent")
-            border.width: current ? Math.max(1, Style.space(1)) : 0
-            border.color: Util.alpha(Color.accent, 0.45)
-
-            Behavior on color {
-              ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
-            }
-
-            ColumnLayout {
-              anchors.centerIn: parent
-              spacing: Style.space(1)
-
-              Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: button.modelData.icon
-                color: button.current ? Color.accent : Color.menu.text
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.iconLarge
-              }
-
-              Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: button.modelData.label
-                color: button.current ? Color.accent : Color.menu.text
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.bodySmall
-                font.bold: button.current
-              }
-
-              Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: button.modelData.caption
-                color: Util.alpha(Color.menu.text, button.current ? 0.75 : 0.45)
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-
-            // Punto rojo: estas filas graban, no sólo capturan.
-            Rectangle {
-              visible: button.modelData.record === true
-              anchors.top: parent.top
-              anchors.right: parent.right
-              anchors.margins: Style.space(7)
-              width: Style.space(6)
-              height: width
-              radius: width / 2
-              color: Color.urgent
-            }
-
-            MouseArea {
-              id: hover
-              anchors.fill: parent
-              hoverEnabled: true
-              onEntered: root.hovered(button.index)
-              onClicked: root.activated(button.index)
-            }
+          Text {
+            text: mode.recording ? "󰻂" : "󰹑"
+            color: mode.recording ? Color.urgent : Color.accent
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.icon
           }
+
+          Text {
+            text: mode.recording ? "Grabar" : "Capturar"
+            color: Color.accent
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+        }
+
+        MouseArea {
+          id: modeArea
+          anchors.fill: parent
+          hoverEnabled: true
+          onClicked: root.modeToggled()
         }
       }
 
       Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: Math.max(1, Style.space(1))
-        color: Util.alpha(Color.menu.text, 0.12)
+        Layout.preferredWidth: Math.max(1, Style.space(1))
+        Layout.preferredHeight: Style.space(18)
+        color: Util.alpha(Color.menu.text, 0.15)
       }
 
-      Text {
-        Layout.alignment: Qt.AlignHCenter
-        text: root.regionMode
-          ? "Arrastra una zona o clic en una ventana  ·  Esc cancela"
-          : "← →  mover    ·    Enter  aceptar    ·    Esc  cancelar"
-        color: Util.alpha(Color.menu.text, 0.45)
-        font.family: Style.font.menuFamily
-        font.pixelSize: Style.font.caption
+      Repeater {
+        model: root.rows
+
+        delegate: Rectangle {
+          id: button
+          required property var modelData
+          required property int index
+
+          readonly property bool current: index === root.currentIndex
+
+          width: itemRow.implicitWidth + Style.space(18)
+          height: Style.space(34)
+          radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
+          color: current
+            ? Util.alpha(Color.accent, 0.16)
+            : (hover.containsMouse ? Color.menu.selectedBackground : "transparent")
+          border.width: current ? Math.max(1, Style.space(1)) : 0
+          border.color: Util.alpha(Color.accent, 0.45)
+
+          Behavior on color {
+            ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+          }
+
+          RowLayout {
+            id: itemRow
+            anchors.centerIn: parent
+            spacing: Style.space(6)
+
+            Text {
+              text: button.modelData.icon
+              color: button.current ? Color.accent : Color.menu.text
+              font.family: Style.font.menuFamily
+              font.pixelSize: Style.font.icon
+            }
+
+            Text {
+              text: button.modelData.label
+              color: button.current ? Color.accent : Color.menu.text
+              font.family: Style.font.menuFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: button.current
+            }
+          }
+
+          MouseArea {
+            id: hover
+            anchors.fill: parent
+            hoverEnabled: true
+            onEntered: root.hovered(button.index)
+            onClicked: root.activated(button.index)
+          }
+        }
       }
     }
   }

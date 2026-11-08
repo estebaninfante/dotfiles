@@ -6,13 +6,12 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 
-// PrintScreen y Shift+Print abren la misma barra: capturar o grabar pantalla,
-// zona o ventana. Al elegir zona se pasa a la selección (la barra se oculta al
-// arrastrar); un clic sobre una ventana la captura o graba; un clic en el fondo
-// vuelve a la barra.
+// PrintScreen entra directo a capturar y Shift+Print a grabar: en ambos casos
+// se puede clicar una ventana o dibujar un área de inmediato. La barra sólo
+// cambia el modo y ofrece las otras zonas (ventana activa / pantalla completa).
 //
-// El recuadro vive en esta capa, así que no entra en la captura: el archivo se
-// recorta del PNG original. Al grabar se manda geometría lógica y
+// El recuadro vive en esta capa, así que no entra en el archivo: la imagen se
+// recorta del PNG congelado y el video usa la geometría lógica con la que
 // screenrecord-toggle filma sólo esa zona.
 Item {
   id: root
@@ -21,8 +20,8 @@ Item {
   property string selectionFile: ""
   property string doneFile: ""
   property string imagePath: ""
-  property string mode: "menu" // "menu" | "region"
-  property string intent: "image" // intención de la selección de región
+  property string mode: "region" // única UI: siempre región
+  property string intent: "image" // "image" | "video"
   property int selectedIndex: 0
 
   property real dragX0: 0
@@ -44,12 +43,9 @@ Item {
   readonly property real selH: Math.abs(dragY1 - dragY0)
 
   readonly property var rows: [
-    { key: "record",       icon: "󰻂", label: "Pantalla", caption: "grabar",   record: true },
-    { key: "videoregion",  icon: "󰹵", label: "Zona",     caption: "grabar",   record: true },
-    { key: "recordwindow", icon: "󰖲", label: "Ventana",  caption: "grabar",   record: true },
-    { key: "region",       icon: "󰹵", label: "Zona",     caption: "capturar", record: false },
-    { key: "window",       icon: "󰖲", label: "Ventana",  caption: "capturar", record: false },
-    { key: "full",         icon: "󰹞", label: "Pantalla", caption: "capturar", record: false }
+    { key: "region", icon: "󰹵", label: "Zona" },
+    { key: "window", icon: "󰖲", label: "Ventana" },
+    { key: "full",   icon: "󰹞", label: "Pantalla" }
   ]
 
   Behavior on reveal {
@@ -76,11 +72,10 @@ Item {
     root.selectionFile = String(p.selectionFile || "")
     root.doneFile = String(p.doneFile || "")
     root.imagePath = String(p.imagePath || "")
-    // Una sola barra para Print y Shift+Print; sólo cambia la fila inicial:
-    // capturar zona (Print) o grabar pantalla (Shift+Print).
-    root.mode = "menu"
-    root.intent = "image"
-    root.selectedIndex = String(p.defaultAction || "image") === "record" ? 0 : 3
+    // Print captura; Shift+Print graba. Listos para clic o arrastre.
+    root.intent = String(p.defaultAction || "image") === "record" ? "video" : "image"
+    root.mode = "region"
+    root.selectedIndex = 0
     root.resetSelection()
     root.reveal = 0
     root.opened = true
@@ -113,14 +108,13 @@ Item {
     }
   }
 
-  function move(delta) {
-    if (root.rows.length === 0) return
-    root.selectedIndex = (root.selectedIndex + delta + root.rows.length) % root.rows.length
+  function toggleMode() {
+    root.intent = root.intent === "video" ? "image" : "video"
+    keyCatcher.forceActiveFocus()
   }
 
-  function chooseRegion(kind) {
+  function chooseRegion() {
     root.mode = "region"
-    root.intent = kind
     root.resetSelection()
     keyCatcher.forceActiveFocus()
   }
@@ -128,9 +122,13 @@ Item {
   function activate(index) {
     if (index < 0 || index >= root.rows.length) return
     var key = root.rows[index].key
-    if (key === "region") root.chooseRegion("image")
-    else if (key === "videoregion") root.chooseRegion("video")
-    else root.finish(key)
+    if (key === "region") {
+      root.chooseRegion()
+    } else if (key === "window") {
+      root.finish(root.intent === "video" ? "recordwindow" : "window")
+    } else if (key === "full") {
+      root.finish(root.intent === "video" ? "record" : "full")
+    }
   }
 
   // Coordenada de la pantalla (lógica) → píxeles del PNG congelado. El PNG
@@ -146,7 +144,7 @@ Item {
     var sx = panel.screen ? panel.screen.x : 0
     var sy = panel.screen ? panel.screen.y : 0
     // Clic sin arrastre: la ventana bajo el puntero. Si no hay ninguna, el
-    // script reabre la barra. Sin un press real (Enter) no hace nada.
+    // script no hace nada (clic en el escritorio cancela).
     if (root.selW < 4 || root.selH < 4) {
       if (!root.hasPress) return
       var prefix = root.intent === "video" ? "recordwindowat:" : "windowat:"
@@ -197,7 +195,7 @@ Item {
 
     CaptureSelection {
       anchors.fill: parent
-      regionMode: root.mode === "region"
+      regionMode: true
       dragging: root.dragging
       selX: root.selX
       selY: root.selY
@@ -214,35 +212,21 @@ Item {
       focus: root.opened
 
       Keys.onEscapePressed: root.finish(null)
-      Keys.onLeftPressed: if (root.mode === "menu") root.move(-1)
-      Keys.onRightPressed: if (root.mode === "menu") root.move(1)
-      Keys.onReturnPressed: {
-        if (root.mode === "menu") root.activate(root.selectedIndex)
-        else root.completeRegion()
-      }
-      Keys.onEnterPressed: {
-        if (root.mode === "menu") root.activate(root.selectedIndex)
-        else root.completeRegion()
-      }
+      Keys.onReturnPressed: root.completeRegion()
+      Keys.onEnterPressed: root.completeRegion()
       Keys.onPressed: function(event) {
-        if (event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
+        if (event.key === Qt.Key_Tab) {
+          root.toggleMode()
+          event.accepted = true
+        } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_3) {
           root.activate(event.key - Qt.Key_1)
           event.accepted = true
         }
       }
 
-      // Clic fuera de la barra: cancela. Clic derecho: cancela en cualquier modo.
+      // Selección sobre la imagen congelada: arrastre = zona, clic = ventana.
       MouseArea {
         anchors.fill: parent
-        visible: root.mode === "menu"
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onClicked: root.finish(null)
-      }
-
-      // Selección de región sobre la imagen congelada.
-      MouseArea {
-        anchors.fill: parent
-        visible: root.mode === "region"
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.CrossCursor
         hoverEnabled: true
@@ -278,22 +262,18 @@ Item {
       }
 
       CaptureToolbar {
-        // La misma barra en menú y en región: se oculta al arrastrar para no
-        // tapar la zona que se está eligiendo.
-        visible: root.mode === "menu" || !root.dragging
+        // Única barra. Se oculta al arrastrar para no tapar la zona elegida.
+        visible: !root.dragging
         reveal: root.reveal
         rows: root.rows
-        regionMode: root.mode === "region"
-        currentIndex: root.mode === "menu"
-          ? root.selectedIndex
-          : (root.intent === "video" ? 1 : 3)
+        intent: root.intent
+        currentIndex: root.selectedIndex
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: Style.bar.sizeHorizontal + Style.space(12)
         onActivated: function(index) { root.activate(index) }
-        onHovered: function(index) {
-          if (root.mode === "menu") root.selectedIndex = index
-        }
+        onHovered: function(index) { root.selectedIndex = index }
+        onModeToggled: root.toggleMode()
       }
     }
   }

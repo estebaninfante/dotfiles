@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# PrintScreen y Shift+Print abren la misma barra de captura (plugin
-# eztvn.capture-menu): capturar o grabar pantalla, zona o ventana. Print deja
-# preseleccionada la captura de zona; Shift+Print, la grabación de pantalla.
-# Al elegir zona se arrastra el recuadro o se hace clic en una ventana.
+# PrintScreen y Shift+Print congelan la pantalla y entran directo a la zona:
+# Print captura, Shift+Print graba. Arrastrar toma esa área; un clic toma la
+# ventana bajo el puntero. La barra cambia entre capturar y grabar y ofrece la
+# ventana activa o la pantalla completa.
 #
 # La imagen congelada es un PNG que saca este script ANTES de mostrar el
 # overlay, así que ni la barra ni el resaltado entran en la captura: las
@@ -220,12 +220,8 @@ case "$key" in
     windowat:*)
         IFS=, read -r cx cy <<<"${key#windowat:}"
         hit=$(window_at "$cx" "$cy")
-        if [[ -z $hit ]]; then
-            # Clic en el escritorio: abrir la barra (grabar pantalla/zona/ventana).
-            wait_overlay_gone
-            exec 9>&-
-            exec ~/.local/bin/capture-menu record
-        fi
+        # Clic en el escritorio: cancela (el overlay ya se está cerrando).
+        [[ -n $hit ]] || exit 0
         geom=${hit%|*}
         scale=$(monitor_scale "${hit##*|}")
         [[ -n $scale && $scale != null ]] || scale=1
@@ -235,11 +231,8 @@ case "$key" in
     recordwindowat:*)
         IFS=, read -r cx cy <<<"${key#recordwindowat:}"
         hit=$(window_at "$cx" "$cy")
-        if [[ -z $hit ]]; then
-            wait_overlay_gone
-            exec 9>&-
-            exec ~/.local/bin/capture-menu record
-        fi
+        # Clic en el escritorio: cancela (el overlay ya se está cerrando).
+        [[ -n $hit ]] || exit 0
         geom=${hit%|*}
         wait_overlay_gone
         sleep 0.12
