@@ -190,6 +190,7 @@ Item {
       selY: root.selY
       selW: root.selW
       selH: root.selH
+      pixelScale: panel.width > 0 ? frozen.implicitWidth / panel.width : Screen.devicePixelRatio
       pointerX: root.pointerX
       pointerY: root.pointerY
     }

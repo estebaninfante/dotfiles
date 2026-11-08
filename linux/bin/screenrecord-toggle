@@ -36,7 +36,7 @@ fi
 copy_video() {
     local file="$1" uri
     [[ -n $file && -f $file ]] || return 0
-    uri=$(jq -rn --arg f "$file" '$f|@uri') || return 0
+    uri=$(jq -rn --arg f "$file" '$f | split("/") | map(@uri) | join("/")') || return 0
     printf 'file://%s\r\n' "$uri" | wl-copy --type text/uri-list || return 0
     omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u low -t 4000 \
         "Video copiado al portapapeles" "$file"
@@ -49,8 +49,14 @@ copy_video() {
 # reutiliza tal cual en vez de duplicarlo aquí.
 start_region_recording() {
     local shim_dir="$STATE_DIR/picker" region_file="$STATE_DIR/region"
+    local size offsets x y
+    size="${region%%+*}"       # WxH
+    offsets="${region#*+}"     # X+Y
+    x="${offsets%%+*}"
+    y="${offsets#*+}"
     mkdir -p "$shim_dir"
-    printf '%s\n' "$region" >"$region_file"
+    # El selector de Omarchy habla el formato de slurp: "x,y WxH".
+    printf '%s,%s %s\n' "$x" "$y" "$size" >"$region_file"
     printf '#!/usr/bin/env bash\ncat "$CAPTURE_MENU_REGION_FILE"\n' \
         >"$shim_dir/omarchy-capture-region"
     chmod +x "$shim_dir/omarchy-capture-region"

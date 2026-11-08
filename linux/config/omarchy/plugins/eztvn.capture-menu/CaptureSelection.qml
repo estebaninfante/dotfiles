@@ -16,6 +16,8 @@ Item {
   property real selH: 0
   property real pointerX: -1
   property real pointerY: -1
+  // Lógico → píxeles del archivo (el PNG/MP4 sale a resolución física).
+  property real pixelScale: 1
 
   readonly property bool hasSelection: regionMode && selW >= 1 && selH >= 1
   readonly property bool showCrosshair: regionMode && !dragging &&
@@ -149,7 +151,7 @@ Item {
     Text {
       id: sizeLabel
       anchors.centerIn: parent
-      text: Math.round(root.selW) + " × " + Math.round(root.selH)
+      text: Math.round(root.selW * root.pixelScale) + " × " + Math.round(root.selH * root.pixelScale)
       color: Color.foreground
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.caption
