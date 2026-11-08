@@ -40,7 +40,7 @@ Item {
       }
 
       Text {
-        text: root.video ? "Arrastrá para grabar la zona" : "Arrastrá para capturar la zona"
+        text: root.video ? "Selecciona la zona a grabar" : "Selecciona la zona a capturar"
         color: Color.menu.text
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.bodySmall

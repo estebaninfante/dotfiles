@@ -7,10 +7,10 @@ import Quickshell.Wayland
 import qs.Commons
 
 // PrintScreen: congela la pantalla al instante (el PNG lo toma capture-menu
-// antes de abrir esto) y entra directo en la selección de región: arrastrás el
-// recuadro y queda copiado. Un clic sin arrastre abre la barra (grabar pantalla,
-// grabar zona, capturar zona, ventana, pantalla completa). Shift+Print abre
-// directo la barra.
+// antes de abrir esto) y entra directo en la selección de región: se arrastra
+// el recuadro y queda copiado. Un clic sin arrastre abre la barra (grabar
+// pantalla, grabar zona, capturar zona, ventana, pantalla completa).
+// Shift+Print abre directo la barra.
 //
 // La imagen congelada y el recuadro viven en esta capa: no entran en el archivo
 // porque la captura se recorta del PNG original. Al grabar una zona se manda la
@@ -54,6 +54,19 @@ Item {
     NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
   }
 
+  // El plugin queda cargado entre capturas (keepLoaded), así que las
+  // coordenadas del recuadro sobreviven. Sin este reset, la siguiente captura
+  // abriría mostrando la selección anterior como si ya estuviera elegida.
+  function resetSelection() {
+    root.dragX0 = 0
+    root.dragY0 = 0
+    root.dragX1 = 0
+    root.dragY1 = 0
+    root.dragging = false
+    root.pointerX = -1
+    root.pointerY = -1
+  }
+
   function open(payloadJson) {
     var p = ({})
     try { p = JSON.parse(payloadJson || "{}") } catch (e) { p = ({}) }
@@ -65,9 +78,7 @@ Item {
     root.mode = String(p.defaultAction || "image") === "record" ? "menu" : "region"
     root.intent = "image"
     root.selectedIndex = 0
-    root.dragging = false
-    root.pointerX = -1
-    root.pointerY = -1
+    root.resetSelection()
     root.reveal = 0
     root.opened = true
     Qt.callLater(function() {
@@ -105,9 +116,7 @@ Item {
   function chooseRegion(kind) {
     root.mode = "region"
     root.intent = kind
-    root.dragging = false
-    root.pointerX = -1
-    root.pointerY = -1
+    root.resetSelection()
     keyCatcher.forceActiveFocus()
   }
 
