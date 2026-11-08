@@ -39,11 +39,24 @@ Item {
         font.pixelSize: Style.font.icon
       }
 
-      Text {
-        text: root.video ? "Selecciona la zona a grabar" : "Selecciona la zona a capturar"
-        color: Color.menu.text
-        font.family: Style.font.menuFamily
-        font.pixelSize: Style.font.bodySmall
+      ColumnLayout {
+        spacing: 0
+
+        Text {
+          text: root.video ? "Selecciona la zona a grabar" : "Selecciona la zona a capturar"
+          color: Color.menu.text
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.bodySmall
+        }
+
+        Text {
+          text: root.video
+            ? "Clic en una ventana: grabarla · Clic en el fondo: menú"
+            : "Clic en una ventana: capturarla · Clic en el fondo: menú"
+          color: Util.alpha(Color.menu.text, 0.5)
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.caption
+        }
       }
 
       Rectangle {

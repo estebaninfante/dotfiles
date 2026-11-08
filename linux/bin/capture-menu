@@ -41,8 +41,10 @@ if pgrep -f '^gpu-screen-recorder' >/dev/null; then
 fi
 
 # Geometría de la ventana activa ANTES del overlay (después el foco es del
-# overlay). Se guarda en píxeles del PNG: lógico * escala del monitor.
+# overlay). win_crop va en píxeles del PNG (lógico * escala del monitor);
+# win_region queda en coordenadas lógicas, que es lo que pide el grabador.
 win_crop=""
+win_region=""
 active=$(hyprctl activewindow -j 2>/dev/null)
 if [[ -n $active ]] && jq -e '.at != null and .size != null' >/dev/null 2>&1 <<<"$active"; then
     read -r wx wy ww wh monitor_id < <(jq -r '"\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.monitor)"' <<<"$active")
@@ -51,6 +53,7 @@ if [[ -n $active ]] && jq -e '.at != null and .size != null' >/dev/null 2>&1 <<<
     [[ -n $scale && $scale != null ]] || scale=1
     win_crop=$(awk -v s="$scale" -v x="$wx" -v y="$wy" -v w="$ww" -v h="$wh" \
         'BEGIN { printf "%d,%d,%d,%d", x*s, y*s, w*s, h*s }')
+    win_region="${ww}x${wh}+${wx}+${wy}"
 fi
 
 # Congelar primero: el PNG queda sin overlay.
@@ -117,6 +120,36 @@ copy_region() {
     copy_png "$STATE_DIR/crop.png" "${w}×${h}"
 }
 
+# Ventana visible bajo un punto lógico global. Devuelve "WxH+X+Y|monitor" con
+# la ventana más reciente en foco (proxy del z-order de Hyprland, que no
+# expone el orden de apilado). Vacío si el clic cayó en el escritorio.
+window_at() {
+    local x=$1 y=$2 ws
+    ws=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // 0')
+    hyprctl clients -j 2>/dev/null | jq -r --argjson x "$x" --argjson y "$y" --argjson ws "$ws" '
+        [ .[] | select(.mapped and (.hidden | not) and (.workspace.id == $ws))
+          | select(.at != null and .size != null)
+          | select(.at[0] <= $x and $x < (.at[0] + .size[0]) and
+                   .at[1] <= $y and $y < (.at[1] + .size[1]))
+          | { g: "\(.size[0])x\(.size[1])+\(.at[0])+\(.at[1])",
+              m: .monitor,
+              f: (.focusHistoryID // 999) } ]
+        | sort_by(.f) | if length > 0 then "\(.[0].g)|\(.[0].m)" else empty end'
+}
+
+monitor_scale() {
+    hyprctl monitors -j 2>/dev/null |
+        jq -r --argjson id "${1:-0}" '.[] | select(.id == $id) | .scale' | head -1
+}
+
+# Geometría lógica de ventana → píxeles del PNG congelado.
+logical_to_crop() {
+    local geom=$1 scale=$2 w h x y
+    IFS=x+ read -r w h x y <<<"$geom"
+    awk -v s="$scale" -v x="$x" -v y="$y" -v w="$w" -v h="$h" \
+        'BEGIN { printf "%d,%d,%d,%d", x*s, y*s, w*s, h*s }'
+}
+
 case "$key" in
     record)
         # Ocultar el overlay antes de arrancar: no debe quedar filmado.
@@ -143,6 +176,46 @@ case "$key" in
         sleep 0.12
         exec 9>&-
         exec ~/.local/bin/screenrecord-toggle --region "${gw}x${gh}+${gx}+${gy}"
+        ;;
+    recordwindow)
+        if [[ -n $win_region ]]; then
+            wait_overlay_gone
+            sleep 0.12
+            exec 9>&-
+            exec ~/.local/bin/screenrecord-toggle --region "$win_region"
+        else
+            nofd notify -u critical -g "󰅚" --app-name shot \
+                "Grabación fallida" "No hay ventana activa." 2>/dev/null || true
+        fi
+        ;;
+    windowat:*)
+        IFS=, read -r cx cy <<<"${key#windowat:}"
+        hit=$(window_at "$cx" "$cy")
+        if [[ -z $hit ]]; then
+            # Clic en el escritorio: abrir la barra (grabar pantalla/zona/ventana).
+            wait_overlay_gone
+            exec 9>&-
+            exec ~/.local/bin/capture-menu record
+        fi
+        geom=${hit%|*}
+        scale=$(monitor_scale "${hit##*|}")
+        [[ -n $scale && $scale != null ]] || scale=1
+        read -r px py pw ph < <(logical_to_crop "$geom" "$scale")
+        copy_region "$px" "$py" "$pw" "$ph"
+        ;;
+    recordwindowat:*)
+        IFS=, read -r cx cy <<<"${key#recordwindowat:}"
+        hit=$(window_at "$cx" "$cy")
+        if [[ -z $hit ]]; then
+            wait_overlay_gone
+            exec 9>&-
+            exec ~/.local/bin/capture-menu record
+        fi
+        geom=${hit%|*}
+        wait_overlay_gone
+        sleep 0.12
+        exec 9>&-
+        exec ~/.local/bin/screenrecord-toggle --region "$geom"
         ;;
     window)
         if [[ -n $win_crop ]]; then

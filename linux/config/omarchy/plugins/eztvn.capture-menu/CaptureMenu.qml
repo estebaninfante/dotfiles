@@ -43,11 +43,12 @@ Item {
   readonly property real selH: Math.abs(dragY1 - dragY0)
 
   readonly property var rows: [
-    { key: "record",     icon: "󰻂", label: "Pantalla", caption: "grabar",   record: true },
-    { key: "videoregion", icon: "󰹑", label: "Zona",     caption: "grabar",   record: true },
-    { key: "region",     icon: "󰹑", label: "Zona",     caption: "capturar", record: false },
-    { key: "window",     icon: "󰖲", label: "Ventana",  caption: "capturar", record: false },
-    { key: "full",       icon: "󰹹", label: "Pantalla", caption: "capturar", record: false }
+    { key: "record",       icon: "󰻂", label: "Pantalla", caption: "grabar",   record: true },
+    { key: "videoregion",  icon: "󰹑", label: "Zona",     caption: "grabar",   record: true },
+    { key: "recordwindow", icon: "󰖲", label: "Ventana",  caption: "grabar",   record: true },
+    { key: "region",       icon: "󰹑", label: "Zona",     caption: "capturar", record: false },
+    { key: "window",       icon: "󰖲", label: "Ventana",  caption: "capturar", record: false },
+    { key: "full",         icon: "󰹹", label: "Pantalla", caption: "capturar", record: false }
   ]
 
   Behavior on reveal {
@@ -143,14 +144,17 @@ Item {
   }
 
   function completeRegion() {
+    var sx = panel.screen ? panel.screen.x : 0
+    var sy = panel.screen ? panel.screen.y : 0
+    // Clic sin arrastre: la ventana bajo el puntero. Si no hay ninguna, el
+    // script reabre la barra (grabar pantalla / zona / ventana).
     if (root.selW < 4 || root.selH < 4) {
-      root.mode = "menu"
+      var prefix = root.intent === "video" ? "recordwindowat:" : "windowat:"
+      root.finish(prefix + Math.round(sx + root.dragX1) + "," + Math.round(sy + root.dragY1))
       return
     }
     if (root.intent === "video") {
       // gpu-screen-recorder espera la geometría lógica global del compositor.
-      var sx = panel.screen ? panel.screen.x : 0
-      var sy = panel.screen ? panel.screen.y : 0
       var vx = Math.max(0, Math.round(sx + root.selX))
       var vy = Math.max(0, Math.round(sy + root.selY))
       var vw = Math.round(root.selW)
@@ -221,7 +225,7 @@ Item {
         else root.completeRegion()
       }
       Keys.onPressed: function(event) {
-        if (root.mode === "menu" && event.key >= Qt.Key_1 && event.key <= Qt.Key_5) {
+        if (root.mode === "menu" && event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
           root.activate(event.key - Qt.Key_1)
           event.accepted = true
         } else if (root.mode === "region" && event.key === Qt.Key_V) {
