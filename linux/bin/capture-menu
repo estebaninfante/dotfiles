@@ -77,9 +77,21 @@ if ! omarchy-shell shell summon eztvn.capture-menu "$payload" >/dev/null 2>&1; t
     exit 1
 fi
 
-# Espera la tecla (o la cancelación) desde el plugin.
+# Espera la tecla (o la cancelación) desde el plugin. Si el overlay desaparece
+# sin dejar `done` (recarga o reinicio del shell), se aborta: si no, el lock
+# quedaría tomado 90 s y la próxima captura saldría muda.
+overlay_seen=0
+tick=0
 for _ in $(seq 1 1800); do
     [[ -e $done_file ]] && break
+    tick=$((tick + 1))
+    if (( tick % 5 == 0 )); then
+        if hyprctl layers -j 2>/dev/null | grep -q '"namespace": *"capture-menu"'; then
+            overlay_seen=1
+        elif ((overlay_seen)); then
+            exit 0
+        fi
+    fi
     sleep 0.05
 done
 [[ -e $done_file ]] || exit 0

@@ -44,11 +44,11 @@ Item {
 
   readonly property var rows: [
     { key: "record",       icon: "󰻂", label: "Pantalla", caption: "grabar",   record: true },
-    { key: "videoregion",  icon: "󰹑", label: "Zona",     caption: "grabar",   record: true },
+    { key: "videoregion",  icon: "󰹵", label: "Zona",     caption: "grabar",   record: true },
     { key: "recordwindow", icon: "󰖲", label: "Ventana",  caption: "grabar",   record: true },
-    { key: "region",       icon: "󰹑", label: "Zona",     caption: "capturar", record: false },
+    { key: "region",       icon: "󰹵", label: "Zona",     caption: "capturar", record: false },
     { key: "window",       icon: "󰖲", label: "Ventana",  caption: "capturar", record: false },
-    { key: "full",         icon: "󰹹", label: "Pantalla", caption: "capturar", record: false }
+    { key: "full",         icon: "󰹞", label: "Pantalla", caption: "capturar", record: false }
   ]
 
   Behavior on reveal {
@@ -90,7 +90,9 @@ Item {
   }
 
   function close() {
-    root.opened = false
+    // El shell puede cerrar el panel (recarga, apagado): hay que dejar el
+    // archivo de cancelación para que capture-menu suelte el lock al instante.
+    root.finish(null)
   }
 
   function finish(key) {
