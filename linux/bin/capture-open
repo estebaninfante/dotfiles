@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Acción al hacer clic en el aviso de una captura o video ya guardado:
+# vuelve a dejar el archivo en el portapapeles y abre el explorador con él
+# seleccionado. Lo invoca el propio notificador (`--exec`), no el usuario.
+#
+# Uso: capture-open image|video <ruta>
+
+set -u
+
+kind="${1:-image}"
+file="${2:-}"
+[[ -n $file && -f $file ]] || exit 1
+
+case "$kind" in
+    video)
+        uri=$(jq -rn --arg f "$file" '$f | split("/") | map(@uri) | join("/")') || exit 1
+        printf 'file://%s\r\n' "$uri" | wl-copy --type text/uri-list || exit 1
+        ;;
+    *)
+        wl-copy --type image/png <"$file" || exit 1
+        ;;
+esac
+
+# Con el archivo seleccionado cuando el explorador lo soporta.
+if command -v nautilus >/dev/null 2>&1; then
+    uri="file://$(jq -rn --arg f "$file" '$f | split("/") | map(@uri) | join("/")')"
+    exec nautilus --select "$uri"
+elif command -v dolphin >/dev/null 2>&1; then
+    exec dolphin --select "$file"
+elif command -v nemo >/dev/null 2>&1; then
+    exec nemo "$(dirname "$file")"
+else
+    exec xdg-open "$(dirname "$file")"
+fi

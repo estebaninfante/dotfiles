@@ -6,11 +6,10 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 
-// PrintScreen: congela la pantalla (PNG de capture-menu) y entra directo en la
-// selección de región: al arrastrar el recuadro queda copiado. Un clic sobre
-// una ventana la captura o graba (según Imagen/Grabar); un clic en el
-// escritorio abre la barra (grabar pantalla/zona/ventana, capturar
-// zona/ventana/pantalla). Shift+Print abre directo la barra.
+// PrintScreen y Shift+Print abren la misma barra: capturar o grabar pantalla,
+// zona o ventana. Al elegir zona se pasa a la selección (la barra se oculta al
+// arrastrar); un clic sobre una ventana la captura o graba; un clic en el fondo
+// vuelve a la barra.
 //
 // El recuadro vive en esta capa, así que no entra en la captura: el archivo se
 // recorta del PNG original. Al grabar se manda geometría lógica y
@@ -31,10 +30,12 @@ Item {
   property real dragX1: 0
   property real dragY1: 0
   property bool dragging: false
+  // Hubo un press real: distingue un clic (ventana) de Enter sin selección.
+  property bool hasPress: false
   property real pointerX: -1
   property real pointerY: -1
 
-  // 0 = recién abierto, 1 = asentado. La barra y la pista entran con esto.
+  // 0 = recién abierto, 1 = asentado. La barra entra con esto.
   property real reveal: 0
 
   readonly property real selX: Math.min(dragX0, dragX1)
@@ -64,6 +65,7 @@ Item {
     root.dragX1 = 0
     root.dragY1 = 0
     root.dragging = false
+    root.hasPress = false
     root.pointerX = -1
     root.pointerY = -1
   }
@@ -74,11 +76,11 @@ Item {
     root.selectionFile = String(p.selectionFile || "")
     root.doneFile = String(p.doneFile || "")
     root.imagePath = String(p.imagePath || "")
-    // Print (imagen) abre directo en selección de región; Shift+Print (grabar)
-    // abre la barra directamente.
-    root.mode = String(p.defaultAction || "image") === "record" ? "menu" : "region"
+    // Una sola barra para Print y Shift+Print; sólo cambia la fila inicial:
+    // capturar zona (Print) o grabar pantalla (Shift+Print).
+    root.mode = "menu"
     root.intent = "image"
-    root.selectedIndex = 0
+    root.selectedIndex = String(p.defaultAction || "image") === "record" ? 0 : 3
     root.resetSelection()
     root.reveal = 0
     root.opened = true
@@ -123,11 +125,6 @@ Item {
     keyCatcher.forceActiveFocus()
   }
 
-  function setIntent(kind) {
-    root.intent = kind
-    keyCatcher.forceActiveFocus()
-  }
-
   function activate(index) {
     if (index < 0 || index >= root.rows.length) return
     var key = root.rows[index].key
@@ -149,8 +146,9 @@ Item {
     var sx = panel.screen ? panel.screen.x : 0
     var sy = panel.screen ? panel.screen.y : 0
     // Clic sin arrastre: la ventana bajo el puntero. Si no hay ninguna, el
-    // script reabre la barra (grabar pantalla / zona / ventana).
+    // script reabre la barra. Sin un press real (Enter) no hace nada.
     if (root.selW < 4 || root.selH < 4) {
+      if (!root.hasPress) return
       var prefix = root.intent === "video" ? "recordwindowat:" : "windowat:"
       root.finish(prefix + Math.round(sx + root.dragX1) + "," + Math.round(sy + root.dragY1))
       return
@@ -227,11 +225,8 @@ Item {
         else root.completeRegion()
       }
       Keys.onPressed: function(event) {
-        if (root.mode === "menu" && event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
+        if (event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
           root.activate(event.key - Qt.Key_1)
-          event.accepted = true
-        } else if (root.mode === "region" && event.key === Qt.Key_V) {
-          root.setIntent(root.intent === "video" ? "image" : "video")
           event.accepted = true
         }
       }
@@ -270,6 +265,7 @@ Item {
           root.dragY1 = mouse.y
           root.pointerX = mouse.x
           root.pointerY = mouse.y
+          root.hasPress = true
           root.dragging = true
         }
         onReleased: function(mouse) {
@@ -281,26 +277,23 @@ Item {
         }
       }
 
-      CaptureRegionHint {
-        visible: root.mode === "region"
-        reveal: root.reveal
-        intent: root.intent
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: Style.bar.sizeHorizontal + Style.space(12)
-        onIntentPicked: function(kind) { root.setIntent(kind) }
-      }
-
       CaptureToolbar {
-        visible: root.mode === "menu"
+        // La misma barra en menú y en región: se oculta al arrastrar para no
+        // tapar la zona que se está eligiendo.
+        visible: root.mode === "menu" || !root.dragging
         reveal: root.reveal
         rows: root.rows
-        currentIndex: root.selectedIndex
+        regionMode: root.mode === "region"
+        currentIndex: root.mode === "menu"
+          ? root.selectedIndex
+          : (root.intent === "video" ? 1 : 3)
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: Style.bar.sizeHorizontal + Style.space(12)
         onActivated: function(index) { root.activate(index) }
-        onHovered: function(index) { root.selectedIndex = index }
+        onHovered: function(index) {
+          if (root.mode === "menu") root.selectedIndex = index
+        }
       }
     }
   }

@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# PrintScreen: congela la pantalla al instante y entra directo en la selección
-# de región (plugin eztvn.capture-menu); se arrastra el recuadro y queda copiado.
-# Un clic sobre una ventana la captura (o la graba, según Imagen/Grabar); un
-# clic en el escritorio abre la barra (grabar pantalla, grabar zona, grabar
-# ventana, capturar zona, ventana, pantalla completa); Shift+Print abre la barra
-# con Grabar seleccionado.
+# PrintScreen y Shift+Print abren la misma barra de captura (plugin
+# eztvn.capture-menu): capturar o grabar pantalla, zona o ventana. Print deja
+# preseleccionada la captura de zona; Shift+Print, la grabación de pantalla.
+# Al elegir zona se arrastra el recuadro o se hace clic en una ventana.
 #
 # La imagen congelada es un PNG que saca este script ANTES de mostrar el
 # overlay, así que ni la barra ni el resaltado entran en la captura: las
@@ -24,6 +22,10 @@ STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/capture-menu"
 mkdir -p "$STATE_DIR"
 exec 9>"$STATE_DIR/lock"
 flock -n 9 || exit 0
+
+# Las capturas se guardan para que el aviso pueda abrirlas en el explorador.
+[[ -f ~/.config/user-dirs.dirs ]] && source ~/.config/user-dirs.dirs
+SHOTS_DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}"
 
 # wl-copy/notify daemonizan y heredarían fd 9: sin esto el lock queda tomado
 # para siempre y la próxima captura sale muda.
@@ -108,11 +110,25 @@ wait_overlay_gone() {
 }
 
 copy_png() {
-    local file="$1" label="$2"
+    local file="$1" label="$2" dest n=1
     [[ -s $file ]] || return 1
-    nofd wl-copy --type image/png <"$file"
-    nofd notify -g "󰹑" -t 3000 --app-name shot --image "$file" \
-        "Captura copiada" "$label"
+    mkdir -p "$SHOTS_DIR"
+    dest="$SHOTS_DIR/captura-$(date +%F_%H-%M-%S).png"
+    while [[ -e $dest ]]; do
+        dest="$SHOTS_DIR/captura-$(date +%F_%H-%M-%S)-$n.png"
+        n=$((n + 1))
+    done
+    cp -f "$file" "$dest" || return 1
+    nofd wl-copy --type image/png <"$dest"
+    if command -v omarchy-notification-send >/dev/null 2>&1; then
+        nofd omarchy-notification-send --app-name shot -g "󰹑" -t 6000 \
+            --image "$dest" \
+            "Captura copiada" "$label · Clic: copiar y abrir" \
+            --exec ~/.local/bin/capture-open image "$dest"
+    else
+        nofd notify -g "󰹑" -t 3000 --app-name shot --image "$dest" \
+            "Captura copiada" "$label"
+    fi
 }
 
 # Coordenadas del PNG congelado → recorte a clipboard.

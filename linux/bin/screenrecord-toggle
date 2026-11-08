@@ -38,8 +38,9 @@ copy_video() {
     [[ -n $file && -f $file ]] || return 0
     uri=$(jq -rn --arg f "$file" '$f | split("/") | map(@uri) | join("/")') || return 0
     printf 'file://%s\r\n' "$uri" | wl-copy --type text/uri-list || return 0
-    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u low -t 4000 \
-        "Video copiado al portapapeles" "$file"
+    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u low -t 6000 \
+        "Video copiado al portapapeles" "$(basename "$file") · Clic: copiar y abrir" \
+        --exec ~/.local/bin/capture-open video "$file"
 }
 
 # Omarchy decide qué capturar llamando a `omarchy-capture-region` (su selector
@@ -67,8 +68,18 @@ start_region_recording() {
 
 if pgrep -f "^gpu-screen-recorder" >/dev/null; then
     # --stop-recording imprime la ruta final (ya reencodeada) en stdout cuando
-    # termina de guardar; nos quedamos con la última línea no vacía.
-    saved=$("$REC" --stop-recording)
+    # termina de guardar; nos quedamos con la última línea no vacía. Silenciamos
+    # el aviso "Screen recording saved" de Omarchy (abría mpv): el nuestro ya
+    # copia el video y abre Archivos al hacer clic. Los errores sí pasan.
+    shim_dir="$STATE_DIR/stop-notify"
+    mkdir -p "$shim_dir"
+    printf '%s\n' '#!/usr/bin/env bash' \
+        'for arg in "$@"; do [[ $arg == "Screen recording saved" ]] && exit 0; done' \
+        'exec /usr/bin/omarchy-notification-send "$@"' \
+        >"$shim_dir/omarchy-notification-send"
+    chmod +x "$shim_dir/omarchy-notification-send"
+    saved=$(PATH="$shim_dir:$PATH" "$REC" --stop-recording)
+    rm -f "$shim_dir/omarchy-notification-send"
     saved=$(printf '%s\n' "$saved" | awk 'NF { last = $0 } END { print last }')
     copy_video "$saved"
     exit 0

@@ -2,14 +2,16 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 
-// Barra flotante del menú de captura: cada acción con icono, nombre y para qué
-// sirve; el cursor y las flechas mueven la selección y Enter (o 1-5) la ejecuta.
+// Barra flotante única del menú de captura: cada acción con icono, nombre y
+// para qué sirve; el cursor y las flechas mueven la selección y Enter (o 1-6)
+// la ejecuta. En modo región se oculta al arrastrar y su pie explica el gesto.
 Item {
   id: root
 
   property var rows: []
   property int currentIndex: 0
   property real reveal: 0
+  property bool regionMode: false
   signal activated(int index)
   signal hovered(int index)
 
@@ -122,7 +124,9 @@ Item {
 
       Text {
         Layout.alignment: Qt.AlignHCenter
-        text: "← →  mover    ·    Enter  aceptar    ·    Esc  cancelar"
+        text: root.regionMode
+          ? "Arrastra una zona o clic en una ventana  ·  Esc cancela"
+          : "← →  mover    ·    Enter  aceptar    ·    Esc  cancelar"
         color: Util.alpha(Color.menu.text, 0.45)
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.caption
