@@ -2,7 +2,8 @@
 # PrintScreen y Shift+Print congelan la pantalla y entran directo a la zona:
 # Print captura, Shift+Print graba. Arrastrar toma esa área; un clic toma la
 # ventana bajo el puntero. La barra cambia entre capturar y grabar y ofrece la
-# ventana activa o la pantalla completa.
+# pantalla completa; la ventana es un clic dentro de la zona, no una opción
+# aparte.
 #
 # La imagen congelada es un PNG que saca este script ANTES de mostrar el
 # overlay, así que ni la barra ni el resaltado entran en la captura: las
@@ -41,22 +42,6 @@ rm -f "$frame" "$selection_file" "$done_file"
 if pgrep -f '^gpu-screen-recorder' >/dev/null; then
     exec 9>&-
     exec ~/.local/bin/screenrecord-toggle
-fi
-
-# Geometría de la ventana activa ANTES del overlay (después el foco es del
-# overlay). win_crop va en píxeles del PNG (lógico * escala del monitor);
-# win_region queda en coordenadas lógicas, que es lo que pide el grabador.
-win_crop=""
-win_region=""
-active=$(hyprctl activewindow -j 2>/dev/null)
-if [[ -n $active ]] && jq -e '.at != null and .size != null' >/dev/null 2>&1 <<<"$active"; then
-    read -r wx wy ww wh monitor_id < <(jq -r '"\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.monitor)"' <<<"$active")
-    scale=$(hyprctl monitors -j 2>/dev/null |
-        jq -r --argjson id "$monitor_id" '.[] | select(.id == $id) | .scale' | head -1)
-    [[ -n $scale && $scale != null ]] || scale=1
-    win_crop=$(awk -v s="$scale" -v x="$wx" -v y="$wy" -v w="$ww" -v h="$wh" \
-        'BEGIN { printf "%d,%d,%d,%d", x*s, y*s, w*s, h*s }')
-    win_region="${ww}x${wh}+${wx}+${wy}"
 fi
 
 # Congelar primero: el PNG queda sin overlay.
@@ -206,17 +191,6 @@ case "$key" in
         exec 9>&-
         exec ~/.local/bin/screenrecord-toggle --region "${gw}x${gh}+${gx}+${gy}"
         ;;
-    recordwindow)
-        if [[ -n $win_region ]]; then
-            wait_overlay_gone
-            sleep 0.12
-            exec 9>&-
-            exec ~/.local/bin/screenrecord-toggle --region "$win_region"
-        else
-            nofd notify -u critical -g "󰅚" --app-name shot \
-                "Grabación fallida" "No hay ventana activa." 2>/dev/null || true
-        fi
-        ;;
     windowat:*)
         IFS=, read -r cx cy <<<"${key#windowat:}"
         hit=$(window_at "$cx" "$cy")
@@ -238,15 +212,6 @@ case "$key" in
         sleep 0.12
         exec 9>&-
         exec ~/.local/bin/screenrecord-toggle --region "$geom"
-        ;;
-    window)
-        if [[ -n $win_crop ]]; then
-            IFS=, read -r wx_px wy_px ww_px wh_px <<<"$win_crop"
-            copy_region "$wx_px" "$wy_px" "$ww_px" "$wh_px"
-        else
-            nofd notify -u critical -g "󰅚" --app-name shot \
-                "Captura fallida" "No hay ventana activa."
-        fi
         ;;
     full)
         magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || cp "$frame" "$STATE_DIR/full.png"

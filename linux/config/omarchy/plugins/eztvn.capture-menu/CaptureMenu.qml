@@ -7,8 +7,9 @@ import Quickshell.Wayland
 import qs.Commons
 
 // PrintScreen entra directo a capturar y Shift+Print a grabar: en ambos casos
-// se puede clicar una ventana o dibujar un área de inmediato. La barra sólo
-// cambia el modo y ofrece las otras zonas (ventana activa / pantalla completa).
+// se puede clicar una ventana o dibujar un área de inmediato. La ventana es un
+// caso de Zona (clic sobre ella); la barra sólo cambia el modo y ofrece la
+// pantalla completa.
 //
 // El recuadro vive en esta capa, así que no entra en el archivo: la imagen se
 // recorta del PNG congelado y el video usa la geometría lógica con la que
@@ -44,7 +45,6 @@ Item {
 
   readonly property var rows: [
     { key: "region", icon: "󰹵", label: "Zona" },
-    { key: "window", icon: "󰖲", label: "Ventana" },
     { key: "full",   icon: "󰹞", label: "Pantalla" }
   ]
 
@@ -124,8 +124,6 @@ Item {
     var key = root.rows[index].key
     if (key === "region") {
       root.chooseRegion()
-    } else if (key === "window") {
-      root.finish(root.intent === "video" ? "recordwindow" : "window")
     } else if (key === "full") {
       root.finish(root.intent === "video" ? "record" : "full")
     }
@@ -218,7 +216,7 @@ Item {
         if (event.key === Qt.Key_Tab) {
           root.toggleMode()
           event.accepted = true
-        } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_3) {
+        } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_2) {
           root.activate(event.key - Qt.Key_1)
           event.accepted = true
         }
