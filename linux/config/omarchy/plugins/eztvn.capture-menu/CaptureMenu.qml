@@ -6,15 +6,15 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 
-// PrintScreen: congela la pantalla al instante (el PNG lo toma capture-menu
-// antes de abrir esto) y entra directo en la selección de región: se arrastra
-// el recuadro y queda copiado. Un clic sin arrastre abre la barra (grabar
-// pantalla, grabar zona, capturar zona, ventana, pantalla completa).
-// Shift+Print abre directo la barra.
+// PrintScreen: congela la pantalla (PNG de capture-menu) y entra directo en la
+// selección de región: al arrastrar el recuadro queda copiado. Un clic sobre
+// una ventana la captura o graba (según Imagen/Grabar); un clic en el
+// escritorio abre la barra (grabar pantalla/zona/ventana, capturar
+// zona/ventana/pantalla). Shift+Print abre directo la barra.
 //
-// La imagen congelada y el recuadro viven en esta capa: no entran en el archivo
-// porque la captura se recorta del PNG original. Al grabar una zona se manda la
-// geometría lógica (la misma que slurp) y screenrecord-toggle filma sólo eso.
+// El recuadro vive en esta capa, así que no entra en la captura: el archivo se
+// recorta del PNG original. Al grabar se manda geometría lógica y
+// screenrecord-toggle filma sólo esa zona.
 Item {
   id: root
 

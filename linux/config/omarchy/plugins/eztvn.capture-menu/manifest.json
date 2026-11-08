@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "eztvn.capture-menu",
   "name": "Capture menu",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "eztvn",
   "license": "MIT",
-  "description": "Barra flotante de PrintScreen: capturar (zona, ventana, pantalla) o grabar zona/pantalla, con copia automática al portapapeles",
+  "description": "Barra flotante de PrintScreen: capturar o grabar zona, ventana y pantalla (clic en una ventana o arrastre), con copia automática al portapapeles",
   "kinds": [
     "menu"
   ],
