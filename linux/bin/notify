@@ -27,6 +27,7 @@ if command -v omarchy-notification-send >/dev/null 2>&1; then
       --urgency|-u)     args+=(-u "${2-}") ;;
       --expire-time|-t) args+=(-t "${2-}") ;;
       --icon|-i)        args+=(-i "${2-}") ;;
+      --image)          args+=(--image "${2-}") ;;
       --replace-id|-r)  args+=(-r "${2-}") ;;
       --)               shift; args+=("$@"); break ;;
       *)                args+=("$1"); pos=$((pos + 1)); n=1 ;;

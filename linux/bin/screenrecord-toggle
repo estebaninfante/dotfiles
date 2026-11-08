@@ -1,27 +1,62 @@
 #!/usr/bin/env bash
-# Toggle de grabación de pantalla completa (pantalla completa + audio del escritorio).
+# Toggle de grabación de pantalla (pantalla completa o zona) + audio del escritorio.
 #
-# Primera pulsada: arranca la grabación y muestra un aviso breve para que se
-# note que está grabando. Segunda pulsada: frena, deja que Omarchy muestre la
-# notificación de "grabación guardada" con la miniatura y copia la ruta del
-# video al portapapeles.
+# Primera pulsada: arranca la grabación y deja un aviso breve para que se note.
+# Segunda pulsada: frena, deja que Omarchy muestre "grabación guardada" con la
+# miniatura y copia el VIDEO (como archivo) al portapapeles.
 #
-# Se usa desde los atajos Súper+Mayús+K y F10 (sólo desktop) — ver hypr/bindings.lua.
+# Uso:
+#   screenrecord-toggle                 pantalla completa
+#   screenrecord-toggle --region WxH+X+Y   sólo esa zona (coordenadas lógicas,
+#                                          las mismas que devuelve slurp)
+#   screenrecord-toggle                 (grabando) detiene
+#
+# Se usa desde los atajos Súper+Mayús+K y F10, y desde capture-menu al grabar
+# una región — ver hypr/bindings.lua.
 
 set -u
 
 # Ruta del binario de Omarchy (por si cambia de nombre en el futuro).
 REC="omarchy-capture-screenrecording"
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/capture-menu"
 
-# Deja la ruta absoluta del video como texto plano. wl-copy sólo puede ofrecer
-# un MIME a la vez, así que se copia la ruta (se pega en cualquier lado) en vez
-# del archivo (que sólo entienden apps que aceptan text/uri-list).
-copy_path() {
-    local file="$1"
+region=""
+if [[ ${1:-} == "--region" ]]; then
+    region="${2:-}"
+    if [[ ! $region =~ ^[0-9]+x[0-9]+\+[0-9]+\+[0-9]+$ ]]; then
+        printf 'screenrecord-toggle: región inválida: %s\n' "$region" >&2
+        exit 2
+    fi
+fi
+
+# Deja el video como archivo en el portapapeles (text/uri-list): se pega en el
+# gestor de archivos y en las apps que aceptan archivos arrastrados. wl-copy
+# sólo puede ofrecer un MIME a la vez, así que no se copia además la ruta; el
+# aviso sí la muestra.
+copy_video() {
+    local file="$1" uri
     [[ -n $file && -f $file ]] || return 0
-    printf '%s' "$file" | wl-copy --type text/plain || return 0
-    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u normal -t 5000 \
-        "Ruta copiada al portapapeles" "$file"
+    uri=$(jq -rn --arg f "$file" '$f|@uri') || return 0
+    printf 'file://%s\r\n' "$uri" | wl-copy --type text/uri-list || return 0
+    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u low -t 4000 \
+        "Video copiado al portapapeles" "$file"
+}
+
+# Omarchy decide qué capturar llamando a `omarchy-capture-region` (su selector
+# slurp). Para grabar una zona ya elegida en capture-menu se adelanta en PATH un
+# selector de una línea que devuelve esa geometría: así el resto del flujo de
+# Omarchy (audio, nombre, indicador, recorte inicial, loudnorm, miniatura) se
+# reutiliza tal cual en vez de duplicarlo aquí.
+start_region_recording() {
+    local shim_dir="$STATE_DIR/picker" region_file="$STATE_DIR/region"
+    mkdir -p "$shim_dir"
+    printf '%s\n' "$region" >"$region_file"
+    printf '#!/usr/bin/env bash\ncat "$CAPTURE_MENU_REGION_FILE"\n' \
+        >"$shim_dir/omarchy-capture-region"
+    chmod +x "$shim_dir/omarchy-capture-region"
+    CAPTURE_MENU_REGION_FILE="$region_file" PATH="$shim_dir:$PATH" \
+        "$REC" --with-desktop-audio
+    rm -f "$shim_dir/omarchy-capture-region"
 }
 
 if pgrep -f "^gpu-screen-recorder" >/dev/null; then
@@ -29,18 +64,28 @@ if pgrep -f "^gpu-screen-recorder" >/dev/null; then
     # termina de guardar; nos quedamos con la última línea no vacía.
     saved=$("$REC" --stop-recording)
     saved=$(printf '%s\n' "$saved" | awk 'NF { last = $0 } END { print last }')
-    copy_path "$saved"
+    copy_video "$saved"
     exit 0
 fi
 
 # Arrancar en primer plano: la función vuelve cuando el archivo ya existe, así
 # el primer cuadro (la miniatura) no incluye el aviso.
-"$REC" --fullscreen --with-desktop-audio
+if [[ -n $region ]]; then
+    start_region_recording
+else
+    "$REC" --fullscreen --with-desktop-audio
+fi
 
 # Aviso sólo si de verdad quedó grabando.
 if pgrep -f "^gpu-screen-recorder" >/dev/null; then
+    scope="Pantalla completa"
+    title="Grabando pantalla"
+    if [[ -n $region ]]; then
+        scope="Zona ${region%%+*}"
+        title="Grabando zona"
+    fi
     omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u normal -t 5000 \
-        "Grabando pantalla" \
-        "Pantalla completa + audio del escritorio.
+        "$title" \
+        "${scope} + audio del escritorio.
 Detener: PrintScreen o Súper + Mayús + K."
 fi

@@ -8,10 +8,13 @@ import qs.Commons
 
 // PrintScreen: congela la pantalla al instante (el PNG lo toma capture-menu
 // antes de abrir esto) y entra directo en la selección de región: arrastrás el
-// recuadro y queda copiado, sin pasar por ninguna barra. Un clic sin arrastre
-// abre la barra (región, ventana, pantalla, grabar). La imagen congelada y el
-// recuadro viven en esta capa: no entran en el archivo porque la captura se
-// recorta del PNG original.
+// recuadro y queda copiado. Un clic sin arrastre abre la barra (grabar pantalla,
+// grabar zona, capturar zona, ventana, pantalla completa). Shift+Print abre
+// directo la barra.
+//
+// La imagen congelada y el recuadro viven en esta capa: no entran en el archivo
+// porque la captura se recorta del PNG original. Al grabar una zona se manda la
+// geometría lógica (la misma que slurp) y screenrecord-toggle filma sólo eso.
 Item {
   id: root
 
@@ -20,6 +23,7 @@ Item {
   property string doneFile: ""
   property string imagePath: ""
   property string mode: "menu" // "menu" | "region"
+  property string intent: "image" // intención de la selección de región
   property int selectedIndex: 0
 
   property real dragX0: 0
@@ -27,6 +31,11 @@ Item {
   property real dragX1: 0
   property real dragY1: 0
   property bool dragging: false
+  property real pointerX: -1
+  property real pointerY: -1
+
+  // 0 = recién abierto, 1 = asentado. La barra y la pista entran con esto.
+  property real reveal: 0
 
   readonly property real selX: Math.min(dragX0, dragX1)
   readonly property real selY: Math.min(dragY0, dragY1)
@@ -34,11 +43,16 @@ Item {
   readonly property real selH: Math.abs(dragY1 - dragY0)
 
   readonly property var rows: [
-    { key: "record", icon: "󰻂", label: "Grabar" },
-    { key: "region", icon: "󰹑", label: "Región" },
-    { key: "window", icon: "󰖲", label: "Ventana" },
-    { key: "full",   icon: "󰹹", label: "Pantalla" }
+    { key: "record",     icon: "󰻂", label: "Pantalla", caption: "grabar",   record: true },
+    { key: "videoregion", icon: "󰹑", label: "Zona",     caption: "grabar",   record: true },
+    { key: "region",     icon: "󰹑", label: "Zona",     caption: "capturar", record: false },
+    { key: "window",     icon: "󰖲", label: "Ventana",  caption: "capturar", record: false },
+    { key: "full",       icon: "󰹹", label: "Pantalla", caption: "capturar", record: false }
   ]
+
+  Behavior on reveal {
+    NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+  }
 
   function open(payloadJson) {
     var p = ({})
@@ -46,14 +60,21 @@ Item {
     root.selectionFile = String(p.selectionFile || "")
     root.doneFile = String(p.doneFile || "")
     root.imagePath = String(p.imagePath || "")
-    // Print (imagen) abre directo en selección de región: arrastrás y listo,
-    // sin pasar por la barra. Un clic sin arrastre abre la barra; Shift+Print
-    // (grabar) abre la barra directamente.
+    // Print (imagen) abre directo en selección de región; Shift+Print (grabar)
+    // abre la barra directamente.
     root.mode = String(p.defaultAction || "image") === "record" ? "menu" : "region"
-    root.selectedIndex = root.mode === "menu" ? 0 : 1
+    root.intent = "image"
+    root.selectedIndex = 0
     root.dragging = false
+    root.pointerX = -1
+    root.pointerY = -1
+    root.reveal = 0
     root.opened = true
-    Qt.callLater(function() { if (root.opened) keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() {
+      if (!root.opened) return
+      root.reveal = 1
+      keyCatcher.forceActiveFocus()
+    })
   }
 
   function close() {
@@ -81,19 +102,30 @@ Item {
     root.selectedIndex = (root.selectedIndex + delta + root.rows.length) % root.rows.length
   }
 
-  function activate(index) {
-    if (index < 0 || index >= root.rows.length) return
-    if (root.rows[index].key === "region") root.chooseRegion()
-    else root.finish(root.rows[index].key)
-  }
-
-  function chooseRegion() {
+  function chooseRegion(kind) {
     root.mode = "region"
+    root.intent = kind
     root.dragging = false
+    root.pointerX = -1
+    root.pointerY = -1
     keyCatcher.forceActiveFocus()
   }
 
-  // Coordenada de pantalla (lógica) → píxeles del PNG congelado.
+  function setIntent(kind) {
+    root.intent = kind
+    keyCatcher.forceActiveFocus()
+  }
+
+  function activate(index) {
+    if (index < 0 || index >= root.rows.length) return
+    var key = root.rows[index].key
+    if (key === "region") root.chooseRegion("image")
+    else if (key === "videoregion") root.chooseRegion("video")
+    else root.finish(key)
+  }
+
+  // Coordenada de la pantalla (lógica) → píxeles del PNG congelado. El PNG
+  // cubre el monitor completo, el overlay su tamaño lógico con escala Qt.
   function imageCoord(value, horizontal) {
     var natural = horizontal ? frozen.implicitWidth : frozen.implicitHeight
     var total = horizontal ? panel.width : panel.height
@@ -102,14 +134,25 @@ Item {
   }
 
   function completeRegion() {
+    if (root.selW < 4 || root.selH < 4) {
+      root.mode = "menu"
+      return
+    }
+    if (root.intent === "video") {
+      // gpu-screen-recorder espera la geometría lógica global del compositor.
+      var sx = panel.screen ? panel.screen.x : 0
+      var sy = panel.screen ? panel.screen.y : 0
+      var vx = Math.max(0, Math.round(sx + root.selX))
+      var vy = Math.max(0, Math.round(sy + root.selY))
+      var vw = Math.round(root.selW)
+      var vh = Math.round(root.selH)
+      root.finish("videoregion:" + vx + "," + vy + "," + vw + "," + vh)
+      return
+    }
     var x = root.imageCoord(root.selX, true)
     var y = root.imageCoord(root.selY, false)
     var w = root.imageCoord(root.selW, true)
     var h = root.imageCoord(root.selH, false)
-    if (w < 4 || h < 4) {
-      root.mode = "menu"
-      return
-    }
     root.finish("region:" + x + "," + y + "," + w + "," + h)
   }
 
@@ -139,9 +182,16 @@ Item {
       smooth: true
     }
 
-    Rectangle {
+    CaptureSelection {
       anchors.fill: parent
-      color: Qt.rgba(0, 0, 0, 0.18)
+      regionMode: root.mode === "region"
+      dragging: root.dragging
+      selX: root.selX
+      selY: root.selY
+      selW: root.selW
+      selH: root.selH
+      pointerX: root.pointerX
+      pointerY: root.pointerY
     }
 
     Item {
@@ -152,19 +202,29 @@ Item {
       Keys.onEscapePressed: root.finish(null)
       Keys.onLeftPressed: if (root.mode === "menu") root.move(-1)
       Keys.onRightPressed: if (root.mode === "menu") root.move(1)
-      Keys.onReturnPressed: if (root.mode === "menu") root.activate(root.selectedIndex)
-      Keys.onEnterPressed: if (root.mode === "menu") root.activate(root.selectedIndex)
+      Keys.onReturnPressed: {
+        if (root.mode === "menu") root.activate(root.selectedIndex)
+        else root.completeRegion()
+      }
+      Keys.onEnterPressed: {
+        if (root.mode === "menu") root.activate(root.selectedIndex)
+        else root.completeRegion()
+      }
       Keys.onPressed: function(event) {
-        if (root.mode === "menu" && event.key >= Qt.Key_1 && event.key <= Qt.Key_4) {
+        if (root.mode === "menu" && event.key >= Qt.Key_1 && event.key <= Qt.Key_5) {
           root.activate(event.key - Qt.Key_1)
+          event.accepted = true
+        } else if (root.mode === "region" && event.key === Qt.Key_V) {
+          root.setIntent(root.intent === "video" ? "image" : "video")
           event.accepted = true
         }
       }
 
-      // Clic fuera de la barra: cancela, como el menú de Windows.
+      // Clic fuera de la barra: cancela. Clic derecho: cancela en cualquier modo.
       MouseArea {
         anchors.fill: parent
         visible: root.mode === "menu"
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: root.finish(null)
       }
 
@@ -172,22 +232,32 @@ Item {
       MouseArea {
         anchors.fill: parent
         visible: root.mode === "region"
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.CrossCursor
+        hoverEnabled: true
 
+        onPositionChanged: function(mouse) {
+          root.pointerX = mouse.x
+          root.pointerY = mouse.y
+          if (!root.dragging) return
+          root.dragX1 = mouse.x
+          root.dragY1 = mouse.y
+        }
         onPressed: function(mouse) {
+          if (mouse.button === Qt.RightButton) {
+            root.finish(null)
+            return
+          }
           root.dragX0 = mouse.x
           root.dragY0 = mouse.y
           root.dragX1 = mouse.x
           root.dragY1 = mouse.y
+          root.pointerX = mouse.x
+          root.pointerY = mouse.y
           root.dragging = true
         }
-        onPositionChanged: function(mouse) {
-          if (!root.dragging) return
-          root.dragX1 = mouse.x
-          root.dragY1 = mouse.y
-        }
         onReleased: function(mouse) {
-          if (!root.dragging) return
+          if (mouse.button !== Qt.LeftButton || !root.dragging) return
           root.dragX1 = mouse.x
           root.dragY1 = mouse.y
           root.dragging = false
@@ -195,104 +265,26 @@ Item {
         }
       }
 
-      Rectangle {
-        visible: root.mode === "region" && root.dragging && root.selW > 0 && root.selH > 0
-        x: root.selX
-        y: root.selY
-        width: root.selW
-        height: root.selH
-        color: "transparent"
-        border.width: Math.max(1, Style.space(1))
-        border.color: Color.menu.selectedText
-      }
-
-      Rectangle {
-        id: card
-        visible: root.mode === "menu"
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: Style.bar.sizeHorizontal + Style.space(12)
-        width: rowLayout.implicitWidth + Style.space(10) * 2
-        height: rowLayout.implicitHeight + Style.space(8) * 2
-        radius: Style.cornerRadius
-        color: Color.menu.background
-        border.width: Math.max(1, Style.space(1))
-        border.color: Color.menu.border
-
-        RowLayout {
-          id: rowLayout
-          anchors.centerIn: parent
-          spacing: Style.space(4)
-
-          Repeater {
-            model: root.rows
-
-            delegate: Rectangle {
-              id: button
-              required property var modelData
-              required property int index
-
-              readonly property bool active: index === root.selectedIndex
-
-              width: Style.space(86)
-              height: Style.space(56)
-              radius: Math.max(0, Style.cornerRadius - Style.space(4))
-              color: button.active ? Color.menu.selectedBackground : "transparent"
-
-              ColumnLayout {
-                anchors.centerIn: parent
-                spacing: Style.space(2)
-
-                Text {
-                  Layout.alignment: Qt.AlignHCenter
-                  text: button.modelData.icon
-                  color: button.active ? Color.menu.selectedText : Color.menu.text
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.iconLarge
-                }
-
-                Text {
-                  Layout.alignment: Qt.AlignHCenter
-                  text: button.modelData.label
-                  color: button.active ? Color.menu.selectedText : Color.menu.text
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.bodySmall
-                  font.bold: button.active
-                }
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                onEntered: root.selectedIndex = button.index
-                onClicked: root.activate(button.index)
-              }
-            }
-          }
-        }
-      }
-
-      // Pista durante la selección de región.
-      Rectangle {
+      CaptureRegionHint {
         visible: root.mode === "region"
+        reveal: root.reveal
+        intent: root.intent
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: Style.bar.sizeHorizontal + Style.space(12)
-        width: hint.implicitWidth + Style.space(20)
-        height: hint.implicitHeight + Style.space(10)
-        radius: Style.cornerRadius
-        color: Color.menu.background
-        border.width: Math.max(1, Style.space(1))
-        border.color: Color.menu.border
+        onIntentPicked: function(kind) { root.setIntent(kind) }
+      }
 
-        Text {
-          id: hint
-          anchors.centerIn: parent
-          text: "Arrastrá para elegir la región · Esc cancela · clic abre el menú"
-          color: Color.menu.text
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.bodySmall
-        }
+      CaptureToolbar {
+        visible: root.mode === "menu"
+        reveal: root.reveal
+        rows: root.rows
+        currentIndex: root.selectedIndex
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: Style.bar.sizeHorizontal + Style.space(12)
+        onActivated: function(index) { root.activate(index) }
+        onHovered: function(index) { root.selectedIndex = index }
       }
     }
   }

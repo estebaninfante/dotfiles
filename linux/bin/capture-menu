@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # PrintScreen: congela la pantalla al instante y entra directo en la selección
 # de región (plugin eztvn.capture-menu); arrastrás el recuadro y queda copiado.
-# Un clic sin arrastre abre la barra (región, ventana, pantalla, grabar);
-# Shift+Print abre la barra con Grabar seleccionado.
+# Un clic sin arrastre abre la barra (grabar pantalla, grabar zona, capturar
+# zona, ventana, pantalla completa); Shift+Print abre la barra con Grabar
+# seleccionado.
 #
 # La imagen congelada es un PNG que saca este script ANTES de mostrar el
 # overlay, así que ni la barra ni el resaltado entran en la captura: las
@@ -94,7 +95,7 @@ copy_png() {
     local file="$1" label="$2"
     [[ -s $file ]] || return 1
     nofd wl-copy --type image/png <"$file"
-    nofd notify -g "󰹑" -t 3000 --app-name shot \
+    nofd notify -g "󰹑" -t 3000 --app-name shot --image "$file" \
         "Captura copiada" "$label"
 }
 
@@ -127,6 +128,21 @@ case "$key" in
     region:*)
         IFS=, read -r rx ry rw rh <<<"${key#region:}"
         copy_region "$rx" "$ry" "$rw" "$rh"
+        ;;
+    videoregion:*)
+        # Coordenadas lógicas (las mismas que slurp): gpu-screen-recorder graba
+        # sólo esa zona. El overlay debe salir del compositor antes de arrancar.
+        IFS=, read -r gx gy gw gh <<<"${key#videoregion:}"
+        if [[ ! $gx =~ ^[0-9]+$ || ! $gy =~ ^[0-9]+$ || ! $gw =~ ^[0-9]+$ || ! $gh =~ ^[0-9]+$ ]] ||
+            ((gw < 4 || gh < 4)); then
+            nofd notify -u critical -g "󰅚" --app-name shot \
+                "Grabación cancelada" "La zona elegida es demasiado pequeña." 2>/dev/null || true
+            exit 1
+        fi
+        wait_overlay_gone
+        sleep 0.12
+        exec 9>&-
+        exec ~/.local/bin/screenrecord-toggle --region "${gw}x${gh}+${gx}+${gy}"
         ;;
     window)
         if [[ -n $win_crop ]]; then
