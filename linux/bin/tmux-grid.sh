@@ -118,7 +118,16 @@ for ((r = 0; r < rows; r++)); do
         idx=$(( idx + 1 ))
     done
 
-    filas+=("${W}x${h},0,${y}{${row}}")
+    # OJO: una fila de UN solo panel NO se envuelve en {}: tmux 3.7 no poda los
+    # contenedores unarios al matar su unico panel y deja el layout corrupto
+    # (media ventana en blanco y, con mas hijos, el servidor girando al 100%
+    # de CPU). Una hoja suelta en el [] es la forma canonica de tmux y se poda
+    # bien.
+    if (( k == 1 )); then
+        filas+=("$row")
+    else
+        filas+=("${W}x${h},0,${y}{${row}}")
+    fi
     y=$(( y + h + 1 ))
 done
 
