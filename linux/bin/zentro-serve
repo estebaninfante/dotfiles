@@ -4,12 +4,19 @@ set -euo pipefail
 export PATH="${HOME}/.local/share/mise/shims:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
 main_tree="${HOME}/developing/zentr0"
+integration_tree="${HOME}/developing/.rig-worktrees/zentr0/_integration"
 
 target="${1:-developing}"
 
 case "$target" in
     developing|dev)
-        tree="$main_tree"
+        # El checkout principal vive en `main`; para desarrollo se sirve el
+        # worktree de integración (rama dev) si existe.
+        if [ -e "$integration_tree/.git" ]; then
+            tree="$integration_tree"
+        else
+            tree="$main_tree"
+        fi
         port="${ZENTRO_DEV_PORT:-3050}"
         ;;
     *)
