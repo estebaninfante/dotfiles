@@ -57,6 +57,13 @@ hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, workspace = "10" })
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
 hl.window_rule({ match = { class = "ssh-peer" }, opacity = "1.0 1.0", border_color = "rgba(00ff99f2)" })
 
+-- Acrílico: WhatsApp (PWA de Brave) y Spotify. Van DESPUÉS del catch-all
+-- `class = ".*" opacity 1.0` porque la última regla que matchea gana. La
+-- transparencia se ve difuminada por decoration:blur (global); 0.56 no tiene
+-- windowrule `blur`. Activo 0.92 = 8% de fondo visible, inactivo 0.85.
+hl.window_rule({ match = { class = "^brave-web\\.whatsapp\\.com__-Default$" }, opacity = "0.92 0.85" })
+hl.window_rule({ match = { class = "^Spotify$" }, opacity = "0.92 0.85" })
+
 -- Historial de dictado (Super+Ctrl+I): ventana flotante y centrada.
 hl.window_rule({
   match = { class = "^org\\.omarchy\\.dictado-historial$" },

@@ -16,11 +16,25 @@ local function read_trim(path)
     return (s:match("^%s*(.-)%s*$"))
 end
 
+-- El plugin cachea la textura por STRING de ruta: si le pasamos el symlink, la
+-- primera carga fallida (symlink roto al parsear) queda cacheada y el overview
+-- pinta negro para siempre. Resolvemos al path real (readlink -f) para que cada
+-- fondo nuevo sea una ruta distinta y la cache se invalide sola.
+local function resolve_image(path)
+    if not path then return nil end
+    local f = io.popen("readlink -f -- " .. string.format("%q", path) .. " 2>/dev/null")
+    if not f then return path end
+    local resolved = (f:read("*a") or ""):match("^%s*(.-)%s*$")
+    f:close()
+    if resolved ~= "" and io.open(resolved, "r") then return resolved end
+    return path
+end
+
 local bg_link     = HOME .. "/.local/state/omarchy/current/background"
 local bg_source   = read_trim(HOME .. "/.config/wallpaper-source") or "static"
 local bg_id       = read_trim(HOME .. "/.config/wallpaper-current") or ""
 local bg_frame    = (bg_id ~= "") and (HOME .. "/.cache/wallpaper-frames/" .. bg_id .. ".png") or nil
-local bg_image    = bg_link
+local bg_image    = resolve_image(bg_link)
 if bg_source == "video" and bg_frame and io.open(bg_frame, "r") then
     bg_image = bg_frame
 end

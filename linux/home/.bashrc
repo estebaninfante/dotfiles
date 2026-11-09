@@ -37,6 +37,10 @@ alias office='lo'
 alias wall='wallpaper-switch.sh'
 alias walls='wallpaper-switch.sh list'
 
+# Fondo estático en un solo paso: escritorio + hyprpaper + overview (hyprexpo).
+#   fondo ~/Imágenes/foto.png    (también vale sin argumento: re-sincroniza)
+alias fondo='sync-wallpaper.sh'
+
 # DeepSeek Harness: abre/levanta la web UI (servidor en dsh-web.service)
 alias dshw='dsh-web'
 
