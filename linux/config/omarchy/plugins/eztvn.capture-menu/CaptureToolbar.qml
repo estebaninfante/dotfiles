@@ -11,10 +11,12 @@ Item {
   property var rows: []
   property int currentIndex: 0
   property string intent: "image"
+  property bool canConfirm: false
   property real reveal: 0
   signal activated(int index)
   signal hovered(int index)
   signal modeToggled()
+  signal confirmed()
 
   implicitWidth: card.width
   implicitHeight: card.height
@@ -141,6 +143,39 @@ Item {
             onEntered: root.hovered(button.index)
             onClicked: root.activated(button.index)
           }
+        }
+      }
+
+      // Confirmar la zona elegida (también con Enter o doble clic).
+      Rectangle {
+        visible: root.canConfirm
+        width: Style.space(34)
+        height: Style.space(34)
+        radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
+        color: confirmArea.containsMouse
+          ? Util.alpha(Color.accent, 0.26)
+          : Util.alpha(Color.accent, 0.16)
+        border.width: Math.max(1, Style.space(1))
+        border.color: Util.alpha(Color.accent, 0.45)
+
+        Behavior on color {
+          ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
+
+        Text {
+          anchors.centerIn: parent
+          text: "✓"
+          color: Color.accent
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.icon
+          font.bold: true
+        }
+
+        MouseArea {
+          id: confirmArea
+          anchors.fill: parent
+          hoverEnabled: true
+          onClicked: root.confirmed()
         }
       }
     }

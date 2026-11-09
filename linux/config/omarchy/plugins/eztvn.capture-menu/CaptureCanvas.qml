@@ -1,20 +1,85 @@
 import QtQuick
+import "Annotations.js" as Annotations
 
-// Trazo libre y formas sobre la captura congelada. Es sólo pintura: la imagen
-// final se compone en el script a partir de estos trazos, no de esta capa.
+// Trazo libre y formas sobre la captura congelada, y dueño del estado de la
+// anotación. Es sólo pintura: la imagen final se compone en el script a partir
+// de los trazos serializados, no de esta capa.
 Canvas {
   id: root
 
+  property string tool: "pencil"
+  property string color: "#ffffff"
+  property int strokeWidth: 4
   property var strokes: []
   property var activeStroke: null
   property int revision: 0
-  property bool enabled: true
+  property bool layerVisible: true
 
-  visible: enabled
+  readonly property bool drawing: activeStroke !== null
 
+  signal cancelled()
+
+  visible: layerVisible
   onStrokesChanged: requestPaint()
   onActiveStrokeChanged: requestPaint()
   onRevisionChanged: requestPaint()
+
+  function begin(x, y) {
+    root.activeStroke = {
+      tool: root.tool,
+      color: root.color,
+      width: root.strokeWidth,
+      points: [{ x: x, y: y }]
+    }
+    root.revision++
+  }
+
+  function extend(x, y) {
+    if (!root.activeStroke) return
+    var st = root.activeStroke
+    if (st.tool === "pencil") {
+      var pts = st.points
+      var last = pts[pts.length - 1]
+      var dx = x - last.x
+      var dy = y - last.y
+      if (dx * dx + dy * dy < 1.5) return
+      pts.push({ x: x, y: y })
+      st.points = pts
+    } else {
+      st.points = [st.points[0], { x: x, y: y }]
+    }
+    root.revision++
+  }
+
+  function end() {
+    var st = root.activeStroke
+    root.activeStroke = null
+    root.revision++
+    if (!st) return
+    var pts = st.points
+    var dx = pts[pts.length - 1].x - pts[0].x
+    var dy = pts[pts.length - 1].y - pts[0].y
+    if (pts.length > 1 && (dx * dx + dy * dy) > 4)
+      root.strokes = root.strokes.concat([st])
+    else
+      root.cancelled() // clic derecho sin trazo: cancela el overlay
+  }
+
+  function undo() {
+    if (root.strokes.length === 0) return
+    root.strokes = root.strokes.slice(0, root.strokes.length - 1)
+    root.revision++
+  }
+
+  function clear() {
+    root.strokes = []
+    root.activeStroke = null
+    root.revision++
+  }
+
+  function serialized(scale) {
+    return Annotations.serialize(root.strokes, scale)
+  }
 
   onPaint: {
     var ctx = getContext("2d")

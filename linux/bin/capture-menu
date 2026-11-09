@@ -35,7 +35,9 @@ nofd() { "$@" 9>&-; }
 frame="$STATE_DIR/frame.png"
 selection_file="$STATE_DIR/selection"
 done_file="$STATE_DIR/done"
-rm -f "$frame" "$selection_file" "$done_file"
+annotations_file="$STATE_DIR/annotations.json"
+draw_file="$STATE_DIR/annotations.mvg"
+rm -f "$frame" "$selection_file" "$done_file" "$annotations_file" "$draw_file" "$STATE_DIR/frame-drawn.png"
 
 # Detener una grabación en curso sin abrir el overlay: si no, la barra
 # quedaría filmada en el video.
@@ -163,6 +165,48 @@ logical_to_crop() {
     awk -v s="$scale" -v x="$x" -v y="$y" -v w="$w" -v h="$h" \
         'BEGIN { printf "%d,%d,%d,%d", x*s, y*s, w*s, h*s }'
 }
+
+# Compone los trazos del plugin sobre el PNG congelado. Se aplica antes de
+# recortar, así que la imagen guardada y la copiada ya llevan el dibujo.
+apply_annotations() {
+    [[ -s $annotations_file ]] || return 0
+    jq -e '.strokes != null and (.strokes | length) > 0' "$annotations_file" >/dev/null 2>&1 || return 0
+
+    jq -r '
+      .strokes[] |
+      select(.points != null and (.points | length) > 0) |
+      "stroke '\''\(.color)'\''\nstroke-width \(.width)\nfill none\nstroke-linecap round\nstroke-linejoin round\n" +
+      (if .tool == "pencil" then
+         "polyline " + ([.points[] | "\(.x),\(.y)"] | join(" "))
+       elif .tool == "line" and (.points | length) >= 2 then
+         "line \(.points[0].x),\(.points[0].y) \(.points[-1].x),\(.points[-1].y)"
+       elif .tool == "rect" and (.points | length) >= 2 then
+         "rectangle \(.points[0].x),\(.points[0].y) \(.points[-1].x),\(.points[-1].y)"
+       elif .tool == "arrow" and (.points | length) >= 2 then
+         (.points[0] as $a | .points[-1] as $b |
+          ($b.x-$a.x) as $dx | ($b.y-$a.y) as $dy |
+          ((($dx*$dx+$dy*$dy) | sqrt) | if . < 1 then 1 else . end) as $len |
+          (($b.x - ($dx/$len)*14) | round) as $bx |
+          (($b.y - ($dy/$len)*14) | round) as $by |
+          (($b.x - ($dx/$len)*14 - ($dy/$len)*6) | round) as $h1x |
+          (($b.y - ($dy/$len)*14 + ($dx/$len)*6) | round) as $h1y |
+          (($b.x - ($dx/$len)*14 + ($dy/$len)*6) | round) as $h2x |
+          (($b.y - ($dy/$len)*14 - ($dx/$len)*6) | round) as $h2y |
+          "line \($a.x),\($a.y) \($b.x),\($b.y)\nline \($b.x),\($b.y) \($h1x),\($h1y)\nline \($b.x),\($b.y) \($h2x),\($h2y)")
+       else empty end)
+    ' "$annotations_file" >"$draw_file" 2>/dev/null || return 0
+    [[ -s $draw_file ]] || return 0
+
+    if magick "$frame" -draw "@$draw_file" "png:$STATE_DIR/frame-drawn.png" 2>/dev/null &&
+        [[ -s $STATE_DIR/frame-drawn.png ]]; then
+        frame="$STATE_DIR/frame-drawn.png"
+    fi
+}
+
+# Sólo las capturas llevan dibujo (en video la capa no se filma).
+case "$key" in
+    region:*|windowat:*|full) apply_annotations ;;
+esac
 
 case "$key" in
     record)

@@ -5,15 +5,15 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import "Annotations.js" as Annotations
 
-// PrintScreen entra directo a capturar y Shift+Print a grabar: en ambos casos
-// se puede clicar una ventana o dibujar un área de inmediato. La ventana es un
-// caso de Zona (clic sobre ella); la barra sólo cambia el modo y ofrece la
-// pantalla completa.
+// PrintScreen entra directo a capturar y Shift+Print a grabar: arrastrar toma
+// la zona, un clic toma la ventana bajo el puntero. En captura se puede dibujar
+// con el botón derecho (lápiz, línea, recuadro, flecha) antes de confirmar.
+// La barra superior cambia el modo; la inferior elige la anotación.
 //
-// El recuadro vive en esta capa, así que no entra en el archivo: la imagen se
-// recorta del PNG congelado y el video usa la geometría lógica con la que
-// screenrecord-toggle filma sólo esa zona.
+// Los trazos se mandan al script y se componen sobre el PNG congelado, así que
+// entran en la imagen guardada y en el portapapeles.
 Item {
   id: root
 
@@ -21,7 +21,6 @@ Item {
   property string selectionFile: ""
   property string doneFile: ""
   property string imagePath: ""
-  property string mode: "region" // única UI: siempre región
   property string intent: "image" // "image" | "video"
   property int selectedIndex: 0
 
@@ -30,18 +29,31 @@ Item {
   property real dragX1: 0
   property real dragY1: 0
   property bool dragging: false
-  // Hubo un press real: distingue un clic (ventana) de Enter sin selección.
-  property bool hasPress: false
+  property bool pressing: false
+  property real pressX: 0
+  property real pressY: 0
+  property bool priorSelection: false
   property real pointerX: -1
   property real pointerY: -1
 
-  // 0 = recién abierto, 1 = asentado. La barra entra con esto.
+  // Anotaciones: la capa es dueña de los trazos; aquí sólo el pincel activo.
+  property string drawTool: "pencil"
+  property int drawWidth: 4
+  property string drawColor: Annotations.colorHex(Color.accent)
+
+  // 0 = recién abierto, 1 = asentado. Las barras entran con esto.
   property real reveal: 0
 
   readonly property real selX: Math.min(dragX0, dragX1)
   readonly property real selY: Math.min(dragY0, dragY1)
   readonly property real selW: Math.abs(dragX1 - dragX0)
   readonly property real selH: Math.abs(dragY1 - dragY0)
+  readonly property bool selectionValid: selW >= 4 && selH >= 4
+  readonly property var palette: [
+    Annotations.colorHex(Color.accent),
+    Annotations.colorHex(Color.urgent),
+    Annotations.colorHex(Color.foreground)
+  ]
 
   readonly property var rows: [
     { key: "region", icon: "󰹵", label: "Zona" },
@@ -52,18 +64,19 @@ Item {
     NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
   }
 
-  // El plugin queda cargado entre capturas (keepLoaded), así que las
-  // coordenadas del recuadro sobreviven. Sin este reset, la siguiente captura
-  // abriría mostrando la selección anterior como si ya estuviera elegida.
+  // El plugin queda cargado entre capturas (keepLoaded), así que el estado
+  // sobrevive. Se limpia todo lo de la captura anterior.
   function resetSelection() {
     root.dragX0 = 0
     root.dragY0 = 0
     root.dragX1 = 0
     root.dragY1 = 0
     root.dragging = false
-    root.hasPress = false
+    root.pressing = false
+    root.priorSelection = false
     root.pointerX = -1
     root.pointerY = -1
+    drawing.clear()
   }
 
   function open(payloadJson) {
@@ -72,9 +85,7 @@ Item {
     root.selectionFile = String(p.selectionFile || "")
     root.doneFile = String(p.doneFile || "")
     root.imagePath = String(p.imagePath || "")
-    // Print captura; Shift+Print graba. Listos para clic o arrastre.
     root.intent = String(p.defaultAction || "image") === "record" ? "video" : "image"
-    root.mode = "region"
     root.selectedIndex = 0
     root.resetSelection()
     root.reveal = 0
@@ -92,16 +103,44 @@ Item {
     root.finish(null)
   }
 
+  function annotationPath() {
+    if (root.selectionFile === "") return ""
+    var cut = root.selectionFile.lastIndexOf("/")
+    return (cut >= 0 ? root.selectionFile.substring(0, cut + 1) : "") + "annotations.json"
+  }
+
+  function isVideoKey(key) {
+    return key !== null && key !== undefined &&
+      (key === "record" || key.indexOf("videoregion:") === 0 || key.indexOf("recordwindowat:") === 0)
+  }
+
+  function outputScale() {
+    if (panel.width > 0 && frozen.implicitWidth > 0)
+      return frozen.implicitWidth / panel.width
+    return Screen.devicePixelRatio
+  }
+
   function finish(key) {
     var selection = root.selectionFile
     var done = root.doneFile
+    var annPath = root.annotationPath()
+    var ann = ""
+    if (key && !root.isVideoKey(key) && annPath !== "")
+      ann = drawing.serialized(root.outputScale())
+
     root.selectionFile = ""
     root.doneFile = ""
     if (done !== "") {
-      if (key === null || key === undefined)
-        resultProc.command = ["bash", "-c", ": > " + Util.shellQuote(done)]
-      else
-        resultProc.command = ["bash", "-c", "printf '%s\\n' " + Util.shellQuote(key) + " > " + Util.shellQuote(selection) + "; : > " + Util.shellQuote(done)]
+      var parts = []
+      if (ann !== "")
+        parts.push("printf '%s' " + Util.shellQuote(ann) + " > " + Util.shellQuote(annPath))
+      if (key === null || key === undefined) {
+        parts.push(": > " + Util.shellQuote(done))
+      } else {
+        parts.push("printf '%s\\n' " + Util.shellQuote(key) + " > " + Util.shellQuote(selection))
+        parts.push(": > " + Util.shellQuote(done))
+      }
+      resultProc.command = ["bash", "-c", parts.join("; ")]
       resultProc.running = true
     } else {
       root.opened = false
@@ -109,12 +148,17 @@ Item {
   }
 
   function toggleMode() {
-    root.intent = root.intent === "video" ? "image" : "video"
+    if (root.intent === "video") {
+      root.intent = "image"
+    } else {
+      // Las anotaciones no se graban: al pasar a video se descartan.
+      root.intent = "video"
+      drawing.clear()
+    }
     keyCatcher.forceActiveFocus()
   }
 
   function chooseRegion() {
-    root.mode = "region"
     root.resetSelection()
     keyCatcher.forceActiveFocus()
   }
@@ -122,15 +166,18 @@ Item {
   function activate(index) {
     if (index < 0 || index >= root.rows.length) return
     var key = root.rows[index].key
-    if (key === "region") {
-      root.chooseRegion()
-    } else if (key === "full") {
-      root.finish(root.intent === "video" ? "record" : "full")
-    }
+    if (key === "region") root.chooseRegion()
+    else if (key === "full") root.finish(root.intent === "video" ? "record" : "full")
   }
 
-  // Coordenada de la pantalla (lógica) → píxeles del PNG congelado. El PNG
-  // cubre el monitor completo, el overlay su tamaño lógico con escala Qt.
+  function screenX(value) {
+    return Math.max(0, Math.round((panel.screen ? panel.screen.x : 0) + value))
+  }
+
+  function screenY(value) {
+    return Math.max(0, Math.round((panel.screen ? panel.screen.y : 0) + value))
+  }
+
   function imageCoord(value, horizontal) {
     var natural = horizontal ? frozen.implicitWidth : frozen.implicitHeight
     var total = horizontal ? panel.width : panel.height
@@ -138,31 +185,27 @@ Item {
     return Math.round(value * Screen.devicePixelRatio)
   }
 
-  function completeRegion() {
-    var sx = panel.screen ? panel.screen.x : 0
-    var sy = panel.screen ? panel.screen.y : 0
-    // Clic sin arrastre: la ventana bajo el puntero. Si no hay ninguna, el
-    // script no hace nada (clic en el escritorio cancela).
-    if (root.selW < 4 || root.selH < 4) {
-      if (!root.hasPress) return
-      var prefix = root.intent === "video" ? "recordwindowat:" : "windowat:"
-      root.finish(prefix + Math.round(sx + root.dragX1) + "," + Math.round(sy + root.dragY1))
-      return
-    }
+  function captureWindow(x, y) {
+    var prefix = root.intent === "video" ? "recordwindowat:" : "windowat:"
+    root.finish(prefix + root.screenX(x) + "," + root.screenY(y))
+  }
+
+  function finishVideoRegion() {
+    if (!root.selectionValid) return
+    root.finish("videoregion:" + root.screenX(root.selX) + "," + root.screenY(root.selY) +
+                "," + Math.round(root.selW) + "," + Math.round(root.selH))
+  }
+
+  function confirmCapture() {
+    if (!root.selectionValid) return
     if (root.intent === "video") {
-      // gpu-screen-recorder espera la geometría lógica global del compositor.
-      var vx = Math.max(0, Math.round(sx + root.selX))
-      var vy = Math.max(0, Math.round(sy + root.selY))
-      var vw = Math.round(root.selW)
-      var vh = Math.round(root.selH)
-      root.finish("videoregion:" + vx + "," + vy + "," + vw + "," + vh)
+      root.finishVideoRegion()
       return
     }
-    var x = root.imageCoord(root.selX, true)
-    var y = root.imageCoord(root.selY, false)
-    var w = root.imageCoord(root.selW, true)
-    var h = root.imageCoord(root.selH, false)
-    root.finish("region:" + x + "," + y + "," + w + "," + h)
+    root.finish("region:" + root.imageCoord(root.selX, true) + "," +
+                root.imageCoord(root.selY, false) + "," +
+                root.imageCoord(root.selW, true) + "," +
+                root.imageCoord(root.selH, false))
   }
 
   Process {
@@ -209,11 +252,24 @@ Item {
       anchors.fill: parent
       focus: root.opened
 
+      CaptureCanvas {
+        id: drawing
+        anchors.fill: parent
+        layerVisible: root.intent === "image"
+        tool: root.drawTool
+        color: root.drawColor
+        strokeWidth: root.drawWidth
+        onCancelled: root.finish(null)
+      }
+
       Keys.onEscapePressed: root.finish(null)
-      Keys.onReturnPressed: root.completeRegion()
-      Keys.onEnterPressed: root.completeRegion()
+      Keys.onReturnPressed: root.confirmCapture()
+      Keys.onEnterPressed: root.confirmCapture()
       Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Tab) {
+        if (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_Z) {
+          drawing.undo()
+          event.accepted = true
+        } else if (event.key === Qt.Key_Tab) {
           root.toggleMode()
           event.accepted = true
         } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_2) {
@@ -222,7 +278,7 @@ Item {
         }
       }
 
-      // Selección sobre la imagen congelada: arrastre = zona, clic = ventana.
+      // Izquierda: zona o clic en ventana. Derecha: dibujar en captura.
       MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -232,46 +288,90 @@ Item {
         onPositionChanged: function(mouse) {
           root.pointerX = mouse.x
           root.pointerY = mouse.y
-          if (!root.dragging) return
-          root.dragX1 = mouse.x
-          root.dragY1 = mouse.y
+
+          if (drawing.drawing) {
+            drawing.extend(mouse.x, mouse.y)
+            return
+          }
+          if (!root.pressing) return
+          if (!root.dragging &&
+              (Math.abs(mouse.x - root.pressX) > 3 || Math.abs(mouse.y - root.pressY) > 3)) {
+            root.dragging = true
+            root.dragX0 = root.pressX
+            root.dragY0 = root.pressY
+          }
+          if (root.dragging) {
+            root.dragX1 = mouse.x
+            root.dragY1 = mouse.y
+          }
         }
         onPressed: function(mouse) {
           if (mouse.button === Qt.RightButton) {
-            root.finish(null)
+            if (root.intent !== "image") {
+              root.finish(null)
+              return
+            }
+            drawing.begin(mouse.x, mouse.y)
             return
           }
-          root.dragX0 = mouse.x
-          root.dragY0 = mouse.y
-          root.dragX1 = mouse.x
-          root.dragY1 = mouse.y
-          root.pointerX = mouse.x
-          root.pointerY = mouse.y
-          root.hasPress = true
-          root.dragging = true
+          root.pressX = mouse.x
+          root.pressY = mouse.y
+          root.priorSelection = root.selectionValid
+          root.pressing = true
+          root.dragging = false
         }
         onReleased: function(mouse) {
-          if (mouse.button !== Qt.LeftButton || !root.dragging) return
-          root.dragX1 = mouse.x
-          root.dragY1 = mouse.y
-          root.dragging = false
-          root.completeRegion()
+          if (mouse.button === Qt.RightButton) {
+            drawing.end()
+            return
+          }
+          if (!root.pressing) return
+          root.pressing = false
+          if (root.dragging) {
+            root.dragX1 = mouse.x
+            root.dragY1 = mouse.y
+            root.dragging = false
+            // Grabar arranca al soltar; capturar espera anotaciones/confirmación.
+            if (root.intent === "video") root.finishVideoRegion()
+          } else if (!root.priorSelection) {
+            root.captureWindow(mouse.x, mouse.y)
+          }
         }
+        onDoubleClicked: root.confirmCapture()
+      }
+
+      CaptureAnnotations {
+        visible: root.intent === "image"
+        reveal: root.reveal
+        tool: root.drawTool
+        color: root.drawColor
+        strokeWidth: root.drawWidth
+        palette: root.palette
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(28)
+        onToolPicked: function(tool) { root.drawTool = tool }
+        onColorPicked: function(color) { root.drawColor = color }
+        onWidthCycled: root.drawWidth = root.drawWidth === 2 ? 4 : (root.drawWidth === 4 ? 8 : 2)
+        onUndoRequested: drawing.undo()
+        onClearRequested: drawing.clear()
       }
 
       CaptureToolbar {
-        // Única barra. Se oculta al arrastrar para no tapar la zona elegida.
-        visible: !root.dragging
+        // Única barra de acciones; se oculta al arrastrar o dibujar.
+        visible: !root.dragging && !drawing.drawing
         reveal: root.reveal
         rows: root.rows
         intent: root.intent
         currentIndex: root.selectedIndex
+        canConfirm: root.selectionValid
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: Style.bar.sizeHorizontal + Style.space(12)
         onActivated: function(index) { root.activate(index) }
         onHovered: function(index) { root.selectedIndex = index }
         onModeToggled: root.toggleMode()
+        onConfirmed: root.confirmCapture()
       }
     }
   }
