@@ -237,7 +237,7 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 | `linux/bin/voice-asr-stream` | Selector del motor del wake-word: GPU (`[wake] gpu_command`) o CPU (Vosk) |
 | `linux/bin/voice-hermes` | Hermes headless (una pasada, sólo terminal) para el cerebro de voz |
 | `linux/bin/voice-pi` | Variante Pi headless (sin razonamiento/extensiones) del cerebro |
-| `linux/bin/dictado` | Dictado del escritorio: graba, transcribe y pega (portapapeles) en la ventana enfocada |
+| `linux/bin/dictado` | Dictado del escritorio: graba, transcribe y escribe en la ventana enfocada |
 | `linux/bin/dictado-historial` | Historial de dictados (SUPER+CTRL+I) |
 | `linux/dictado/servidor.py` | Servidor STT local (faster-whisper) que usa `dictado` |
 | `scripts/setup-wake.sh` | Prepara el wake-word: venv + vosk + modelo + servicio `talk-command.service` |
