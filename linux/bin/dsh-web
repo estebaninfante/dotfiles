@@ -1,25 +1,142 @@
 #!/usr/bin/env bash
-# dsh-web — abre la Web UI de DeepSeek Harness (dsh web).
+# dsh-web — abre la Web UI de DeepSeek Harness (dsh web) y la publica en el celular.
 #
 # El servidor vive en el unit de usuario dsh-web.service (sobrevive a este
 # script y se reusa entre lanzamientos). El token de acceso es por proceso:
 # --serve trunca el log en cada arranque y deja ahí la URL vigente, que este
 # script relee para abrir la UI.
 #
+# El celular entra por Tailscale: el servidor sigue escuchando solo en
+# 127.0.0.1 y `tailscale serve` publica https://<nodo>:8446 (tailnet-only)
+# hacia ese loopback. El puerto interno es efímero (--port 0), el enlace de
+# afuera no: la cookie de sesión (30 días, atada a host:puerto) sobrevive a los
+# reinicios del servidor. Por el proxy el header Host es el nombre del nodo, y
+# el cerco de confianza de /api solo acepta loopback, la IP de bind o lo que se
+# declare con --trusted-host: por eso --serve lo pasa.
+#
 # Uso:
 #   dsh-web            levanta el servidor si hace falta y abre/focaliza la UI
-#   dsh-web --url      imprime la URL con token (no abre nada)
-#   dsh-web --status   estado del unit + URL vigente
+#   dsh-web --phone    imprime el enlace del celular (+ QR si hay terminal)
+#   dsh-web --url      imprime la URL local con token (no abre nada)
+#   dsh-web --status   estado del unit + URLs local y del celular
 #   dsh-web --stop     apaga el servidor
 #   dsh-web --serve    corre el servidor en primer plano (lo usa el unit)
 set -uo pipefail
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dsh-web"
 LOG="$STATE/server.log"
+PHONE_FILE="$STATE/phone.url"
+TS_HOST_FILE="$STATE/tshost"
 UNIT=dsh-web.service
+# Puerto del enlace tailnet-only. 443 lo ocupa otra app y 8443-8445 también.
+TS_PORT="${DSH_WEB_TS_PORT:-8446}"
 
 current_url() {
   grep -o 'http://[^[:space:]]*' "$LOG" 2>/dev/null | tail -1
+}
+
+port_of() {
+  local rest=${1#*//}
+  rest=${rest%%/*}
+  printf '%s\n' "${rest##*:}"
+}
+
+token_of() {
+  [[ $1 == *"token="* ]] || return 0
+  local rest=${1#*token=}
+  printf '%s\n' "${rest%%&*}"
+}
+
+# Nombre MagicDNS del nodo (sin el punto final). Se cachea porque tailscaled
+# puede tardar en conectar al arrancar y el unit ya necesita el nombre para
+# --trusted-host: el nombre del nodo no cambia entre arranques.
+ts_host() {
+  local host=""
+  if command -v tailscale >/dev/null; then
+    host=$(tailscale status --json 2>/dev/null | jq -r '.Self.DNSName // ""' 2>/dev/null | sed 's/\.$//')
+  fi
+  if [[ -n ${host:-} ]]; then
+    printf '%s\n' "$host" >"$TS_HOST_FILE" 2>/dev/null
+  else
+    host=$(cat "$TS_HOST_FILE" 2>/dev/null)
+  fi
+  [[ -n ${host:-} ]] || return 1
+  printf '%s\n' "$host"
+}
+
+wait_ts_host() {
+  local tries=${1:-60} i host
+  for i in $(seq 1 "$tries"); do
+    host=$(ts_host) && { printf '%s\n' "$host"; return 0; }
+    sleep 0.5
+  done
+  return 1
+}
+
+# Publica el loopback vivo en https://<nodo>:<TS_PORT> y devuelve el enlace con
+# el token de este proceso. Idempotente: reaplicar el mapeo solo lo actualiza.
+publish_phone() {
+  local url=$1 host port token
+  host=$(ts_host) || return 1
+  port=$(port_of "$url")
+  token=$(token_of "$url")
+  [[ -n $port && -n $token ]] || return 1
+  tailscale serve --bg --https="$TS_PORT" "http://127.0.0.1:$port" >/dev/null 2>&1 || return 1
+  printf 'https://%s:%s/?token=%s\n' "$host" "$TS_PORT" "$token"
+}
+
+# Enlace guardado, solo si su token es el del servidor vivo.
+phone_url() {
+  local stored token
+  [[ -f $PHONE_FILE ]] || return 1
+  stored=$(cat "$PHONE_FILE")
+  token=$(token_of "$(current_url)")
+  [[ -n $stored && -n $token && $stored == *"token=$token" ]] || return 1
+  printf '%s\n' "$stored"
+}
+
+save_phone() {
+  printf '%s\n' "$1" >"$PHONE_FILE"
+}
+
+# Corre dentro de --serve: espera la URL del log y publica el enlace para el
+# celular. Reintenta porque tailscaled puede subir después que el harness.
+announce_phone() {
+  local parent=$$ url phone attempt
+  for attempt in $(seq 1 120); do
+    url=$(current_url)
+    [[ -n ${url:-} ]] && break
+    sleep 0.5
+    kill -0 "$parent" 2>/dev/null || return 0
+  done
+  [[ -n ${url:-} ]] || return 0
+  for attempt in $(seq 1 30); do
+    if phone=$(publish_phone "$url"); then
+      save_phone "$phone"
+      printf 'dsh-web: celular: %s\n' "$phone"
+      return 0
+    fi
+    kill -0 "$parent" 2>/dev/null || return 0
+    sleep 10
+  done
+  printf 'dsh-web: tailscale no publicó el enlace del celular\n' >&2
+}
+
+# Aviso con el enlace; un clic lo copia al portapapeles.
+announce_link() {
+  local phone=$1
+  [[ -n $phone ]] || return 0
+  if command -v notify >/dev/null; then
+    if command -v wl-copy >/dev/null; then
+      notify -u normal -t 15000 --app-name "DeepSeek Harness" \
+        "DeepSeek Harness en el celular" "$phone" --exec wl-copy "$phone"
+    else
+      notify -u normal -t 15000 --app-name "DeepSeek Harness" \
+        "DeepSeek Harness en el celular" "$phone"
+    fi
+  elif command -v notify-send >/dev/null; then
+    notify-send -a "DeepSeek Harness" "DeepSeek Harness en el celular" "$phone"
+  fi
 }
 
 alive_url() {
@@ -81,14 +198,39 @@ case "${1:-}" in
     # journal. pipefail propaga el fallo de dsh para que Restart actúe.
     mkdir -p "$STATE"
     : >"$LOG"
+    rm -f "$PHONE_FILE"
     set -o pipefail
     # --port 0: el servidor administrado no pelea por el 3080 con un `dsh web`
     # lanzado a mano en una terminal; el puerto real sale en la URL del log.
-    dsh web --no-open --port 0 2>&1 | tee -a "$LOG"
+    args=(web --no-open --port 0)
+    if host=$(wait_ts_host 60); then
+      args+=(--trusted-host "$host")
+    else
+      printf 'dsh-web: tailscale no respondió; arranco sin enlace de celular\n' >&2
+    fi
+    announce_phone &
+    dsh "${args[@]}" 2>&1 | tee -a "$LOG"
     exit "${PIPESTATUS[0]}"
     ;;
   --url)
     alive_url || ensure_server || exit 1
+    exit 0
+    ;;
+  --phone)
+    url=$(alive_url) || url=$(ensure_server) || exit 1
+    if ! phone=$(phone_url); then
+      phone=$(publish_phone "$url") || {
+        echo "dsh-web: Tailscale no disponible; no hay enlace para el celular" >&2
+        exit 1
+      }
+      save_phone "$phone"
+    fi
+    printf '%s\n' "$phone"
+    # El enlace es largo para tipear: con terminal a la vista, QR para escanear
+    # una vez y dejar la cookie de 30 días en el celular.
+    if [[ -t 1 ]] && command -v qrencode >/dev/null; then
+      qrencode -t ANSIUTF8 -m 1 "$phone"
+    fi
     exit 0
     ;;
   --stop)
@@ -97,6 +239,7 @@ case "${1:-}" in
   --status)
     systemctl --user status "$UNIT" --no-pager | head -20
     alive_url
+    phone_url
     exit 0
     ;;
   -h | --help)
@@ -117,6 +260,20 @@ if ! url=$(alive_url); then
     command -v notify-send >/dev/null && notify-send -u critical "DeepSeek Harness" "El servidor no arrancó"
     exit 1
   fi
+fi
+
+# Enlace para el celular: el que anunció --serve, o publicado ahora si el
+# servidor ya estaba arriba (arranque al login) sin tailscale disponible.
+if ! phone=$(phone_url); then
+  phone=$(publish_phone "$url") || phone=""
+  [[ -n $phone ]] && save_phone "$phone"
+fi
+
+if [[ -n ${phone:-} ]]; then
+  printf 'dsh-web: celular: %s\n' "$phone"
+  announce_link "$phone"
+else
+  echo "dsh-web: sin enlace de celular (¿Tailscale apagado?)" >&2
 fi
 
 # Si ya hay un panel abierto, enfocarlo; si no, abrirlo como web app en Brave.
