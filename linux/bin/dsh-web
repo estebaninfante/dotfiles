@@ -8,8 +8,8 @@
 #
 # El celular entra por Tailscale: el servidor sigue escuchando solo en
 # 127.0.0.1 y `tailscale serve` publica https://<nodo>:8446 (tailnet-only)
-# hacia ese loopback. El puerto interno es efímero (--port 0), el enlace de
-# afuera no: la cookie de sesión (30 días, atada a host:puerto) sobrevive a los
+# hacia ese loopback. El puerto interno (3980) y el enlace de afuera son fijos,
+# así que la cookie de sesión (30 días, atada a host:puerto) sobrevive a los
 # reinicios del servidor. Por el proxy el header Host es el nombre del nodo, y
 # el cerco de confianza de /api solo acepta loopback, la IP de bind o lo que se
 # declare con --trusted-host: por eso --serve lo pasa.
