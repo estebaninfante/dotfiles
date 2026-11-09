@@ -592,6 +592,16 @@ al usuario remoto por **Tailscale** (tailnet-only). Nada de `0.0.0.0` en apps si
   explicito). `--share` en el CLI abre `0.0.0.0` a proposito: no usarlo en la unit.
   El celular entra por `https://laptopmarchy.tail77dc99.ts.net` -> `tailscale serve` (443,
   tailnet-only) proxy a `http://127.0.0.1:8777`.
+- **DeepSeek Harness** (`dsh-web.service`, wrapper `linux/bin/dsh-web`): el servidor escucha en
+  `127.0.0.1:3980` (fijo; si esta ocupado cae a efimero) y `tailscale serve` publica
+  `https://astradeux.tail77dc99.ts.net:8446` -> `http://127.0.0.1:3980` (tailnet-only, puerto 443
+  y 8443-8445 ya usados). `--serve` aplica el mapeo solo al arrancar (idempotente) y pasa
+  `--trusted-host <nodo>` porque el proxy conserva el header `Host`: sin eso `/api` responde 403.
+  El token es por proceso, pero el enlace de afuera es estable y la cookie de sesion dura 30 dias,
+  asi que el celular escanea una vez (`dsh-web --phone` imprime el enlace + QR) y despues entra
+  directo. El puerto local fijo ademas hace que la ventana y la cookie del escritorio sobrevivan
+  a un reinicio del servidor. Aviso con el enlace en cada apertura (un clic lo copia). Cambiar el
+  wrapper requiere `dsh-web --restart` (o el proximo arranque del servidor).
 - El **Funnel `:8443` -> `127.0.0.1:3000`** es otra app (público por diseno): no tocarlo.
 - Verificacion: `ss -ltn | grep 8777` = `127.0.0.1:8777`; `curl http://192.168.1.240:8777/`
   debe fallar (000) y `curl -k https://laptopmarchy.tail77dc99.ts.net/` = 200; `verify auto

@@ -16,6 +16,7 @@
 #
 # Uso:
 #   dsh-web            levanta el servidor si hace falta y abre/focaliza la UI
+#   dsh-web --restart  reinicia el servidor y reabre la UI (toma este script)
 #   dsh-web --phone    imprime el enlace del celular (+ QR si hay terminal)
 #   dsh-web --url      imprime la URL local con token (no abre nada)
 #   dsh-web --status   estado del unit + URLs local y del celular
@@ -27,9 +28,15 @@ STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dsh-web"
 LOG="$STATE/server.log"
 PHONE_FILE="$STATE/phone.url"
 TS_HOST_FILE="$STATE/tshost"
+TRUST_FILE="$STATE/trusted-host"
 UNIT=dsh-web.service
 # Puerto del enlace tailnet-only. 443 lo ocupa otra app y 8443-8445 también.
 TS_PORT="${DSH_WEB_TS_PORT:-8446}"
+# Puerto local fijo: no compite con el 3080 de un `dsh web` lanzado a mano, y
+# como el origen no cambia entre arranques la cookie del navegador y la ventana
+# abierta sobreviven a un reinicio del servidor. Si está ocupado se usa uno
+# efímero (--port 0), como antes.
+PORT="${DSH_WEB_PORT:-3980}"
 
 current_url() {
   grep -o 'http://[^[:space:]]*' "$LOG" 2>/dev/null | tail -1
@@ -45,6 +52,14 @@ token_of() {
   [[ $1 == *"token="* ]] || return 0
   local rest=${1#*token=}
   printf '%s\n' "${rest%%&*}"
+}
+
+free_port() {
+  local port=$1
+  if command -v ss >/dev/null; then
+    ss -ltnH "sport = :$port" 2>/dev/null | grep -q . && return 1
+  fi
+  return 0
 }
 
 # Nombre MagicDNS del nodo (sin el punto final). Se cachea porque tailscaled
@@ -73,10 +88,22 @@ wait_ts_host() {
   return 1
 }
 
+# El servidor vivo se arrancó con --trusted-host (marca de --serve). Sin eso el
+# proxy recibe el index pero toda llamada a /api da 403: mejor no ofrecer enlace.
+server_exposed() {
+  local host ts
+  [[ -f $TRUST_FILE ]] || return 1
+  host=$(cat "$TRUST_FILE" 2>/dev/null)
+  [[ -n $host ]] || return 1
+  ts=$(ts_host 2>/dev/null) || ts=""
+  [[ -z $ts || $ts == "$host" ]]
+}
+
 # Publica el loopback vivo en https://<nodo>:<TS_PORT> y devuelve el enlace con
 # el token de este proceso. Idempotente: reaplicar el mapeo solo lo actualiza.
 publish_phone() {
   local url=$1 host port token
+  server_exposed || return 1
   host=$(ts_host) || return 1
   port=$(port_of "$url")
   token=$(token_of "$url")
@@ -198,13 +225,20 @@ case "${1:-}" in
     # journal. pipefail propaga el fallo de dsh para que Restart actúe.
     mkdir -p "$STATE"
     : >"$LOG"
-    rm -f "$PHONE_FILE"
+    rm -f "$PHONE_FILE" "$TRUST_FILE"
     set -o pipefail
-    # --port 0: el servidor administrado no pelea por el 3080 con un `dsh web`
-    # lanzado a mano en una terminal; el puerto real sale en la URL del log.
-    args=(web --no-open --port 0)
+    # Puerto fijo (o efímero si está ocupado): el servidor administrado no
+    # pelea por el 3080 con un `dsh web` lanzado a mano en una terminal; el
+    # puerto real sale en la URL del log.
+    port=$PORT
+    if ! free_port "$port"; then
+      printf 'dsh-web: puerto %s ocupado; uso uno efímero\n' "$port" >&2
+      port=0
+    fi
+    args=(web --no-open --port "$port")
     if host=$(wait_ts_host 60); then
       args+=(--trusted-host "$host")
+      printf '%s\n' "$host" >"$TRUST_FILE"
     else
       printf 'dsh-web: tailscale no respondió; arranco sin enlace de celular\n' >&2
     fi
@@ -220,7 +254,7 @@ case "${1:-}" in
     url=$(alive_url) || url=$(ensure_server) || exit 1
     if ! phone=$(phone_url); then
       phone=$(publish_phone "$url") || {
-        echo "dsh-web: Tailscale no disponible; no hay enlace para el celular" >&2
+        echo "dsh-web: el servidor vivo no está publicado en Tailscale; corré: dsh-web --restart" >&2
         exit 1
       }
       save_phone "$phone"
@@ -232,6 +266,13 @@ case "${1:-}" in
       qrencode -t ANSIUTF8 -m 1 "$phone"
     fi
     exit 0
+    ;;
+  --restart)
+    # El token y el enlace del celular son por proceso: reiniciar es la forma
+    # de tomar un script nuevo. Después sigue el camino normal (esperar,
+    # publicar el enlace y abrir la ventana).
+    systemctl --user stop "$UNIT" >/dev/null 2>&1
+    systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
     ;;
   --stop)
     exec systemctl --user stop "$UNIT"
@@ -273,7 +314,7 @@ if [[ -n ${phone:-} ]]; then
   printf 'dsh-web: celular: %s\n' "$phone"
   announce_link "$phone"
 else
-  echo "dsh-web: sin enlace de celular (¿Tailscale apagado?)" >&2
+  echo "dsh-web: sin enlace de celular (el servidor vivo no se publicó; corré: dsh-web --restart)" >&2
 fi
 
 # Si ya hay un panel abierto, enfocarlo; si no, abrirlo como web app en Brave.
