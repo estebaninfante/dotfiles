@@ -33,10 +33,15 @@ if [ -f "$HYPR_CONF" ] && grep -q 'path =' "$HYPR_CONF"; then
 fi
 
 # 2. hyprpaper vivo: aplica sin reiniciar el daemon (v0.8+: solo `wallpaper mon,path`).
+#    A TODOS los monitors: aplicar solo a `.[0]` dejaba el segundo con el fondo viejo
+#    (con un monitor virtual de Sunshine el escritorio y el stream no coincidian) y
+#    hyprpaper solo re-lee la config al reiniciar.
 if pgrep -x hyprpaper >/dev/null 2>&1; then
-    mon="$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // empty' 2>/dev/null || true)"
-    [ -z "$mon" ] && mon="DP-2"
-    hyprctl hyprpaper wallpaper "$mon,$BG" >/dev/null 2>&1 || true
+    monitors="$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name // empty' 2>/dev/null || true)"
+    [ -z "$monitors" ] && monitors="DP-2"
+    for mon in $monitors; do
+        hyprctl hyprpaper wallpaper "$mon,$BG" >/dev/null 2>&1 || true
+    done
 fi
 
 if [ "${SYNC_WALLPAPER_NO_RELOAD:-0}" != "1" ]; then
