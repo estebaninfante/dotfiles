@@ -2,8 +2,11 @@
 """dictado — dictado por voz del escritorio: hablás y el texto aparece donde está el cursor.
 
 No depende de Omar ni de una app con GUI: graba con PipeWire (`parec`),
-transcribe contra el servidor local `dictado` (faster-whisper) y escribe con
-`wtype` en la ventana enfocada. Todo lo dictado queda en el historial.
+transcribe contra el servidor local `dictado` (faster-whisper) y entrega el
+texto en la ventana enfocada **pegándolo desde el portapapeles** (`wl-copy` +
+Ctrl+V / Ctrl+Shift+V según la ventana). Teclear con `wtype` se conserva solo
+como respaldo: su keymap sintético pierde caracteres en textos largos.
+Todo lo dictado queda en el historial.
 
 Uso:
     dictado                 alterna: abre la grabación; si ya hay una, la cierra y pega
@@ -25,12 +28,14 @@ Variables:
   DICTADO_PUERTO     puerto del servidor (default 8091)
   DICTADO_IDIOMA     idioma (default es)
   DICTADO_MAX_S      tope de grabación en segundos (default 180)
+  DICTADO_ENTREGA    "auto" (pegado, default), "pegar" o "teclear"
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -52,6 +57,7 @@ HISTORIAL = os.path.join(ESTADO, "dictado", "historial.jsonl")
 PUERTO = int(os.environ.get("DICTADO_PUERTO", "8091"))
 IDIOMA = os.environ.get("DICTADO_IDIOMA", "es")
 MAX_S = int(os.environ.get("DICTADO_MAX_S", "180"))
+ENTREGA = os.environ.get("DICTADO_ENTREGA", "auto").lower()
 SAMPLE_RATE = 16000
 MIN_BYTES = SAMPLE_RATE * 4 // 4  # un cuarto de segundo
 
@@ -275,16 +281,108 @@ def guardar_historial(texto: str, modo: str) -> None:
         pass
 
 
-def escribir(texto: str) -> bool:
-    """Teclea en la ventana enfocada. False si wtype no pudo (sin foco, etc)."""
-    limpio = texto.replace("\n", " ").strip()
-    if not limpio:
-        return True
+# Ventanas donde pegar es Ctrl+Shift+V (terminales y Warp).
+TERMINALES = {
+    "kitty", "foot", "alacritty", "xterm", "urxvt", "st", "konsole",
+    "gnome-terminal", "gnome-terminal-server", "org.wezfurlong.wezterm",
+    "wezterm", "com.mitchellh.ghostty", "dev.warp.warp", "warp", "terminator",
+    "tilix", "xfce4-terminal", "io.elementary.terminal",
+    "com.raggesilver.blackbox", "blackbox",
+}
+
+# ydotool usa códigos evdev: 29 = ctrl, 42 = shift, 47 = v.
+_PEGAR = ("29:1", "47:1", "47:0", "29:0")
+_PEGAR_TERMINAL = ("29:1", "42:1", "47:1", "47:0", "42:0", "29:0")
+
+
+def clase_activa() -> str:
+    """Clase de la ventana con foco según Hyprland ("" si no se sabe)."""
     try:
-        hecho = subprocess.run(["wtype", "--", limpio], check=False, timeout=60)
+        salida = subprocess.run(["hyprctl", "-j", "activewindow"], check=False,
+                                capture_output=True, text=True, timeout=2).stdout
+        return str(json.loads(salida or "{}").get("class") or "").strip().lower()
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return ""
+
+
+def atajo_pegar(terminal: bool) -> bool:
+    """Manda Ctrl+V (o Ctrl+Shift+V) a la ventana con foco."""
+    seq = _PEGAR_TERMINAL if terminal else _PEGAR
+    try:
+        hecho = subprocess.run(["ydotool", "key", *seq], check=False, timeout=5,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if hecho.returncode == 0:
+            return True
+    except (OSError, subprocess.SubprocessError):
+        pass
+    orden = ["wtype"]
+    if terminal:
+        orden += ["-M", "ctrl", "-M", "shift", "-k", "v", "-m", "shift", "-m", "ctrl"]
+    else:
+        orden += ["-M", "ctrl", "-k", "v", "-m", "ctrl"]
+    try:
+        return subprocess.run(orden, check=False, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def leer_portapapeles() -> str:
+    try:
+        salida = subprocess.run(["wl-paste", "--no-newline", "--type", "text"],
+                                check=False, capture_output=True, timeout=5).stdout
+        return salida.decode("utf-8", "replace")
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def escribir_portapapeles(texto: str) -> bool:
+    """Copia el texto y lo pega: byte-exacto, sin keymap sintético de por medio.
+
+    Teclear con `wtype` reconstruye el texto tecla por tecla con un keymap
+    temporal; en textos largos, y según la app de destino, se pierden caracteres
+    (p. ej. "cómo" → "cmo"). El portapapeles no tiene ese problema.
+    """
+    if not (shutil.which("wl-copy") and shutil.which("wl-paste")):
+        return False
+    anterior = leer_portapapeles()
+    try:
+        copiado = subprocess.run(["wl-copy", "-n"], input=texto.encode("utf-8"),
+                                 check=False, timeout=5,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if copiado.returncode != 0:
+            return False
+        time.sleep(0.12)
+        if not atajo_pegar(clase_activa() in TERMINALES):
+            return False
+        # Dar tiempo a que la app lea la selección antes de devolver la anterior.
+        time.sleep(0.45)
+        return True
+    finally:
+        if anterior:
+            try:
+                subprocess.run(["wl-copy", "-n"], input=anterior.encode("utf-8"),
+                               check=False, timeout=5,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+
+def teclear(texto: str) -> bool:
+    try:
+        hecho = subprocess.run(["wtype", "--", texto], check=False, timeout=60)
     except (OSError, subprocess.SubprocessError):
         return False
     return hecho.returncode == 0
+
+
+def escribir(texto: str) -> bool:
+    """Escribe en la ventana enfocada. False si no pudo (sin foco, etc)."""
+    limpio = texto.replace("\n", " ").strip()
+    if not limpio:
+        return True
+    if ENTREGA != "teclear" and escribir_portapapeles(limpio):
+        return True
+    return teclear(limpio)
 
 
 def pulsar_enter() -> None:
