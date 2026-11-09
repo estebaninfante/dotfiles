@@ -606,6 +606,15 @@ else
     warn "Falta $DOTFILES_SYSTEM/systemd-user/agentes-platform-*.service"
 fi
 
+if [[ -f "$DOTFILES_SYSTEM/systemd-user/zentro-developing.service" ]]; then
+    install -m 0644 "$DOTFILES_SYSTEM/systemd-user/zentro-developing.service" "$SYSTEMD_DIR/zentro-developing.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now zentro-developing.service 2>/dev/null || true
+    ok "zentro-developing (user) habilitado (dev server en 3050)"
+else
+    warn "Falta $DOTFILES_SYSTEM/systemd-user/zentro-developing.service"
+fi
+
 if [[ -f "$DOTFILES_SYSTEM/systemd-user/rig-main-seat.service" ]]; then
     install -m 0644 "$DOTFILES_SYSTEM/systemd-user/rig-main-seat.service" "$SYSTEMD_DIR/rig-main-seat.service"
     systemctl --user daemon-reload 2>/dev/null || true
