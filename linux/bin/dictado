@@ -380,8 +380,10 @@ def escribir(texto: str) -> bool:
     limpio = texto.replace("\n", " ").strip()
     if not limpio:
         return True
-    if ENTREGA != "teclear" and escribir_portapapeles(limpio):
-        return True
+    if ENTREGA != "teclear":
+        if escribir_portapapeles(limpio):
+            return True
+        log("no pude pegar desde el portapapeles; tecleo con wtype")
     return teclear(limpio)
 
 
