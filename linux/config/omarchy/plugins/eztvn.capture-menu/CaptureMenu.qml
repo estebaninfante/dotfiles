@@ -88,6 +88,17 @@ Item {
     root.intent = String(p.defaultAction || "image") === "record" ? "video" : "image"
     root.selectedIndex = 0
     root.resetSelection()
+    // El PNG congelado es del monitor con foco: el overlay debe vivir ahí.
+    var mon = String(p.monitor || "")
+    if (mon !== "") {
+      var screens = Quickshell.screens
+      for (var i = 0; i < screens.length; i++) {
+        if (screens[i].name === mon) {
+          panel.screen = screens[i]
+          break
+        }
+      }
+    }
     root.reveal = 0
     root.opened = true
     Qt.callLater(function() {

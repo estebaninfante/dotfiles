@@ -46,8 +46,24 @@ if pgrep -f '^gpu-screen-recorder' >/dev/null; then
     exec ~/.local/bin/screenrecord-toggle
 fi
 
-# Congelar primero: el PNG queda sin overlay.
-if ! grim "$frame" 2>/dev/null || [[ ! -s $frame ]]; then
+# Congelar primero: el PNG queda sin overlay. Se captura sólo el monitor con
+# foco (no todo el layout): el overlay vive en ese monitor y así las
+# coordenadas de la selección y el PNG comparten el mismo espacio.
+read -r mon_name mon_x mon_y mon_scale < <(
+    hyprctl monitors -j 2>/dev/null |
+        jq -r '.[] | select(.focused) | "\(.name) \(.x) \(.y) \(.scale)"'
+)
+[[ -n $mon_name && $mon_name != null ]] || mon_name=""
+[[ -n $mon_x && $mon_x != null ]] || mon_x=0
+[[ -n $mon_y && $mon_y != null ]] || mon_y=0
+[[ -n $mon_scale && $mon_scale != null ]] || mon_scale=1
+
+if [[ -n $mon_name ]]; then
+    grim -o "$mon_name" "$frame" 2>/dev/null || grim "$frame" 2>/dev/null
+else
+    grim "$frame" 2>/dev/null
+fi
+if [[ ! -s $frame ]]; then
     nofd notify -u critical -g "󰅚" --app-name capture-menu \
         "No se pudo congelar la pantalla" "grim no devolvió imagen" 2>/dev/null || true
     exit 1
@@ -58,7 +74,8 @@ payload=$(jq -cn \
     --arg doneFile "$done_file" \
     --arg imagePath "$frame" \
     --arg defaultAction "$default_action" \
-    '{selectionFile: $selectionFile, doneFile: $doneFile, imagePath: $imagePath, defaultAction: $defaultAction}')
+    --arg monitor "$mon_name" \
+    '{selectionFile: $selectionFile, doneFile: $doneFile, imagePath: $imagePath, defaultAction: $defaultAction, monitor: $monitor}')
 
 if ! omarchy-shell shell summon eztvn.capture-menu "$payload" >/dev/null 2>&1; then
     nofd notify -u critical -g "󰅚" --app-name capture-menu \
@@ -153,17 +170,14 @@ window_at() {
         | sort_by(.f) | if length > 0 then "\(.[0].g)|\(.[0].m)" else empty end'
 }
 
-monitor_scale() {
-    hyprctl monitors -j 2>/dev/null |
-        jq -r --argjson id "${1:-0}" '.[] | select(.id == $id) | .scale' | head -1
-}
-
-# Geometría lógica de ventana → píxeles del PNG congelado.
+# Geometría lógica global → píxeles del PNG congelado. El PNG es sólo el
+# monitor capturado, así que se resta su origen antes de escalar.
 logical_to_crop() {
-    local geom=$1 scale=$2 w h x y
+    local geom=$1 w h x y
     IFS=x+ read -r w h x y <<<"$geom"
-    awk -v s="$scale" -v x="$x" -v y="$y" -v w="$w" -v h="$h" \
-        'BEGIN { printf "%d,%d,%d,%d", x*s, y*s, w*s, h*s }'
+    awk -v s="$mon_scale" -v ox="$mon_x" -v oy="$mon_y" \
+        -v x="$x" -v y="$y" -v w="$w" -v h="$h" \
+        'BEGIN { printf "%d,%d,%d,%d", (x-ox)*s, (y-oy)*s, w*s, h*s }'
 }
 
 # Compone los trazos del plugin sobre el PNG congelado. Se aplica antes de
@@ -241,9 +255,7 @@ case "$key" in
         # Clic en el escritorio: cancela (el overlay ya se está cerrando).
         [[ -n $hit ]] || exit 0
         geom=${hit%|*}
-        scale=$(monitor_scale "${hit##*|}")
-        [[ -n $scale && $scale != null ]] || scale=1
-        IFS=, read -r px py pw ph < <(logical_to_crop "$geom" "$scale")
+        IFS=, read -r px py pw ph < <(logical_to_crop "$geom")
         copy_region "$px" "$py" "$pw" "$ph"
         ;;
     recordwindowat:*)
@@ -259,6 +271,6 @@ case "$key" in
         ;;
     full)
         magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || cp "$frame" "$STATE_DIR/full.png"
-        copy_png "$STATE_DIR/full.png" "Pantalla completa"
+        copy_png "$STATE_DIR/full.png" "Pantalla"
         ;;
 esac
