@@ -303,14 +303,21 @@ push() { # [--force]
 
   for attempt in 1 2; do
     mime=$(pick_mime) || { log "push: portapapeles vacío"; return 0; }
-    local tmp err rc_read
+    local tmp err rc_read try
     tmp=$(mktemp "${STATE}/payload.XXXXXX") || return 1
     err="${STATE}/wl-paste.err"
-    timeout 20 wl-paste --no-newline --type "${mime}" >"${tmp}" 2>"${err}"
-    rc_read=$?
+    # El plugin de historial de Omarchy también lee cada imagen; con una imagen
+    # grande dos lectores a la vez hacen que wl-paste se cuelgue (rc=124). Se
+    # reintenta con una pausa en vez de perder la copia.
+    for try in 1 2 3; do
+      timeout 8 wl-paste --no-newline --type "${mime}" >"${tmp}" 2>"${err}"
+      rc_read=$?
+      (( rc_read == 0 )) && break
+      (( try < 3 )) && sleep 1
+    done
     if (( rc_read != 0 )); then
       rm -f "${tmp}"
-      log "push: no se pudo leer ${mime} (rc=${rc_read}): $(head -2 "${err}" 2>/dev/null | tr '\n' ' ')"
+      log "push: no se pudo leer ${mime} tras 3 intentos (rc=${rc_read}): $(head -2 "${err}" 2>/dev/null | tr '\n' ' ')"
       return 1
     fi
     local size digest
