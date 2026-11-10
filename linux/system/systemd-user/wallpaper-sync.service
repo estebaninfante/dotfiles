@@ -1,0 +1,10 @@
+[Unit]
+Description=Wallpaper: propaga el fondo canonico (symlink de Omarchy) a hyprpaper
+Documentation=file://%h/dotfiles/linux/bin/sync-wallpaper.sh
+# Lo dispara wallpaper-sync.path cuando cambia ~/.local/state/omarchy/current/background.
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/sync-wallpaper.sh
+# hyprpaper puede tardar en re-aplicar: no hace falta esperar nada mas.
+TimeoutStartSec=20

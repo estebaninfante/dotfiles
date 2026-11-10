@@ -1,0 +1,12 @@
+[Unit]
+Description=Wallpaper: vigila el symlink canonico de Omarchy y propaga el cambio
+
+[Path]
+# `omarchy theme bg set` (y cualquier agente) reescribe este symlink. Sin esto,
+# hyprpaper se quedaba con el fondo viejo y el overview (que sigue el symlink)
+# mostraba otro: dos wallpapers. Este watcher los mantiene siempre iguales.
+PathChanged=%h/.local/state/omarchy/current/background
+Unit=wallpaper-sync.service
+
+[Install]
+WantedBy=default.target
