@@ -59,10 +59,6 @@ Item {
   property string peerPosition: "right"
   property string peerName: "peer"
   property string localName: "este equipo"
-  property string machine: ""
-  // Proporción (ancho/alto) de la pantalla del peer. El desktop está vertical:
-  // 1152x2048 → 0.5625. Sale de peer-screens.json; 16:9 si no está.
-  property real peerAspect: 1.6
   property bool linked: false
   // true mientras el puntero está del lado del peer (salimos y no ha vuelto).
   property bool sentPointer: false
@@ -84,7 +80,7 @@ Item {
 
   // La pantalla que tiene el borde por donde se cruza (la más extrema en la
   // dirección del peer). Con un solo monitor es esa, siempre.
-  readonly property var edgeScreenRef: {
+  readonly property string edgeScreen: {
     var screens = Quickshell.screens
     var best = null
     for (var i = 0; i < screens.length; i++) {
@@ -96,15 +92,8 @@ Item {
       else if (peerPosition === "bottom" && s.y + s.height > best.y + best.height) best = s
       else if (peerPosition === "top" && s.y < best.y) best = s
     }
-    return best
+    return best ? String(best.name) : ""
   }
-
-  readonly property string edgeScreen: edgeScreenRef ? String(edgeScreenRef.name) : ""
-
-  // Proporción real de esta pantalla: el diagrama dibuja cada equipo con la
-  // suya, así la vertical del desktop no aparece acostada.
-  readonly property real hostAspect: (edgeScreenRef && edgeScreenRef.height > 0)
-    ? edgeScreenRef.width / edgeScreenRef.height : 1.6
 
   function parse(json) {
     try { return JSON.parse(String(json || "{}")) || {} } catch (e) { return {} }
@@ -176,31 +165,27 @@ Item {
     cursorProc.running = true
   }
 
-  // Un cruce abre y cierra la conexión: eso es rutina, no un enlace que
-  // aparece. El aviso grande (escena + tarjeta) sale sólo cuando la conexión
-  // se sostiene `stableMs` sin un cruce en el medio, o sea cuando el peer
-  // arrancó o se cayó de verdad. Antes cada cruce pintaba la escena entera y
-  // quedaba parpadeando "conectado / desconectado".
-  readonly property int stableMs: 4000
-
   function onLog(line) {
     if (paused) return
     var s = String(line)
     var now = Date.now()
+    // "acknowledged" es la confirmación real de que el peer aceptó: el
+    // título/captura pueden existir sin conexión. Se repite por cada Enter,
+    // así que sólo anima al pasar de desconectado a conectado.
     if (/acknowledged the connection!|dtls client connected/.test(s)) {
-      // Conexión viva: candidata a enlace estable, se confirma en stableMs.
-      dropSettle.stop()
-      if (!linked && !sentPointer) upSettle.restart()
+      if (!linked) {
+        linked = true
+        if (now - lastLinkUp > 15000) { lastLinkUp = now; linkUp() }
+      }
     } else if (/entering client/.test(s)) {
       // El puntero salió de este equipo hacia el peer. Sólo ocurre con la
       // captura armada; los intentos fallidos loguean "no active client".
       sentPointer = true
-      upSettle.stop(); dropSettle.stop()
       if (now - lastCrossOut > 700) { lastCrossOut = now; cross("out") }
     } else if (/entered this device/.test(s)) {
       // El puntero llegó desde el peer a esta máquina.
+      linked = true
       sentPointer = false
-      upSettle.stop(); dropSettle.stop()
       if (now - lastCrossIn > 700) { lastCrossIn = now; cross("in") }
     } else if (/left remote client device region/.test(s)) {
       // El peer soltó la captura: el puntero volvió. Un Leave espurio (enlace
@@ -210,37 +195,11 @@ Item {
         if (now - lastCrossIn > 700) { lastCrossIn = now; cross("in") }
       }
     } else if (/connection closed|active connections: \[\]|deactivated client|compositor released mouse|no active client at this position/.test(s)) {
-      // Se cerró la conexión: si había un enlace estable, se confirma la caída
-      // en stableMs (un cruce normal vuelve a conectar enseguida y no avisa).
-      upSettle.stop()
-      if (linked) dropSettle.restart()
-    }
-  }
-
-  Timer {
-    id: upSettle
-    interval: root.stableMs
-    onTriggered: {
-      if (root.sentPointer) return
-      root.linked = true
-      // El aviso es de "enlace establecido", no de cada cruce: 30 min.
-      if (Date.now() - root.lastLinkUp > 1800000) {
-        root.lastLinkUp = Date.now()
-        root.linkUp()
-      }
-    }
-  }
-
-  Timer {
-    id: dropSettle
-    interval: root.stableMs
-    onTriggered: {
-      if (root.sentPointer || upSettle.running) return
-      root.linked = false
-      if (Date.now() - root.lastLinkDown > 1800000) {
-        root.lastLinkDown = Date.now()
-        root.linkDown()
-      }
+      // Enlace caído o captura desactivada. "no active client at this
+      // position" es el borde tocado con el cliente apagado: avisar una vez,
+      // no fingir un cruce.
+      if (linked || sentPointer) { linked = false; sentPointer = false }
+      if (now - lastLinkDown > 15000) { lastLinkDown = now; linkDown() }
     }
   }
 
@@ -442,16 +401,27 @@ Item {
 
     Rectangle {
       anchors.fill: parent
+      radius: Math.min(width, height) * 0.08
       color: Color.background
     }
 
-    // Marco recto: sin esquinas redondeadas ni brillo de vidrio (nada de
-    // "burbuja": la pantalla se dibuja como un rectángulo, que es lo que es).
     Rectangle {
       anchors.fill: parent
+      radius: Math.min(width, height) * 0.08
       color: Qt.rgba(tile.tint.r, tile.tint.g, tile.tint.b, 0.06 + 0.10 * tile.lit)
       border.width: 2
       border.color: Qt.rgba(tile.tint.r, tile.tint.g, tile.tint.b, 0.25 + 0.65 * tile.lit)
+
+      // Brillo interior arriba: sugiere vidrio sin dibujar un monitor literal.
+      Rectangle {
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 2 }
+        height: parent.height * 0.45
+        radius: parent.radius
+        gradient: Gradient {
+          GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.07 * tile.lit) }
+          GradientStop { position: 1; color: "transparent" }
+        }
+      }
 
       Text {
         anchors.centerIn: parent
