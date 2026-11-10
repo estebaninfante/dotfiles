@@ -1,5 +1,6 @@
 {
   "bar": {
+    "backgroundAlpha": 0.45,
     "centerAnchor": "eztvn.workspaces",
     "id": "eztvn.bar",
     "layout": {
