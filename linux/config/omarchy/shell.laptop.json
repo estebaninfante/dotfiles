@@ -92,12 +92,14 @@
   },
   "cloneSourceRestores": [
     "eztvn.menu",
-    "eztvn.osd"
+    "eztvn.osd",
+    "eztvn.lock"
   ],
   "disabledPlugins": [
     "omarchy.menu",
     "tomv.battery-usage",
-    "omarchy.osd"
+    "omarchy.osd",
+    "omarchy.lock"
   ],
   "idle": {
     "lock": 180,
@@ -124,6 +126,9 @@
     },
     {
       "id": "eztvn.enlace"
+    },
+    {
+      "id": "eztvn.lock"
     }
   ],
   "version": 1
