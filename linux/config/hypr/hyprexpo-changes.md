@@ -3,69 +3,79 @@
 ## Cambio 2026-11-10 — overview 3D correcto con el monitor girado (pantalla vertical)
 
 **Motivo**: en el desktop la pantalla esta vertical (`DP-2` 2560x1440 con
-`transform: 1`, o sea 1440x2560). Ahi el overview (`SUPER+Y`) abria casi vacio:
+`transform: 3`, o sea 1440x2560). Ahi el overview (`SUPER+Y`) abria casi vacio:
 solo el wallpaper de fondo y algun jiron de un tile; ni grilla ni previews. Con
 `threed_enable = 0` la grilla se veia bien, asi que el problema estaba entero en
-el camino 3D. Afectaba igual a `transform: 2` (180), donde la grilla salia
-espejada.
+el camino 3D. El modo plano y el 3D tienen que verse igual de "nativos" (un solo
+wallpaper, la grilla encima), asi que se arregla la geometria, no se apaga el 3D.
 
-**Causa**: el pass element dibuja en el mismo espacio que el resto del overlay
-—pixeles del monitor ya rotado (`m_size` = 1440x2560) con la ortho que arma
-Hyprland— pero la grilla 3D armaba su propia projection componiendo ademas el
-transform del monitor:
-`outputProjection(MON->m_transformedSize, wlTransformToHyprutils(MON->m_transform))`.
-`outputProjection` reparte `2/w` y `2/h` sobre los ejes *contrarios* cuando hay
-rotacion: la matriz esperaba coordenadas del buffer sin rotar mientras los tiles
-venian en espacio rotado, o sea rotacion + anisotropia de 1440/2560 = 0.5625 en
-un eje. Medido con la geometria real (grilla 3x3, tilt 15, desktop 1440x2560
-scale 1.25): con la projection vieja los corners caian hasta `|NDC| = 2.49`
-—fuera de cuadro— con 100% de error de aspecto; con la nueva dan `|NDC| = 1.11`
-y 7%, igual que el caso horizontal sano de la laptop.
+**Causa (proyeccion)**: el pass element dibuja en pixel-space del monitor ya
+rotado (`m_size` = 1440x2560) pero el buffer de salida es el modo sin rotar
+(`m_pixelSize` = 2560x1440). `outputProjection(size, transform)` reparte `2/w` y
+`2/h` entrecruzados cuando hay rotacion, asi que el par correcto es
+`(m_pixelSize, transform)`: cubre la pantalla entera y mete la rotacion una sola
+vez. La projection usaba `m_transformedSize` (el tamano ya rotado): los ejes se
+entre cruzaban de nuevo y la grilla quedaba anisotropica y fuera de cuadro.
+Medido en la sesion nested girada: con el par correcto los corners caen en
+`|NDC| <= 1`; con `m_transformedSize` se iban a 2.49 (100% de error de aspecto).
+
+**Causa (wallpaper / previews)**: los tiles son transparentes y el "un solo
+wallpaper" lo sostienen dos piezas: el fondo que pinta el plugin con la imagen
+canonica y la captura de cada workspace *sin* el wallpaper (el
+`CTransparentTileGuard` desengancha la capa BACKGROUND). En un monitor girado esa
+captura salia con el tamano del buffer y la textura marcada como rotada 180: en
+90/270 el preview quedaba girado y estirado, con "otro" wallpaper adentro del
+tile. Ahora la captura sale en el espacio ya rotado del monitor
+(`monitorState.transformedSize()`) y la textura va sin rotacion, asi que el tile
+muestra lo mismo que el escritorio.
 
 **Comportamiento nuevo**:
 
 - La grilla 3D y el fisheye se ven correctos en cualquier orientacion
-  (`transform` 0, 1, 2 y 3): la misma geometria que el modo plano, ahora con tilt.
-- En un monitor vertical los tiles quedan verticales (un workspace vertical),
-  que es lo que corresponde: sin letterbox ni recorte.
-- Horizontal no cambia: con `transform: 0` la projection nueva es identica a la
-  vieja, asi que la laptop se ve igual que antes.
+  (`transform` 0, 1, 2 y 3), con los tiles verticales cuando el monitor es
+  vertical (sin letterbox ni recorte).
+- El fondo del overview y los previews quedan alineados con el wallpaper del
+  escritorio: no aparece "otro" wallpaper adentro de los tiles.
+- Horizontal no cambia: con `transform: 0` `m_pixelSize` y `m_transformedSize`
+  son iguales y la textura ya iba sin rotacion, asi que la laptop se ve igual.
 
 **Implementacion** (`linux/patches/hyprexpo-local.patch`, fork local):
 
-- `OverviewRender.cpp`: `proj3D = outputProjection(MON->m_transformedSize,
-  HYPRUTILS_TRANSFORM_NORMAL)`.
-- `Overview3D.cpp` (`ensureInit`): `makeEGLCurrent()` antes de compilar el
-  shader. El resultado se cachea (`g_inited`): si la primera llamada caia sin
-  contexto EGL current (arranque, reload, sesion nested) el 3D quedaba apagado
-  para siempre y en silencio.
+- `OverviewRender.cpp`: `proj3D = outputProjection(MON->m_pixelSize,
+  Math::wlTransformToHyprutils(MON->m_transform))`.
+- `OverviewCapture.cpp`: la captura de un monitor con transform distinto de normal
+  usa `monitorState.transformedSize()` (con un accessor nuevo en el guard) y la
+  textura queda en `HYPRUTILS_TRANSFORM_NORMAL` (antes: tamano del buffer + 180).
+- `Overview3D.cpp` (`ensureInit`): `makeEGLCurrent()` antes de compilar el shader.
+  El resultado se cachea (`g_inited`): si la primera llamada caia sin contexto EGL
+  current (arranque, reload, sesion nested) el 3D quedaba apagado para siempre y
+  en silencio.
 - `scripts/run-nested.sh`: `HYPREXPO_DEV_TRANSFORM=0|1|2|3` levanta el harness
   nested con el output girado; es la unica forma de probar orientacion sin
   reiniciar la sesion viva.
-- `tests/OverviewSourceTests.cpp`: asserts de la projection sin transform, de que
-  no vuelva `wlTransformToHyprutils(MON->m_transform)` en el render, del
-  `makeEGLCurrent()` antes de compilar y de la rotacion del harness.
-- `hyprexpo-rebuild.sh`: guards de la projection (existe la linea nueva y no
-  aparece la vieja), del `makeEGLCurrent` y de `HYPREXPO_DEV_TRANSFORM`.
+- `tests/OverviewSourceTests.cpp`: asserts del par `m_pixelSize` + transform (y de
+  que no vuelva `m_transformedSize`), de la captura en `transformedSize()` sin
+  `HYPRUTILS_TRANSFORM_180`, del `makeEGLCurrent()` y de la rotacion del harness.
+- `hyprexpo-rebuild.sh`: los mismos guards, para que un rebase del patch no los
+  pierda en silencio.
 
 **Verificado**:
 
-- Matematico, con la geometria y los numeros del desktop: la projection vieja
-  deja tiles fuera de cuadro con 100% de error de aspecto; la nueva coincide con
-  el caso horizontal sano.
-- Sesion anidada girada (`HYPREXPO_DEV_TRANSFORM=1`, harness nested corriendo en
-  el desktop, captura del output nested): grilla 3x3 vertical completa, centrada,
-  tile activo resaltado, fisheye aplicado.
-- `make` compila; `make test` no agrega fallos nuevos (la suite ya tenia asserts
-  rojos por drift viejo de `close()`/seleccion, ajenos a este cambio).
-- Falta verlo en la sesion viva del desktop: el `.so` solo se carga al arrancar
-  Hyprland.
+- Sesion anidada girada en el desktop (`HYPREXPO_DEV_TRANSFORM=1`, harness nested,
+  captura del output nested): grilla 3x3 vertical completa y centrada, tile activo
+  resaltado, contenido sin girar.
+- Antes del arreglo, en la sesion viva: solo wallpaper y un jiron de tile; con la
+  projection sin transform (intento intermedio) la grilla aparecia pero girada 90.
+- `make` compila; `make test` no agrega fallos nuevos (la suite ya tenia 10
+  asserts rojos por drift viejo de `close()`/seleccion, ajenos a este cambio).
+- El `.so` se aplica al reiniciar Hyprland (no se puede recargar en caliente).
 
 **Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` (pide sudo) y despues
 **logout/login** en cada maquina.
 
 **Revertir**: volver la linea de `proj3D` a
-`outputProjection(MON->m_transformedSize, Math::wlTransformToHyprutils(MON->m_transform))`,
+`outputProjection(MON->m_transformedSize, Math::wlTransformToHyprutils(MON->m_transform))`
+y la captura a `{{0,0},{captureBox.h,captureBox.w}}` + `HYPRUTILS_TRANSFORM_180`;
 regenerar el patch y rebuild. Para volver al modo plano alcanza con
 `threed_enable = 0`, que ya se veia bien girado.
 

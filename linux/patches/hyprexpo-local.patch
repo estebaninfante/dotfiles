@@ -1682,7 +1682,7 @@ index 6984d59..a59e32b 100644
  
  ePassElementType COverviewPassElement::type() {
 diff --git c/OverviewRender.cpp i/OverviewRender.cpp
-index e73c8f6..045d878 100644
+index e73c8f6..3943e23 100644
 --- c/OverviewRender.cpp
 +++ i/OverviewRender.cpp
 @@ -2,6 +2,7 @@
@@ -1893,17 +1893,17 @@ index e73c8f6..045d878 100644
 +    // in on open and out on close instead of snapping on one frame.
 +    float warpAmt = 1.0f;
 +    if (use3D) {
-+        // La grilla 3D usa la MISMA proyeccion que Hyprland tiene puesta para
-+        // este frame: la que ya usan los tiles del modo plano a traves de
-+        // renderTextureInternal. Es la unica forma de que caiga exactamente donde
-+        // cae el resto del overlay con cualquier orientacion (0/90/180/270),
-+        // escala o layout de monitores, sin re-derivar el transform a mano:
-+        // armarla con outputProjection(...) y el transform del monitor metia la
-+        // rotacion dos veces (y repartia 2/w y 2/h en los ejes contrarios), que en
-+        // una pantalla vertical dejaba la grilla fuera de cuadro y estirada.
-+        const auto& nativeProjection = g_pHyprRenderer->m_renderData.targetProjection;
-+        const auto  nativeMatrix     = nativeProjection.getMatrix();
-+        proj3D = nativeMatrix[8] != 0.0f ? nativeMatrix : Hyprutils::Math::Mat3x3::outputProjection(MON->m_pixelSize, HYPRUTILS_TRANSFORM_NORMAL).getMatrix();
++        // La proyeccion de la grilla 3D tiene que ser la MISMA que usa Hyprland
++        // para el resto del overlay en este monitor: pixel-space del monitor
++        // compuesto con el transform de salida. Ojo con los dos tamanos:
++        //  - el espacio de ENTRADA es el tamano ya rotado (m_size/m_transformedSize:
++        //    en vertical 1440x2560): los tiles se maquetan ahi;
++        //  - el BUFFER de salida es el tamano del modo sin rotar (m_pixelSize:
++        //    2560x1440), y por eso outputProjection reparte 2/w y 2/h entrecruzados.
++        // Pasarle m_transformedSize en vez de m_pixelSize entrecruza los ejes de
++        // nuevo y deja la grilla anisotropica y fuera de cuadro (pantalla vertical
++        // casi vacia); omitir el transform la deja entera pero girada 90.
++        proj3D = Hyprutils::Math::Mat3x3::outputProjection(MON->m_pixelSize, Math::wlTransformToHyprutils(MON->m_transform)).getMatrix();
 +        // Animated strength; falls back to full effect if the var is missing.
 +        warpAmt = tiltAnim ? std::min(1.0f, std::max(0.0f, tiltAnim->value())) : 1.0f;
 +        const float tiltNow = (float)**P3TILT * warpAmt;
@@ -2603,7 +2603,7 @@ index 0000000..0456292
 +echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
 +exit 0
 diff --git c/tests/OverviewSourceTests.cpp i/tests/OverviewSourceTests.cpp
-index d2e7572..d6c4dde 100644
+index d2e7572..5420287 100644
 --- c/tests/OverviewSourceTests.cpp
 +++ i/tests/OverviewSourceTests.cpp
 @@ -122,6 +122,67 @@ int main() {
@@ -2688,10 +2688,10 @@ index d2e7572..d6c4dde 100644
  
      const auto renderSource = readFile("OverviewRender.cpp");
      expect(!renderSource.empty(), "OverviewRender.cpp can be read from repo root");
-+    expectContains(renderSource, "m_renderData.targetProjection",
-+                   "the 3D grid reuses the compositor's own per-frame projection instead of rebuilding it");
-+    expectAbsent(renderSource, "Math::wlTransformToHyprutils(MON->m_transform)",
-+                 "the 3D projection never re-applies the monitor transform (rotated monitors rendered off-screen)");
++    expectContains(renderSource, "outputProjection(MON->m_pixelSize, Math::wlTransformToHyprutils(MON->m_transform))",
++                   "the 3D grid projects monitor pixel space through the output transform (upright on rotated monitors)");
++    expectAbsent(renderSource, "outputProjection(MON->m_transformedSize",
++                 "the projection never swaps the buffer size for the rotated size (anisotropic grid on vertical monitors)");
 +    const auto captureRotationSource = readFile("OverviewCapture.cpp");
 +    expect(!captureRotationSource.empty(), "OverviewCapture.cpp can be read from repo root");
 +    expectContains(captureRotationSource, "captureBox = {{0, 0}, monitorState.transformedSize()};",

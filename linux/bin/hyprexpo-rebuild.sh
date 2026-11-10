@@ -65,21 +65,22 @@ if ! grep -q "keep_layers" "$SRC/PluginConfig.cpp" || ! grep -q "keep_layers" "$
     exit 1
 fi
 
-# Guards anti-regresion de orientacion. El overview 3D tiene que usar la MISMA
-# proyeccion que Hyprland tiene puesta para el frame (la que ya usan los tiles del
-# modo plano). Armarla a mano con outputProjection + el transform del monitor metia
-# la rotacion dos veces (y repartia 2/w y 2/h en los ejes contrarios): en vertical
-# la grilla quedaba fuera de cuadro y el fondo girado. Y la captura de los previews
-# tiene que salir en el espacio ya rotado del monitor, sin el flip de 180. Ver
-# "2026-11-10 - overview 3D en pantalla girada" en el changes.
-if ! grep -q "m_renderData.targetProjection" "$SRC/OverviewRender.cpp"; then
-    echo "error: el patch perdio la projection nativa del overview 3D (roto en pantalla girada)" >&2
+# Guards anti-regresion de orientacion. El overview 3D tiene que proyectarse desde
+# el pixel-space del monitor (m_pixelSize, el buffer sin rotar) con el transform de
+# salida: ese es el unico par que cubre la pantalla entera con la rotacion incluida.
+# Con m_transformedSize (el tamano ya rotado) los ejes se entrecruzan y la grilla
+# queda anisotropica y fuera de cuadro; sin transform queda entera pero girada 90.
+# Ademas la captura de los previews tiene que salir en el espacio ya rotado del
+# monitor (transformedSize), sin el flip de 180 que solo servia para 180 grados.
+# Ver "2026-11-10 - overview 3D en pantalla girada" en el changes.
+if ! grep -q "outputProjection(MON->m_pixelSize, Math::wlTransformToHyprutils(MON->m_transform))" "$SRC/OverviewRender.cpp"; then
+    echo "error: la projection 3D tiene que ser pixel-space (m_pixelSize) + transform de salida" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
 
-if grep -q "wlTransformToHyprutils(MON->m_transform)" "$SRC/OverviewRender.cpp"; then
-    echo "error: la projection 3D volvio a componer el transform del monitor" >&2
+if grep -q "outputProjection(MON->m_transformedSize" "$SRC/OverviewRender.cpp"; then
+    echo "error: la projection 3D volvio a usar el tamano rotado en vez del buffer (grilla anisotropica en vertical)" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
