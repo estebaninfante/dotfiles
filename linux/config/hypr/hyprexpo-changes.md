@@ -1,5 +1,44 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-10d — grilla usable con el mouse (lan-mouse) y previews bien encuadrados
+
+**Motivo**: (1) con la grilla abierta el mouse se "duplicaba": el puntero cruzaba el
+borde, lan-mouse se lo llevaba a la otra máquina y quedaban dos cursores, así que el
+clic caía en el equipo equivocado; (2) el contenido de cada workspace se veía
+recortado y con una franja del wallpaper al costado.
+
+**Comportamiento nuevo**:
+
+- Mientras el submap `hyprexpo` está activo, `lan-mouse-capture.sh off` suelta la
+  captura del borde: el puntero se queda en esta máquina y se puede elegir tile con
+  el mouse. Al cerrar la grilla se re-arma (`on`), salvo que haya un stream —
+  Moonlight también la tiene apagada a propósito.
+- La captura de los tiles usa el tamaño **lógico** del monitor (`m_size / escala`:
+  1152x2048 en el desktop vertical) y no el físico (1440x2560). El render del
+  workspace trabaja en lógico: capturar al físico dejaba el contenido en el 80%
+  (1/1.25) del framebuffer, anclado arriba a la izquierda → preview recortado con
+  franja de wallpaper. Se mantiene el flip 180 de la textura, que es lo que lo
+  endereza (sin él se ve invertido).
+
+**Implementación**:
+
+- `navigation.lua`: en el hook `keybinds.submap`, `off` al entrar a `hyprexpo` y `on`
+  al salir (con `previous_submap` y `modes.streaming`).
+- `OverviewCapture.cpp`: `captureBox = transformedSize() / m_scale` (+ el flip 180).
+- `hyprexpo-rebuild.sh`: el guard de la captura ahora exige las dos cosas
+  (`transformedSize() / capScale` y `HYPRUTILS_TRANSFORM_180`).
+
+**Verificado** (desktop, sesión viva):
+
+- `lan-mouse-capture.sh status`: `capture: active` → **`released`** con la grilla
+  abierta → `active` al cerrarla.
+- El preview del tile quedó derecho (barra del navegador arriba, texto legible) y,
+  con la captura en tamaño lógico, llena el tile (pendiente de ver en la sesión
+  viva: el `.so` se aplica al reiniciar Hyprland).
+
+**Aplicar**: `hyprexpo-rebuild.sh` + **logout/login** para el `.so`. La parte de
+lan-mouse es sólo config (`hyprctl reload`).
+
 ## Cambio 2026-11-10c — un solo wallpaper de verdad (sin copias ni desincronización)
 
 **Motivo**: al cambiar el wallpaper (lo pidió al agente), el escritorio mostraba uno

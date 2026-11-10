@@ -371,6 +371,31 @@ Item {
     }
   }
 
+  // Proporción de la pantalla del peer, por máquina: el desktop está vertical
+  // (1152x2048 → 0.5625), la laptop horizontal (1440x900 → 1.6). Un solo
+  // archivo para las dos máquinas; la clave es la que corre el shell.
+  FileView {
+    id: peerScreens
+    path: root.home + "/.config/omarchy/plugins/eztvn.enlace/peer-screens.json"
+    printErrors: false
+    onLoaded: {
+      var map = root.parse(text())
+      var v = root.machine ? map[root.machine] : undefined
+      if (typeof v === "number" && v > 0.1 && v < 10) root.peerAspect = v
+    }
+  }
+
+  FileView {
+    path: root.home + "/.config/machine-type"
+    printErrors: false
+    onLoaded: {
+      var m = text().trim()
+      if (m === "" || m === root.machine) return
+      root.machine = m
+      peerScreens.reload()
+    }
+  }
+
   FileView {
     path: "/etc/hostname"
     printErrors: false
@@ -401,7 +426,8 @@ Item {
     function debug(): string {
       return JSON.stringify({ veil: root.veil, scrim: root.linkScrim, card: root.linkCard, edge: root.edgeGlow,
         cross: root.crossGlow, edgeScreen: root.edgeScreen, pos: root.peerPosition, bg: String(Color.background),
-        accent: String(Color.accent), paused: root.paused })
+        accent: String(Color.accent), paused: root.paused, machine: root.machine,
+        peerAspect: root.peerAspect, hostAspect: root.hostAspect })
     }
   }
 
@@ -603,16 +629,24 @@ Item {
   }
 
   // Escena de lan-mouse: dos pantallas que encajan por el borde compartido.
+  // Cada una con su proporción real (la del desktop está vertical) y la misma
+  // dimensión sobre el borde común, así el par se lee como el escritorio real.
   component LinkCard: Item {
     id: card
     readonly property real unit: Math.min(width, height) / 900
-    readonly property real tileW: 210 * unit
-    readonly property real tileH: tileW / 1.6
     readonly property string pos: root.peerPosition
+    readonly property bool beside: pos === "left" || pos === "right"
+    readonly property real tileH: 150 * unit
+    readonly property real tileW: 210 * unit
+    // Dimensión compartida: el alto si van al lado, el ancho si van arriba/abajo.
+    readonly property real hostW: beside ? tileH * root.hostAspect : tileW
+    readonly property real hostH: beside ? tileH : tileW / root.hostAspect
+    readonly property real peerW: beside ? tileH * root.peerAspect : tileW
+    readonly property real peerH: beside ? tileH : tileW / root.peerAspect
+    // Centro del peer relativo al centro de esta pantalla, ya encajado.
+    readonly property real dx: pos === "right" ? (hostW + peerW) / 2 : (pos === "left" ? -(hostW + peerW) / 2 : 0)
+    readonly property real dy: pos === "bottom" ? (hostH + peerH) / 2 : (pos === "top" ? -(hostH + peerH) / 2 : 0)
     readonly property real far: 160 * unit * (1 - root.linkJoin)
-    // El peer se acerca desde su lado: dx/dy son su posición final.
-    readonly property real dx: pos === "right" ? tileW : (pos === "left" ? -tileW : 0)
-    readonly property real dy: pos === "bottom" ? tileH : (pos === "top" ? -tileH : 0)
     readonly property real fx: pos === "right" ? far : (pos === "left" ? -far : 0)
     readonly property real fy: pos === "bottom" ? far : (pos === "top" ? -far : 0)
 
@@ -621,11 +655,11 @@ Item {
     Item {
       id: pair
       anchors.centerIn: parent
-      anchors.verticalCenterOffset: -30 * card.unit
-      // Centra el par completo, no solo la pantalla local.
-      anchors.horizontalCenterOffset: -card.dx / 2
-      width: card.tileW
-      height: card.tileH
+      // Centra el par completo (esta pantalla + la del peer), no sólo la local.
+      anchors.horizontalCenterOffset: pos === "right" ? -peerW / 2 : (pos === "left" ? peerW / 2 : 0)
+      anchors.verticalCenterOffset: -30 * card.unit + (pos === "bottom" ? -peerH / 2 : (pos === "top" ? peerH / 2 : 0))
+      width: card.hostW
+      height: card.hostH
       scale: 0.94 + 0.06 * root.linkCard
 
       ScreenTile {
@@ -634,10 +668,10 @@ Item {
       }
 
       ScreenTile {
-        width: card.tileW
-        height: card.tileH
-        x: card.dx + card.fx
-        y: card.dy + card.fy
+        width: card.peerW
+        height: card.peerH
+        x: card.hostW / 2 + card.dx + card.fx - card.peerW / 2
+        y: card.hostH / 2 + card.dy + card.fy - card.peerH / 2
         opacity: Math.min(1, root.linkJoin * 1.3)
         label: root.peerName
       }
@@ -646,27 +680,19 @@ Item {
       // pulsos que lo cruzan de un lado al otro (la sincronización).
       Item {
         id: seam
-        readonly property bool vertical: card.pos === "left" || card.pos === "right"
-        width: vertical ? 4 : card.tileW * root.linkEdge
-        height: vertical ? card.tileH * root.linkEdge : 4
-        x: card.pos === "right" ? card.tileW - 2
+        readonly property bool vertical: card.beside
+        width: vertical ? 4 : card.hostW * root.linkEdge
+        height: vertical ? card.hostH * root.linkEdge : 4
+        x: card.pos === "right" ? card.hostW - 2
           : card.pos === "left" ? -2
-          : (card.tileW - width) / 2
-        y: card.pos === "bottom" ? card.tileH - 2
+          : (card.hostW - width) / 2
+        y: card.pos === "bottom" ? card.hostH - 2
           : card.pos === "top" ? -2
-          : (card.tileH - height) / 2
+          : (card.hostH - height) / 2
         visible: root.linkEdge > 0
 
         Rectangle {
-          anchors.centerIn: parent
-          width: seam.vertical ? 26 : parent.width + 20
-          height: seam.vertical ? parent.height + 20 : 26
-          radius: 13
-          color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.16)
-        }
-        Rectangle {
           anchors.fill: parent
-          radius: 2
           color: Color.accent
         }
         Repeater {
@@ -674,7 +700,7 @@ Item {
           Rectangle {
             required property int index
             readonly property real p: (root.flow + index / 4) % 1
-            width: 8; height: 8; radius: 4
+            width: 8; height: 8
             color: Color.foreground
             opacity: Math.sin(p * Math.PI) * root.linkEdge
             x: seam.vertical
@@ -689,7 +715,7 @@ Item {
     }
 
     Column {
-      anchors { horizontalCenter: parent.horizontalCenter; top: parent.verticalCenter; topMargin: card.tileH / 2 + Math.abs(card.dy) / 2 + 80 * card.unit }
+      anchors { horizontalCenter: parent.horizontalCenter; top: parent.verticalCenter; topMargin: card.hostH / 2 + (card.pos === "bottom" ? card.peerH : 0) + 80 * card.unit }
       spacing: 8 * card.unit
 
       Text {
@@ -784,19 +810,18 @@ Item {
       y: edge.vertical ? along - len / 2 : (edge.pos === "bottom" ? edge.height - height : 0)
       opacity: root.crossGlow
 
+      // Halo recto (sin cápsula redondeada): un rectángulo tenue pegado al borde.
       Rectangle {
         anchors.centerIn: parent
-        width: edge.vertical ? 34 : parent.width
-        height: edge.vertical ? parent.height : 34
-        anchors.horizontalCenterOffset: edge.vertical ? (edge.pos === "right" ? 17 : -17) : 0
-        anchors.verticalCenterOffset: edge.vertical ? 0 : (edge.pos === "bottom" ? 17 : -17)
-        radius: 17
-        color: Qt.rgba(root.edgeColor.r, root.edgeColor.g, root.edgeColor.b, 0.35)
+        width: edge.vertical ? 22 : parent.width
+        height: edge.vertical ? parent.height : 22
+        anchors.horizontalCenterOffset: edge.vertical ? (edge.pos === "right" ? 11 : -11) : 0
+        anchors.verticalCenterOffset: edge.vertical ? 0 : (edge.pos === "bottom" ? 11 : -11)
+        color: Qt.rgba(root.edgeColor.r, root.edgeColor.g, root.edgeColor.b, 0.22)
       }
       Rectangle {
-        width: edge.vertical ? 4 : parent.width * 0.7
-        height: edge.vertical ? parent.height * 0.7 : 4
-        radius: 2
+        width: edge.vertical ? 3 : parent.width * 0.7
+        height: edge.vertical ? parent.height * 0.7 : 3
         x: edge.vertical ? (edge.pos === "right" ? parent.width - width : 0) : (parent.width - width) / 2
         y: edge.vertical ? (parent.height - height) / 2 : (edge.pos === "bottom" ? parent.height - height : 0)
         color: root.edgeColor
