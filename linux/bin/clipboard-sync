@@ -101,6 +101,29 @@ ensure_wayland() {
   return 1
 }
 
+# ¿El socket realmente atiende? Un compositor que murió sin limpiar deja el
+# archivo del socket y "Connection refused". `--watch` con timeout responde
+# justo eso: 124 = conectó y quedó escuchando; 1 = no hay servidor.
+wayland_probe() { timeout 2 wl-paste --watch true >/dev/null 2>&1; (( $? == 124 )); }
+
+# Si el WAYLAND_DISPLAY heredado apunta a un socket muerto (pasa cuando la
+# sesión gráfica se reinicia y los números de socket se reciclan), se elige uno
+# que sí atienda.
+rescan_wayland() {
+  local s
+  for s in "${XDG_RUNTIME_DIR}"/wayland-*; do
+    [[ -S ${s} ]] || continue
+    WAYLAND_DISPLAY=${s##*/}
+    export WAYLAND_DISPLAY
+    if wayland_probe; then
+      log "wayland: usando ${WAYLAND_DISPLAY}"
+      return 0
+    fi
+  done
+  log "wayland: ningún socket responde"
+  return 1
+}
+
 # Digest canónico de una entrada: mime + NUL + bytes. Mismo cálculo en las dos
 # puntas, así el eco que vuelve se reconoce y no rebota.
 digest_of() { # <mime> <archivo>
@@ -585,6 +608,8 @@ watch() {
     wl-paste --watch "${SELF}" push 8>&- 2>/dev/null
     local rc=$?
     log "watch: wl-paste terminó (rc=${rc}), reintento en 3s"
+    # rc != 0 = no pudo conectarse: puede ser un socket viejo, se re-elige.
+    (( rc != 0 )) && rescan_wayland
     sleep 3
   done
 }
