@@ -53,7 +53,9 @@ if ! grep -q "hoverSelectParked" "$SRC/OverviewInteraction.cpp" || ! grep -q "ar
     exit 1
 fi
 
-if ! grep -q "background_transparent" "$SRC/PluginConfig.cpp" || ! grep -q "backgroundTransparent" "$SRC/OverviewRender.cpp" || ! grep -q "background_transparent" "$SRC/main.cpp"; then
+# El repintado del fondo real ahora vive en OverviewRender.cpp (antes en main.cpp,
+# donde quedaba DESPUES de los tiles y los tapaba).
+if ! grep -q "background_transparent" "$SRC/PluginConfig.cpp" || ! grep -q "backgroundTransparent" "$SRC/OverviewRender.cpp"; then
     echo "error: el patch perdio background_transparent (fondo transparente para video de linux-wallpaperengine)" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
