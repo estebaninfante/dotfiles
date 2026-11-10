@@ -190,7 +190,10 @@ pick_mime() {
   local types type
   types=$(timeout 5 wl-paste --list-types 2>/dev/null) || return 1
   [[ -n ${types} ]] || return 1
-  for type in image/png image/jpeg image/webp image/gif text/uri-list text/html text/plain UTF8_STRING; do
+  # text/plain antes que text/html: wl-copy ofrece UN solo tipo, así que el
+  # texto plano pega en cualquier app; el html sólo como último recurso (en un
+  # chat o una terminal el marcado se pega literal).
+  for type in image/png image/jpeg image/webp image/gif text/uri-list text/plain UTF8_STRING text/html; do
     if grep -Fxq -- "${type}" <<<"${types}"; then
       printf '%s\n' "${type}"
       return 0
