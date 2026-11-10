@@ -23,6 +23,8 @@ Item {
   // dos estados los consume el LockView para animarse.
   property bool lockSecure: false
   property bool lockReleasing: false
+  // "" esperando · "ok" huella correcta · "denied" el dedo no coincide.
+  property string fingerprintResult: ""
   property bool pendingSessionLock: false
   property bool authenticatingPassword: false
   property bool fingerprintAuthenticating: false
@@ -66,6 +68,19 @@ Item {
 
   function queueSessionLock() {
     pendingSessionLock = true
+
+    // Con las pantallas ya presentes (el caso normal: SUPER+L en una sesión
+    // viva) no hay nada que estabilizar: esperar los 500ms del timer era la
+    // razón por la que la animación de entrada arrancaba tarde. El margen queda
+    // sólo para cuando todavía no hay salida real.
+    if (hasRealScreen()) {
+      requestSessionLock()
+      // Si el compositor no tomó el lock al toque, el polling de siempre sigue
+      // insistiendo (se detiene solo cuando la superficie queda arriba).
+      if (!pendingSessionLockTimer.running) pendingSessionLockTimer.start()
+      return
+    }
+
     if (!sessionLockStabilizeTimer.running) logEvent("lock-pending: screen-stabilizing")
     sessionLockStabilizeTimer.restart()
     if (!pendingSessionLockTimer.running) pendingSessionLockTimer.start()
@@ -133,7 +148,10 @@ Item {
     fingerprintAuthenticating = false
     fingerprintBackoff = 1000
     fingerprintAttemptStartedAt = 0
+    fingerprintResult = ""
     fingerprintRetryTimer.stop()
+    fingerprintSuccessTimer.stop()
+    fingerprintFeedbackTimer.stop()
     if (passwordPam.active) passwordPam.abort()
     if (fingerprintPam.active) fingerprintPam.abort()
   }
@@ -270,15 +288,32 @@ Item {
     fingerprintRetryTimer.restart()
   }
 
+  // pam_fprintd manda "Failed to match fingerprint" cuando hay un dedo puesto
+  // que no coincide (y sigue escuchando). Eso se anima al toque; el timeout de
+  // 30s sin dedo no, para no sacudir la caja porque sí.
+  function handleFingerprintMessage(message) {
+    if (!lockRequested) return
+
+    var text = String(message || "").toLowerCase()
+    if (text.indexOf("match fingerprint") >= 0) {
+      fingerprintResult = "denied"
+      fingerprintFeedbackTimer.restart()
+    }
+  }
+
   function handleFingerprintFinished(result) {
     fingerprintAuthenticating = false
 
     if (!lockRequested) return
     if (result === PamResult.Success) {
-      finishUnlock()
-    } else if (fingerprintConfigured) {
-      scheduleFingerprintRetry()
+      // El "✓" se ve antes de soltar: un toque de confirmación y recién ahí
+      // arranca la salida animada.
+      fingerprintResult = "ok"
+      fingerprintSuccessTimer.restart()
+      return
     }
+
+    scheduleFingerprintRetry()
   }
 
   WlSessionLock {
@@ -339,6 +374,7 @@ Item {
         revealOnLoad: false
         lockSecure: root.lockSecure
         lockReleasing: root.lockReleasing
+        fingerprintResult: root.fingerprintResult
         backgroundPath: root.backgroundPath
         backgroundVersion: root.backgroundVersion
         fingerprintConfigured: root.fingerprintConfigured
@@ -414,6 +450,10 @@ Item {
     config: "omarchy-lock-fingerprint"
     user: root.userName
 
+    onPamMessage: function(message, type) {
+      root.handleFingerprintMessage(message)
+    }
+
     onCompleted: function(result) {
       root.handleFingerprintFinished(result)
     }
@@ -422,6 +462,22 @@ Item {
       root.fingerprintAuthenticating = false
       root.scheduleFingerprintRetry()
     }
+  }
+
+  // Confirmación de huella: se ve el ✓ y después se suelta la sesión.
+  Timer {
+    id: fingerprintSuccessTimer
+    interval: 320
+    repeat: false
+    onTriggered: root.finishUnlock()
+  }
+
+  // El feedback de "no coincide" se limpia solo para volver al icono normal.
+  Timer {
+    id: fingerprintFeedbackTimer
+    interval: 900
+    repeat: false
+    onTriggered: root.fingerprintResult = ""
   }
 
   Timer {

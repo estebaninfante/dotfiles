@@ -42,6 +42,22 @@ Item {
   // así que Service.qml NO puede tocar este item por id: se comunican por acá.
   property bool lockSecure: false
   property bool lockReleasing: false
+  // Resultado de la huella: "" (esperando), "ok" o "denied" (el dedo está
+  // puesto pero no coincide). Lo publica el servicio desde pam_fprintd.
+  property string fingerprintResult: ""
+
+  readonly property bool fpOk: fingerprintResult === "ok"
+  readonly property bool fpDenied: fingerprintResult === "denied"
+  // Verde para confirmar, rojo para rechazar: los únicos dos colores que se
+  // salen de la paleta, sólo en el icono y el borde del campo.
+  readonly property color fpColor: fpDenied ? "#ff7b72" : "#7ee787"
+
+  // Valores animados del feedback (los visuals sólo leen de acá).
+  property real fpRingScale: 1
+  property real fpRingOpacity: 0
+  property real fpGlyphScale: 1
+  property real fpFlash: 0
+  property real shakeX: 0
 
   readonly property string placeholderText: "Enter Password"
   readonly property int fieldWidth: 381
@@ -169,6 +185,39 @@ Item {
     }
   }
 
+  // Huella correcta: el glifo entra con un pop, el anillo se expande y el borde
+  // del campo da un destello verde. Se ve antes de que arranque la salida.
+  ParallelAnimation {
+    id: fpOkAnim
+    NumberAnimation { target: root; property: "fpRingOpacity"; from: 0.85; to: 0; duration: 520; easing.type: Easing.OutCubic }
+    NumberAnimation { target: root; property: "fpRingScale"; from: 1.0; to: 2.0; duration: 520; easing.type: Easing.OutCubic }
+    NumberAnimation { target: root; property: "fpFlash"; from: 0.95; to: 0; duration: 620; easing.type: Easing.OutCubic }
+    SequentialAnimation {
+      NumberAnimation { target: root; property: "fpGlyphScale"; from: 0.55; to: 1.3; duration: 150; easing.type: Easing.OutBack }
+      NumberAnimation { target: root; property: "fpGlyphScale"; to: 1.0; duration: 220; easing.type: Easing.InOutQuad }
+    }
+  }
+
+  // Huella que no coincide: la caja se sacude, el anillo se cierra y el borde
+  // destella rojo. No bloquea nada: el lector sigue escuchando.
+  ParallelAnimation {
+    id: fpDeniedAnim
+    NumberAnimation { target: root; property: "fpFlash"; from: 0.9; to: 0; duration: 460; easing.type: Easing.OutCubic }
+    NumberAnimation { target: root; property: "fpRingOpacity"; from: 0.7; to: 0; duration: 280 }
+    NumberAnimation { target: root; property: "fpRingScale"; from: 1.35; to: 0.85; duration: 280 }
+    SequentialAnimation {
+      NumberAnimation { target: root; property: "shakeX"; from: 0; to: -8; duration: 50; easing.type: Easing.OutQuad }
+      NumberAnimation { target: root; property: "shakeX"; to: 7; duration: 60 }
+      NumberAnimation { target: root; property: "shakeX"; to: -4; duration: 60 }
+      NumberAnimation { target: root; property: "shakeX"; to: 0; duration: 70 }
+    }
+  }
+
+  onFingerprintResultChanged: {
+    if (root.fpOk) fpOkAnim.restart()
+    else if (root.fpDenied) fpDeniedAnim.restart()
+  }
+
   NumberAnimation {
     id: exitAnim
     target: root
@@ -268,7 +317,7 @@ Item {
       // curva al revés: el campo se posa y se disuelve.
       scale: 0.97 + 0.03 * root.reveal
       opacity: Math.min(1, root.reveal * 1.25)
-      transform: Translate { y: (1 - root.reveal) * 16 }
+      transform: Translate { x: root.shakeX; y: (1 - root.reveal) * 16 }
 
       TextInput {
         id: passwordInput
@@ -341,23 +390,66 @@ Item {
         elide: Text.ElideRight
       }
 
-      // Fingerprint hint pinned inside the field's right edge when a sensor is
-      // enrolled, so the user knows they can touch to unlock instead of typing.
-      // Matches hyprlock, which draws its fingerprint icon in the same spot.
-      Text {
-        id: fingerprintIcon
+      // Huella + feedback, dentro del campo sobre el borde derecho. El badge
+      // mantiene el layout quieto mientras el glifo cambia (huella → ✓ / ✕).
+      Item {
+        id: fingerprintBadge
         objectName: "fingerprintIndicator"
+        visible: root.fingerprintConfigured
         anchors.right: parent.right
         anchors.rightMargin: inputField.borderRight + 18
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.fingerprintConfigured
-        text: "󰈷"
-        color: Color.lock.placeholder
-        font.family: Style.font.family
-        font.pixelSize: Math.round(root.fieldFontSize * 1.1)
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+        width: Math.max(fingerprintIcon.implicitWidth, fingerprintGlyph.implicitWidth)
+        height: Math.max(fingerprintIcon.implicitHeight, fingerprintGlyph.implicitHeight)
+
+        // Anillo: se abre al confirmar, se cierra al rechazar.
+        Rectangle {
+          anchors.centerIn: parent
+          width: parent.width + 12
+          height: width
+          radius: width / 2
+          color: "transparent"
+          border.width: 1.5
+          border.color: root.fpColor
+          opacity: root.fpRingOpacity
+          scale: root.fpRingScale
+        }
+
+        Text {
+          id: fingerprintIcon
+          anchors.centerIn: parent
+          text: "󰈷"
+          color: Color.lock.placeholder
+          font.family: Style.font.family
+          font.pixelSize: Math.round(root.fieldFontSize * 1.1)
+          opacity: root.fingerprintResult === "" ? 1 : 0
+        }
+
+        Text {
+          id: fingerprintGlyph
+          anchors.centerIn: parent
+          text: root.fpDenied ? "✕" : "✓"
+          color: root.fpColor
+          font.family: Style.font.family
+          font.pixelSize: Math.round(root.fieldFontSize * 1.15)
+          opacity: root.fingerprintResult === "" ? 0 : 1
+          scale: root.fpGlyphScale
+        }
       }
+    }
+
+    // Destello del borde (verde al confirmar, rojo al rechazar). Declarado
+    // después del campo para quedar encima, y comparte su sacudida.
+    Rectangle {
+      id: fieldFlash
+      anchors.fill: inputField
+      radius: Style.cornerRadius
+      color: "transparent"
+      border.width: root.outlineThickness
+      border.color: root.fpColor
+      opacity: root.fpFlash
+      visible: root.fpFlash > 0.002
+      transform: Translate { x: root.shakeX }
     }
   }
 }
