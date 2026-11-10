@@ -1,0 +1,12 @@
+# XDG user dirs — GENERADO por scripts/link-dotfiles.sh desde esta plantilla.
+# No editar ~/.config/user-dirs.dirs a mano: se sobrescribe (y xdg-user-dirs-update
+# lo reescribe solo). Cambiar acá y correr link-dotfiles.sh.
+XDG_DESKTOP_DIR="$HOME/Escritorio"
+XDG_DOWNLOAD_DIR="$HOME/Descargas"
+XDG_TEMPLATES_DIR="$HOME/.local/share/templates"
+XDG_PUBLICSHARE_DIR="$HOME/.local/share/public"
+XDG_DOCUMENTS_DIR="$HOME/Documentos"
+XDG_MUSIC_DIR="$HOME/Música"
+XDG_PICTURES_DIR="$HOME/Imágenes"
+XDG_VIDEOS_DIR="$HOME/Videos"
+XDG_PROJECTS_DIR="$HOME/Proyectos"

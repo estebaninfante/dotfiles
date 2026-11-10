@@ -190,8 +190,8 @@ if [[ -x "$REPO/scripts/verify/skills.sh" ]]; then
 fi
 
 if [[ -n "$(git status --porcelain)" ]]; then
-    git add -A >>"$LOG" 2>&1
-    if git commit -m "autosync($HOST): $(date '+%F %T')" >>"$LOG" 2>&1; then
+    # El commit lo escribe publish.sh (unico dueno de `git add/commit/push`).
+    if "$REPO/scripts/publish.sh" commit --mensaje "autosync($HOST): $(date '+%F %T')" >>"$LOG" 2>&1; then
         log "OK commit autosync"
     fi
 fi
@@ -302,12 +302,15 @@ fi
 if [[ "$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo 0)" -gt 0 ]]; then
     pushed=0
     for intento in 1 2 3; do
-        if git_net push --quiet origin "$BRANCH"; then
+        if out=$("$REPO/scripts/publish.sh" push 2>&1); then
+            printf '%s\n' "$out" >>"$LOG"
             log "OK push (intento $intento)"
             pushed=1
             break
         fi
-        net_error "${GIT_NET_ERR:-}" && break
+        printf '%s\n' "$out" >>"$LOG"
+        GIT_NET_ERR="$out"
+        net_error "$GIT_NET_ERR" && break
         if (( intento < 3 )); then
             sleep $((intento * 10))
         fi

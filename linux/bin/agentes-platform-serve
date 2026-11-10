@@ -3,8 +3,8 @@ set -euo pipefail
 
 export PATH="${HOME}/.local/share/mise/shims:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
-main_tree="${HOME}/developing/agentes-platform"
-dev_tree="${HOME}/developing/.rig-worktrees/agentes-platform/developing"
+main_tree="${HOME}/Proyectos/agentes-platform"
+dev_tree="${HOME}/Proyectos/.rig-worktrees/agentes-platform/developing"
 
 target="${1:-}"
 

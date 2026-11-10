@@ -19,7 +19,7 @@
 #   suppress                      = mientras este botón está apretado, ignora esas teclas
 #
 # Acciones internas:
-#   @voice   toggle de Omar (prende/apaga)
+#   @voice   corta el dictado (o el TTS) que esté en curso
 #   @arrow prev|next   flecha contextual (terminal->tmux, otro->scroll)
 #   @enter   manda Enter
 #   @cancel  corta la sesión de voz
@@ -35,11 +35,11 @@ combo_ms = 600       # ventana para encadenar combos (ej. Enter + Tab = triple)
 cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactivado)
 
 # ── Botón del cuadrito (inteligente: Tab / Enter / Alt+Tab) ──────────────
-# 1 toque (Tab -> f14): toggle de Omar
+# 1 toque (Tab -> f14): corta el dictado en curso (o el TTS que suene)
 [buttons.f14]
 tap = "@voice"
 
-# 2 toques (Enter -> f17): dictado de Omar. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
+# 2 toques (Enter -> f17): dictado del escritorio. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
 [buttons.f17]
 tap = "~/.local/bin/dictado"
 combo_with = "f14"

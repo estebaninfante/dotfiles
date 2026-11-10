@@ -34,7 +34,7 @@ set -uo pipefail
 # PATH se conserva: los hooks del repo necesitan pnpm/node de mise.
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
-ROOTS="${DEV_SYNC_ROOTS:-$HOME/developing $HOME/proyectos}"
+ROOTS="${DEV_SYNC_ROOTS:-$HOME/Proyectos}"
 PEER="${DEV_SYNC_PEER:-desktop-lan}"
 CUENTA="${DEV_SYNC_CUENTA:-estebaninfante}"
 HOST="$(hostname -s 2>/dev/null || hostname)"

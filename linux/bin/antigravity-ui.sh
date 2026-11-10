@@ -2,7 +2,7 @@
 
 # Lanzador de la Aplicación GUI Antigravity Agent
 
-UI_DIR="$HOME/developing/antigravity-ui"
+UI_DIR="$HOME/Proyectos/antigravity-ui"
 
 # Si el servidor no está corriendo, iniciarlo en segundo plano
 if ! pgrep -f "node server.js" > /dev/null; then

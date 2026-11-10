@@ -96,6 +96,12 @@ for _ in $(seq 1 1800); do
             overlay_seen=1
         elif ((overlay_seen)); then
             exit 0
+        elif (( tick >= 40 )); then
+            # `shell summon` sale 0 aunque el plugin esté deshabilitado (sólo
+            # avisa por log). Sin esto la pantalla quedaba congelada ~90 s.
+            nofd notify -u critical -g "󰅚" --app-name capture-menu \
+                "Overlay no disponible" "Revisar: omarchy plugin enable eztvn.capture-menu" 2>/dev/null || true
+            exit 1
         fi
     fi
     sleep 0.05

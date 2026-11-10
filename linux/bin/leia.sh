@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LEIA_DIR="$HOME/developing/leia"
+LEIA_DIR="$HOME/Proyectos/leia"
 PORT="${LEIA_PORT:-3100}"
 
 # Reiniciar leia si ya está corriendo

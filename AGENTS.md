@@ -8,6 +8,33 @@ Todas las configuraciones gestionadas viven aqui. Los archivos en `~/.config/`, 
 
 **El usuario esta en Omarchy (Arch Linux), NO en NixOS.** El setup declarativo con NixOS se elimino del repo (queda solo en el historial de git): NO existe `flake.nix`, `nixos-rebuild`, `home-manager` ni specialisations. Paquetes con `pacman` + `yay` (AUR).
 
+## Filesystem del usuario (fuera del repo)
+
+Una sola forma de nombrar las cosas. Si algo cambia, cambia aca primero.
+
+| Ruta | Qué vive ahí | Regla |
+|------|--------------|-------|
+| `~/Proyectos/` | **única** raíz de código (repos git, un checkout por origin) | no crear otra raíz (`developing`, `Projects`, `proyectos`, `dev`, `Work`) |
+| `~/Proyectos/_archivo/` | repos dormidos o absorbidos (siguen siendo git) | cold storage, no se edita |
+| `~/Proyectos/.rig-worktrees/` | worktrees de agentes (efímeros) | viven mientras vive su ticket; `rig ticket done` los retira |
+| `~/Archivo/` | datos fríos: libros, backups de teléfono, investigación, material | no es zona de trabajo |
+| `~/Descargas/` | única carpeta de descargas (XDG) | `~/Downloads` no existe |
+| `~/Escritorio/` | bandeja de entrada de lo que se toca hoy | debe quedar vacío al cerrar el día |
+| `~/Imágenes/` | fotos y capturas | capturas nuevas van a `Imágenes/screenshots/` |
+| `~/alicia/`, `~/ai-chats/`, `~/books/`, `~/go/` | vault de notas, historial de chats, biblioteca, GOPATH | excepciones conocidas en `doctor.sh` |
+
+Reglas que mantienen el orden (las verifica `scripts/doctor.sh`):
+
+- **Nada de backups al lado del original.** Los `.pre-dotfiles.*` van a
+  `~/.local/state/dotfiles-backups/`; los de `~/.local/bin` no existen.
+- **Nada de archivos sueltos en `$HOME`.** Ni logs, ni PNG, ni `.part`.
+- **`~/.config/user-dirs.dirs` se GENERA** desde `linux/config/user-dirs.dirs.template`
+  (no se symlinkea: `xdg-user-dirs-update` lo reescribe).
+- **El `$HOME` no es un rootfs.** Si aparece `usr/`, `etc/`, `var/`, `bin/` en `$HOME`,
+  es basura de un chroot y se borra (requiere `sudo`).
+- **Un `git worktree` por agente, no un ticket eterno**: al cerrar el ticket se retira.
+
+
 ## Reglas permanentes
 
 1. **Editar siempre dentro de `~/dotfiles/`.** Nunca modificar directamente `~/.config/`, `~/.bashrc` u otros destinos enlazados. Excepcion: migraciones puntuales o emergencias justificadas.
@@ -45,7 +72,8 @@ dotfiles/
 │   ├── setup-kokoro-reader.sh # Read Aloud de Zotero (Kokoro local)
 │   ├── reconcile-machine.sh   # aplica a la maquina lo que pide el repo (autosync)
 │   ├── setup-secrets.sh # Configura/verifica claves y secrets
-│   └── publish.sh       # Commit + push con confirmacion
+│   ├── publish.sh       # ÚNICO dueño de commit+push (--yes para agentes)
+│   └── doctor.sh        # sanidad del filesystem + repo (symlinks, worktrees, raíces)
 ├── AGENTS.md
 └── README.md
 ```
@@ -129,7 +157,7 @@ del timer. Ver skill `dotfiles-publish`.
 |---------|-------------|
 | libinput-gestures.conf | `~/.config/libinput-gestures.conf` |
 | mimeapps.list | `~/.config/mimeapps.list` |
-| user-dirs.dirs | `~/.config/user-dirs.dirs` |
+| user-dirs.dirs **generado** desde `user-dirs.dirs.template` (no symlink) | `~/.config/user-dirs.dirs` |
 | user-dirs.locale | `~/.config/user-dirs.locale` |
 
 ### Pi agent (`linux/pi/agent/` — symlink por archivo)
@@ -272,7 +300,8 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 2. Para cambios de configs symlinkeadas (hypr, waybar, nvim, etc.), se aplican al instante (symlink directo al repo).
 3. Para scripts: guardar en `linux/bin/`; el inventario de `scripts/link-dotfiles.sh` los enlaza.
 4. Al anadir/renombrar una config, agregarla al inventario de `scripts/link-dotfiles.sh` y correrlo.
-5. Ejecutar `~/dotfiles/scripts/publish.sh` para commitear (y pushear con confirmacion).
+5. Ejecutar `~/dotfiles/scripts/publish.sh` para commitear y pushear (único dueño de git).
+6. Correr `~/dotfiles/scripts/doctor.sh` si tocaste rutas del filesystem o worktrees.
 
 ## Multi-maquina (laptop + desktop)
 
@@ -490,7 +519,7 @@ mientras grabás, debajo en chiquito va el micrófono que está escuchando
 Es click-through y no toma foco; lee `$XDG_RUNTIME_DIR/dictado/estado.json`,
 que publica el grabador. `linux/voice/micguard.py` lee
 `$XDG_RUNTIME_DIR/dictado/mic-busy` para que el TTS no hable encima del dictado. Sin palabra clave ni píldora: el asistente
-anterior (Omar) se retiró; su código queda en `~/developing/omar` sin servicios
+anterior (Omar) se retiró; su código queda en `~/Proyectos/omar` sin servicios
 ni atajos.
 
 **Archivos:**
@@ -630,7 +659,7 @@ al usuario remoto por **Tailscale** (tailnet-only). Nada de `0.0.0.0` en apps si
 
 ## agentes-platform: dos enlaces tailnet (main y developing)
 
-La app **agentes-platform** (`~/developing/agentes-platform`, Next.js + pnpm) se sirve en la
+La app **agentes-platform** (`~/Proyectos/agentes-platform`, Next.js + pnpm) se sirve en la
 maquina con **dos enlaces tailnet estables**, uno por rama, para ver en vivo lo que hacen los
 agentes en cada version:
 
@@ -645,13 +674,13 @@ Ambos solo-tailnet (`tailscale serve`), loopback `127.0.0.1` en la maquina (nada
 - **Wrapper**: `linux/bin/agentes-platform-serve <main|developing>` (symlink en `~/.local/bin/`).
   `main` construye si el build esta obsoleto (`find ... -newer .next/BUILD_ID`) y corre
   `next start`; `developing` corre `next dev` sobre el worktree persistente
-  `~/developing/.rig-worktrees/agentes-platform/developing` (siempre refleja el codigo actual).
+  `~/Proyectos/.rig-worktrees/agentes-platform/developing` (siempre refleja el codigo actual).
 - **Los dos modos difieren a proposito**: Next 16 admite **un solo `next dev` por arbol** (el
   segundo falla con "Another next dev server is already running"). El usuario tiene su dev en
   `:3020` sobre el arbol main, asi que main se sirve con **build de produccion + `next start`**
   (convive con el dev, que vive en `.next/dev/`). El worktree `developing` es dedicado -> ahi si
   `next dev`. `next.config.ts` ya declara `allowedDevOrigins` con el host tailnet.
-- **`.env.local`**: el wrapper enlaza `developing/.env.local` -> `main/.env.local` si falta (el
+- **`.env.local`**: el wrapper enlaza `Proyectos/.env.local` -> `main/.env.local` si falta (el
   archivo es gitignored y no viaja con el worktree).
 - **Puertos reservados**: NO reusar `38000` (`PREVIEW-SEGURO`) ni `47000`; los enlaces de
   agentes-platform son `10000 -> 3031` y `10001 -> 3040`. Un puerto nuevo = un enlace nuevo.

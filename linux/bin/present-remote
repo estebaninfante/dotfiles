@@ -17,6 +17,7 @@ internas de present-remote:
     @arrow prev    flecha contextual (terminal->tmux prev | otro->scroll arriba)
     @arrow next    flecha contextual (terminal->tmux next | otro->scroll abajo)
     @cancel        cancela la sesión de voz activa
+    @voice         corta el dictado (nuevo o el viejo de Omar) o el TTS que suene
 
 Config: ~/.config/present-remote/config.toml (o $PRESENT_CONFIG).
 
@@ -48,6 +49,8 @@ CONFIG_PATH = os.environ.get(
 )
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 DICTATE_PID = os.path.join(RUNTIME, "dictado", "grabando.pid")
+# Dictado viejo de Omar (`omar dictate`), por si alguna otra ruta todavía lo abre.
+OMAR_DICTATE_PID = os.path.join(RUNTIME, "omar", "dictate.pid")
 # Lo escribe `linux/voice/daemon.py` mientras reproduce y lo borra al terminar.
 SPEAKING_FILE = os.path.join(
     os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache"),
@@ -243,6 +246,42 @@ def dictate_active():
     return dictate_pid() is not None
 
 
+def legacy_dictate_pid():
+    """Pid del dictado viejo de Omar, o None.
+
+    Omar quedó como app de TTS, pero todavía puede abrir `omar dictate` por
+    alguna ruta vieja (gestos, una versión anterior de Orión). La tecla del
+    control remoto tiene que poder cancelarlo igual: SIGINT es "cancelá" para
+    Omar (descarta lo grabado); SIGTERM lo cerraría transcribiendo y pegando.
+    """
+    try:
+        with open(OMAR_DICTATE_PID, encoding="utf-8") as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+    if pid <= 0 or not _alive(pid):
+        return None
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            argv = f.read()
+    except OSError:
+        return None
+    return pid if b"dictate" in argv else None
+
+
+def cancel_legacy_dictation():
+    """Corta el dictado viejo de Omar descartando lo grabado."""
+    pid = legacy_dictate_pid()
+    if pid is None:
+        return False
+    log(f"voice: corto el dictado viejo de Omar ({pid})")
+    try:
+        os.kill(pid, signal.SIGINT)
+    except OSError:
+        return False
+    return _wait_dead([pid], 2.0)
+
+
 def cancel_dictation():
     """Corta el dictado en curso descartando lo grabado.
 
@@ -255,7 +294,7 @@ def cancel_dictation():
     if pid is None:
         return False
     log(f"voice: corto el dictado ({pid})")
-    _run_cmd(["dictado", "--cancel"])
+    _spawn("dictado", "--cancel")
     return _wait_dead([pid], 2.0)
 
 
@@ -293,6 +332,7 @@ def cancel_voice():
     snap = speaking_snapshot()
     _spawn("voice", "stop")
     cancel_dictation()
+    cancel_legacy_dictation()
     dismiss_voice_card(snap)
 
 
@@ -303,8 +343,9 @@ def toggle_voice():
     queda como "apagá lo que esté pasando", que es lo que el control remoto
     necesita durante una presentación.
     """
-    if dictate_active():
+    if dictate_active() or legacy_dictate_pid():
         cancel_dictation()
+        cancel_legacy_dictation()
         return
     if cut_speaking():
         return

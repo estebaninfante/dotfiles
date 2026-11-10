@@ -117,7 +117,7 @@ Plugins vivos en `~/.config/omarchy/plugins/`:
 | `conversar.ts` | idem | tool `hablar`, latido, identidad del panel |
 | `rig.ts` | idem | tareas `T-XXXXXX` y trace |
 | Plugin de voz de opencode | `~/.config/opencode/plugins/voice/` | resumen al terminar, inyección |
-| Bus `agente` | `~/developing/voz-agentes/agente` | `preguntar/esperar/responder/pensar` |
+| Bus `agente` | `~/Proyectos/voz-agentes/agente` | `preguntar/esperar/responder/pensar` |
 | Sillas | `rig seats` (`main-seat`, `rig-main-seat.service`) | agentes en tmux |
 | Puente Discord | `rig-discord-bot.service` | hablar con `main` desde el teléfono |
 | Registro | `~/.local/state/rig/events.jsonl`, `voice messages`, bodega `rig db` | trazabilidad |
@@ -177,7 +177,7 @@ privilegio de uno solo*.
 - **No** reescribir el TTS: los motores andan.
 - **No** borrar OmniVoz ni el shell. Dejan de tener voz propia; siguen
   existiendo. (Omar sí se retiró: sus servicios y atajos ya no están; sólo
-  queda el código en `~/developing/omar`.)
+  queda el código en `~/Proyectos/omar`.)
 - **No** arreglar el síntoma de "responde tres veces" antes de tener el dueño
   único: se arregla solo cuando hay un solo camino de salida.
 
@@ -215,5 +215,5 @@ privilegio de uno solo*.
 | `docs/main-bridge.md` | puente Discord y escalado al humano |
 | `docs/bodega-agentica.md` | registro unificado de la actividad de agentes |
 | `docs/agents.md` | registro de agentes y skills |
-| `~/developing/voz-agentes/` | bus `agente` (README, ESTADO, ROADMAP) |
-| `~/developing/omar/` | asistente anterior (sin servicios ni atajos) |
+| `~/Proyectos/voz-agentes/` | bus `agente` (README, ESTADO, ROADMAP) |
+| `~/Proyectos/omar/` | asistente anterior (sin servicios ni atajos) |

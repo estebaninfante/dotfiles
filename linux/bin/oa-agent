@@ -16,8 +16,8 @@
 # Nunca cambia el workspace activo del usuario ni le da foco a la ventana.
 set -euo pipefail
 
-REPO="${OA_REPO:-$HOME/developing/pi-desktop}"
-WTROOT="${OA_WTROOT:-$HOME/developing/.rig-worktrees/pi-desktop}"
+REPO="${OA_REPO:-$HOME/Proyectos/pi-desktop}"
+WTROOT="${OA_WTROOT:-$HOME/Proyectos/.rig-worktrees/pi-desktop}"
 STATE="${OA_STATE:-$HOME/.local/share/openagents-agents}"
 REG="$STATE/agentes.tsv"
 MARCAS="$STATE/marcas"

@@ -3,8 +3,8 @@ set -euo pipefail
 
 export PATH="${HOME}/.local/share/mise/shims:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
-main_tree="${HOME}/developing/zentr0"
-integration_tree="${HOME}/developing/.rig-worktrees/zentr0/_integration"
+main_tree="${HOME}/Proyectos/zentr0"
+integration_tree="${HOME}/Proyectos/.rig-worktrees/zentr0/_integration"
 
 target="${1:-developing}"
 

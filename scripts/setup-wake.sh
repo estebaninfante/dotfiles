@@ -18,7 +18,7 @@ ASR_VENV="${VOICE_ASR_VENV:-$HOME/.local/share/voice/asr-venv}"
 ASR_DIR="$HOME/.local/share/voice/asr"
 MODEL="$ASR_DIR/vosk-model-small-es-0.42"
 MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
-TALK_REPO="${TALK_COMMAND_REPO:-$HOME/developing/talk-command}"
+TALK_REPO="${TALK_COMMAND_REPO:-$HOME/Proyectos/talk-command}"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 
 command -v uv >/dev/null 2>&1 || { echo "setup-wake: falta 'uv'"; exit 1; }

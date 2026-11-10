@@ -34,9 +34,10 @@ CONFIG_DIRS=(
     mako swaync swayosd avizo btop gh opencode quickshell tmux
     gesturecontrol voice caveman mise present-remote pi wireplumber liberar
 )
-# Archivos sueltos -> ~/.config/<name> (symlink)
+# Archivos sueltos -> ~/.config/<name> (symlink).
+# user-dirs.dirs NO va acá: se genera desde user-dirs.dirs.template (ver abajo).
 CONFIG_FILES=(
-    libinput-gestures.conf mimeapps.list user-dirs.dirs user-dirs.locale
+    libinput-gestures.conf mimeapps.list user-dirs.locale
 )
 # Archivos de home -> ~/<name> (symlink)
 HOME_FILES=( .bashrc .gitconfig )
@@ -116,6 +117,25 @@ header "Config files (~/.config)"
 for name in "${CONFIG_FILES[@]}"; do
     link_path "${CONFIG_SRC}/${name}" "${HOME}/.config/${name}" true
 done
+
+# user-dirs.dirs NO se symlinkea: xdg-user-dirs-update lo reescribe y el symlink
+# se pierde en cada corrida (antes eso dejaba un .pre-dotfiles por corrida).
+# Se GENERA desde la plantilla del repo, solo si el contenido cambió.
+header "XDG user dirs (generado, no symlink)"
+USERDIRS_SRC="${CONFIG_SRC}/user-dirs.dirs.template"
+USERDIRS_DST="${HOME}/.config/user-dirs.dirs"
+if [ -f "$USERDIRS_SRC" ]; then
+    if [ ! -f "$USERDIRS_DST" ] || ! cmp -s "$USERDIRS_SRC" "$USERDIRS_DST"; then
+        $DRY && info "(dry) generar $USERDIRS_DST desde plantilla" || {
+            install -m 644 "$USERDIRS_SRC" "$USERDIRS_DST.$$" && mv "$USERDIRS_DST.$$" "$USERDIRS_DST"
+            ok "generado $USERDIRS_DST"
+        }
+    else
+        ok "$USERDIRS_DST (al día)"
+    fi
+else
+    warn "falta ${USERDIRS_SRC}"
+fi
 
 header "Home files"
 for name in "${HOME_FILES[@]}"; do
