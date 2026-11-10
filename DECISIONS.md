@@ -195,7 +195,6 @@ Verificación: `scripts/verify/energia.sh` (sección "extremo"). Doc:
 
 ## 2026-10-20 — Un reinicio corta el buzón de "dime" (lo viejo no se repite)
 
-**Contexto.** El usuario reinició el equipo, dijo "dime" y Omar le leyó una
 ráfaga de mensajes de la sesión anterior. El TTL por edad (`dime_max_age_min`,
 30 min) no alcanzaba: si los mensajes habían llegado minutos antes de apagar,
 seguían siendo "recientes" y se leían como si fueran de ahora.
@@ -319,8 +318,6 @@ sólo cuando la pide. Speech-to-speech no: es caro y no hace falta.
   `"<agente> dice: <mensaje>"`, con la voz/color de cada agente, tope de 5 y
   texto recortado a 420 caracteres; si quedan, lo dice. `--quiet-empty` para la
   hotword (silencio si no hay nada).
-- Hotword `dime` en `~/.local/share/omar/hotwords.json` con
-  `launch voice dime --quiet-empty`: cero código nuevo en Omar.
 - Se corrigió `pending_messages`: devolvía los pendientes al revés (el último
   primero) pese a que el buzón y `play-inbox` prometen orden de llegada.
 
@@ -329,23 +326,18 @@ sólo cuando la pide. Speech-to-speech no: es caro y no hace falta.
 - Reproducir un resumen con un modelo local: proyecto aparte; la lectura
   secuencial con tope ya resuelve el caso. Si algún día se quiere resumen, va
   como feature separada.
-- Un estado nuevo en Omar para "hay mensajes": el buzón de `voice` ya es la
   fuente de verdad y no hay que duplicarlo.
-- Exigir "Omar, dime": "dime" a secas es más Jarvis y con la guarda de "sólo si
   hay pendientes" no molesta.
 
 ## 2026-10-19 — El TTS nunca habla encima de un dictado
 
 **Contexto.** Estando en dictado, el aviso hablado del cierre de un agente se
 solapó con la grabación: el micrófono captó la voz sintética y lo dictado salió
-mezclado (y, al revés, Omar podía oír su propio eco). La causa es que había dos
-relojes: Omar ya se apartaba del micrófono (`mic-busy`), pero el daemon de TTS
 no miraba ese turno y hablaba cuando llegaba el mensaje.
 
 **Elegido.**
 
 - Una sola pregunta compartida, `linux/voice/micguard.py`: ¿hay dictado? Lee el
-turno que ya publican `omar dictate` y `handy-dictado` (`mic-busy` y
   `dictate.pid`), valida el PID (vivo, cmdline de dictado, caducidad de 5 min) y,
   como red de seguridad, ve por PipeWire un `handy`/`voxtype` que grabe por su
   cuenta. Se cachea 1 s para no pagar `pactl` en cada vuelta.
@@ -353,7 +345,6 @@ turno que ya publican `omar dictate` y `handy-dictado` (`mic-busy` y
   frase queda en la cola, no se pierde) y durante el `pw-play` revisa cada
   250 ms. Si empieza un dictado, corta y reencola la frase (máx. 3 veces).
 - Anota `spoken.log` con la hora **real** del audio: si la frase esperó, el oído
-  de Omar no debe tomar su eco como voz propia.
 - Los caminos directos del CLI (sin daemon, `repeat`, `inbox play`, `play`,
   `history play`) esperan al dictado antes de sonar.
 
@@ -513,9 +504,7 @@ solución.
 
 ## 2026-10-18 — El cerebro de voz pasa de Pi a Hermes
 
-**Contexto.** Omar (el asistente de voz, wake word "omar") resolvía lo que no
 era comando fijo con Pi headless (`voice-pi`) a través de `pi_shim.py`. El
-usuario usa Hermes como harness y quiere que Omar corra ahí, con el mismo
 modelo que ya usa Hermes (`deepseek-v4.1-flash` de opencode-go), cubierto por
 su plan y sin costo por token.
 
@@ -526,7 +515,6 @@ su plan y sin costo por token.
   mínimo) y el `AGENTS.md` del cerebro, que Hermes ya carga por CWD.
 - `pi_shim.py` apunta a `voice-hermes` por defecto. `VOICE_BRAIN_BIN` manda;
   `VOICE_PI_BIN` queda por compatibilidad con configs viejas.
-- `voice think` y `omar ask` llaman a `voice-hermes`. `voice-pi` sigue
   existiendo como variante explícita.
 - El guard de comandos destructivos (`pi-brain/guard/`) se comparte: los
   symlinks de `omarchy`/`systemctl`/`reboot` siguen haciendo la confirmación
@@ -535,7 +523,6 @@ su plan y sin costo por token.
   para que haya una sola fuente de verdad. `VOICE_HERMES_MODEL` y
   `VOICE_HERMES_PROVIDER` permiten pisarlo.
 - `voice-pi-shim.service` conserva el nombre (histórico) para no migrar links,
-  timers ni la config de Omar.
 
 **Descartado.**
 
@@ -573,7 +560,6 @@ sólo si no alcanza, nunca al revés. Hermes venía con
 
 - En `~/.hermes/config.yaml`: primario **`cat-jam-free`** y cadena de respaldo
   **`beam-free`** y **`longcat-2.5-preview-free`**, los tres gratis del plan
-  opencode-go. Omar hereda ese default.
 - Medidos con tareas reales del cerebro (foco, ventanas del workspace 5,
   volumen, multi-paso en dry-run): `cat-jam-free` y `beam-free` 3–5 s y
   `longcat-2.5-preview-free` 13–18 s; los tres usan herramientas y aciertan.
@@ -628,7 +614,6 @@ alguna vez a la nube y leerlo desde varias aplicaciones.
 
 **Contexto.** El 2026-10-19 a las 04:25 la sesión gráfica se reinició (logout/
 login) y `voice-pi-shim.service` no volvió: quedó `inactive (dead)` con el
-proceso terminado por SIGTERM en el teardown. Estuvo 9 horas caído y Omar
 contestaba "no pude resolver eso" — el `fetch` al `127.0.0.1:11435` fallaba y el
 error solo se logueaba. Dos causas juntas: la unidad era `WantedBy=
 default.target` (sin `PartOf=graphical-session.target`, así que el reinicio de la
@@ -643,20 +628,16 @@ sesión no la levantaba) y `Restart=on-failure` no revive un TERM externo.
 - La unidad entra en `enabled-laptop.txt` para que `install-user-units.sh` la
   enlace al repo (symlink). Antes era una copia suelta y driftaba en silencio.
 - `scripts/verify/cerebro.sh` ya avisaba del drift del `AGENTS.md` del cerebro;
-  se copió el del repo. La copia viva decía `omar ticket …`, que no existe:
-  el CLI de tickets es `omar-hub`.
 
 **Descartado.**
 
 - Un healthcheck externo con timer que reinicie el puente: systemd ya puede
   hacerlo desde la unidad, sin proceso extra ni latencia.
-- Dejar el puente en `default.target` y atarlo por `Wants=` desde `omar-listen`:
   mezcla ciclo de vida de sesión con ciclo de vida de usuario.
 
 ## 2026-10-19 — Cortar la voz la calla, no la degrada
 
 **Contexto.** Con la tecla física de Windows `present-remote toggle` cierra a
-Omar, que manda `voice stop`. El daemon hacía `pkill -f pw-play` y el
 `synth_and_play` tomaba el playback muerto como "falló el motor", así que
 reintentaba la MISMA frase con piper y después espeak: en vez de silencio se
 oía otra voz, peor. Además el `pkill` por patrón se llevaba earcons, chimes y
@@ -679,14 +660,11 @@ cualquier otro `pw-play` (y hasta un shell cuyo comando mencionara el patrón).
 - Marcar el corte con un archivo con vencimiento: ventana arbitraria, decide
   por tiempo lo que ya se sabe por generación.
 
-## 2026-10-19 — Cancelar la voz responde en el acto (y calla aunque Omar esté apagado)
 
 **Contexto.** Medido el recorrido de la tecla de Windows: `voice-key-listener`
 tenía un antirrebote de 800 ms que **descartaba la segunda pulsación**, así que
 "cerrar y que se calle" no hacía nada hasta apretar otra vez. `present-remote`
 decidía con `qs ipc` (dos intentos, ~60-150 ms), cerraba la UI antes de avisar
-al oído, y la señal iba por `systemctl kill` (un proceso extra). Peor: si Omar
-estaba apagado y hablaba un aviso de otro agente, la tecla **prendía a Omar** y
 la voz seguía sonando; había que apretar de nuevo para callarla.
 
 **Elegido.**
@@ -695,17 +673,13 @@ la voz seguía sonando; había que apretar de nuevo para callarla.
   repetido al mantener ya lo cubre el flag por pulsación.
 - La píldora se lee de `pill-open` (el archivo que publica el propio QML y que
   el glow ya usa). `qs ipc` queda como respaldo si el archivo no existe.
-- Si no hay Omar activo pero `speaking.json` está vigente, la tecla/`Escape`
-  cortan el audio (`voice stop`) en vez de prender a Omar.
 - Cerrar: `SIGUSR2` por `listen.pid` + `kill(2)` (validando la línea de
   comandos del PID) y `voice stop` en paralelo; UI y limpieza de PTT después,
   con topes cortos (1,0 / 0,6 / 0,3 s) para no trabar la próxima pulsación.
 
 **Descartado.**
 
-- Sólo adelantar la señal y esperar al loop de Omar: medido ~80 ms extra; el
   `voice stop` directo baja la pulsación→silencio a ~60 ms.
-- Depender de `status.json` para saber si Omar está despierto: lo publica
   también el dictado y llega con retardo; `pill-open` es el estado de la
   superficie que el usuario ve.
 - Un antirrebote más corto (100-200 ms): sigue perdiendo pulsaciones rápidas y
@@ -716,7 +690,6 @@ la voz seguía sonando; había que apretar de nuevo para callarla.
 
 **Problema.** El core residente de la máquina (sistema + escritorio + voz +
 visión) se iba a ~5,8 GB sin que nadie pudiera decir cuánto pesaba cada parte ni
-cuándo se pasaba del límite. Las discusiones sobre "Omar pesa demasiado" se
 hacían con `free -h`, que no distingue core de satélites ni memoria privada de
 compartida.
 
@@ -940,7 +913,6 @@ ninguna otra combinación. Mantener Súper sí abría la grilla y elegir ahí
 funcionaba, porque esa parte es un hook de teclado y el plugin cambia al submap
 `hyprexpo`.
 
-**Causa.** `omar dictate` entra al submap `dictado` mientras graba, y el submap
 sólo definía `RETURN`, `KP_Enter`, `Súper+I` y `F7`. Un submap de Hyprland
 **reemplaza** el mapa de atajos: todo lo que no esté declarado ahí deja de
 existir mientras dure. La intención era adueñarse sólo de Enter (para que no
@@ -969,7 +941,6 @@ entero.
 - **`submap_universal` en todos los binds globales**: probado en vivo; el bind
   universal gana sobre el del submap y rompería la navegación de `hyprexpo`
   (las flechas y las teclas de workspace dejarían de elegir en la grilla).
-- **Enter global sin submap**: `omar dictate --enter` inyecta un Enter con
   `wtype`, que volvería a disparar el mismo bind (recursión). Además obligaría a
   lanzar un proceso en cada Enter del sistema.
 

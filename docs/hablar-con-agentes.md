@@ -107,7 +107,6 @@ Todo esto está en la máquina y funcionando (verificado el 2026-10-29).
 Plugins vivos en `~/.config/omarchy/plugins/`:
 `eztvn.pi-tts` (interruptor y registro de voz), `eztvn.mic`, `eztvn.modo-voz`,
 `eztvn.asistente`, `eztvn.audio`, `eztvn.osd`, `talk-command.status`.
-(`omar.status` se retiró junto con Omar.)
 
 ### 4.4 Agentes y enganches
 
@@ -124,7 +123,6 @@ Plugins vivos en `~/.config/omarchy/plugins/`:
 
 ### 4.5 Proyectos relacionados en `~/Proyectos`
 
-`omar` (asistente anterior, hoy sin servicios), `voz-agentes` (bus y
 experimentos de conversación), `asistente`, `fluidez`, `speeedy`,
 `speeedy-hub`, `px0`, `protolab`, `alcaide`, `agentes-platform`, `pi-desktop`,
 `zentr0`.
@@ -159,7 +157,6 @@ Desglosado en lo que se siente:
 
 ### Causa raíz
 
-Omar, VoiceListen, OmniVoz y el bus `agente` **no fueron cuatro intentos de lo
 mismo**: fueron cuatro puntas distintas (control del escritorio, dictado, wake
 word, agentes) y cada una se llevó su propio dueño del micrófono, su router y su
 camino de TTS. Ninguna arrancó desde "conversación con agentes", así que ninguna
@@ -176,8 +173,6 @@ privilegio de uno solo*.
 - **No** meter otro modelo entre el agente y mi oído.
 - **No** reescribir el TTS: los motores andan.
 - **No** borrar OmniVoz ni el shell. Dejan de tener voz propia; siguen
-  existiendo. (Omar sí se retiró: sus servicios y atajos ya no están; sólo
-  queda el código en `~/Proyectos/omar`.)
 - **No** arreglar el síntoma de "responde tres veces" antes de tener el dueño
   único: se arregla solo cuando hay un solo camino de salida.
 
@@ -187,7 +182,6 @@ privilegio de uno solo*.
 
 1. Cuál es **el** dueño del bloque al pie: `voice-daemon` (motor de audio) o
    la superficie que dibuja subtítulos/estado (hoy ya no hay píldora ni glow:
-   Omar se retiró y sólo queda el dictado, sin overlay).
 2. Si la conversación es **un agente en foco a la vez** o varios hilos con
    cambio por nombre.
 3. Si el adaptador universal es **tmux/PTY** (sirve para cualquier CLI) o se
@@ -216,4 +210,3 @@ privilegio de uno solo*.
 | `docs/bodega-agentica.md` | registro unificado de la actividad de agentes |
 | `docs/agents.md` | registro de agentes y skills |
 | `~/Proyectos/voz-agentes/` | bus `agente` (README, ESTADO, ROADMAP) |
-| `~/Proyectos/omar/` | asistente anterior (sin servicios ni atajos) |

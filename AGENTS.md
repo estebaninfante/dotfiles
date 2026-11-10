@@ -456,9 +456,8 @@ se comía la segunda pulsación rápida). **Si hay algo en uso, la tecla cancela
 TODO** y no prende nada: audio del TTS (`voice stop`), dictado en curso
 (`dictado --cancel` = descartar, no pegar) y el cartel de escritorio del aviso
 que sonaba (se descarta esa notificación por el nombre del agente, no todo el
-centro). Ya no hay asistente que prender (Omar se retiró). Escape
-(`cancel_key`) cancela lo mismo, pero sólo si hay algo que cancelar.
-Verificador: `scripts/verify/cancelar-voz.sh`.
+centro). Escape (`cancel_key`) cancela lo mismo, pero sólo si hay algo que cancelar.
+
 
 **Registro unificado + API para cualquier proceso:** cada mensaje entregado
 (voz y notificaciones) queda en `~/.local/share/voice/tts/messages.jsonl`, con
@@ -518,9 +517,7 @@ mientras grabás, debajo en chiquito va el micrófono que está escuchando
 (descripción del source por defecto de PipeWire, la misma que abre `parec`).
 Es click-through y no toma foco; lee `$XDG_RUNTIME_DIR/dictado/estado.json`,
 que publica el grabador. `linux/voice/micguard.py` lee
-`$XDG_RUNTIME_DIR/dictado/mic-busy` para que el TTS no hable encima del dictado. Sin palabra clave ni píldora: el asistente
-anterior (Omar) se retiró; su código queda en `~/Proyectos/omar` sin servicios
-ni atajos.
+`$XDG_RUNTIME_DIR/dictado/mic-busy` para que el TTS no hable encima del dictado. Sin palabra clave ni píldora: el dictado no depende de ningún asistente.
 
 **Archivos:**
 - `linux/voice/daemon.py` — daemon principal
