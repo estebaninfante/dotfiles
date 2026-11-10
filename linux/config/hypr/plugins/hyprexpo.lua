@@ -128,12 +128,17 @@ if hl.plugin.hyprexpo ~= nil then
     -- overview, no del modo 3D, asi que valen en los dos.
     config.reverse_rows = 1
     config.animation = "specialWorkspace"
+    -- Fondo canonico del overview: NO va dentro del bloque 3D. Es lo que hace
+    -- que los tiles se capturen sin wallpaper (CTransparentTileGuard exige
+    -- background_image o background_transparent) y que se vea UN solo wallpaper
+    -- detras de la grilla. Sin esto, en modo plano cada tile trae su propia copia.
+    config.background_image = style.background_image
+    config.background_dim = style.background_dim
+    if hl.get_config("plugin:hyprexpo:background_transparent") ~= nil then
+        config.background_transparent = style.background_transparent
+    end
+
     if EXPO_3D then
-        config.background_image = style.background_image
-        config.background_dim = style.background_dim
-        if hl.get_config("plugin:hyprexpo:background_transparent") ~= nil then
-            config.background_transparent = style.background_transparent
-        end
         config.threed_enable = style.threed_enable
         config.threed_tilt = style.threed_tilt
         config.threed_yaw = style.threed_yaw
