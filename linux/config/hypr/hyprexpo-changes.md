@@ -1,5 +1,46 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-10b — grilla plana (sin 3D, sin redondez, sin lente de pez)
+
+**Motivo**: con la pantalla vertical, el overview seguia "sintiendo" aparte: el tilt
+deformaba los previews (cada tile quedaba en trapecio), la lente de pez curvaba los
+bordes y las esquinas redondeadas lo hacian ver como tarjetas. La idea es que el
+overview se comporte como el de Windows+Tab / el nativo de Hyprland: workspaces y
+ventanas derechos, legibles y encima del wallpaper real.
+
+**Comportamiento nuevo**:
+
+- `EXPO_3D = false` en `plugins/hyprexpo.lua`: la grilla usa el render plano del
+  plugin (sin tilt/perspectiva, sin vineta, sin glow). Para volver al 3D alcanza con
+  ponerlo en `true` (el bloque de estilo 3D queda intacto abajo).
+- Esquinas rectas: `tile_rounding = 0` (y `threed_radius = 0`,
+  `threed_border_round = 0` para cuando se vuelva al 3D).
+- Sin lente de pez: `threed_fisheye = 0`.
+- Sigue habiendo **un solo wallpaper**: el fondo canonico se pinta una vez y los
+  tiles son transparentes (solo previews de ventanas). Ojo: `background_image`,
+  `background_dim` y `background_transparent` tienen que configurarse SIEMPRE, no
+  dentro del `if EXPO_3D` — son la condicion que habilita el
+  `CTransparentTileGuard`. Si quedan afuera, cada tile trae su propia copia del
+  wallpaper (mosaico de 9).
+- Se conservan el orden numpad (`reverse_rows = 1`) y la curva de apertura
+  (`animation = "specialWorkspace"`), que no son del modo 3D.
+- Las teclas de workspace (`SUPER+M`, ...) siguen eligiendo workspace dentro de la
+  grilla: `navigation.lua` ahora las enlaza siempre y en modo plano llama a
+  `plugin.kb_selectn(i)` (antes solo existian con 3D).
+
+**Verificado** (sesion viva del desktop, `hyprctl reload`, `configerrors` vacio):
+
+- Grilla 3x3 vertical, rectangulos exactos, borde fino, cero distorsion.
+- Un solo wallpaper continuo (sin mosaico) y previews de ventana derechos dentro de
+  su tile.
+- `threed_enable=0`, `tile_rounding=0`, `background_image` con la imagen canonica.
+
+**Aplicar**: es solo config — `hyprctl reload` (o el proximo login). No requiere
+rebuild del `.so`.
+
+**Revertir**: `EXPO_3D = true` y, si se quiere, `tile_rounding = 12`,
+`threed_radius = 0.04`, `threed_border_round = 1`, `threed_fisheye = 0.1`.
+
 ## Cambio 2026-11-10 — overview 3D correcto con el monitor girado (pantalla vertical)
 
 **Motivo**: en el desktop la pantalla esta vertical (`DP-2` 2560x1440 con
