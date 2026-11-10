@@ -84,8 +84,22 @@ elseif variables.machine == "desktop" then
     -- La escala y el modo son los que eligió el panel de Better Displays (1.25 y
     -- 144Hz): quedaban solo en su archivo recordado y cualquier reload los
     -- pisaba con 1/144. Ahora viven acá, que carga después, y no bailan.
+    --
+    -- La regla va dos veces a propósito: por nombre de puerto (DP-2) y por la
+    -- descripción del EDID. Si el monitor se reconecta en otro DP, el nombre
+    -- cambia y la regla por nombre deja de servir; la de descripción lo sigue.
+    -- Ojo: nunca poner un nombre de salida inventado acá — Hyprland crea un
+    -- monitor fantasma con ese nombre y se queda sin señal el real.
     local transform = saved_transform("DP-2", 0)
-    hl.monitor({ output = "DP-2", mode = "2560x1440@143.97", position = "0x0", scale = 1.25, transform = transform, vrr = true })
+    for _, output in ipairs({ "DP-2", "desc:ASUSTek COMPUTER INC VG27AQL3A T2LMQS058098" }) do
+        hl.monitor({
+            output = output,
+            mode = "2560x1440@143.97301",
+            position = "0x0",
+            scale = 1.25,
+            transform = transform
+        })
+    end
     apply_orientation_layout(transform)
 end
 

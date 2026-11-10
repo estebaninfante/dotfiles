@@ -71,7 +71,7 @@ for u in $(managed_units); do
     || systemctl --user enable "$u" >/dev/null 2>&1 \
     || { echo "install-user-units: no pude habilitar $u" >&2; continue; }
   systemctl --user is-active "$u" >/dev/null 2>&1 \
-    || systemctl --user start "$u" >/dev/null 2>&1 \
+    || systemctl --user start --no-block "$u" >/dev/null 2>&1 \
     || true
   echo "habilitado: $u"
 done
