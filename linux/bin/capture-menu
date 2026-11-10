@@ -120,7 +120,7 @@ wait_overlay_gone() {
 }
 
 copy_png() {
-    local file="$1" label="$2" dest n=1
+    local file="$1" dest n=1
     [[ -s $file ]] || return 1
     mkdir -p "$SHOTS_DIR"
     dest="$SHOTS_DIR/captura-$(date +%F_%H-%M-%S).png"
@@ -130,15 +130,6 @@ copy_png() {
     done
     cp -f "$file" "$dest" || return 1
     nofd wl-copy --type image/png <"$dest"
-    if command -v omarchy-notification-send >/dev/null 2>&1; then
-        nofd omarchy-notification-send --app-name shot -g "󰹑" -t 6000 \
-            --image "$dest" \
-            "Captura copiada" "$label · Clic: copiar y abrir" \
-            --exec ~/.local/bin/capture-open image "$dest"
-    else
-        nofd notify -g "󰹑" -t 3000 --app-name shot --image "$dest" \
-            "Captura copiada" "$label"
-    fi
 }
 
 # Coordenadas del PNG congelado → recorte a clipboard.
@@ -156,7 +147,7 @@ copy_region() {
     (( w > 0 && h > 0 )) || return 1
 
     magick "$frame" -crop "${w}x${h}+${x}+${y}" +repage "png:$STATE_DIR/crop.png" || return 1
-    copy_png "$STATE_DIR/crop.png" "${w}×${h}"
+    copy_png "$STATE_DIR/crop.png"
 }
 
 # Ventana visible bajo un punto lógico global. Devuelve "WxH+X+Y|monitor" con
@@ -277,6 +268,6 @@ case "$key" in
         ;;
     full)
         magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || cp "$frame" "$STATE_DIR/full.png"
-        copy_png "$STATE_DIR/full.png" "Pantalla"
+        copy_png "$STATE_DIR/full.png"
         ;;
 esac

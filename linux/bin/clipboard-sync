@@ -78,6 +78,11 @@ mkdir -p "${STATE}" "${LOG_DIR}" 2>/dev/null || true
 log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"${LOG}" 2>/dev/null || true; }
 
 NOTIFY_BIN=$(type -P notify 2>/dev/null || true)
+# Los avisos de "ya lo mandé" son ruido justo cuando lo que hacés es sacar una
+# captura o grabar: por defecto sólo se avisa cuando algo FALLA. NOTIFY_OK=1 en
+# ~/.config/clipboard-sync/config los vuelve a mostrar.
+: "${NOTIFY_OK:=0}"
+notify_ok() { (( NOTIFY_OK )) || { log "aviso silenciado: $2"; return 0; }; notify "$@"; }
 notify() { # <glifo> <título> <cuerpo> [urgencia]
   [[ -n ${NOTIFY_BIN} ]] || { log "aviso (sin notify): $2"; return 0; }
   "${NOTIFY_BIN}" -g "${1:-󰆏}" -u "${4:-low}" -t 5000 --app-name clipboard-sync \
@@ -252,7 +257,7 @@ push_blob() { # <destino> <mime> <digest> <archivo>
   fi
   # Sin aviso, copiar una captura se siente como si no hubiera pasado nada.
   if [[ ${mime} == image/* ]] && (( $(stat -c %s -- "${file}" 2>/dev/null || echo 0) > 51200 )); then
-    notify 󰹑 "Imagen enviada" "Ya se puede pegar en el otro equipo"
+    notify_ok 󰹑 "Imagen enviada" "Ya se puede pegar en el otro equipo"
   fi
   log "push: ${mime} -> ${target}"
   return 0
@@ -288,7 +293,7 @@ push_files() { # <destino> <uri-list tmp> <digest>
   fi
 
   id=$(hostname -s 2>/dev/null || echo host)
-  notify 󰇚 "Enviando al otro equipo" "${#kept[@]} archivo(s) · $(size_mb "${total}") MB"
+  notify_ok 󰇚 "Enviando al otro equipo" "${#kept[@]} archivo(s) · $(size_mb "${total}") MB"
 
   {
     for path in "${kept[@]}"; do
@@ -307,7 +312,7 @@ push_files() { # <destino> <uri-list tmp> <digest>
     return "${rc}"
   fi
   seen_add "${digest}"
-  notify 󰄬 "Archivos en el otro equipo" "${#kept[@]} archivo(s) · ya se puede pegar ahí"
+  notify_ok 󰄬 "Archivos en el otro equipo" "${#kept[@]} archivo(s) · ya se puede pegar ahí"
   log "push: ${#kept[@]} archivo(s) (${total} bytes) -> ${target}"
   return 0
 }
@@ -541,7 +546,7 @@ receive_files() { # <id remoto>
   fi
   rm -f "${list}"
 
-  notify 󰄬 "Llegaron archivos" "${#saved[@]} en $(basename "${dest}") · ya se pueden pegar"
+  notify_ok 󰄬 "Llegaron archivos" "${#saved[@]} en $(basename "${dest}") · ya se pueden pegar"
   log "receive-files: ${#saved[@]} archivo(s) en ${dest}"
   return 0
 }
@@ -572,7 +577,7 @@ pull() {
   target=$(resolve_peer)
   log "pull: pidiendo el portapapeles a ${target}"
   if ssh_run "${target}" 60 "$(remote_cmd 'push --force')" >/dev/null; then
-    notify 󰆏 "Portapapeles traído" "Lo del otro equipo ya está acá"
+    notify_ok 󰆏 "Portapapeles traído" "Lo del otro equipo ya está acá"
     return 0
   fi
   drop_peer_cache

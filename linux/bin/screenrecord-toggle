@@ -38,9 +38,6 @@ copy_video() {
     [[ -n $file && -f $file ]] || return 0
     uri=$(jq -rn --arg f "$file" '$f | split("/") | map(@uri) | join("/")') || return 0
     printf 'file://%s\r\n' "$uri" | wl-copy --type text/uri-list || return 0
-    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u low -t 6000 \
-        "Video copiado al portapapeles" "$(basename "$file") · Clic: copiar y abrir" \
-        --exec ~/.local/bin/capture-open video "$file"
 }
 
 # Omarchy decide qué capturar llamando a `omarchy-capture-region` (su selector
@@ -93,16 +90,5 @@ else
     "$REC" --fullscreen --with-desktop-audio
 fi
 
-# Aviso sólo si de verdad quedó grabando.
-if pgrep -f "^gpu-screen-recorder" >/dev/null; then
-    scope="Pantalla completa"
-    title="Grabando pantalla"
-    if [[ -n $region ]]; then
-        scope="Zona ${region%%+*}"
-        title="Grabando zona"
-    fi
-    omarchy-notification-send --app-name omarchy-screenrecord -g "󰻂" -u normal -t 5000 \
-        "$title" \
-        "${scope} + audio del escritorio.
-Detener: PrintScreen o Súper + Mayús + K."
-fi
+# Sin aviso al arrancar: el indicador de grabación de la barra ya dice que está
+# grabando, y el atajo para detener es el mismo que para arrancar.

@@ -413,6 +413,12 @@ una captura guardada, cualquier cosa copiada en Dolphin).
 - A mano: `SUPER+SHIFT+Z` empuja (repetir algo ya enviado), `SUPER+SHIFT+J`
   trae lo que tenga el otro equipo, `clipboard-sync send <ruta...>` comparte
   archivos sueltos.
+- **Avisos de escritorio: silenciados a proposito.** Sacar una captura o grabar
+  no debe escupir toasts: ni `shot`/`capture-menu`/`screenrecord-toggle` (se les
+  quitaron los de "captura copiada"/"video copiado"/"grabando"), ni el
+  portapapeles ("imagen enviada", "llegaron archivos"). Solo quedan los
+  `-u critical` (no se pudo capturar) y los fallos de envio. Para recuperar los
+  del portapapeles: `NOTIFY_OK=1` en `~/.config/clipboard-sync/config`.
 - Registro: `~/.local/state/clipboard-sync/log`. Diagnostico: `clipboard-sync doctor`.
 - Verificacion: `scripts/verify/portapapeles.sh` (corre el "otro equipo" en
   loopback: no necesita SSH ni la otra maquina; pisa el portapapeles real).

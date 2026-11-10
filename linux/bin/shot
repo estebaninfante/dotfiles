@@ -99,8 +99,6 @@ fi
 case "$ACTION" in
     copy)
         nofd wl-copy --type image/png < "$OUT"
-        nofd notify -g "󰹑" -t 3000 --app-name shot \
-            "Captura copiada" "Al portapapeles"
         ;;
     save)
         TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
@@ -108,8 +106,6 @@ case "$ACTION" in
         FILE="$SAVE_DIR/shot_$TIMESTAMP.png"
         cp "$OUT" "$FILE"
         nofd wl-copy --type image/png < "$FILE"
-        nofd notify -g "󰉉" -t 4000 --app-name shot \
-            "Captura guardada" "$FILE"
         ;;
     edit)
         nofd swappy -f "$OUT"
