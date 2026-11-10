@@ -193,7 +193,13 @@ PI_SRC="${REPO}/linux/pi/agent"
 PI_DST="${HOME}/.pi/agent"
 if [ -d "$PI_SRC" ]; then
     for sub in extensions skills themes; do
-        [ -d "$PI_SRC/$sub" ] || continue
+        # Si el origen no existe, decirlo: un inventario que se salta en silencio
+        # se ve igual que uno aplicado (las extensiones de pi viven en
+        # linux/pi/agent/desactivado/ cuando están apagadas a propósito).
+        if [ ! -d "$PI_SRC/$sub" ]; then
+            warn "pi: no existe $PI_SRC/$sub — no se enlaza nada de '$sub'"
+            continue
+        fi
         mkdir -p "$PI_DST/$sub"
         for f in "$PI_SRC/$sub"/*; do
             [ -e "$f" ] || continue
