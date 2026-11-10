@@ -2,9 +2,11 @@
 Description=Wallpaper: vigila el symlink canonico de Omarchy y propaga el cambio
 
 [Path]
-# `omarchy theme bg set` (y cualquier agente) reescribe este symlink. Sin esto,
-# hyprpaper se quedaba con el fondo viejo y el overview (que sigue el symlink)
-# mostraba otro: dos wallpapers. Este watcher los mantiene siempre iguales.
+# `omarchy theme bg set` (y cualquier agente) REEMPLAZA este symlink por otro
+# inode. Vigilar solo el symlink no alcanza: el watch muere con el inode viejo y
+# el cambio siguiente ya no dispara. Se vigila el directorio (donde se renombra
+# el symlink) y ademas el archivo, como respaldo.
+PathChanged=%h/.local/state/omarchy/current
 PathChanged=%h/.local/state/omarchy/current/background
 Unit=wallpaper-sync.service
 
