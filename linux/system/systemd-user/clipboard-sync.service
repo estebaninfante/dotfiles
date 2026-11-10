@@ -3,10 +3,10 @@ Description=Portapapeles compartido con el otro equipo (clipboard-sync)
 Documentation=file://%h/dotfiles/linux/bin/clipboard-sync
 After=graphical-session.target network-online.target
 Wants=network-online.target
-# Igual que lan-mouse: si Hyprland reinicia, el `wl-paste --watch` se queda con
-# la conexión vieja y el demonio queda mudo aunque el proceso siga vivo. Con la
-# sesión como PartOf, cada reinicio del compositor lo levanta de cero.
-PartOf=graphical-session.target
+# A diferencia de lan-mouse NO lleva PartOf: el target de sesión se reinicia
+# entero cada pocos minutos en el desktop y se llevaba el demonio puesto (30 s
+# sin vigilancia). Acá el propio bucle relanza `wl-paste --watch` si el
+# compositor cambia, así que sobrevivir al ciclo es mejor que reiniciar.
 
 [Service]
 Type=simple

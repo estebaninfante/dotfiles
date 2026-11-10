@@ -303,15 +303,25 @@ push() { # [--force]
 
   for attempt in 1 2; do
     mime=$(pick_mime) || { log "push: portapapeles vacío"; return 0; }
-    local tmp
+    local tmp err rc_read
     tmp=$(mktemp "${STATE}/payload.XXXXXX") || return 1
-    if ! timeout 20 wl-paste --no-newline --type "${mime}" >"${tmp}" 2>/dev/null; then
+    err="${STATE}/wl-paste.err"
+    timeout 20 wl-paste --no-newline --type "${mime}" >"${tmp}" 2>"${err}"
+    rc_read=$?
+    if (( rc_read != 0 )); then
       rm -f "${tmp}"
-      log "push: no se pudo leer ${mime}"
+      log "push: no se pudo leer ${mime} (rc=${rc_read}): $(head -2 "${err}" 2>/dev/null | tr '\n' ' ')"
       return 1
     fi
     local size digest
     size=$(stat -c %s -- "${tmp}" 2>/dev/null || echo 0)
+    # Una lectura vacía no es contenido: si no se filtra, su digest constante
+    # hace que el próximo envío real se tome por "eco conocido".
+    if (( size == 0 )); then
+      rm -f "${tmp}"
+      log "push: lectura vacía de ${mime}, se ignora"
+      return 0
+    fi
     if (( size > MAX_BLOB_MB * 1048576 )); then
       rm -f "${tmp}"
       notify 󰈀 "Portapapeles muy grande" "$(size_mb "${size}") MB · no se envió"
