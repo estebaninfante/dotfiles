@@ -63,5 +63,10 @@
   // Los paneles que antes vivían como íconos sueltos en la barra viven acá.
   "voz.tts": {"icon":"󰂞","label":"Voz y avisos (TTS)","aliases":["tts","voz","pi tts","campana","avisos","buzon"],"description":"Panel de voz: prender/apagar la voz, volumen, velocidad, entrega (campana, silencio, al instante) y el registro de mensajes","action":"omarchy-shell -q shell toggle eztvn.pi-tts"},
   "voz.audio": {"icon":"󰕾","label":"Audio y micrófono","aliases":["audio","volumen","parlantes","mic","microfono","mezclador"],"description":"Volumen general, salida, entrada del micrófono y mezclador por aplicación","action":"omarchy-shell -q shell toggle eztvn.audio"},
-  "voz.omar": {"icon":"󰍬","label":"Omar (agente de voz)","aliases":["omar","agente de voz"],"description":"Estado del agente de voz: escuchando, pensando o actuando, con su configuración","action":"omarchy-shell -q shell toggle omar.status"}
+  "voz.omar": {"icon":"󰍬","label":"Omar (agente de voz)","aliases":["omar","agente de voz"],"description":"Estado del agente de voz: escuchando, pensando o actuando, con su configuración","action":"omarchy-shell -q shell toggle omar.status"},
+
+  // Orientación del monitor del escritorio: pantalla-orientacion aplica el giro
+  // en vivo y lo deja guardado en ~/.local/state/omarchy/display-orientation,
+  // que monitors.lua lee al cargar (ver SUPER+ALT+O).
+  "trigger.toggle.pantalla-vertical": {"icon":"󰍹","label":"Pantalla vertical","aliases":["vertical","girar pantalla","rotar","orientacion","portrait"],"description":"Gira la pantalla entre horizontal y vertical (SUPER+ALT+O). Si queda espejada, SUPER+ALT+SHIFT+O invierte el giro.","checked":"~/.local/bin/pantalla-orientacion state 2>/dev/null | grep -q vertical","action":"~/.local/bin/pantalla-orientacion toggle"}
 }

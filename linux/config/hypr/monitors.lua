@@ -34,13 +34,59 @@ local function apply_laptop_monitors()
     end
 end
 
+-- Orientación guardada por `pantalla-orientacion` (SUPER+ALT+O). Girar no
+-- reescribe este archivo: el guion aplica el cambio en vivo con `hyprctl eval`
+-- y deja el número acá para que el próximo reload o arranque no devuelva todo a
+-- horizontal. Qué es cada valor: 0 = normal, 1 = 90° horario, 2 = 180°, 3 = 90°
+-- antihorario (1 y 3 son las dos verticales). Si el giro sale espejado al revés,
+-- el otro vertical es el que falta: SUPER+ALT+SHIFT+O alterna entre 1 y 3.
+local function saved_transform(output, fallback)
+    local file = io.open(os.getenv("HOME") .. "/.local/state/omarchy/display-orientation", "r")
+    if not file then return fallback end
+    local transform = fallback
+    for line in file:lines() do
+        local name, value = line:match("^(%S+)%s+([0-3])$")
+        if name == output then transform = tonumber(value) end
+    end
+    file:close()
+    return transform
+end
+
+-- En vertical la pantalla es alta y angosta, y dwindle no es lo más cómodo:
+-- reparte en columnas angostas. Lo que se recomienda para portrait es el layout
+-- "master" con la principal arriba ocupando el ancho entero y la pila abajo
+-- (es lo que pide la mitad de los hilos de r/hyprland, y lo que automatiza
+-- hyprland-auto-layout): una ventana ancha para leer o codear y el resto a mano.
+-- En horizontal vuelve dwindle, que es lo de siempre.
+--
+-- mfact = 0.6 le deja el 60% de la altura a la principal; new_status = "slave"
+-- hace que la ventana nueva entre en la pila de abajo sin mover la principal
+-- (si no, cada cosa que abrís te corre la ventana grande). Para darle la vuelta
+-- a mano: SUPER+J cambia el split y `hyprctl dispatch layoutmsg swapwithmaster`
+-- cambia cuál manda.
+local function apply_orientation_layout(transform)
+    if transform % 2 == 1 then
+        hl.config({
+            general = { layout = "master" },
+            master = { orientation = "top", new_status = "slave", mfact = 0.6 }
+        })
+    else
+        hl.config({ general = { layout = "dwindle" } })
+    end
+end
+
 if variables.machine == "laptop" then
     apply_laptop_monitors()
     hl.on("monitor.added", apply_laptop_monitors)
     hl.on("monitor.removed", apply_laptop_monitors)
     hl.monitor({ output = "HEADLESS-2", mode = "1920x1080@60", position = "0x1500", scale = 2 })
 elseif variables.machine == "desktop" then
-    hl.monitor({ output = "DP-2", mode = "2560x1440@144", position = "0x0", scale = 1 })
+    -- La escala y el modo son los que eligió el panel de Better Displays (1.25 y
+    -- 144Hz): quedaban solo en su archivo recordado y cualquier reload los
+    -- pisaba con 1/144. Ahora viven acá, que carga después, y no bailan.
+    local transform = saved_transform("DP-2", 0)
+    hl.monitor({ output = "DP-2", mode = "2560x1440@144", position = "0x0", scale = 1.25, transform = transform })
+    apply_orientation_layout(transform)
 end
 
 -- Expuesto para el guard de energia: re-evalua la rama de monitores (60/120Hz)
@@ -48,5 +94,8 @@ end
 -- tarda ~1.5s y deja el panel en negro todo ese rato; el eval tarda ~10ms.
 _G.omarchy = _G.omarchy or {}
 _G.omarchy.apply_power_monitors = apply_laptop_monitors
+-- Para que el giro en vivo (pantalla-orientacion) cambie también el layout sin
+-- un reload completo: `hyprctl eval "omarchy.apply_orientation(1)"`.
+_G.omarchy.apply_orientation = apply_orientation_layout
 
 return true

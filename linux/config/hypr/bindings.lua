@@ -160,6 +160,12 @@ hl.bind(main_mod .. " + SHIFT + B", hl.dsp.exec_cmd("~/.local/bin/power-extreme.
 -- puede arrastrar la barra o usar `omarchy bar position <borde>`.
 hl.bind(main_mod .. " + ALT + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/bar-position"), { description = "Barra: cambiar de posición" })
 
+-- Pantalla: gira entre horizontal y vertical, con la cortina de eztvn.fade en
+-- medio para que el reacomodo de ventanas no se vea de golpe. Si el giro sale
+-- espejado al revés, SUPER+ALT+SHIFT+O alterna las dos verticales (1 <-> 3).
+hl.bind(main_mod .. " + ALT + O", hl.dsp.exec_cmd("~/.local/bin/pantalla-orientacion toggle"), { description = "Pantalla: horizontal/vertical" })
+hl.bind(main_mod .. " + ALT + SHIFT + O", hl.dsp.exec_cmd("~/.local/bin/pantalla-orientacion flip"), { description = "Pantalla: invertir el vertical" })
+
 hl.bind(main_mod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/ohm"), { description = "Ohm" })
 hl.bind(main_mod .. " + SHIFT + Y", hl.dsp.exec_cmd("~/.local/bin/ohm https://youtube.com/"), { description = "Ohm: YouTube" })
 

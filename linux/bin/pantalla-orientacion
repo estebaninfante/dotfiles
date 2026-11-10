@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# pantalla-orientacion — gira un monitor entre horizontal y vertical.
+#
+# Omarchy no trae atajo para esto y la rotación vive en ~/.config/hypr/monitors.lua,
+# que sólo se lee al cargar la config. Por eso girar con el panel de Better Displays
+# funciona hasta el próximo reload (o el arranque), que devuelve la pantalla a
+# horizontal. Acá el giro se aplica en vivo con `hyprctl eval` —la misma llamada
+# hl.monitor que hace la config— y se guarda en
+# ~/.local/state/omarchy/display-orientation, que monitors.lua lee al cargar.
+# Se guarda FUERA de la config a propósito: escribir dentro de ~/.config/hypr/
+# dispara un reload completo (1,5 s de pantalla en negro), y girar tiene que ser
+# instantáneo.
+#
+# Girar re-acomoda todas las ventanas de una vez, y eso se ve como un salto. Por
+# eso el cambio corre tapado por la cortina de `pantalla-fade` (plugin del shell
+# eztvn.fade): baja a negro con el motor de movimiento del escritorio, se hace el
+# giro mientras ya está negro y vuelve. Si el shell no está, se aplica igual, sin
+# fundido.
+#
+# Uso:
+#   pantalla-orientacion                 # alterna horizontal <-> vertical
+#   pantalla-orientacion toggle          # idem
+#   pantalla-orientacion flip            # vertical al revés (1 <-> 3)
+#   pantalla-orientacion set 0|1|2|3     # forzar una orientación
+#   pantalla-orientacion state           # imprime horizontal | vertical
+#
+#   --output NOMBRE   monitor a girar (por defecto, el enfocado)
+#
+# Transforms de Hyprland: 0 = normal, 1 = 90° horario, 2 = 180°, 3 = 90°
+# antihorario. En 1 y 3 la pantalla queda vertical.
+set -uo pipefail
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/display-orientation"
+
+die() { echo "pantalla-orientacion: $*" >&2; exit 1; }
+
+command -v hyprctl >/dev/null 2>&1 || die "hyprctl no está en el PATH"
+command -v jq >/dev/null 2>&1 || die "hace falta jq"
+
+label_for() {
+  case "$1" in
+    0) echo "Horizontal" ;;
+    2) echo "Boca abajo" ;;
+    *) echo "Vertical" ;;
+  esac
+}
+
+# Aplica el modo con la misma API que usa monitors.lua.
+apply_rule() {
+  local out="$1" mode="$2" x="$3" y="$4" scale="$5" transform="$6"
+  [[ $out =~ ^[A-Za-z0-9._-]+$ ]] || die "nombre de monitor inválido: $out"
+  [[ $mode =~ ^[0-9]+x[0-9]+@[0-9.]+$ ]] || die "modo inválido: $mode"
+  [[ $scale =~ ^[0-9]+([.][0-9]+)?$ ]] || die "escala inválida: $scale"
+  [[ $transform =~ ^[0-3]$ ]] || die "transform inválido: $transform"
+  hyprctl eval "hl.monitor({ output = \"$out\", mode = \"$mode\", position = \"${x}x${y}\", scale = $scale, transform = $transform })" >/dev/null
+}
+
+# Guarda la orientación por monitor, conservando las líneas de otros monitores.
+persist() {
+  local out="$1" transform="$2" tmp dir
+  dir=$(dirname "$STATE")
+  mkdir -p "$dir" || return 0
+  tmp=$(mktemp "$dir/.display-orientation.XXXXXX") || return 0
+  {
+    [[ -f $STATE ]] && awk -v o="$out" '$1 != o' "$STATE"
+    printf '%s %s\n' "$out" "$transform"
+  } | sort >"$tmp" && mv -f "$tmp" "$STATE"
+}
+
+# El plugin Better Displays Pro guarda los layouts que recordó y los vuelve a
+# aplicar en cada reload (Panel.qml -> apply-layout.sh restore-after-reload). Si
+# su memoria dice horizontal, el giro se deshace solo en el próximo reload o al
+# arrancar. Se actualiza esa memoria, no su archivo de reglas: escribirlo dentro
+# de ~/.config/hypr/ dispara un reload completo, y girar tiene que ser al toque.
+sync_plugin_memory() {
+  local out="$1" transform="$2" store tmp
+  store="$HOME/.local/state/omarchy/displays/profiles.json"
+  [[ -f $store ]] || return 0
+  tmp=$(mktemp) || return 0
+  if jq --arg n "$out" --argjson t "$transform" \
+    '(.profiles[].topology.monitors[] | select(.name == $n)) |= (.transform = $t)' \
+    "$store" >"$tmp" 2>/dev/null; then
+    mv -f "$tmp" "$store"
+  else
+    rm -f "$tmp"
+  fi
+  return 0
+}
+
+# Lee el monitor pedido (o el enfocado) de hyprctl como JSON de una línea.
+monitor_json() {
+  local want="$1"
+  hyprctl monitors -j 2>/dev/null | jq -c --arg n "$want" '
+    if $n == "" then (map(select(.focused == true))[0])
+    else (map(select(.name == $n))[0]) end
+  '
+}
+
+action="${1:-toggle}"
+[[ $# -gt 0 ]] && shift
+
+# Rama interna: corre TAPADA por la cortina, así que sólo aplica y se va.
+if [[ $action == "_apply" ]]; then
+  [[ $# -eq 6 ]] || die "_apply espera 6 argumentos"
+  apply_rule "$1" "$2" "$3" "$4" "$5" "$6" || die "hyprctl rechazó el cambio"
+  # El layout también depende de la orientación (master arriba en vertical,
+  # dwindle en horizontal; ver monitors.lua). Va acá adentro para que el
+  # reacomodo de las ventanas caiga con la pantalla tapada.
+  hyprctl eval "omarchy.apply_orientation($6)" >/dev/null 2>&1 || true
+  exit 0
+fi
+
+output=""
+positionals=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output | -o) output="${2:-}"; shift 2 || shift ;;
+    *) positionals+=("$1"); shift ;;
+  esac
+done
+
+monitor=$(monitor_json "$output")
+[[ -n $monitor && $monitor != "null" ]] || exit 0
+
+name=$(jq -r '.name // ""' <<<"$monitor")
+[[ -n $name ]] || exit 0
+
+# Ojo: con la pantalla girada, width/height que informa Hyprland siguen siendo
+# los del modo (los píxeles del panel), no los lógicos. Es justo lo que espera
+# hl.monitor, así que se pasan tal cual.
+width=$(jq -r '.width' <<<"$monitor")
+height=$(jq -r '.height' <<<"$monitor")
+refresh=$(jq -r '.refreshRate' <<<"$monitor")
+scale=$(jq -r '.scale' <<<"$monitor")
+x=$(jq -r '.x' <<<"$monitor")
+y=$(jq -r '.y' <<<"$monitor")
+current=$(jq -r '.transform // 0' <<<"$monitor")
+
+mode=$(printf '%sx%s@%.2f' "$width" "$height" "$refresh")
+
+case "$action" in
+  state)
+    if [[ $current == 1 || $current == 3 ]]; then echo "vertical"; else echo "horizontal"; fi
+    exit 0
+    ;;
+  toggle)
+    # De la vertical se vuelve a horizontal; de horizontal se vuelve a la última
+    # vertical que usaste (no a una fija: 1 y 3 no son lo mismo, la pantalla
+    # queda girada para el otro lado). Se recuerda en una clave aparte, que
+    # monitors.lua ignora, para no perderla al pasar a horizontal.
+    if [[ $current == 1 || $current == 3 ]]; then
+      next=0
+      persist "$name.vertical" "$current"
+    else
+      last=$(awk -v o="$name.vertical" '$1 == o { print $2 }' "$STATE" 2>/dev/null | tail -1)
+      if [[ $last == 1 || $last == 3 ]]; then next=$last; else next=1; fi
+    fi
+    ;;
+  flip)
+    # El "otro" vertical: sirve cuando el giro sale espejado al revés.
+    if [[ $current == 3 ]]; then next=1; else next=3; fi
+    persist "$name.vertical" "$next"
+    ;;
+  set)
+    next="${positionals[0]:-}"
+    ;;
+  *)
+    die "acción desconocida: $action (usá toggle | flip | set 0-3 | state)"
+    ;;
+esac
+
+[[ $next =~ ^[0-3]$ ]] || die "orientación inválida: ${next:-vacío}"
+
+if [[ $next == "$current" ]]; then
+  exit 0
+fi
+
+# Se guarda antes de aplicar: si el fundido o hyprctl fallan, el arranque
+# siguiente igual respeta lo elegido.
+persist "$name" "$next"
+sync_plugin_memory "$name" "$next"
+
+if command -v pantalla-fade >/dev/null 2>&1; then
+  pantalla-fade cover -- "$0" _apply "$name" "$mode" "$x" "$y" "$scale" "$next"
+else
+  apply_rule "$name" "$mode" "$x" "$y" "$scale" "$next" || die "hyprctl rechazó el cambio"
+fi
+
+# Confirmación: el mismo OSD de notch que usan volumen y brillo.
+command -v omarchy >/dev/null 2>&1 && omarchy osd -i display -m "$(label_for "$next")" >/dev/null 2>&1
+
+exit 0
