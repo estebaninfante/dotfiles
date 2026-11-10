@@ -1172,7 +1172,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..5e3e480 100644
+index cb18d2f..4a25639 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1190,7 +1190,20 @@ index cb18d2f..5e3e480 100644
  #include <hyprland/src/helpers/time/Time.hpp>
  #include <hyprutils/utils/ScopeGuard.hpp>
  #include <hyprland/src/render/OpenGL.hpp>
-@@ -123,6 +128,103 @@ class CMonitorStateGuard {
+@@ -103,6 +108,12 @@ class CMonitorStateGuard {
+         return m_transform;
+     }
+ 
++    // Tamano del monitor en su orientacion actual (vertical = 1440x2560). Lo usa
++    // la captura para salir en el mismo espacio en el que viven los tiles.
++    Vector2D transformedSize() const {
++        return m_transformedSize;
++    }
++
+     PHLWORKSPACE activeWorkspace() const {
+         return m_activeWorkspace;
+     }
+@@ -123,6 +134,103 @@ class CMonitorStateGuard {
      bool                m_restored         = false;
  };
  
@@ -1294,7 +1307,25 @@ index cb18d2f..5e3e480 100644
  bool ensureFramebuffer(SP<Render::IFramebuffer>& framebuffer, const CBox& box, uint32_t drmFormat) {
      if (!framebuffer)
          framebuffer = g_pHyprRenderer->createFB("hyprexpo workspace preview");
-@@ -188,12 +290,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -169,8 +277,15 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+         CRendererStateGuard rendererState{g_pHyprRenderer.get()};
+         CBox captureBox = request.box;
+ 
+-        if (isTransformRotated(monitorState.transform())) {
+-            captureBox = {{0, 0}, {captureBox.h, captureBox.w}};
++        // En un monitor girado el overlay (y por lo tanto los tiles) vive en el
++        // espacio YA rotado del monitor, asi que la captura tiene que salir de
++        // ese mismo espacio: se neutraliza el transform y se toma como tamano el
++        // transformado (vertical: 1440x2560, no el buffer 2560x1440). Antes se
++        // usaba el tamano del buffer y se marcaba la textura como rotada 180, lo
++        // que en 90/270 dejaba los previews girados y estirados (se veia "otro"
++        // wallpaper adentro de los tiles).
++        if (monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL) {
++            captureBox = {{0, 0}, monitorState.transformedSize()};
+             request.monitor->m_transform       = WL_OUTPUT_TRANSFORM_NORMAL;
+             request.monitor->m_pixelSize       = captureBox.size();
+             request.monitor->m_transformedSize = captureBox.size();
+@@ -188,12 +303,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
          rendererState.begun();
          g_pHyprRenderer->m_bBlockSurfaceFeedback = g_pHyprRenderer->m_bBlockSurfaceFeedback || request.blockSurfaceFeedback;
@@ -1310,7 +1341,7 @@ index cb18d2f..5e3e480 100644
              bool activeChanged   = false;
              bool previewApplied  = false;
              bool windowApplied   = false;
-@@ -202,6 +306,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -202,6 +319,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  if (temporaryRestored)
                      return;
                  try {
@@ -1321,7 +1352,7 @@ index cb18d2f..5e3e480 100644
                      if (windowApplied)
                          restoreWorkspaceWindowGoalState(windowState);
                      if (previewApplied)
-@@ -220,6 +328,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -220,6 +341,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  windowApplied = true;
              }
  
@@ -1341,7 +1372,7 @@ index cb18d2f..5e3e480 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace = monitorState.activeSpecialWorkspace();
  
-@@ -233,6 +354,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -233,6 +367,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              restoreActiveWorkspaceAfterPreview(request.monitor, previousWS);
              temporaryRestored = true;
  
@@ -1356,7 +1387,7 @@ index cb18d2f..5e3e480 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace.reset();
          } else {
-@@ -240,6 +369,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -240,6 +382,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
          }
  
@@ -1365,6 +1396,15 @@ index cb18d2f..5e3e480 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
+@@ -247,7 +391,7 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+             return false;
+ 
+         if (const auto texture = framebuffer->getTexture(); texture)
+-            texture->m_transform = isTransformRotated(monitorState.transform()) ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
++            texture->m_transform = HYPRUTILS_TRANSFORM_NORMAL;
+         else
+             return false;
+ 
 diff --git c/OverviewCapture.hpp i/OverviewCapture.hpp
 index fa06d24..c448235 100644
 --- c/OverviewCapture.hpp
@@ -1642,7 +1682,7 @@ index 6984d59..a59e32b 100644
  
  ePassElementType COverviewPassElement::type() {
 diff --git c/OverviewRender.cpp i/OverviewRender.cpp
-index e73c8f6..df9c914 100644
+index e73c8f6..045d878 100644
 --- c/OverviewRender.cpp
 +++ i/OverviewRender.cpp
 @@ -2,6 +2,7 @@
@@ -1853,17 +1893,17 @@ index e73c8f6..df9c914 100644
 +    // in on open and out on close instead of snapping on one frame.
 +    float warpAmt = 1.0f;
 +    if (use3D) {
-+        // La grilla 3D vive en el mismo espacio que el resto del overlay: los
-+        // tiles se maquetan con m_size (ya rotado: en un monitor vertical es
-+        // 1440x2560, no 2560x1440) y el pass element dibuja sobre un framebuffer
-+        // que Hyprland proyecta con una ortho simple de ese tamano. Aplicar aca
-+        // ademas el transform del monitor rota y anisotropiza la grilla DOS
-+        // veces: outputProjection reparte 2/w y 2/h sobre los ejes contrarios
-+        // cuando hay rotacion, asi que en una pantalla vertical la grilla quedaba
-+        // casi entera fuera de cuadro (y con el 180 salia espejada). Con la
-+        // projection sin transform la geometria coincide con la del modo plano en
-+        // cualquier orientacion (0/90/180/270).
-+        proj3D = Hyprutils::Math::Mat3x3::outputProjection(MON->m_transformedSize, HYPRUTILS_TRANSFORM_NORMAL).getMatrix();
++        // La grilla 3D usa la MISMA proyeccion que Hyprland tiene puesta para
++        // este frame: la que ya usan los tiles del modo plano a traves de
++        // renderTextureInternal. Es la unica forma de que caiga exactamente donde
++        // cae el resto del overlay con cualquier orientacion (0/90/180/270),
++        // escala o layout de monitores, sin re-derivar el transform a mano:
++        // armarla con outputProjection(...) y el transform del monitor metia la
++        // rotacion dos veces (y repartia 2/w y 2/h en los ejes contrarios), que en
++        // una pantalla vertical dejaba la grilla fuera de cuadro y estirada.
++        const auto& nativeProjection = g_pHyprRenderer->m_renderData.targetProjection;
++        const auto  nativeMatrix     = nativeProjection.getMatrix();
++        proj3D = nativeMatrix[8] != 0.0f ? nativeMatrix : Hyprutils::Math::Mat3x3::outputProjection(MON->m_pixelSize, HYPRUTILS_TRANSFORM_NORMAL).getMatrix();
 +        // Animated strength; falls back to full effect if the var is missing.
 +        warpAmt = tiltAnim ? std::min(1.0f, std::max(0.0f, tiltAnim->value())) : 1.0f;
 +        const float tiltNow = (float)**P3TILT * warpAmt;
@@ -2563,7 +2603,7 @@ index 0000000..0456292
 +echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
 +exit 0
 diff --git c/tests/OverviewSourceTests.cpp i/tests/OverviewSourceTests.cpp
-index d2e7572..7e0a092 100644
+index d2e7572..edd3874 100644
 --- c/tests/OverviewSourceTests.cpp
 +++ i/tests/OverviewSourceTests.cpp
 @@ -122,6 +122,67 @@ int main() {
@@ -2644,14 +2684,20 @@ index d2e7572..7e0a092 100644
      const auto enterSubmap = extractFunction(interactionSource, "void enterOverviewSubmap(bool& submapActive) {");
      expect(!enterSubmap.empty(), "keyboard navigation submap entry function exists");
      const auto captureSubmapPos = enterSubmap.find("g_previousSubmap = g_pKeybindManager->getCurrentSubmap().name;");
-@@ -429,6 +487,17 @@ int main() {
+@@ -429,6 +487,23 @@ int main() {
  
      const auto renderSource = readFile("OverviewRender.cpp");
      expect(!renderSource.empty(), "OverviewRender.cpp can be read from repo root");
-+    expectContains(renderSource, "outputProjection(MON->m_transformedSize, HYPRUTILS_TRANSFORM_NORMAL)",
-+                   "the 3D grid projects with the overlay ortho, not a second monitor transform");
++    expectContains(renderSource, "m_renderData.targetProjection",
++                   "the 3D grid reuses the compositor's own per-frame projection instead of rebuilding it");
 +    expectAbsent(renderSource, "Math::wlTransformToHyprutils(MON->m_transform)",
 +                 "the 3D projection never re-applies the monitor transform (rotated monitors rendered off-screen)");
++    const auto captureSource = readFile("OverviewCapture.cpp");
++    expect(!captureSource.empty(), "OverviewCapture.cpp can be read from repo root");
++    expectContains(captureSource, "captureBox = {{0, 0}, monitorState.transformedSize()};",
++                   "rotated monitors capture the already-rotated overlay space");
++    expectAbsent(captureSource, "HYPRUTILS_TRANSFORM_180",
++                 "previews are no longer compensated with a 180 flip (wrong for 90/270)");
 +    const auto threeDSource = readFile("Overview3D.cpp");
 +    expect(!threeDSource.empty(), "Overview3D.cpp can be read from repo root");
 +    const auto ensureInit = extractFunction(threeDSource, "bool ensureInit() {");

@@ -81,14 +81,7 @@ Item {
   property bool foregroundAnimationEnabled: true
   // AMOLED: la barra hereda el color de superficie del tema (Color.bar.background),
   // que el override de ~/.config/omarchy/shell.toml fija en #000000 opaco.
-  // Fondo: si el shell.json de esta máquina define bar.backgroundAlpha, la
-  // barra se pinta negro con ese alpha y el blur del compositor (regla
-  // "omarchy-bar" en layerrules.lua) se ve detrás: 0 = invisible, 1 = negro
-  // pleno. Sin la clave queda el color de superficie del tema, que es el
-  // comportamiento de siempre. Así cada máquina elige: el desktop translúcido
-  // con blur, la laptop opaca como estaba.
-  property real backgroundAlpha: -1
-  property color background: backgroundAlpha >= 0 ? Qt.rgba(0, 0, 0, backgroundAlpha) : Color.bar.background
+  property color background: Color.bar.background
   property color urgent: Color.accent
 
   Behavior on barForeground { enabled: root.foregroundAnimationEnabled; ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
@@ -676,8 +669,6 @@ Item {
 
     position = normalizePosition(config.position)
     setRequestedTransparency(config.transparent === true)
-    backgroundAlpha = (config.backgroundAlpha !== undefined && config.backgroundAlpha !== null)
-      ? Number(config.backgroundAlpha) : -1
     centerAnchor = Util.canonicalWidgetId(config.centerAnchor || "")
 
     // layoutEntries feeds plain JS arrays to the module Repeaters, and QML
