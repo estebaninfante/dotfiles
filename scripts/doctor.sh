@@ -21,8 +21,10 @@ warn() { printf '  ojo   %s\n' "$*"; WARNED=$((WARNED+1)); }
 head_() { [[ "$QUIET" == 1 ]] || printf '\n%s\n' "$*"; }
 
 # Directorios permitidos en $HOME (todos los demás son sospechosos).
+# `data` y `mnt` son puntos de montaje (volumen btrfs aparte / iPhone); `Zotero`
+# es la biblioteca que algunos equipos tienen en el home. El resto es estructura.
 HOME_DIRS_OK=( Archivo Descargas Documentos Escritorio "Imágenes" "Música" Proyectos
-               Videos alicia ai-chats books dotfiles go _basura )
+               Videos alicia ai-chats books dotfiles go _basura data mnt Zotero )
 
 head_ "── raíces ──"
 [[ -d "$DEV_ROOT" ]] && ok "raíz de proyectos: $DEV_ROOT" || bad "no existe $DEV_ROOT"
