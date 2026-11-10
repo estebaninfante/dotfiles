@@ -1,63 +1,572 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
-# Sync richest single Wayland MIME offered by clipboard. wl-copy cannot expose
-# multiple MIME sources at once, so prefer formats that preserve most data.
-STATE_FILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/clipboard-sync.last"
-PEER="${CLIPBOARD_PEER:?CLIPBOARD_PEER not set}"
-SSH_KEY="${CLIPBOARD_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+# clipboard-sync — el portapapeles compartido entre la laptop y el desktop.
+#
+# Lo que copiás en una máquina aparece en la otra, y al revés:
+#   texto    -> text/plain (cualquier app)
+#   capturas -> image/png (Print, SUPER+Print, capture-menu, shot)
+#   archivos -> text/uri-list: videos de screenrecord, capturas guardadas,
+#               cualquier cosa copiada en Dolphin. Los archivos VIAJAN de
+#               verdad (framing binario por SSH) y en el destino quedan en
+#               ~/Descargas/Entre-computadoras/<fecha>/.
+#
+# El demonio (`watch`, unit clipboard-sync.service) escucha cada cambio del
+# portapapeles y lo empuja. Los atajos de Hyprland sólo fuerzan un envío o una
+# traída cuando querés repetir algo que ya se envió.
+#
+# Uso:
+#   clipboard-sync watch            demonio: escucha y empuja (lo arranca systemd)
+#   clipboard-sync push [--force]   empuja el portapapeles actual al otro equipo
+#   clipboard-sync pull             trae lo que tenga el otro equipo
+#   clipboard-sync send <ruta...>   comparte archivos (quedan en ambos portapapeles)
+#   clipboard-sync doctor           diagnóstico (ssh, wayland, unit, peer)
+#   clipboard-sync status           estado y últimas líneas del registro
+#
+# Internos (los invoca la otra máquina por SSH):
+#   clipboard-sync receive <mime> <digest>   stdin -> wl-copy
+#   clipboard-sync receive-files <id>        stdin (framing) -> carpeta + uri-list
 
-choose_mime() {
-  local type
-  mapfile -t types < <(wl-paste --list-types 2>/dev/null || true)
-  for type in image/png image/jpeg image/webp image/gif text/html text/uri-list text/plain UTF8_STRING; do
-    if printf '%s\n' "${types[@]}" | grep -Fxq "$type"; then
-      printf '%s\n' "$type"
+SELF=$(readlink -f -- "${BASH_SOURCE[0]}")
+
+# ---------------------------------------------------------------- entorno ---
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[[ -n ${DBUS_SESSION_BUS_ADDRESS:-} ]] || export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+
+STATE="${CLIPBOARD_SYNC_STATE:-${XDG_RUNTIME_DIR}/clipboard-sync}"
+SEEN="${STATE}/seen"
+LOCK="${STATE}/lock"
+WATCH_LOCK="${STATE}/watch.lock"
+PEER_CACHE="${STATE}/peer"
+LOG_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/clipboard-sync"
+LOG="${CLIPBOARD_SYNC_LOG:-${LOG_DIR}/log}"
+
+CONFIG="${CLIPBOARD_SYNC_CONFIG:-${HOME}/.config/clipboard-sync/config}"
+MACHINE=$(tr -d '[:space:]' <"${HOME}/.config/machine-type" 2>/dev/null) || MACHINE=laptop
+
+# Destino por defecto: la otra máquina del par laptop <-> desktop. Las IPs
+# estáticas de la LAN son fijas (ver AGENTS.md); si no hay ruta se cae a
+# Tailscale, que es lo que funciona fuera de casa.
+if [[ ${MACHINE} == desktop ]]; then
+  : "${PEER_LAN_ADDR:=192.168.1.240}"
+  : "${PEER_LAN:=eztvn@192.168.1.240}"
+  : "${PEER_TS:=eztvn@laptopmarchy}"
+else
+  : "${PEER_LAN_ADDR:=192.168.1.241}"
+  : "${PEER_LAN:=eztvn@192.168.1.241}"
+  : "${PEER_TS:=eztvn@astradeux}"
+fi
+: "${MAX_FILE_MB:=2048}"   # tope por transferencia de archivos
+: "${MAX_BLOB_MB:=256}"    # tope para texto/imagen pegados en el portapapeles
+: "${SEEN_TTL:=300}"       # segundos en que un digest se considera "ya visto"
+: "${AUTO_FILES:=1}"       # 0 = los archivos sólo viajan con `send` o el atajo
+: "${SSH_KEY:=${HOME}/.ssh/id_ed25519}"
+
+DOWNLOAD=$(xdg-user-dir DOWNLOAD 2>/dev/null) || DOWNLOAD=""
+[[ -n ${DOWNLOAD} ]] || DOWNLOAD="${HOME}/Descargas"
+: "${INCOMING_DIR:=${DOWNLOAD}/Entre-computadoras}"
+
+# La config de la máquina (si existe) gana sobre los valores por defecto.
+# shellcheck disable=SC1090
+[[ -r ${CONFIG} ]] && . "${CONFIG}"
+
+mkdir -p "${STATE}" "${LOG_DIR}" 2>/dev/null || true
+
+# ---------------------------------------------------------------- helpers ---
+log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"${LOG}" 2>/dev/null || true; }
+
+NOTIFY_BIN=$(type -P notify 2>/dev/null || true)
+notify() { # <glifo> <título> <cuerpo> [urgencia]
+  [[ -n ${NOTIFY_BIN} ]] || { log "aviso (sin notify): $2"; return 0; }
+  "${NOTIFY_BIN}" -g "${1:-󰆏}" -u "${4:-low}" -t 5000 --app-name clipboard-sync \
+    "${2}" "${3:-}" >/dev/null 2>&1 || true
+  log "aviso: $2"
+}
+
+# El demonio y los comandos por SSH pueden no heredar el entorno gráfico: se
+# rescata el socket de Wayland del runtime dir si falta.
+ensure_wayland() {
+  if [[ -n ${WAYLAND_DISPLAY:-} && -S ${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY} ]]; then
+    return 0
+  fi
+  local s
+  for s in "${XDG_RUNTIME_DIR}"/wayland-*; do
+    [[ -S ${s} ]] || continue
+    WAYLAND_DISPLAY=${s##*/}
+    export WAYLAND_DISPLAY
+    return 0
+  done
+  return 1
+}
+
+# Digest canónico de una entrada: mime + NUL + bytes. Mismo cálculo en las dos
+# puntas, así el eco que vuelve se reconoce y no rebota.
+digest_of() { # <mime> <archivo>
+  { printf '%s\0' "$1"; cat -- "$2"; } | sha256sum | cut -d' ' -f1
+}
+
+seen_prune() {
+  local now ttl
+  now=$(date +%s)
+  ttl=${SEEN_TTL}
+  [[ -s ${SEEN} ]] || return 0
+  awk -v now="${now}" -v ttl="${ttl}" '$2 + ttl > now' "${SEEN}" >"${SEEN}.tmp" 2>/dev/null &&
+    mv -f "${SEEN}.tmp" "${SEEN}" 2>/dev/null
+  return 0
+}
+
+seen_check() { # <digest> — ¿visto hace menos de SEEN_TTL?
+  [[ -s ${SEEN} ]] || return 1
+  local ts
+  ts=$(awk -v d="$1" '$1 == d { t = $2 } END { print t }' "${SEEN}" 2>/dev/null)
+  [[ -n ${ts} ]] || return 1
+  (( $(date +%s) - ts < SEEN_TTL ))
+}
+
+seen_add() { # <digest>
+  seen_prune
+  printf '%s %s\n' "$1" "$(date +%s)" >>"${SEEN}"
+}
+
+# Un envío que falló no debe quedar marcado como visto: si no, un reintento con
+# el mismo contenido se descarta en silencio.
+seen_del() { # <digest>
+  [[ -s ${SEEN} ]] || return 0
+  awk -v d="$1" '$1 != d' "${SEEN}" >"${SEEN}.tmp" 2>/dev/null && mv -f "${SEEN}.tmp" "${SEEN}"
+  return 0
+}
+
+size_mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1048576 }'; }
+
+uri_of() { # ruta local -> porcentaje-encodeado (mismo criterio que screenrecord-toggle)
+  jq -rn --arg f "$1" '$f | split("/") | map(@uri) | join("/")' 2>/dev/null
+}
+
+# ---------------------------------------------------------------- transporte ---
+resolve_peer() {
+  local age now
+  if [[ -s ${PEER_CACHE} ]]; then
+    now=$(date +%s)
+    age=$(( now - $(stat -c %Y "${PEER_CACHE}" 2>/dev/null || echo 0) ))
+    if (( age < 120 )); then
+      head -1 "${PEER_CACHE}"
+      return 0
+    fi
+  fi
+  # Sondeo rápido de la LAN: si el puerto 22 responde, ese camino es el bueno.
+  if timeout 2 bash -c "exec 3<>/dev/tcp/${PEER_LAN_ADDR}/22" 2>/dev/null; then
+    printf '%s\n' "${PEER_LAN}" >"${PEER_CACHE}"
+  else
+    printf '%s\n' "${PEER_TS}" >"${PEER_CACHE}"
+  fi
+  head -1 "${PEER_CACHE}"
+}
+
+drop_peer_cache() { rm -f "${PEER_CACHE}" 2>/dev/null || true; }
+
+# Comando remoto: usa el symlink de ~/.local/bin y, si la otra máquina todavía
+# no corrió link-dotfiles.sh, cae al script del repo.
+remote_cmd() {
+  printf 'p="$HOME/.local/bin/clipboard-sync"; [ -x "$p" ] || p="$HOME/dotfiles/linux/bin/clipboard-sync"; exec "$p" %s' "$1"
+}
+
+ssh_run() { # <destino> <timeout-segundos> <comando>
+  local target=$1 tmo=$2 cmd=$3
+  if [[ ${CLIPBOARD_SYNC_LOCAL_PEER:-0} == 1 ]]; then
+    timeout "${tmo}" bash -c "${cmd}"
+    return $?
+  fi
+  timeout "${tmo}" ssh -T -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+    -o ConnectTimeout=5 -o IdentitiesOnly=yes -i "${SSH_KEY}" \
+    "${target}" "${cmd}" 2>>"${LOG}"
+}
+
+peer_ok() { ssh_run "$1" 20 true >/dev/null 2>&1; }
+
+# ---------------------------------------------------------------- lectura ---
+# Un solo MIME por envío: wl-copy no puede ofrecer varios a la vez. El orden
+# prioriza lo que conserva más información (imagen > lista de archivos > texto).
+pick_mime() {
+  local types type
+  types=$(timeout 5 wl-paste --list-types 2>/dev/null) || return 1
+  [[ -n ${types} ]] || return 1
+  for type in image/png image/jpeg image/webp image/gif text/uri-list text/html text/plain UTF8_STRING; do
+    if grep -Fxq -- "${type}" <<<"${types}"; then
+      printf '%s\n' "${type}"
       return 0
     fi
   done
-  [[ ${#types[@]} -gt 0 ]] && printf '%s\n' "${types[0]}"
+  head -1 <<<"${types}"
 }
 
-send() {
-  local mime tmp digest
-  # Single-flight: si un send previo sigue colgado (peer offline, clipboard
-  # atascado), saltar en vez de acumular procesos bloqueados.
-  exec 9>"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/clipboard-sync.lock"
-  flock -n 9 || exit 0
-  mime="$(choose_mime)"
-  [[ -n "$mime" ]] || exit 0
-  tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN
-  # Timeout tambien en la lectura: un clipboard cuyo dueño no responde datos
-  # bloquea wl-paste indefinidamente y congela todo el pipeline.
-  timeout 10 wl-paste --no-newline --type "$mime" > "$tmp" || exit 0
-  digest="$( { printf '%s\0' "$mime"; sha256sum "$tmp"; } | sha256sum | cut -d' ' -f1 )"
-  if [[ -f "$STATE_FILE" ]] && [[ $(<"$STATE_FILE") == "$digest" ]]; then
-    rm -f "$STATE_FILE"
-    exit 0
+# file:///ruta%20con%20espacios -> /ruta con espacios
+uris_to_paths() { # <archivo con uri-list>
+  local line path
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    [[ -n ${line} && ${line} != \#* ]] || continue
+    [[ ${line} == file://* ]] || continue
+    path=${line#file://}
+    path=${path#localhost}
+    printf '%b\n' "${path//%/\\x}"
+  done <"$1"
+}
+
+# ---------------------------------------------------------------- empujar ---
+push_blob() { # <destino> <mime> <digest> <archivo>
+  local target=$1 mime=$2 digest=$3 file=$4 rc
+  ssh_run "${target}" 45 "$(remote_cmd "receive '$mime' '$digest'")" <"${file}"
+  rc=$?
+  if (( rc != 0 )); then
+    log "push: falló el envío de ${mime} (rc=${rc})"
+    drop_peer_cache
+    return "${rc}"
   fi
-  # ConnectTimeout no cubre DNS lento (MagicDNS con peer offline): capar total.
-  timeout 10 ssh -4 -o BatchMode=yes -o ConnectTimeout=3 -o IdentitiesOnly=yes \
-    -i "$SSH_KEY" "$PEER" \
-    "${HOME}/.local/bin/clipboard-sync receive '$mime' '$digest'" < "$tmp" \
-    >/dev/null 2>&1 </dev/null || true
+  log "push: ${mime} -> ${target}"
+  return 0
 }
 
-receive() {
-  local mime="$1" digest="$2" tmp
-  [[ "$mime" =~ ^[A-Za-z0-9._+-]+/[A-Za-z0-9._+-]+$|^UTF8_STRING$ ]] || exit 2
-  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || exit 2
-  tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN
-  cat > "$tmp"
-  printf '%s\n' "$digest" > "$STATE_FILE"
-  wl-copy --type "$mime" < "$tmp" >/dev/null 2>&1 &
-  disown || true
+# Envía archivos reales: por el mismo stream, un encabezado "nombre<TAB>tamaño"
+# y a continuación los bytes. El receptor los corta con `head -c`, así no hace
+# falta tar ni copiar nada a un temporal gigante.
+push_files() { # <destino> <uri-list tmp> <digest>
+  local target=$1 list=$2 digest=$3
+  local -a files=() kept=()
+  local path size total=0 id rc
+
+  mapfile -t files < <(uris_to_paths "${list}")
+  for path in "${files[@]}"; do
+    [[ -f ${path} ]] && kept+=("${path}")
+  done
+  if (( ${#kept[@]} == 0 )); then
+    # La lista apunta a archivos que no están acá: es el eco de algo que llegó
+    # del otro equipo (o rutas muertas). No hay nada que mandar.
+    log "push: uri-list sin archivos locales, se ignora"
+    return 0
+  fi
+
+  for path in "${kept[@]}"; do
+    size=$(stat -c %s -- "${path}" 2>/dev/null) || continue
+    total=$(( total + size ))
+  done
+  if (( total > MAX_FILE_MB * 1048576 )); then
+    notify 󰈀 "Archivo demasiado grande" "$(size_mb "${total}") MB > ${MAX_FILE_MB} MB · no se envió"
+    log "push: rechazado por tamaño (${total} bytes)"
+    return 0
+  fi
+
+  id=$(hostname -s 2>/dev/null || echo host)
+  notify 󰇚 "Enviando al otro equipo" "${#kept[@]} archivo(s) · $(size_mb "${total}") MB"
+
+  {
+    for path in "${kept[@]}"; do
+      size=$(stat -c %s -- "${path}" 2>/dev/null) || continue
+      name=${path##*/}
+      name=${name//$'\t'/ }; name=${name//$'\n'/ }
+      printf '%s\t%s\t%s\n' "${name}" "${size}" "$(stat -c %a -- "${path}" 2>/dev/null || echo 644)"
+      cat -- "${path}"
+    done
+  } | ssh_run "${target}" 3600 "$(remote_cmd "receive-files '$id'")"
+  rc=$?
+  if (( rc != 0 )); then
+    notify 󰅚 "No se pudo enviar" "${#kept[@]} archivo(s) · revisá la conexión"
+    log "push: archivos fallaron (rc=${rc})"
+    drop_peer_cache
+    return "${rc}"
+  fi
+  seen_add "${digest}"
+  notify 󰄬 "Archivos en el otro equipo" "${#kept[@]} archivo(s) · ya se puede pegar ahí"
+  log "push: ${#kept[@]} archivo(s) (${total} bytes) -> ${target}"
+  return 0
 }
 
-case "${1:-watch}" in
-  watch|send) send ;;
-  receive) receive "${2:-}" "${3:-}" ;;
-  *) exit 2 ;;
+push() { # [--force]
+  local force=0 attempt mime rc
+  [[ ${1:-} == --force ]] && force=1
+
+  ensure_wayland || { log "push: sin sesión Wayland"; return 1; }
+
+  # Un solo envío a la vez: si un video está viajando, el cambio siguiente se
+  # descarta en vez de apilar procesos colgados (el que copió último puede
+  # reintentar con el atajo).
+  exec 9>"${LOCK}"
+  flock -n 9 || { log "push: ocupado, se descarta este evento"; return 0; }
+
+  for attempt in 1 2; do
+    mime=$(pick_mime) || { log "push: portapapeles vacío"; return 0; }
+    local tmp
+    tmp=$(mktemp "${STATE}/payload.XXXXXX") || return 1
+    if ! timeout 20 wl-paste --no-newline --type "${mime}" >"${tmp}" 2>/dev/null; then
+      rm -f "${tmp}"
+      log "push: no se pudo leer ${mime}"
+      return 1
+    fi
+    local size digest
+    size=$(stat -c %s -- "${tmp}" 2>/dev/null || echo 0)
+    if (( size > MAX_BLOB_MB * 1048576 )); then
+      rm -f "${tmp}"
+      notify 󰈀 "Portapapeles muy grande" "$(size_mb "${size}") MB · no se envió"
+      log "push: rechazado por tamaño (${size} bytes, ${mime})"
+      return 0
+    fi
+    digest=$(digest_of "${mime}" "${tmp}")
+
+    if (( ! force )) && seen_check "${digest}"; then
+      rm -f "${tmp}"
+      log "push: eco conocido (${mime}), se ignora"
+      return 0
+    fi
+    seen_add "${digest}"
+
+    local target
+    target=$(resolve_peer)
+    if [[ ${mime} == text/uri-list ]]; then
+      if (( AUTO_FILES )); then
+        push_files "${target}" "${tmp}" "${digest}"
+      else
+        log "push: AUTO_FILES=0, uri-list sin enviar"
+      fi
+    else
+      push_blob "${target}" "${mime}" "${digest}" "${tmp}"
+    fi
+    rc=$?
+    rm -f "${tmp}"
+    if (( rc != 0 )); then
+      seen_del "${digest}"
+      break
+    fi
+    (( attempt == 1 )) || break
+
+    # Si mientras viajaba el portapapeles cambió, el evento nuevo se perdió
+    # (el lock estaba tomado): se reintenta una vez al terminar.
+    local mime2 again
+    again=$(mktemp "${STATE}/again.XXXXXX")
+    mime2=$(pick_mime || true)
+    if [[ -n ${mime2} ]] && timeout 5 wl-paste --no-newline --type "${mime2}" >"${again}" 2>/dev/null &&
+      [[ "$(digest_of "${mime2}" "${again}")" != "${digest}" ]]; then
+      rm -f "${again}"
+      log "push: el portapapeles cambió durante el envío, se repite"
+      continue
+    fi
+    rm -f "${again}"
+    break
+  done
+  return 0
+}
+
+# ---------------------------------------------------------------- recibir ---
+receive() { # <mime> <digest>
+  local mime=${1:-} digest=${2:-} tmp
+  # Los tipos con parámetros (text/plain;charset=utf-8) también son válidos.
+  local mime_re='^[A-Za-z0-9._+;-]+/[A-Za-z0-9._+;=-]+$|^UTF8_STRING$'
+  [[ ${mime} =~ ${mime_re} ]] || { log "receive: mime inválido: ${mime}"; exit 2; }
+  [[ ${digest} =~ ^[0-9a-f]{64}$ ]] || { log "receive: digest inválido"; exit 2; }
+  ensure_wayland || { log "receive: sin sesión Wayland"; exit 1; }
+
+  tmp=$(mktemp "${STATE}/recv.XXXXXX") || exit 1
+  cat >"${tmp}"
+  seen_add "${digest}"
+  # wl-copy daemoniza el dueño de la selección: tiene que sobrevivir al cierre
+  # de la sesión SSH.
+  setsid wl-copy --type "${mime}" <"${tmp}" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+  rm -f "${tmp}"
+  log "receive: ${mime} aplicado (${digest:0:8})"
+  return 0
+}
+
+receive_files() { # <id remoto>
+  local remote_id=${1:-peer} name size mode dest fname n
+  ensure_wayland || { log "receive-files: sin sesión Wayland"; exit 1; }
+
+  dest="${INCOMING_DIR}/$(date +%Y%m%d-%H%M%S)-${remote_id//[^A-Za-z0-9_.-]/_}"
+  mkdir -p "${dest}" || exit 1
+
+  local -a saved=()
+  while IFS=$'\t' read -r name size mode; do
+    [[ ${size} =~ ^[0-9]+$ ]] || break
+    (( size >= 0 )) || break
+    if (( size > MAX_FILE_MB * 1048576 )); then
+      log "receive-files: ${name} excede el tope, se corta"
+      break
+    fi
+    # Sin rutas ni saltos: el nombre llega de la otra máquina.
+    name=${name//\//_}
+    name=${name#..}
+    name=${name:-archivo}
+    fname="${dest}/${name}"
+    n=2
+    while [[ -e ${fname} ]]; do fname="${dest}/${name%.*}-${n}.${name##*.}"; n=$(( n + 1 )); done
+    if ! head -c "${size}" >"${fname}"; then
+      log "receive-files: corte al escribir ${fname}"
+      break
+    fi
+    [[ ${mode:-} =~ ^[0-7]{3,4}$ ]] && chmod "${mode}" "${fname}" 2>/dev/null
+    saved+=("${fname}")
+  done
+
+  if (( ${#saved[@]} == 0 )); then
+    log "receive-files: no llegó ningún archivo"
+    rmdir "${dest}" 2>/dev/null || true
+    exit 1
+  fi
+
+  # La lista se arma en un archivo para que el digest sea exactamente el de los
+  # bytes que quedan en el portapapeles (sin perder el \r\n final).
+  local list
+  list=$(mktemp "${STATE}/uris.XXXXXX") || exit 1
+  local p
+  for p in "${saved[@]}"; do
+    printf 'file://%s\r\n' "$(uri_of "${p}")" >>"${list}"
+  done
+  local digest
+  digest=$(digest_of text/uri-list "${list}")
+  seen_add "${digest}"
+  setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+  rm -f "${list}"
+
+  notify 󰄬 "Llegaron archivos" "${#saved[@]} en $(basename "${dest}") · ya se pueden pegar"
+  log "receive-files: ${#saved[@]} archivo(s) en ${dest}"
+  return 0
+}
+
+# ---------------------------------------------------------------- atajos ---
+send_files() { # <ruta...>
+  local -a paths=()
+  local p
+  for p in "$@"; do [[ -e ${p} ]] && paths+=("$(readlink -f -- "${p}")"); done
+  if (( ${#paths[@]} == 0 )); then
+    notify 󰅚 "Nada para enviar" "Pasá una ruta existente"
+    return 2
+  fi
+  ensure_wayland || return 1
+  local list
+  list=$(mktemp "${STATE}/send.XXXXXX") || return 1
+  for p in "${paths[@]}"; do
+    printf 'file://%s\r\n' "$(uri_of "${p}")" >>"${list}"
+  done
+  setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+  push --force
+  rm -f "${list}"
+}
+
+pull() {
+  local target
+  target=$(resolve_peer)
+  log "pull: pidiendo el portapapeles a ${target}"
+  if ssh_run "${target}" 60 "$(remote_cmd 'push --force')" >/dev/null; then
+    notify 󰆏 "Portapapeles traído" "Lo del otro equipo ya está acá"
+    return 0
+  fi
+  drop_peer_cache
+  notify 󰅚 "No se pudo traer el portapapeles" "Revisá la conexión con el otro equipo"
+  return 1
+}
+
+# ---------------------------------------------------------------- demonio ---
+watch() {
+  ensure_wayland || { log "watch: sin sesión Wayland, reintento"; sleep 3; exec "$SELF" watch; }
+  # Una sola instancia por sesión. El fd queda abierto mientras viva el
+  # demonio; los hijos lo cierran para no estirar el lock si el demonio muere.
+  exec 8>"${WATCH_LOCK}"
+  flock -n 8 || { log "watch: ya hay un demonio corriendo"; exit 0; }
+
+  log "watch: arrancando (peer lan=${PEER_LAN} ts=${PEER_TS})"
+  while :; do
+    # wl-paste -w se queda escuchando y ejecuta push en cada cambio de
+    # selección. Si el compositor reinicia (o el socket se cae) muere: se
+    # relanza en vez de quedar mudo para siempre.
+    wl-paste --watch "${SELF}" push 8>&- 2>/dev/null
+    local rc=$?
+    log "watch: wl-paste terminó (rc=${rc}), reintento en 3s"
+    sleep 3
+  done
+}
+
+# ---------------------------------------------------------------- estado ---
+status() {
+  local target
+  target=$(resolve_peer)
+  printf 'clipboard-sync · %s\n' "${MACHINE}"
+  printf '  peer:      %s\n' "${target}"
+  printf '  recibidos: %s\n' "${INCOMING_DIR}"
+  printf '  registro:  %s\n' "${LOG}"
+  printf '  demonio:   '
+  if pgrep -f 'clipboard-sync watch' >/dev/null 2>&1; then
+    printf 'corriendo\n'
+  else
+    printf 'detenido\n'
+  fi
+  printf '  peer vivo: '
+  if peer_ok "${target}"; then printf 'sí\n'; else printf 'no (LAN y Tailscale sin respuesta)\n'; fi
+  printf '\nÚltimas líneas:\n'
+  tail -n 8 "${LOG}" 2>/dev/null | sed 's/^/  /'
+}
+
+doctor() {
+  local ok=0 target
+  check() { # <estado> <texto> [pista]
+    if [[ ${1} == ok ]]; then printf '  ✓ %s\n' "${2}"; else printf '  ✗ %s\n' "${2}"; [[ -n ${3:-} ]] && printf '      → %s\n' "${3}"; ok=1; fi
+  }
+
+  printf 'clipboard-sync doctor · %s\n' "${MACHINE}"
+  command -v wl-paste >/dev/null && command -v wl-copy >/dev/null
+  check $? "wl-clipboard instalado" "pacman -S wl-clipboard"
+  ensure_wayland
+  check $? "sesión Wayland (${WAYLAND_DISPLAY:-?})"
+  if [[ -r ${SSH_KEY} ]]; then check ok "llave SSH ${SSH_KEY}"; else check no "llave SSH ${SSH_KEY}" "ssh-keygen -t ed25519"; fi
+
+  target=$(resolve_peer)
+  local err
+  err=$(ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
+    -o IdentitiesOnly=yes -i "${SSH_KEY}" "${target}" true 2>&1 >/dev/null)
+  if [[ -z ${err} ]]; then
+    check ok "ssh sin contraseña a ${target}"
+  elif [[ ${err} == *"Bad owner or permissions on /etc/ssh/ssh_config.d"* ]]; then
+    check no "ssh a ${target}" "arreglo de una vez (pide contraseña): sudo chown -R root:root /etc/ssh/ssh_config.d && sudo chmod 644 /etc/ssh/ssh_config.d/*.conf"
+  else
+    check no "ssh a ${target}" "${err//$'\n'/ }"
+  fi
+
+  if [[ -z ${err} ]] && ssh_run "${target}" 15 "test -x \$HOME/.local/bin/clipboard-sync -o -x \$HOME/dotfiles/linux/bin/clipboard-sync" >/dev/null 2>&1; then
+    check ok "el otro equipo tiene clipboard-sync"
+  elif [[ -z ${err} ]]; then
+    check no "el otro equipo tiene clipboard-sync" "ahí: dotfiles-sync.sh --force  (o link-dotfiles.sh)"
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl --user is-enabled clipboard-sync.service >/dev/null 2>&1; then
+      check ok "clipboard-sync.service habilitado"
+    else
+      check no "clipboard-sync.service habilitado" "${HOME}/dotfiles/scripts/install-user-units.sh"
+    fi
+    systemctl --user is-active clipboard-sync.service >/dev/null 2>&1 &&
+      check ok "demonio activo" ||
+      check no "demonio activo" "systemctl --user start clipboard-sync.service"
+  fi
+
+  local lan=no ts=no
+  timeout 2 bash -c "exec 3<>/dev/tcp/${PEER_LAN_ADDR}/22" 2>/dev/null && lan=sí
+  command -v tailscale >/dev/null 2>&1 && timeout 3 tailscale status >/dev/null 2>&1 && ts=sí
+  printf '  · ruta LAN %s · tailscale %s\n' "${lan}" "${ts}"
+  (( ok == 0 )) && printf '\nTodo en orden.\n' || printf '\nHay pendientes (arriba).\n'
+  return "${ok}"
+}
+
+usage() { awk 'NR > 3 && /^#/ { sub(/^# ?/, ""); print; next } NR > 3 { exit }' "${SELF}"; }
+
+# ------------------------------------------------------------------ main ---
+case "${1:-}" in
+  watch)         watch ;;
+  push)          shift; push "${1:-}" ;;
+  pull)          pull ;;
+  send)          shift; send_files "$@" ;;
+  receive)       receive "${2:-}" "${3:-}" ;;
+  receive-files) receive_files "${2:-}" ;;
+  status)        status ;;
+  doctor)        doctor ;;
+  -h|--help|help|"") usage ;;
+  *) printf 'clipboard-sync: comando desconocido: %s\n' "$1" >&2; usage; exit 2 ;;
 esac
