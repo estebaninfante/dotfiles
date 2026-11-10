@@ -3,12 +3,12 @@
 #
 # Comprueba, sin criterio humano:
 #   1. Existe la regla canónica `linux/agents/estandar-ideas.md` y nombra los
-#      comandos de captura (`idea raw`) y de consulta (`alicia next`).
+#      comandos de captura (`alicia nuevo`) y de consulta (`alicia next`).
 #   2. Las tres entradas que leen las IAs resuelven a esa misma regla:
 #        ~/.omp/agent/AGENTS.md        (OMP)
 #        ~/.claude/CLAUDE.md           (Claude Code)
 #        ~/.config/opencode/AGENTS.md  (OpenCode; dentro del repo symlinkeado)
-#   3. En un vault temporal: `idea raw` crea un pendiente y `alicia next` lo
+#   3. En un vault temporal: `alicia nuevo` crea un pendiente y `alicia next` lo
 #      lista como accionable. No toca las ideas reales del usuario.
 #   4. `alicia check` valida el grafo temporal.
 #
@@ -35,8 +35,8 @@ fail() { fails=$((fails + 1)); printf '  FALLA %s\n' "$*"; }
 # --- 1. regla canónica -----------------------------------------------------
 if [ -f "$REGLA" ]; then
     ok "existe $REGLA"
-    grep -q 'idea raw' "$REGLA" && ok "la regla manda capturar con 'idea raw'" \
-        || fail "la regla no menciona 'idea raw'"
+    grep -q 'alicia nuevo' "$REGLA" && ok "la regla manda capturar con 'alicia nuevo'" \
+        || fail "la regla no menciona 'alicia nuevo'"
     grep -q 'alicia next' "$REGLA" && ok "la regla manda consultar con 'alicia next'" \
         || fail "la regla no menciona 'alicia next'"
 else
@@ -71,26 +71,28 @@ done
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-if command -v idea >/dev/null 2>&1 && command -v alicia >/dev/null 2>&1; then
-    nota="$(ALICIA_VAULT="$TMP" idea raw "prueba de captura del estándar" 2>&1)"
-    if [ -f "$nota" ]; then
-        ok "idea raw crea el pendiente"
+if command -v alicia >/dev/null 2>&1; then
+    nota="$(alicia --vault "$TMP" nuevo --tipo pensamiento \
+        --titulo "prueba de captura del estándar" \
+        --cuerpo "texto de prueba" --tags verificacion 2>&1)"
+    if [ -f "$TMP/$nota" ]; then
+        ok "alicia nuevo crea el pendiente"
     else
-        fail "idea raw no creó la nota: $nota"
+        fail "alicia nuevo no creó la nota: $nota"
     fi
-    if ALICIA_VAULT="$TMP" alicia --vault "$TMP" next --json 2>/dev/null \
+    if alicia --vault "$TMP" next --json 2>/dev/null \
         | grep -q "prueba-de-captura"; then
         ok "alicia next lista el pendiente como accionable"
     else
         fail "alicia next no lista el pendiente"
     fi
-    if ALICIA_VAULT="$TMP" alicia --vault "$TMP" check >/dev/null 2>&1; then
+    if alicia --vault "$TMP" check >/dev/null 2>&1; then
         ok "alicia check valida el grafo"
     else
         fail "alicia check falla en el vault temporal"
     fi
 else
-    fail "faltan los CLI 'idea' y/o 'alicia' en PATH"
+    fail "falta el CLI 'alicia' en PATH"
 fi
 
 if [ "$fails" -eq 0 ]; then

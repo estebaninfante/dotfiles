@@ -15,8 +15,8 @@ duplicadas en el vault. Ninguna IA fuera de pi tenía regla de captura.
 **Elegido.**
 
 - **El vault `~/alicia` es la única fuente de verdad** para ideas, pensamientos
-  y pendientes: `idea raw "<texto>"` crea el nodo en `Inbox/` con
-  `estado: pendiente`, y todo se consulta con `alicia next` / `idea list`.
+  y pendientes: `alicia nuevo` crea el nodo en `Inbox/` con
+  `estado: pendiente`, y todo se consulta con `alicia next` / `alicia arbol`.
 - **Una regla, un archivo**: `linux/agents/estandar-ideas.md`, symlinkeado a
   `~/.claude/CLAUDE.md` y `~/.config/opencode/AGENTS.md`, e importado con
   `@../../agents/estandar-ideas.md` desde `~/.omp/agent/AGENTS.md` (que conserva

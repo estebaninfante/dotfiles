@@ -235,7 +235,7 @@ symlink sin romperlo, asi que `omp config set` desde la maquina termina en el re
 
 Una sola regla para todas las IAs. El texto canónico es
 `linux/agents/estandar-ideas.md`: toda idea o pendiente que el usuario suelta en
-el chat se captura en el vault `~/alicia` (`idea raw`), no en el chat ni en el
+el chat se captura en el vault `~/alicia` (`alicia nuevo`), no en el chat ni en el
 store viejo `~/.local/share/pi/ideas/`. Los tickets de trabajo van a
 `agent-os-cli`.
 

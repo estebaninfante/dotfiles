@@ -9,11 +9,17 @@ chat: se capturan en el vault `~/alicia` (grafo Markdown, CLI `alicia`), que es 
 Cuando aparezca una idea, duda, pensamiento o pendiente que **no** sea una orden
 concreta sobre la máquina:
 
-1. Guardalo: `idea raw "<texto>"` — crea `Inbox/<fecha>-<slug>.md` con
-   `tipo: pensamiento` y `estado: pendiente`, y devuelve el path. Confirmá en una
-   línea: `Anotado: <título>`.
-2. Si el tema ya existe (`idea list`, `alicia dup`, `alicia arbol`), **no
-   dupliques**: agregá al nodo existente.
+1. Guardalo:
+
+   ```sh
+   alicia nuevo --tipo pensamiento --titulo "<título corto>" \
+     --cuerpo "<lo que dije, tal cual>" --tags <tema1,tema2>
+   ```
+
+   Crea `Inbox/<fecha>-<slug>.md` con `estado: pendiente` e imprime la ruta.
+   Confirmá en una línea: `Anotado: <título>`.
+2. Si el tema ya existe (`alicia dup`, `alicia arbol`), **no dupliques**: agregá
+   al nodo existente.
 3. No preguntes "¿lo guardo?": se guarda y se sigue.
 
 ## Distinguir
@@ -27,11 +33,11 @@ concreta sobre la máquina:
 ## Consultar
 
 - `alicia next` — lo accionable ahora (hojas activas sin subproblemas abiertos).
-- `idea list` — pendientes del Inbox.
+- `alicia arbol` — el grafo completo; `alicia ver <id>` — un nodo.
 - `agent-os-cli board` — tablero de tickets.
 
 ## Cerrar
 
-- Hecho: `idea done <N|slug>` o `alicia estado <id> resuelto`.
+- Hecho: `alicia estado <id> resuelto`.
 - Descartado: `alicia estado <id> descartado` (no se borra: queda el rastro).
 - Si la sesión tocó ideas: `alicia check`.

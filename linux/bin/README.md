@@ -137,8 +137,8 @@ Verificación: `scripts/verify/espacios.sh` (corre sin escritorio: `ESPACIOS_SIN
 **Canónico: el vault.** El estándar que siguen todas las IAs está en
 `linux/agents/estandar-ideas.md` (symlinkeado a `~/.omp/agent/AGENTS.md`,
 `~/.claude/CLAUDE.md` y `~/.config/opencode/AGENTS.md`): cada idea o pendiente
-se captura con `idea raw "<texto>"` en el Inbox del vault y se consulta con
-`idea list` / `alicia next`. La página de inicio del navegador lee de ahí.
+se captura con `alicia nuevo --tipo pensamiento ...` en el Inbox del vault y se
+consulta con `alicia next`. La página de inicio del navegador lee de ahí.
 
 `ideas` queda como herramienta manual del store viejo
 (`~/.local/share/pi/ideas/`): su extensión y su skill están en
