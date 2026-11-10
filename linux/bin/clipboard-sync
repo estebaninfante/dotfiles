@@ -58,7 +58,9 @@ else
 fi
 : "${MAX_FILE_MB:=2048}"   # tope por transferencia de archivos
 : "${MAX_BLOB_MB:=256}"    # tope para texto/imagen pegados en el portapapeles
-: "${SEEN_TTL:=300}"       # segundos en que un digest se considera "ya visto"
+# Un digest se considera "ya visto" para cortar el eco, pero si la ventana es
+# larga molesta: copiar dos veces la misma imagen en 5 minutos se ignoraba.
+: "${SEEN_TTL:=60}"        # segundos en que un digest se considera "ya visto"
 : "${AUTO_FILES:=1}"       # 0 = los archivos sólo viajan con `send` o el atajo
 : "${SSH_KEY:=${HOME}/.ssh/id_ed25519}"
 

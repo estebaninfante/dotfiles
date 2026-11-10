@@ -32,6 +32,14 @@ if [ -f "$HYPR_CONF" ] && grep -q 'path =' "$HYPR_CONF"; then
     sed -i "s|^\(\s*path = \).*|\1$BG|" "$HYPR_CONF"
 fi
 
+# 1b. Overview (hyprexpo): pasarle la ruta nueva en caliente si el plugin ya esta
+#     cargado. Con el .so nuevo es redundante (resuelve el symlink y cachea por
+#     mtime en cada apertura), pero en una maquina con el build anterior evita que
+#     la grilla siga mostrando el fondo viejo (dos wallpapers hasta el reload).
+if [[ "$BG" != *'"'* && "$BG" != *\\* ]]; then
+    hyprctl eval "hl.config({ plugin = { hyprexpo = { background_image = \"$BG\" } } })" >/dev/null 2>&1 || true
+fi
+
 # 2. hyprpaper vivo: aplica sin reiniciar el daemon (v0.8+: solo `wallpaper mon,path`).
 #    A TODOS los monitors: aplicar solo a `.[0]` dejaba el segundo con el fondo viejo
 #    (con un monitor virtual de Sunshine el escritorio y el stream no coincidian) y

@@ -1,5 +1,52 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-10c — un solo wallpaper de verdad (sin copias ni desincronización)
+
+**Motivo**: al cambiar el wallpaper (lo pidió al agente), el escritorio mostraba uno
+y el overview otro. Dos causas, las dos de fondo:
+
+1. **El plugin cacheaba la imagen del fondo.** `loadBackgroundImage()` tenia un solo
+   slot indexado por el *string de ruta*; la config de Lua le pasaba la ruta ya
+   resuelta al cargar, asi que despues del cambio seguia sirviendo la imagen vieja
+   hasta un reload.
+2. **hyprpaper no se enteraba del cambio.** `omarchy theme bg set` reescribe el
+   symlink canonico pero NO dispara el hook `theme-set` (es hook de cambio de tema,
+   no de fondo), asi que hyprpaper seguia con el wallpaper anterior. Encima el
+   symlink se REEMPLAZA (otro inode), asi que un `PathChanged` sobre el symlink
+   dispara una vez y despues queda ciego.
+
+**Comportamiento nuevo**:
+
+- El overview sigue el symlink canonico de Omarchy y revalida la imagen en cada
+  apertura con una clave (ruta real + mtime + tamano): un fondo nuevo se ve sin
+  reload ni reinicio, y no hay copia que se quede vieja.
+- `wallpaper-sync.path` (vigila el *directorio* `~/.local/state/omarchy/current`)
+  + `wallpaper-sync.service` → corren `sync-wallpaper.sh` cuando cambia el fondo:
+  reescribe `hyprpaper.conf`, aplica a hyprpaper y empuja la ruta nueva al plugin.
+- `wallpaper-sync.timer` (cada 2 min) es la red de seguridad: si alguien aplica un
+  fondo con `hyprctl hyprpaper` directo (sin tocar el symlink), en <= 2 min vuelve
+  el canonico y las dos superficies coinciden otra vez.
+- `sync-wallpaper.sh` ahora tambien hace `hl.config({plugin.hyprexpo.background_image})`
+  en caliente: sirve incluso con un `.so` viejo (rescata la maquina que no rebuildeo).
+
+**Verificado** (sesion viva del desktop):
+
+- `omarchy theme bg set <otro>` → symlink, hyprpaper y overview con el mismo fondo;
+  capturas del escritorio y del overview correlacionan 0.92 (la diferencia son los
+  bordes de tile y los previews), mismo brillo medio. Restaurar el original vuelve
+  todo atras.
+- Deriva con `hyprctl hyprpaper wallpaper` directo → corregida al correr el servicio
+  (y por el timer en <= 2 min).
+- `hyprctl configerrors` vacio.
+
+**Aplicar**: `install-user-units.sh` en cada maquina (enlaza y habilita los tres
+units; `dotfiles-sync` lo corre solo cuando cambian). El plugin necesita el rebuild
+`hyprexpo-rebuild.sh` + logout/login; sin eso el overview igual se actualiza por el
+empujon en caliente de `sync-wallpaper.sh`.
+
+**Revertir**: sacar `wallpaper-sync.path|service|timer` de `enabled-all.txt` y
+deshabilitarlos; el resto (cache por mtime) puede quedar, no rompe nada.
+
 ## Cambio 2026-11-10b — grilla plana (sin 3D, sin redondez, sin lente de pez)
 
 **Motivo**: con la pantalla vertical, el overview seguia "sintiendo" aparte: el tilt

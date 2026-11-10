@@ -348,10 +348,20 @@ sesión viva: `HYPREXPO_DEV_TRANSFORM=1` en el harness nested
 
 **Wallpaper (una sola fuente)**: el fondo canónico vive en el symlink de Omarchy
 `~/.local/state/omarchy/current/background` (lo escribe `omarchy theme bg set`).
-El hook `theme-set` -> `linux/bin/sync-wallpaper.sh` lo propaga a
-`hyprpaper.conf` + recarga Hyprland (refresca hyprexpo). **Nunca** setear el fondo
-con `hyprctl hyprpaper` directo: dejaría el symlink y la grilla desincronizados.
-`setup-omarchy.sh` instala el hook (`omarchy hook install theme-set ...`).
+Lo propagan dos mecanismos, porque el hook `theme-set` **no** se dispara al cambiar
+sólo el fondo:
+
+- `wallpaper-sync.path` (vigila el directorio `~/.local/state/omarchy/current`) +
+  `wallpaper-sync.service` → `linux/bin/sync-wallpaper.sh`: reescribe
+  `hyprpaper.conf`, aplica a hyprpaper y empuja la ruta al plugin (overview).
+- `wallpaper-sync.timer` (2 min): red de seguridad; si alguien aplica un fondo con
+  `hyprctl hyprpaper` directo, vuelve el canónico y no quedan dos wallpapers.
+- El overview resuelve el symlink y cachea por (ruta real + mtime + tamaño), así que
+  un cambio de fondo se ve en la próxima apertura sin reload.
+
+`setup-omarchy.sh` instala el hook `theme-set` (`omarchy hook install theme-set ...`)
+y `install-user-units.sh` habilita los tres units. **Nunca** setear el fondo con
+`hyprctl hyprpaper` directo: el timer lo revierte en <= 2 min.
 
 ### IPs LAN estaticas (fuera del pool DHCP)
 
