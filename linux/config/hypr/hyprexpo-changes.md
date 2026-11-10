@@ -64,6 +64,10 @@ muestra lo mismo que el escritorio.
 - Sesion anidada girada en el desktop (`HYPREXPO_DEV_TRANSFORM=1`, harness nested,
   captura del output nested): grilla 3x3 vertical completa y centrada, tile activo
   resaltado, contenido sin girar.
+- **Sesion viva del desktop** (rebuild + restart, `transform: 3`): grilla 3x3
+  vertical completa; el fondo del overview y el wallpaper del escritorio dan
+  correlacion 1.0 (mismo encuadre, mismo brillo) — un solo wallpaper, sin mosaico;
+  un preview de ventana aparece derecho y dentro de su tile.
 - Antes del arreglo, en la sesion viva: solo wallpaper y un jiron de tile; con la
   projection sin transform (intento intermedio) la grilla aparecia pero girada 90.
 - `make` compila; `make test` no agrega fallos nuevos (la suite ya tenia 10
