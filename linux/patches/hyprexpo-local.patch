@@ -1199,7 +1199,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..4a25639 100644
+index cb18d2f..9b8e4a2 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1423,12 +1423,17 @@ index cb18d2f..4a25639 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-@@ -247,7 +391,7 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -247,7 +391,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
  
          if (const auto texture = framebuffer->getTexture(); texture)
 -            texture->m_transform = isTransformRotated(monitorState.transform()) ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
-+            texture->m_transform = HYPRUTILS_TRANSFORM_NORMAL;
++            // El framebuffer capturado sale girado 180 respecto del espacio del
++            // overlay cuando el monitor esta rotado (Hyprland neutraliza el
++            // transform y dibuja el workspace en el buffer sin rotar). Se
++            // compensa con TRANSFORM_180, que es lo que hacia el codigo original:
++            // sin esto los previews se ven invertidos dentro del tile.
++            texture->m_transform = monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
          else
              return false;
  
