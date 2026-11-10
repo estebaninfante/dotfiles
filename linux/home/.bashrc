@@ -6,8 +6,11 @@ if [ -f /etc/bashrc ]; then
 fi
 
 # User specific environment
-if ! [[ "$PATH" =~ "$HOME/.local/bin:$HOME/bin:" ]]; then
-    PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+# OJO: $HOME/bin NO va en el PATH. Existió apuntando a un Arch a medio extraer
+# (~/usr/bin) y sus du/df/mv/rm/mkdir/sort shadoweaban a los del sistema:
+# las mediciones daban números falsos y los comandos podían ser los equivocados.
+if ! [[ "$PATH" =~ "$HOME/.local/bin:" ]]; then
+    PATH="$HOME/.local/bin:$PATH"
 fi
 export PATH
 
