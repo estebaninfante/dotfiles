@@ -63,7 +63,7 @@ lastlog() { tail -n "${1:-20}" "$CLIPBOARD_SYNC_LOG" 2>/dev/null; }
 
 # --- 1. texto -------------------------------------------------------------
 msg="prueba-portapapeles-$RANDOM"
-printf '%s' "$msg" | wl-copy 2>/dev/null
+printf '%s' "$msg" 2>/dev/null | wl-copy 2>/dev/null
 sleep 0.3
 peer push
 [ "$(wl-paste)" = "$msg" ] && ok "texto: llega al otro equipo" || fail "texto distinto en destino"
@@ -75,7 +75,7 @@ lastlog | grep -q 'eco conocido' && ok "eco: el mismo contenido no rebota" || fa
 
 # --- 3. imagen ------------------------------------------------------------
 head -c 120000 /dev/urandom >"$T/fuente/foto.png"
-wl-copy --type image/png <"$T/fuente/foto.png"
+wl-copy --type image/png 2>/dev/null <"$T/fuente/foto.png"
 sleep 0.3
 peer push
 cmp -s <(wl-paste --type image/png) "$T/fuente/foto.png" &&
@@ -86,7 +86,7 @@ printf 'video de prueba\n' >"$T/fuente/mi video.mp4"
 head -c 3000000 /dev/urandom >"$T/fuente/captura.png"
 sum1=$(sha256sum "$T/fuente/mi video.mp4" | cut -d' ' -f1)
 sum2=$(sha256sum "$T/fuente/captura.png" | cut -d' ' -f1)
-printf 'file://%s/mi%%20video.mp4\r\nfile://%s/captura.png\r\n' "$T/fuente" "$T/fuente" | wl-copy --type text/uri-list
+printf 'file://%s/mi%%20video.mp4\r\nfile://%s/captura.png\r\n' "$T/fuente" "$T/fuente" 2>/dev/null | wl-copy --type text/uri-list 2>/dev/null
 sleep 0.3
 peer push
 dst=$(find "$INCOMING_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)
@@ -110,7 +110,7 @@ printf 'x' | "$CS" receive 'text/plain' 'zz' >/dev/null 2>&1
 
 # --- 6. otro equipo caído -------------------------------------------------
 msg="sin-ruta-$RANDOM"
-printf '%s' "$msg" | wl-copy 2>/dev/null
+printf '%s' "$msg" 2>/dev/null | wl-copy 2>/dev/null
 sleep 0.3
 t0=$(date +%s)
 CLIPBOARD_SYNC_LOCAL_PEER=0 PEER_LAN_ADDR=203.0.113.1 \
@@ -130,7 +130,7 @@ setsid "$CS" watch >/dev/null 2>&1 &
 wpid=$!
 sleep 2
 n0=$(wc -l <"$CLIPBOARD_SYNC_LOG" 2>/dev/null || echo 0)
-printf 'lo que copio con el demonio escuchando' | wl-copy 2>/dev/null
+printf 'lo que copio con el demonio escuchando' 2>/dev/null | wl-copy 2>/dev/null
 sleep 2
 tail -n +"$((n0 + 1))" "$CLIPBOARD_SYNC_LOG" 2>/dev/null | grep -q 'push: text/plain' &&
   ok "demonio: empuja solo al copiar" || fail "demonio: no reaccionó"
