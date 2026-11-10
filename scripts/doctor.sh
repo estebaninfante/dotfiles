@@ -33,7 +33,7 @@ for viejo in developing Projects proyectos dev Work; do
     [[ -e "$HOME/$viejo" ]] && warn "$HOME/$viejo existe (¿raíz duplicada? la única es $DEV_ROOT)"
 done
 [[ -e "$HOME/usr" || -e "$HOME/etc" || -e "$HOME/var" ]] && \
-    bad "pseudo-root de Arch en \$HOME: sudo rm -rf ~/usr ~/etc ~/var ~/hooks ~/kernel"
+    bad "copia de initramfs descomprimida en \$HOME (usr/etc/var/hooks/kernel): NO es el boot el sistema; /boot y /usr/lib/initcpio están intactos. Borrar: sudo rm -rf ~/usr ~/etc ~/var ~/hooks ~/kernel"
 [[ -e "$HOME/bin" ]] && warn "\$HOME/bin existe (shadowea /usr/bin si está en PATH)"
 
 head_ "── symlinks ──"
