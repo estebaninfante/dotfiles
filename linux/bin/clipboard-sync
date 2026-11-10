@@ -361,6 +361,62 @@ push() { # [--force]
   return "${rc:-0}"
 }
 
+# ---------------------------------------------------------------- cola ---
+# Lo que llega por SSH no puede aplicar el portapapeles él mismo: el wl-copy que
+# lanza queda dentro del cgroup de la sesión SSH y muere cuando la conexión se
+# cierra (setsid no alcanza: systemd mata el scope entero). Resultado: la imagen
+# "llegaba" y desaparecía a los dos segundos.
+#
+# Por eso el receptor deja la entrada en una cola y la aplica el demonio, que
+# vive en la sesión gráfica y no se va con el SSH.
+daemon_alive() { pgrep -f 'clipboard-sync watch' >/dev/null 2>&1; }
+
+spool_add() { # <mime> <digest> <archivo>
+  local sd tmp
+  sd="${STATE}/spool"
+  mkdir -p "${sd}" || return 1
+  tmp="${sd}/.tmp-$$-${RANDOM}"
+  mkdir -p "${tmp}" || return 1
+  printf '%s\n' "$1" >"${tmp}/mime" || return 1
+  printf '%s\n' "$2" >"${tmp}/digest" || return 1
+  cp -- "$3" "${tmp}/payload" || { rm -rf "${tmp}"; return 1; }
+  mv -- "${tmp}" "${sd}/ready-$(date +%s%N)-$$" || return 1
+  return 0
+}
+
+# El demonio vacía la cola: wl-copy acá es hijo del servicio, así el dueño de la
+# selección sigue vivo después de que el SSH se fue.
+apply_spool() {
+  local sd entry mime digest rc
+  sd="${STATE}/spool"
+  [[ -d ${sd} ]] || return 0
+  for entry in "${sd}"/ready-*; do
+    [[ -d ${entry} ]] || continue
+    # Lo que quedó de una sesión vieja se descarta en vez de aplicarse tarde.
+    if [[ -n $(find "${entry}" -maxdepth 0 -mmin +5 2>/dev/null) ]]; then
+      log "apply: entrada vieja descartada (${entry##*/})"
+      rm -rf "${entry}"
+      continue
+    fi
+    mime=$(cat "${entry}/mime" 2>/dev/null)
+    digest=$(cat "${entry}/digest" 2>/dev/null)
+    if [[ -n ${mime} && -f ${entry}/payload ]] && ensure_wayland; then
+      timeout 30 wl-copy --type "${mime}" <"${entry}/payload" >/dev/null 2>&1
+      rc=$?
+      if (( rc == 0 )); then
+        seen_add "${digest}"
+        log "apply: ${mime} aplicado (${digest:0:8})"
+      else
+        log "apply: falló wl-copy para ${mime} (rc=${rc})"
+      fi
+    else
+      log "apply: entrada incompleta, se descarta"
+    fi
+    rm -rf "${entry}"
+  done
+  return 0
+}
+
 # ---------------------------------------------------------------- recibir ---
 receive() { # <mime> <digest>
   local mime=${1:-} digest=${2:-} tmp
@@ -373,12 +429,18 @@ receive() { # <mime> <digest>
   tmp=$(mktemp "${STATE}/recv.XXXXXX") || exit 1
   cat >"${tmp}"
   seen_add "${digest}"
-  # wl-copy daemoniza el dueño de la selección: tiene que sobrevivir al cierre
-  # de la sesión SSH.
-  setsid wl-copy --type "${mime}" <"${tmp}" >/dev/null 2>&1 9>&- &
-  disown 2>/dev/null || true
+  if daemon_alive; then
+    spool_add "${mime}" "${digest}" "${tmp}" || { log "receive: no pude encolar"; rm -f "${tmp}"; exit 1; }
+    log "receive: ${mime} en cola (${digest:0:8})"
+  else
+    # Sin demonio (pruebas, o servicio caído): al menos dejarlo en el
+    # portapapeles, aunque el dueño no sobreviva al SSH.
+    ensure_wayland || { log "receive: sin demonio ni sesión Wayland"; rm -f "${tmp}"; exit 1; }
+    setsid wl-copy --type "${mime}" <"${tmp}" >/dev/null 2>&1 9>&- &
+    disown 2>/dev/null || true
+    log "receive: ${mime} aplicado directo (${digest:0:8})"
+  fi
   rm -f "${tmp}"
-  log "receive: ${mime} aplicado (${digest:0:8})"
   return 0
 }
 
@@ -429,8 +491,12 @@ receive_files() { # <id remoto>
   local digest
   digest=$(digest_of text/uri-list "${list}")
   seen_add "${digest}"
-  setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 9>&- &
-  disown 2>/dev/null || true
+  if daemon_alive; then
+    spool_add text/uri-list "${digest}" "${list}" || log "receive-files: no pude encolar la uri-list"
+  else
+    ensure_wayland && setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 9>&- &
+    disown 2>/dev/null || true
+  fi
   rm -f "${list}"
 
   notify 󰄬 "Llegaron archivos" "${#saved[@]} en $(basename "${dest}") · ya se pueden pegar"
@@ -481,6 +547,18 @@ watch() {
   flock -n 8 || { log "watch: ya hay un demonio corriendo"; exit 0; }
 
   log "watch: arrancando (peer lan=${PEER_LAN} ts=${PEER_TS})"
+
+  # Vigía de la cola: lo que dejó el SSH de la otra máquina. Un tick por
+  # segundo es barato (un `ls` de un directorio casi siempre vacío) y no
+  # depende de inotify ni de systemd-run.
+  (
+    while :; do
+      apply_spool
+      sleep 1
+    done
+  ) 8>&- &
+
+  # Vigía del portapapeles local.
   while :; do
     # wl-paste -w se queda escuchando y ejecuta push en cada cambio de
     # selección. Si el compositor reinicia (o el socket se cae) muere: se

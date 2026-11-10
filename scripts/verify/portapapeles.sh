@@ -134,6 +134,15 @@ printf 'lo que copio con el demonio escuchando' 2>/dev/null | wl-copy 2>/dev/nul
 sleep 2
 tail -n +"$((n0 + 1))" "$CLIPBOARD_SYNC_LOG" 2>/dev/null | grep -q 'push: text/plain' &&
   ok "demonio: empuja solo al copiar" || fail "demonio: no reaccionó"
+
+# Lo que llega por SSH no lo aplica el emisor (moriría con la conexión): lo
+# encola y lo aplica el demonio. Es el camino real de una imagen entre equipos.
+n1=$(wc -l <"$CLIPBOARD_SYNC_LOG" 2>/dev/null || echo 0)
+printf 'vino por ssh' | "$CS" receive text/plain "$(printf 'b%.0s' {1..64})"
+sleep 3
+tail -n +"$((n1 + 1))" "$CLIPBOARD_SYNC_LOG" 2>/dev/null | grep -q 'apply: text/plain aplicado' &&
+  ok "cola: el demonio aplica lo que llega por SSH" || fail "cola: nadie aplicó la entrada"
+[ "$(wl-paste)" = "vino por ssh" ] && ok "cola: quedó en el portapapeles" || fail "cola: no quedó en el portapapeles"
 kill -- "-$wpid" 2>/dev/null || kill "$wpid" 2>/dev/null
 wait "$wpid" 2>/dev/null
 
