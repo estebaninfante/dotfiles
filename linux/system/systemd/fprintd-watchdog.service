@@ -1,0 +1,6 @@
+[Unit]
+Description=Reinicia fprintd si el lector ELAN quedó deshabilitado por temperatura
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/fprintd-watchdog

@@ -25,6 +25,11 @@ Item {
   property bool lockReleasing: false
   // "" esperando · "ok" huella correcta · "denied" el dedo no coincide.
   property string fingerprintResult: ""
+  // El lock apaga el panel por DPMS a los 5s de bloquear. Mientras la pantalla
+  // está apagada no tiene sentido mantener el lector escaneando: el firmware
+  // ELAN se deshabilita solo por temperatura si escanea de corrido, y así queda
+  // muerto justo cuando volvés. Se escanea sólo con la imagen encendida.
+  property bool displayOn: true
   property bool pendingSessionLock: false
   property bool authenticatingPassword: false
   property bool fingerprintAuthenticating: false
@@ -168,6 +173,7 @@ Item {
     releaseTimer.stop()
     releasePending = false
     lockReleasing = false
+    displayOn = true
     lockRequested = true
     armBlankTimer()
     logEvent("lock-requested")
@@ -221,10 +227,24 @@ Item {
   function runWake() {
     if (!wakeProcess.running) wakeProcess.running = true
     if (lockRequested) armBlankTimer()
+
+    if (!displayOn) {
+      displayOn = true
+      // Re-armar enseguida: al volver la imagen el dedo tiene que estar a un
+      // toque de distancia.
+      startFingerprint()
+    }
   }
 
   function runBlank() {
     if (!blankProcess.running) blankProcess.running = true
+
+    // Se corta el reintento (así el lector enfría con la pantalla apagada) pero
+    // NO se aborta el intento en curso: abortarlo dejaba el contexto colgado y
+    // después no se podía re-armar (el dedo no hacía nada al volver). Si el dedo
+    // llega igual, entra: el intento sigue escuchando hasta su timeout.
+    displayOn = false
+    fingerprintRetryTimer.stop()
   }
 
   function submitPassword(value) {
@@ -261,7 +281,7 @@ Item {
   }
 
   function startFingerprint() {
-    if (!lockRequested || !sessionLock.secure || !fingerprintConfigured) return
+    if (!lockRequested || !sessionLock.secure || !fingerprintConfigured || !displayOn) return
     if (fingerprintPam.active || fingerprintAuthenticating) return
 
     fingerprintAuthenticating = true
@@ -279,7 +299,7 @@ Item {
   // espera cada vez más (1s → 8s); si duró lo normal (huella que no coincidió o el
   // timeout de 30s del lector) con 1s alcanza para que quede listo otra vez.
   function scheduleFingerprintRetry() {
-    if (!lockRequested || !fingerprintConfigured) return
+    if (!lockRequested || !fingerprintConfigured || !displayOn) return
 
     var elapsed = fingerprintAttemptStartedAt > 0 ? Date.now() - fingerprintAttemptStartedAt : 0
     fingerprintBackoff = elapsed < 1500 ? Math.min(fingerprintBackoff * 2, 8000) : 1000

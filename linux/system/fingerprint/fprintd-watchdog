@@ -1,0 +1,32 @@
+#!/bin/bash
+# Reinicia fprintd cuando el lector ELAN (04f3:0c4b) quedó deshabilitado por
+# temperatura.
+#
+# El lock de Omarchy mantiene la huella armada mientras la pantalla está
+# bloqueada. El firmware del sensor, tras un rato de escaneo continuo, se apaga
+# solo ("Device disabled to prevent overheating") y desde ahí todo intento falla
+# al instante (PAM code 9): el dedo no hace nada hasta que fprintd se reinicia.
+# Ese estado no se cura esperando, porque el lock vuelve a armar el escaneo.
+#
+# Este watchdog mira el journal: si en los últimos 90s apareció el error de
+# temperatura, reinicia fprintd (con enfriamiento de 30s para no entrar en loop).
+# Es lo que hace que "tocar el sensor y entrar" funcione también después de
+# dejar la máquina bloqueada un buen rato.
+
+set -uo pipefail
+
+stamp=/run/fprintd-watchdog.stamp
+cooldown=30
+now=$(date +%s)
+last=$(cat "$stamp" 2>/dev/null || echo 0)
+
+(( now - last >= cooldown )) || exit 0
+
+if journalctl --since "-90 s" --no-pager -o cat 2>/dev/null |
+  grep -q "disabled to prevent overheating"; then
+  systemctl restart fprintd 2>/dev/null || exit 0
+  echo "$now" >"$stamp"
+  logger -t fprintd-watchdog "fprintd reiniciado: el lector estaba deshabilitado por temperatura"
+fi
+
+exit 0

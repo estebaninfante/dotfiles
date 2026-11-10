@@ -547,6 +547,29 @@ else
     warn "Falta $DOTFILES_SYSTEM/systemd/battery-power-guard.service"
 fi
 
+# El lector ELAN se deshabilita solo por temperatura cuando el lock lo deja
+# escaneando de corrido ("Device disabled to prevent overheating"), y desde ahí
+# todo intento falla al instante (PAM code 9): el dedo no hace nada hasta que
+# fprintd se reinicia. El watchdog mira el journal y lo reinicia.
+if [[ -f "$DOTFILES_SYSTEM/fingerprint/fprintd-watchdog" ]] && \
+   [[ -f "$DOTFILES_SYSTEM/systemd/fprintd-watchdog.service" ]] && \
+   [[ -f "$DOTFILES_SYSTEM/systemd/fprintd-watchdog.timer" ]]; then
+    sudo install -o root -g root -m 755 \
+        "$DOTFILES_SYSTEM/fingerprint/fprintd-watchdog" \
+        /usr/local/bin/fprintd-watchdog
+    sudo install -o root -g root -m 644 \
+        "$DOTFILES_SYSTEM/systemd/fprintd-watchdog.service" \
+        /etc/systemd/system/fprintd-watchdog.service
+    sudo install -o root -g root -m 644 \
+        "$DOTFILES_SYSTEM/systemd/fprintd-watchdog.timer" \
+        /etc/systemd/system/fprintd-watchdog.timer
+    sudo systemctl daemon-reload 2>/dev/null || true
+    sudo systemctl enable --now fprintd-watchdog.timer 2>/dev/null || true
+    ok "fprintd-watchdog instalado (reinicia el lector si se deshabilita por temperatura)"
+else
+    warn "Falta $DOTFILES_SYSTEM/fingerprint/fprintd-watchdog (o sus units)"
+fi
+
 # Bluetooth sin autosuspend USB: el adaptador MediaTek del laptop corta el
 # audio de las llamadas (SCO/HFP) cuando se suspende. Ver el propio archivo.
 if [[ -f "$DOTFILES_SYSTEM/udev/99-bt-no-autosuspend.rules" ]]; then

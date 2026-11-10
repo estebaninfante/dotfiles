@@ -1,0 +1,10 @@
+[Unit]
+Description=Vigila el estado térmico del lector de huellas
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=10s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
