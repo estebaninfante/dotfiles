@@ -19,6 +19,11 @@
 #   - El blob es binario cerrado de Lenovo (el mismo de sus ISOs Ubuntu).
 #   - Tras actualizar fprintd/libfprint en pacman, si la huella deja de
 #     funcionar: volver a correr este script.
+#   - El lock de Omarchy escanea la huella mientras está bloqueado y, si el
+#     sensor se traba (transferencias USB que expiran), el daemon queda roto
+#     hasta reiniciarlo. El hook system-sleep/50-fprintd-resume.sh (lo instala
+#     setup-omarchy.sh) lo reinicia al volver de suspensión; sin él la huella
+#     muere después de cada suspensión.
 #
 # Uso: bash ~/dotfiles/linux/system/fingerprint/setup-elan-fingerprint.sh
 

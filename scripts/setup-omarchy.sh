@@ -308,6 +308,19 @@ else
     warn "Falta $DOTFILES_SYSTEM/system-sleep/keyd-resume.sh"
 fi
 
+# El lector ELAN 04f3:0c4b se traba cuando el lock lo viene escaneando hace rato
+# (transferencias USB que expiran) y el estado roto vive en el daemon: solo se
+# cura reiniciando fprintd. Sin este hook la huella queda muerta después de cada
+# suspensión y hay que entrar con contraseña.
+if [[ -f "$DOTFILES_SYSTEM/system-sleep/50-fprintd-resume.sh" ]]; then
+    sudo install -o root -g root -m 755 \
+        "$DOTFILES_SYSTEM/system-sleep/50-fprintd-resume.sh" \
+        /usr/lib/systemd/system-sleep/50-fprintd-resume.sh
+    ok "hook system-sleep 50-fprintd-resume instalado (re-inicia fprintd al despertar)"
+else
+    warn "Falta $DOTFILES_SYSTEM/system-sleep/50-fprintd-resume.sh"
+fi
+
 # `keyd monitor` (voice-key-listener, present-remote) abre los dispositivos
 # virtuales de keyd directo; sin permiso falla en silencio y la tecla física de
 # Windows nunca llega. Grupo `input` (vía estándar, requiere re-login) + regla
