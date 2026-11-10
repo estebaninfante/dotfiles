@@ -198,9 +198,30 @@ maquina) y **nunca** van al repo: se recrean con `omp login opencode-go` o
 | Archivo | Ruta destino |
 |---------|-------------|
 | config.yml | `~/.omp/agent/config.yml` |
+| AGENTS.md | `~/.omp/agent/AGENTS.md` (→ regla global, ver abajo) |
 
 Proveedor por defecto: `opencode-go` (`modelRoles.default`). OMP escribe sobre el
 symlink sin romperlo, asi que `omp config set` desde la maquina termina en el repo.
+
+### Regla global de ideas (`linux/agents/` + `linux/claude/`)
+
+Una sola regla para todas las IAs. El texto canónico es
+`linux/agents/estandar-ideas.md`: toda idea o pendiente que el usuario suelta en
+el chat se captura en el vault `~/alicia` (`idea raw`), no en el chat ni en el
+store viejo `~/.local/share/pi/ideas/`. Los tickets de trabajo van a
+`agent-os-cli`.
+
+| Archivo del repo | Ruta destino | Lo lee |
+|------------------|--------------|--------|
+| linux/omp/agent/AGENTS.md | `~/.omp/agent/AGENTS.md` | OMP (contexto de usuario) |
+| linux/claude/CLAUDE.md | `~/.claude/CLAUDE.md` | Claude Code (memoria de usuario) |
+| linux/config/opencode/AGENTS.md | `~/.config/opencode/AGENTS.md` | OpenCode (reglas globales) |
+
+Los tres leen la misma regla: Claude y OpenCode por symlink directo a
+`linux/agents/estandar-ideas.md`; OMP conserva sus reglas de escritorio y suma
+el estándar con `@../../agents/estandar-ideas.md`. Editar solo la regla canónica
+(o las reglas propias de OMP, nunca el import). Verificación:
+`scripts/verify/ideas.sh`.
 
 ### Home (`linux/home/`)
 

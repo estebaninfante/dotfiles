@@ -1,0 +1,1 @@
+../agents/estandar-ideas.md

@@ -196,12 +196,23 @@ OMP_SRC="${REPO}/linux/omp/agent"
 OMP_DST="${HOME}/.omp/agent"
 if [ -d "$OMP_SRC" ]; then
     mkdir -p "$OMP_DST"
-    for f in "$OMP_SRC"/config.yml "$OMP_SRC"/config.yaml; do
+    for f in "$OMP_SRC"/config.yml "$OMP_SRC"/config.yaml "$OMP_SRC"/AGENTS.md; do
         [ -e "$f" ] || continue
         link_path "$f" "${OMP_DST}/$(basename "$f")" true
     done
 else
     warn "no existe $OMP_SRC"
+fi
+
+header "Claude Code (~/.claude)"
+# Solo la regla global de agentes. El resto de ~/.claude (sesiones, auth,
+# plugins) es estado local de la maquina y NO se versiona.
+CLAUDE_SRC="${REPO}/linux/claude"
+if [ -f "$CLAUDE_SRC/CLAUDE.md" ]; then
+    mkdir -p "${HOME}/.claude"
+    link_path "$CLAUDE_SRC/CLAUDE.md" "${HOME}/.claude/CLAUDE.md" true
+else
+    warn "no existe $CLAUDE_SRC/CLAUDE.md"
 fi
 
 header "Copias (no symlink)"

@@ -3,6 +3,43 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-11-10 — Un solo estándar de ideas, y el vault como fuente única
+
+**Contexto.** El usuario suelta ideas y pendientes en cualquier chat y se le
+olvidan. Había tres destinos: el vault `~/alicia` (CLI `alicia`, captura por
+voz con `idea`), la "fábrica de ideas" en `~/.local/share/pi/ideas/` y el store
+de tickets. La fábrica quedó a medias: la extensión y la skill de pi están en
+`linux/pi/agent/desactivado/`, sus symlinks vivos rotos, y sus 8 ideas ya están
+duplicadas en el vault. Ninguna IA fuera de pi tenía regla de captura.
+
+**Elegido.**
+
+- **El vault `~/alicia` es la única fuente de verdad** para ideas, pensamientos
+  y pendientes: `idea raw "<texto>"` crea el nodo en `Inbox/` con
+  `estado: pendiente`, y todo se consulta con `alicia next` / `idea list`.
+- **Una regla, un archivo**: `linux/agents/estandar-ideas.md`, symlinkeado a
+  `~/.claude/CLAUDE.md` y `~/.config/opencode/AGENTS.md`, e importado con
+  `@../../agents/estandar-ideas.md` desde `~/.omp/agent/AGENTS.md` (que conserva
+  sus reglas de escritorio). Así OMP, Claude Code y OpenCode leen el mismo texto
+  y no hay copias que se desincronicen.
+- **Separar idea de trabajo**: idea/pendiente → vault; trabajo sobre un repo o
+  la máquina → `agent-os-cli ticket add`; algo que una IA debe hacer → nodo
+  `tipo: tarea` con criterios de aceptación.
+- **La fábrica `ideas` queda como legado de solo lectura** (su CLI sigue por si
+  hay que consultar el store viejo) y `scripts/verify/ideas.sh` ahora verifica
+  el estándar publicado y una captura real contra un vault temporal.
+
+**Descartado.**
+
+- **Mantener dos estándares (vault y fábrica)**: dos listas que el usuario no
+  cruza; la de la fábrica además ya no se alimenta.
+- **Una skill compartida en vez de archivos de contexto**: cada harness lee
+  skills de su propio directorio; el archivo de contexto global es el único
+  mecanismo que los tres leen siempre, sin depender de que el modelo la invoque.
+- **Migrar las 8 ideas del store viejo**: ya están en el vault; migrar crearía
+  duplicados (verificado por título: Panorama 360, POCO F3, Kanvas).
+
+
 ## 2026-10-28 — Omni tiene una página local, y una sola fuente de estado
 
 **Contexto.** Omni ya tenía el oído abierto, la tecla de Windows y el HUD

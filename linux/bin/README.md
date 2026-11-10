@@ -132,12 +132,18 @@ notificaciones son globales a propósito.
 
 Verificación: `scripts/verify/espacios.sh` (corre sin escritorio: `ESPACIOS_SIN_ESC=1`).
 
-## `ideas` — la fábrica de ideas
+## `ideas` — legado: las ideas viven en el vault `~/alicia`
 
-El usuario piensa en voz alta: "¿se podría usar un teléfono viejo como cerebro y dejar
-el portátil de pantalla?". Cada una de esas ideas se captura sola (la extensión
-`linux/pi/agent/extensions/ideas.ts` inyecta la regla en el system prompt y expone la
-tool `idea`), y queda viva hasta que se explore, se promueva o se descarte.
+**Canónico: el vault.** El estándar que siguen todas las IAs está en
+`linux/agents/estandar-ideas.md` (symlinkeado a `~/.omp/agent/AGENTS.md`,
+`~/.claude/CLAUDE.md` y `~/.config/opencode/AGENTS.md`): cada idea o pendiente
+se captura con `idea raw "<texto>"` en el Inbox del vault y se consulta con
+`idea list` / `alicia next`. La página de inicio del navegador lee de ahí.
+
+`ideas` queda como herramienta manual del store viejo
+(`~/.local/share/pi/ideas/`): su extensión y su skill están en
+`linux/pi/agent/desactivado/`, así que **no hay captura automática** ni se
+deben crear ideas nuevas ahí.
 
 ```bash
 ideas                                  # lista las abiertas
@@ -153,11 +159,11 @@ ideas buscar batería
 ideas charlar IDEA-7K2P                # abre pi con la idea como contexto
 ```
 
-Datos en `~/.local/share/pi/ideas/`: `index.md` (tabla legible) + `IDEA-XXXX.md` por
-idea, con la idea, las dudas y la conversación append-only (fecha + agente). En pi:
-`/ideas` lista, `/idea IDEA-7K2P` la muestra en el panel.
+Datos del store viejo en `~/.local/share/pi/ideas/`: `index.md` (tabla legible) +
+`IDEA-XXXX.md` por idea. Solo lectura histórica.
 
-Verificación: `scripts/verify/ideas.sh`.
+Verificación: `scripts/verify/ideas.sh` (comprueba el estándar publicado y una
+captura real contra un vault temporal).
 
 ## `file-open` — abrir según el contenido, no la extensión
 
