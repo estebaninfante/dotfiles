@@ -97,7 +97,7 @@ Omarchy (`~/.local/state/omarchy/current/background`, que escribe
 propaga ese archivo a `hyprpaper.conf` (persistencia) y recarga Hyprland, así el
 escritorio y la grilla de hyprexpo nunca quedan desincronizados.
 
-`~/developing` se sincroniza en tiempo real entre laptop y desktop mediante
+`~/Proyectos` se sincroniza en tiempo real entre laptop y desktop mediante
 Syncthing (Tailscale fuera de casa). Ver `AGENTS.md` para el detalle.
 
 La **barra de Omarchy** (la activa) también se replica: su config

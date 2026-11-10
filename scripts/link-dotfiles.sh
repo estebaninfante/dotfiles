@@ -30,7 +30,7 @@ header(){ echo -e "\n\033[1m═══ $1 ═══\033[0m"; }
 # ── Inventario ─────────────────────────────────────────────────
 # Directorios de config -> ~/.config/<name> (symlink)
 CONFIG_DIRS=(
-    hypr waybar kitty nvim kanata fastfetch
+    hypr waybar kitty nvim kanata fastfetch herdr
     mako swaync swayosd avizo btop gh opencode quickshell tmux
     gesturecontrol voice caveman mise present-remote pi wireplumber liberar
 )

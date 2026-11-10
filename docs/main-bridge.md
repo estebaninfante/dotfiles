@@ -311,7 +311,7 @@ si se acepta el riesgo de bloqueo.
 ## Hermes (pregunta abierta)
 
 En la maquina hay un harness de agente Python **`hermes`** instalado (`~/.local/bin/hermes`,
-`~/dotfiles/linux/bin/hermes`, `hermes-acp`, dashboard WebUI en `127.0.0.1:9119`), con plugin
+`hermes-acp`, dashboard WebUI en `127.0.0.1:9119`), con plugin
 `herdr-agent-state` y skills propias. Es independiente de opencode. Hoy `main` corre bajo
 **opencode**; migrarlo a hermes es una decision aparte (no la toma este ticket). Este puente solo
 depende de que `main` viva en una silla tmux accesible por `rig send` / `rig say`, independiente

@@ -464,6 +464,20 @@ systemctl --user mask talk-command.service 2>/dev/null \
     && ok "talk-command enmascarado (nunca se habilita solo)" \
     || warn "talk-command no pudo enmascararse"
 
+# Los units declarados en linux/system/systemd-user/enabled-*.txt se aplican con
+# UN solo mecanismo: install-user-units.sh (symlink al repo + enable). Sin esta
+# llamada, una maquina nueva quedaba sin esos units y sin dotfiles-sync.timer
+# (que es justamente quien despues corre reconcile-machine.sh).
+if [[ -x "$REPO/scripts/install-user-units.sh" ]]; then
+    if bash "$REPO/scripts/install-user-units.sh" >/dev/null 2>&1; then
+        ok "units de usuario aplicados (install-user-units.sh)"
+    else
+        warn "install-user-units.sh fallo - correr ~/dotfiles/scripts/install-user-units.sh"
+    fi
+else
+    warn "falta scripts/install-user-units.sh - los units no se aplicaron"
+fi
+
 # ══════════════════════════════════════════════════════════════
 # FASE 9: Servicios de sistema
 # ══════════════════════════════════════════════════════════════

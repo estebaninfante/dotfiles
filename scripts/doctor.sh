@@ -38,16 +38,13 @@ head_ "── symlinks ──"
 while IFS= read -r l; do
     [[ -e "$l" ]] || bad "symlink roto: ${l#$HOME/} -> $(readlink "$l")"
 done < <(find "$HOME/.config" -maxdepth 1 -type l 2>/dev/null)
-while IFS= read -r l; do
-    case "$(readlink "$l")" in
-        */Singleton*|*/scoped_dir*|*/pulse/*) continue ;;
-    esac
-    ok "symlink ok: ${l#$HOME/}"
-done < <(find "$HOME/.config" -maxdepth 1 -type l -exec test -e {} \; -print 2>/dev/null | head -0)
 
 head_ "── backups fuera de lugar ──"
-suelto=$(find "$HOME/.config" "$HOME" -maxdepth 1 \( -name '*.pre-dotfiles.*' -o -name '*.bak.[0-9]*' \
-        -o -name 'mise.real.*' -o -name '.bash_history-*.tmp' \) 2>/dev/null)
+suelto=$(
+    find "$HOME" -maxdepth 1 \( -name '*.pre-dotfiles.*' -o -name '*.bak.[0-9]*' \
+        -o -name 'mise.real.*' -o -name '.bash_history-*.tmp' \) -print 2>/dev/null
+    find "$HOME/.config" -mindepth 1 -maxdepth 3 \( -name '*.pre-dotfiles.*' -o -name '*.bak.[0-9]*' \) -print 2>/dev/null
+)
 if [[ -n "$suelto" ]]; then
     printf '%s\n' "$suelto" | while read -r f; do bad "backup suelto: ${f#$HOME/}"; done
 else

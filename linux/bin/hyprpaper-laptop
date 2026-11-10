@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec hyprpaper --config /home/eztvn/.config/hypr/hyprpaper-laptop.conf
+exec hyprpaper --config ${HOME}/.config/hypr/hyprpaper-laptop.conf

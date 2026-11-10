@@ -122,7 +122,7 @@ Plugins vivos en `~/.config/omarchy/plugins/`:
 | Puente Discord | `rig-discord-bot.service` | hablar con `main` desde el teléfono |
 | Registro | `~/.local/state/rig/events.jsonl`, `voice messages`, bodega `rig db` | trazabilidad |
 
-### 4.5 Proyectos relacionados en `~/developing`
+### 4.5 Proyectos relacionados en `~/Proyectos`
 
 `omar` (asistente anterior, hoy sin servicios), `voz-agentes` (bus y
 experimentos de conversación), `asistente`, `fluidez`, `speeedy`,

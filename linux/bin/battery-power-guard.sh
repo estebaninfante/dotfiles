@@ -20,7 +20,7 @@
 # (sin metodo _ON) y dejaria la GPU inutil hasta reiniciar.
 set -uo pipefail
 
-BIN_DIR="/home/eztvn/dotfiles/linux/bin"
+BIN_DIR="${HOME}/dotfiles/linux/bin"
 BRIGHT_SAVE="/var/lib/power-guard/brightness-ac"
 GUARD_DIR="/var/lib/power-guard"
 USER_NAME="eztvn"

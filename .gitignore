@@ -41,3 +41,13 @@ linux/config/opencode/.caveman-active
 # secrets locales (tokens de bots, claves): nunca versionar
 linux/config/opencode/secrets/
 linux/config/opencode/service.json
+
+# claves privadas de lan-mouse: son secretos, viven en la máquina (nunca en git)
+*.pem
+
+# binarios compilados: se instalan con mise/pacman, no se versionan
+linux/bin/uv
+linux/bin/uvx
+
+# backups de herramientas que se auto-reescriben (mise deja .config.toml.<rand>)
+linux/config/mise/.config.toml.*

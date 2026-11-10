@@ -1,0 +1,29 @@
+#!/bin/bash
+# Wait until Hyprland's MAIN keyboard has applied the Dvorak keymap before
+# lan-mouse captures the seat keymap. Otherwise the virtual keyboard that
+# lan-mouse feeds to the peer ends up with a stale/US layout.
+set -u
+
+uid="$(id -u)"
+
+sig="${HYPRLAND_INSTANCE_SIGNATURE:-}"
+if [ -n "$sig" ] && hyprctl --instance "$sig" devices -j >/dev/null 2>&1; then
+    export HYPRLAND_INSTANCE_SIGNATURE="$sig"
+else
+    newest="$(ls -1dt /run/user/"$uid"/hypr/*/ 2>/dev/null | head -1)"
+    if [ -n "$newest" ]; then
+        export HYPRLAND_INSTANCE_SIGNATURE="$(basename "${newest%/}")"
+    fi
+fi
+
+target="Dvorak Programador"
+for _ in $(seq 1 40); do
+    main_map="$(hyprctl devices -j 2>/dev/null | jq -r '.keyboards[] | select(.main) | .active_keymap' 2>/dev/null | head -1)"
+    if [[ "$main_map" == *"$target"* ]]; then
+        exit 0
+    fi
+    sleep 0.5
+done
+
+echo "lan-mouse-wait-keymap: timeout waiting for main keymap '$target'; starting anyway" >&2
+exit 0

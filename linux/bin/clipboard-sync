@@ -40,7 +40,7 @@ send() {
   # ConnectTimeout no cubre DNS lento (MagicDNS con peer offline): capar total.
   timeout 10 ssh -4 -o BatchMode=yes -o ConnectTimeout=3 -o IdentitiesOnly=yes \
     -i "$SSH_KEY" "$PEER" \
-    "/home/eztvn/.local/bin/clipboard-sync receive '$mime' '$digest'" < "$tmp" \
+    "${HOME}/.local/bin/clipboard-sync receive '$mime' '$digest'" < "$tmp" \
     >/dev/null 2>&1 </dev/null || true
 }
 

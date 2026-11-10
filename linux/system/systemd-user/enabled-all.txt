@@ -18,3 +18,8 @@ dictado.service
 
 # Overlay de los subtítulos del dictado.
 dictado-overlay.service
+
+# autosync del repo (5 min): sin esto no corre reconcile-machine.sh en una máquina nueva.
+dotfiles-sync.service
+dotfiles-sync.timer
+rig-discord-bot.service
