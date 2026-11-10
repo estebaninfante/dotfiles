@@ -385,6 +385,28 @@ ssh eztvn@laptop   # desde desktop
 - Resolucion via tailscale MagicDNS
 - IPs tailscale: desktop `100.118.58.7`
 
+### Portapapeles y media entre maquinas (`clipboard-sync`)
+
+Copiar en una maquina y pegar en la otra, sin pasos: texto, capturas
+(`image/png`) y archivos (`text/uri-list`: el video de `screenrecord-toggle`,
+una captura guardada, cualquier cosa copiada en Dolphin).
+
+- Demonio `clipboard-sync.service` (unit en `linux/system/systemd-user/`, listado
+  en `enabled-all.txt`): `wl-paste --watch` empuja cada cambio por SSH. Prueba
+  primero la LAN (`.240`/`.241`) y cae a Tailscale si no hay ruta.
+- Los archivos viajan de verdad (framing `nombre<TAB>tamano` + bytes, sin `tar`
+  ni copias temporales) y quedan en `~/Descargas/Entre-computadoras/<fecha>/`.
+  La uri-list se reescribe con las rutas del destino: alla se pega y funciona.
+- Anti-eco: el digest (`mime` + NUL + bytes) se marca como visto ~5 min en
+  `$XDG_RUNTIME_DIR/clipboard-sync/seen`; lo que vuelve se ignora. Un envio que
+  falla se desmarca, asi el proximo intento no queda mudo.
+- A mano: `SUPER+SHIFT+Z` empuja (repetir algo ya enviado), `SUPER+SHIFT+J`
+  trae lo que tenga el otro equipo, `clipboard-sync send <ruta...>` comparte
+  archivos sueltos.
+- Registro: `~/.local/state/clipboard-sync/log`. Diagnostico: `clipboard-sync doctor`.
+- Verificacion: `scripts/verify/portapapeles.sh` (corre el "otro equipo" en
+  loopback: no necesita SSH ni la otra maquina; pisa el portapapeles real).
+
 ### Reglas para AI (opencode)
 
 1. **Nunca modificar bloques `if machine == "X"` sin preguntar.** Esos bloques son machine-specific.
