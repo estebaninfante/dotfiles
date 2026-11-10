@@ -1,0 +1,16 @@
+[Unit]
+Description=Wallpaper: re-aplica el fondo canonico cada 2 min (red de seguridad)
+Documentation=file://%h/dotfiles/linux/bin/sync-wallpaper.sh
+
+[Timer]
+# El watcher (wallpaper-sync.path) cubre el cambio normal. Este timer corrige
+# cualquier deriva: que alguien aplique un fondo con `hyprctl hyprpaper` directo
+# (el symlink no cambia, hyprpaper si) y las dos superficies queden distintas.
+OnBootSec=30s
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=false
+Unit=wallpaper-sync.service
+
+[Install]
+WantedBy=timers.target

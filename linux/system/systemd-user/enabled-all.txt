@@ -30,3 +30,4 @@ lan-mouse.service
 clipboard-sync.service
 wallpaper-sync.path
 wallpaper-sync.service
+wallpaper-sync.timer
