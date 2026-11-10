@@ -1,5 +1,74 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-10 — overview 3D correcto con el monitor girado (pantalla vertical)
+
+**Motivo**: en el desktop la pantalla esta vertical (`DP-2` 2560x1440 con
+`transform: 1`, o sea 1440x2560). Ahi el overview (`SUPER+Y`) abria casi vacio:
+solo el wallpaper de fondo y algun jiron de un tile; ni grilla ni previews. Con
+`threed_enable = 0` la grilla se veia bien, asi que el problema estaba entero en
+el camino 3D. Afectaba igual a `transform: 2` (180), donde la grilla salia
+espejada.
+
+**Causa**: el pass element dibuja en el mismo espacio que el resto del overlay
+—pixeles del monitor ya rotado (`m_size` = 1440x2560) con la ortho que arma
+Hyprland— pero la grilla 3D armaba su propia projection componiendo ademas el
+transform del monitor:
+`outputProjection(MON->m_transformedSize, wlTransformToHyprutils(MON->m_transform))`.
+`outputProjection` reparte `2/w` y `2/h` sobre los ejes *contrarios* cuando hay
+rotacion: la matriz esperaba coordenadas del buffer sin rotar mientras los tiles
+venian en espacio rotado, o sea rotacion + anisotropia de 1440/2560 = 0.5625 en
+un eje. Medido con la geometria real (grilla 3x3, tilt 15, desktop 1440x2560
+scale 1.25): con la projection vieja los corners caian hasta `|NDC| = 2.49`
+—fuera de cuadro— con 100% de error de aspecto; con la nueva dan `|NDC| = 1.11`
+y 7%, igual que el caso horizontal sano de la laptop.
+
+**Comportamiento nuevo**:
+
+- La grilla 3D y el fisheye se ven correctos en cualquier orientacion
+  (`transform` 0, 1, 2 y 3): la misma geometria que el modo plano, ahora con tilt.
+- En un monitor vertical los tiles quedan verticales (un workspace vertical),
+  que es lo que corresponde: sin letterbox ni recorte.
+- Horizontal no cambia: con `transform: 0` la projection nueva es identica a la
+  vieja, asi que la laptop se ve igual que antes.
+
+**Implementacion** (`linux/patches/hyprexpo-local.patch`, fork local):
+
+- `OverviewRender.cpp`: `proj3D = outputProjection(MON->m_transformedSize,
+  HYPRUTILS_TRANSFORM_NORMAL)`.
+- `Overview3D.cpp` (`ensureInit`): `makeEGLCurrent()` antes de compilar el
+  shader. El resultado se cachea (`g_inited`): si la primera llamada caia sin
+  contexto EGL current (arranque, reload, sesion nested) el 3D quedaba apagado
+  para siempre y en silencio.
+- `scripts/run-nested.sh`: `HYPREXPO_DEV_TRANSFORM=0|1|2|3` levanta el harness
+  nested con el output girado; es la unica forma de probar orientacion sin
+  reiniciar la sesion viva.
+- `tests/OverviewSourceTests.cpp`: asserts de la projection sin transform, de que
+  no vuelva `wlTransformToHyprutils(MON->m_transform)` en el render, del
+  `makeEGLCurrent()` antes de compilar y de la rotacion del harness.
+- `hyprexpo-rebuild.sh`: guards de la projection (existe la linea nueva y no
+  aparece la vieja), del `makeEGLCurrent` y de `HYPREXPO_DEV_TRANSFORM`.
+
+**Verificado**:
+
+- Matematico, con la geometria y los numeros del desktop: la projection vieja
+  deja tiles fuera de cuadro con 100% de error de aspecto; la nueva coincide con
+  el caso horizontal sano.
+- Sesion anidada girada (`HYPREXPO_DEV_TRANSFORM=1`, harness nested corriendo en
+  el desktop, captura del output nested): grilla 3x3 vertical completa, centrada,
+  tile activo resaltado, fisheye aplicado.
+- `make` compila; `make test` no agrega fallos nuevos (la suite ya tenia asserts
+  rojos por drift viejo de `close()`/seleccion, ajenos a este cambio).
+- Falta verlo en la sesion viva del desktop: el `.so` solo se carga al arrancar
+  Hyprland.
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` (pide sudo) y despues
+**logout/login** en cada maquina.
+
+**Revertir**: volver la linea de `proj3D` a
+`outputProjection(MON->m_transformedSize, Math::wlTransformToHyprutils(MON->m_transform))`,
+regenerar el patch y rebuild. Para volver al modo plano alcanza con
+`threed_enable = 0`, que ya se veia bien girado.
+
 ## Cambio 2026-11-03 — hot corner apagado durante una captura + una captura a la vez
 
 **Motivo**: (1) con el hot corner activo (mouse a la esquina superior izquierda

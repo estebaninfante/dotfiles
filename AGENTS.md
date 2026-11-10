@@ -337,6 +337,15 @@ en `/var/cache/hyprpm/$USER/hyprexpo/hyprexpo.so`. `hyprland.lua` lo carga por
 `hl.plugin.load(...)`. Tras `hyprpm update` hay que re-ejecutar el rebuild.
 `EXPO_3D = true` en `hyprland.lua` (ver `linux/config/hypr/hyprexpo-changes.md`).
 
+**Orientación del monitor**: el overview 3D está hecho para verse igual con la
+pantalla horizontal o girada (el desktop está vertical: `DP-2` con
+`transform: 1`). La grilla se proyecta en el mismo espacio que el resto del
+overlay, sin recomponer el transform del monitor; si alguna vez se ve vacía con
+la pantalla girada, ese es el guard que hay que mirar (`hyprexpo-rebuild.sh`
+falla a propósito si el patch pierde esa línea). Para probarlo sin reiniciar la
+sesión viva: `HYPREXPO_DEV_TRANSFORM=1` en el harness nested
+(`~/.local/bin/hyprexpo-verify-3d.sh`) y capturar el output nested.
+
 **Wallpaper (una sola fuente)**: el fondo canónico vive en el symlink de Omarchy
 `~/.local/state/omarchy/current/background` (lo escribe `omarchy theme bg set`).
 El hook `theme-set` -> `linux/bin/sync-wallpaper.sh` lo propaga a

@@ -1,7 +1,7 @@
-diff --git c/Dispatchers.cpp w/Dispatchers.cpp
+diff --git c/Dispatchers.cpp i/Dispatchers.cpp
 index f8c4571..5dafa5c 100644
 --- c/Dispatchers.cpp
-+++ w/Dispatchers.cpp
++++ i/Dispatchers.cpp
 @@ -424,6 +424,23 @@ static int luaExpo(lua_State* L) {
      return luaDispatchResult(L, "hyprexpo.expo", onExpoDispatcher(luaStringArg(L, 1, "hyprexpo.expo", "toggle")));
  }
@@ -65,10 +65,10 @@ index f8c4571..5dafa5c 100644
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_focus", luaKbFocus);
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_confirm", luaKbConfirm);
      HyprlandAPI::addLuaFunction(PHANDLE, "hyprexpo", "kb_selectn", luaKbSelectNumber);
-diff --git c/HyprexpoConfig.hpp w/HyprexpoConfig.hpp
+diff --git c/HyprexpoConfig.hpp i/HyprexpoConfig.hpp
 index c3e70c9..97813a3 100644
 --- c/HyprexpoConfig.hpp
-+++ w/HyprexpoConfig.hpp
++++ i/HyprexpoConfig.hpp
 @@ -18,6 +18,24 @@ inline constexpr int         LEGACY_ENABLE_KEYBOARD_NAV_DEFAULT  = 1;
  inline constexpr int         LEGACY_ENABLE_DRAG_MOVE_DEFAULT     = 0;
  inline constexpr int         LEGACY_ANIMATE_ENTRY_DEFAULT        = 0;
@@ -110,10 +110,10 @@ index c3e70c9..97813a3 100644
  inline constexpr const char* BORDER_COLOR_CURRENT_DEFAULT    = "rgb(66ccff)";
  inline constexpr const char* BORDER_COLOR_FOCUS_DEFAULT      = "rgb(ffcc66)";
  inline constexpr const char* BORDER_COLOR_HOVER_DEFAULT      = "rgb(aabbcc)";
-diff --git c/HyprexpoLogic.cpp w/HyprexpoLogic.cpp
+diff --git c/HyprexpoLogic.cpp i/HyprexpoLogic.cpp
 index 08e3ea8..804c3c8 100644
 --- c/HyprexpoLogic.cpp
-+++ w/HyprexpoLogic.cpp
++++ i/HyprexpoLogic.cpp
 @@ -99,7 +99,7 @@ SSize aspectCorrectTileSize(double screenW, double screenH, int cols, int rows,
      return {maxTileW, maxTileW / monAspect};
  }
@@ -161,10 +161,10 @@ index 08e3ea8..804c3c8 100644
          if (x >= layout.box.x && x < layout.box.x + layout.box.w && y >= layout.box.y && y < layout.box.y + layout.box.h)
              return i;
      }
-diff --git c/HyprexpoLogic.hpp w/HyprexpoLogic.hpp
+diff --git c/HyprexpoLogic.hpp i/HyprexpoLogic.hpp
 index b65111d..8256a84 100644
 --- c/HyprexpoLogic.hpp
-+++ w/HyprexpoLogic.hpp
++++ i/HyprexpoLogic.hpp
 @@ -183,8 +183,8 @@ SGridShape               computeDynamicGridShape(int visibleCount);
  SGridShape               computeFixedGridShape(int64_t columns, int64_t rows);
  std::optional<std::vector<int64_t>> expandDynamicWorkspaceIDs(const std::vector<int64_t>& workspaceIDs, bool fillGaps, std::size_t maxExpandedWorkspaces);
@@ -176,10 +176,10 @@ index b65111d..8256a84 100644
  std::optional<STileTarget> selectDirectionalTile(const SRect& source, EDirection direction, const std::vector<SGlobalTile>& candidates);
  std::optional<STileHit>    hitTestGlobalTile(const SPoint& point, const std::vector<SGlobalTile>& tiles);
  SOverviewDragTransition    transitionOverviewDrag(const SOverviewDragState& state, const SOverviewDragEvent& event, const std::vector<uint64_t>& liveMonitorKeys);
-diff --git c/HyprlandConfigCompat.hpp w/HyprlandConfigCompat.hpp
+diff --git c/HyprlandConfigCompat.hpp i/HyprlandConfigCompat.hpp
 index a53afc5..02e557f 100644
 --- c/HyprlandConfigCompat.hpp
-+++ w/HyprlandConfigCompat.hpp
++++ i/HyprlandConfigCompat.hpp
 @@ -25,4 +25,6 @@ bool                configValueSetByUser(const std::string& name);
  
  Config::INTEGER intValue(const std::string& name);
@@ -187,10 +187,10 @@ index a53afc5..02e557f 100644
 +
 +Config::INTEGER* intValuePtr(const std::string& name);
  }
-diff --git c/IOverviewSession.hpp w/IOverviewSession.hpp
+diff --git c/IOverviewSession.hpp i/IOverviewSession.hpp
 index ca7ba7c..59f35f5 100644
 --- c/IOverviewSession.hpp
-+++ w/IOverviewSession.hpp
++++ i/IOverviewSession.hpp
 @@ -56,10 +56,12 @@ class IOverviewSession {
      virtual bool ownsTouchInput(int32_t touchId) const { return false; }
  
@@ -208,10 +208,10 @@ index ca7ba7c..59f35f5 100644
  };
  
  // Registry ownership is removed before teardown callbacks can re-enter render/damage hooks.
-diff --git c/Makefile w/Makefile
+diff --git c/Makefile i/Makefile
 index 14b2c3f..79efb6b 100644
 --- c/Makefile
-+++ w/Makefile
++++ i/Makefile
 @@ -20,10 +20,10 @@ LUA_PKG_CONFIG ?= $(shell if pkg-config --exists lua5.4; then printf 'lua5.4'; e
  PKG_CONFIG_DEPS = pixman-1 libdrm hyprland pangocairo libinput libudev wayland-server xkbcommon $(LUA_PKG_CONFIG)
  LINK_DEPS = pangocairo xkbcommon $(LUA_PKG_CONFIG)
@@ -226,10 +226,10 @@ index 14b2c3f..79efb6b 100644
  TARGET = hyprexpo.so
  TEST_TARGET = HyprexpoLogicTests
  SOURCE_TEST_TARGET = OverviewSourceTests
-diff --git c/Overview.cpp w/Overview.cpp
+diff --git c/Overview.cpp i/Overview.cpp
 index 305fb1a..fda1b4d 100644
 --- c/Overview.cpp
-+++ w/Overview.cpp
++++ i/Overview.cpp
 @@ -45,6 +45,7 @@
  #include <string>
  #include <vector>
@@ -474,10 +474,10 @@ index 305fb1a..fda1b4d 100644
 +
      enterSubmapIfEnabled();
  }
-diff --git c/Overview.hpp w/Overview.hpp
+diff --git c/Overview.hpp i/Overview.hpp
 index 4675867..04c8c4e 100644
 --- c/Overview.hpp
-+++ w/Overview.hpp
++++ i/Overview.hpp
 @@ -83,6 +83,11 @@ class COverview final : public IOverviewSession {
      PHLMONITOR monitor() const override { return pMonitor.lock(); }
      uint64_t sessionGeneration() const override { return m_sessionGeneration; }
@@ -547,12 +547,12 @@ index 4675867..04c8c4e 100644
  
      bool                         closing = false;
      bool                         m_closeCommitted = false;
-diff --git c/Overview3D.cpp w/Overview3D.cpp
+diff --git c/Overview3D.cpp i/Overview3D.cpp
 new file mode 100644
-index 0000000..6f918cd
+index 0000000..8382576
 --- /dev/null
-+++ w/Overview3D.cpp
-@@ -0,0 +1,507 @@
++++ i/Overview3D.cpp
+@@ -0,0 +1,514 @@
 +#include "Overview3D.hpp"
 +
 +#include <hyprland/src/render/OpenGL.hpp>
@@ -760,6 +760,13 @@ index 0000000..6f918cd
 +        if (g_inited)
 +            return g_ok;
 +        g_inited = true;
++
++        // El shader se compila una sola vez y el resultado queda cacheado: si la
++        // primera llamada cae sin contexto EGL current (arranque, reload o una
++        // sesion nested), glCreateShader devuelve 0 y el plugin se queda en el
++        // render plano para siempre, sin reintento. Se hace current el contexto
++        // del compositor antes de compilar, como el resto del codigo GL.
++        Render::GL::g_pHyprOpenGL->makeEGLCurrent();
 +
 +        GLuint vs = compile(GL_VERTEX_SHADER, VERT_SRC);
 +        GLuint fs = compile(GL_FRAGMENT_SHADER, FRAG_SRC);
@@ -1060,11 +1067,11 @@ index 0000000..6f918cd
 +    }
 +
 +} // namespace Hyprexpo3D
-diff --git c/Overview3D.hpp w/Overview3D.hpp
+diff --git c/Overview3D.hpp i/Overview3D.hpp
 new file mode 100644
 index 0000000..9882297
 --- /dev/null
-+++ w/Overview3D.hpp
++++ i/Overview3D.hpp
 @@ -0,0 +1,98 @@
 +#pragma once
 +
@@ -1164,10 +1171,10 @@ index 0000000..9882297
 +    void teardown();
 +
 +} // namespace Hyprexpo3D
-diff --git c/OverviewCapture.cpp w/OverviewCapture.cpp
+diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
 index cb18d2f..5e3e480 100644
 --- c/OverviewCapture.cpp
-+++ w/OverviewCapture.cpp
++++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
  #include "HyprlandConfigCompat.hpp"
  #include "HyprexpoConfig.hpp"
@@ -1358,10 +1365,10 @@ index cb18d2f..5e3e480 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-diff --git c/OverviewCapture.hpp w/OverviewCapture.hpp
+diff --git c/OverviewCapture.hpp i/OverviewCapture.hpp
 index fa06d24..c448235 100644
 --- c/OverviewCapture.hpp
-+++ w/OverviewCapture.hpp
++++ i/OverviewCapture.hpp
 @@ -18,6 +18,12 @@ struct SWorkspaceCaptureRequest {
      bool         showPinnedWindows      = false;
      bool         blockSurfaceFeedback   = false;
@@ -1375,10 +1382,10 @@ index fa06d24..c448235 100644
  };
  
  struct SWindowCaptureResult {
-diff --git c/OverviewInteraction.cpp w/OverviewInteraction.cpp
+diff --git c/OverviewInteraction.cpp i/OverviewInteraction.cpp
 index 30ab6ea..b0b169d 100644
 --- c/OverviewInteraction.cpp
-+++ w/OverviewInteraction.cpp
++++ i/OverviewInteraction.cpp
 @@ -1,5 +1,6 @@
  #include "HyprlandConfigCompat.hpp"
  #define HyprlandAPI CompatHyprlandAPI
@@ -1596,10 +1603,10 @@ index 30ab6ea..b0b169d 100644
  }
  
  bool COverview::onKbSelectToken(int visibleIdx) {
-diff --git c/OverviewInternal.hpp w/OverviewInternal.hpp
+diff --git c/OverviewInternal.hpp i/OverviewInternal.hpp
 index 2c8a347..a15a58e 100644
 --- c/OverviewInternal.hpp
-+++ w/OverviewInternal.hpp
++++ i/OverviewInternal.hpp
 @@ -63,6 +63,7 @@ int fallbackTokenToVisibleIndex(const std::string& token);
  SHyprGradientSpec parseGradientSpec(const std::string& inRaw);
  bool isGradientBorderSpec(const std::string& borderSpec);
@@ -1613,10 +1620,10 @@ index 2c8a347..a15a58e 100644
  void restoreActiveWorkspaceAfterPreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace);
  void removeOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr);
 +bool cursorAtMonitorEdge(const PHLMONITOR& monitor);
-diff --git c/OverviewPassElement.cpp w/OverviewPassElement.cpp
+diff --git c/OverviewPassElement.cpp i/OverviewPassElement.cpp
 index 6984d59..a59e32b 100644
 --- c/OverviewPassElement.cpp
-+++ w/OverviewPassElement.cpp
++++ i/OverviewPassElement.cpp
 @@ -33,11 +33,11 @@ std::optional<CBox> COverviewPassElement::boundingBox() {
  }
  
@@ -1634,10 +1641,10 @@ index 6984d59..a59e32b 100644
  }
  
  ePassElementType COverviewPassElement::type() {
-diff --git c/OverviewRender.cpp w/OverviewRender.cpp
-index e73c8f6..85d601e 100644
+diff --git c/OverviewRender.cpp i/OverviewRender.cpp
+index e73c8f6..df9c914 100644
 --- c/OverviewRender.cpp
-+++ w/OverviewRender.cpp
++++ i/OverviewRender.cpp
 @@ -2,6 +2,7 @@
  #define HyprlandAPI CompatHyprlandAPI
  #include "OverviewInternal.hpp"
@@ -1781,7 +1788,7 @@ index e73c8f6..85d601e 100644
  
      static auto* const* PTILEROUND  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding")->getDataStaticPtr();
      static auto* const* PTOUNDPWR   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding_power")->getDataStaticPtr();
-@@ -289,18 +319,179 @@ void COverview::fullRender() {
+@@ -289,18 +319,189 @@ void COverview::fullRender() {
      const int   HOVER_ROUND_SCALED   = **PTILEROUNDH >= 0 ? std::max(0, (int)std::lround((double)**PTILEROUNDH * MON->m_scale)) : BASE_ROUND_SCALED;
      const float ROUND_PWR            = **PTOUNDPWR;
  
@@ -1846,7 +1853,17 @@ index e73c8f6..85d601e 100644
 +    // in on open and out on close instead of snapping on one frame.
 +    float warpAmt = 1.0f;
 +    if (use3D) {
-+        proj3D = Hyprutils::Math::Mat3x3::outputProjection(MON->m_transformedSize, Math::wlTransformToHyprutils(MON->m_transform)).getMatrix();
++        // La grilla 3D vive en el mismo espacio que el resto del overlay: los
++        // tiles se maquetan con m_size (ya rotado: en un monitor vertical es
++        // 1440x2560, no 2560x1440) y el pass element dibuja sobre un framebuffer
++        // que Hyprland proyecta con una ortho simple de ese tamano. Aplicar aca
++        // ademas el transform del monitor rota y anisotropiza la grilla DOS
++        // veces: outputProjection reparte 2/w y 2/h sobre los ejes contrarios
++        // cuando hay rotacion, asi que en una pantalla vertical la grilla quedaba
++        // casi entera fuera de cuadro (y con el 180 salia espejada). Con la
++        // projection sin transform la geometria coincide con la del modo plano en
++        // cualquier orientacion (0/90/180/270).
++        proj3D = Hyprutils::Math::Mat3x3::outputProjection(MON->m_transformedSize, HYPRUTILS_TRANSFORM_NORMAL).getMatrix();
 +        // Animated strength; falls back to full effect if the var is missing.
 +        warpAmt = tiltAnim ? std::min(1.0f, std::max(0.0f, tiltAnim->value())) : 1.0f;
 +        const float tiltNow = (float)**P3TILT * warpAmt;
@@ -1964,7 +1981,7 @@ index e73c8f6..85d601e 100644
              texbox.round();
              tileBoxes[id] = texbox;
  
-@@ -325,7 +516,23 @@ void COverview::fullRender() {
+@@ -325,7 +526,23 @@ void COverview::fullRender() {
              }
  
              CRegion damage{0, 0, INT16_MAX, INT16_MAX};
@@ -1989,7 +2006,7 @@ index e73c8f6..85d601e 100644
          }
      }
  
-@@ -359,6 +566,7 @@ void COverview::fullRender() {
+@@ -359,6 +576,7 @@ void COverview::fullRender() {
      static auto const*  PBCOLCUR    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_current")->getDataStaticPtr();
      static auto const*  PBCOLFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_focus")->getDataStaticPtr();
      static auto const*  PBCOLHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_hover")->getDataStaticPtr();
@@ -1997,7 +2014,7 @@ index e73c8f6..85d601e 100644
      static auto const*  PBGRCUR     = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_current")->getDataStaticPtr();
      static auto const*  PBGREFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_focus")->getDataStaticPtr();
      static auto const*  PBGREHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_hover")->getDataStaticPtr();
-@@ -458,15 +666,29 @@ void COverview::fullRender() {
+@@ -458,15 +676,29 @@ void COverview::fullRender() {
                  bg.round();
                  lb.round();
              }
@@ -2030,7 +2047,7 @@ index e73c8f6..85d601e 100644
          };
  
          if (**PLBGEN)
-@@ -491,9 +713,23 @@ void COverview::fullRender() {
+@@ -491,9 +723,23 @@ void COverview::fullRender() {
  
          const std::string effectiveSpec = Hyprexpo::resolveBorderSpec(borderSpec, deprecatedGradSpec);
  
@@ -2054,7 +2071,7 @@ index e73c8f6..85d601e 100644
                  Config::CGradientValueData grad;
                  grad.m_colors.clear();
                  grad.m_colors.push_back(spec.c1);
-@@ -505,6 +741,9 @@ void COverview::fullRender() {
+@@ -505,6 +751,9 @@ void COverview::fullRender() {
          } else if (!effectiveSpec.empty()) {
              Hyprexpo::SColorRGBA parsedColor;
              if (Hyprexpo::parseSolidColorSpec(effectiveSpec, parsedColor)) {
@@ -2064,7 +2081,7 @@ index e73c8f6..85d601e 100644
                  CHyprColor color{parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a};
                  Render::GL::g_pHyprOpenGL->renderBorder(box, color, {.round = roundScaled, .roundingPower = ROUND_PWR, .borderSize = BWIDTH});
              } else {
-@@ -644,6 +883,18 @@ void COverview::fullRender() {
+@@ -644,6 +893,18 @@ void COverview::fullRender() {
      const std::string currentFallback   = Hyprexpo::resolveBorderSpec(std::string{*PBGRCUR}, currentLegacySpec);
      const std::string hoverFallback     = Hyprexpo::resolveBorderSpec(std::string{*PBGREHOV}, hoverLegacySpec);
  
@@ -2083,10 +2100,10 @@ index e73c8f6..85d601e 100644
      if (hoveredID != -1 && hoveredID != openedID && hoveredID != kbFocusID)
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
-diff --git c/PluginConfig.cpp w/PluginConfig.cpp
+diff --git c/PluginConfig.cpp i/PluginConfig.cpp
 index af2b27a..26a7fa8 100644
 --- c/PluginConfig.cpp
-+++ w/PluginConfig.cpp
++++ i/PluginConfig.cpp
 @@ -42,6 +42,14 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:enable_drag_move", "legacy drag-move toggle", HyprexpoConfig::LEGACY_ENABLE_DRAG_MOVE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:animate_entry", "legacy entry animation toggle", HyprexpoConfig::LEGACY_ANIMATE_ENTRY_DEFAULT));
@@ -2154,10 +2171,10 @@ index af2b27a..26a7fa8 100644
      // Deprecated but supported for backwards compatibility
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_style", "border style", HyprexpoConfig::BORDER_STYLE_DEFAULT));     // ignored, auto-detected from format
  
-diff --git c/globals.hpp w/globals.hpp
+diff --git c/globals.hpp i/globals.hpp
 index 66c4f04..7179ea5 100644
 --- c/globals.hpp
-+++ w/globals.hpp
++++ i/globals.hpp
 @@ -3,3 +3,8 @@
  #include <hyprland/src/plugins/PluginAPI.hpp>
  
@@ -2167,10 +2184,10 @@ index 66c4f04..7179ea5 100644
 +// opened slightly larger than the monitor so the current desktop pulls back a
 +// little (subtle zoom-out) before flying into the target. 1.0 = normal open.
 +inline float g_peekScale = 1.0f;
-diff --git c/main.cpp w/main.cpp
+diff --git c/main.cpp i/main.cpp
 index 302ed07..abe9e34 100644
 --- c/main.cpp
-+++ w/main.cpp
++++ i/main.cpp
 @@ -6,12 +6,18 @@
  #include <hyprland/src/helpers/time/Time.hpp>
  #include <hyprland/src/render/Renderer.hpp>
@@ -2323,11 +2340,31 @@ index 302ed07..abe9e34 100644
  
      if (!success) {
          failNotif("Failed initializing hooks");
-diff --git c/scripts/run-nested.sh w/scripts/run-nested.sh
-index 98a8340..13700a2 100755
+diff --git c/scripts/run-nested.sh i/scripts/run-nested.sh
+index 98a8340..5794f79 100755
 --- c/scripts/run-nested.sh
-+++ w/scripts/run-nested.sh
-@@ -109,6 +109,13 @@ $EXTRA_OUTPUTS
++++ i/scripts/run-nested.sh
+@@ -100,15 +100,30 @@ mkdir -p "$(dirname "$CONF")" "$(dirname "$SO")"
+ echo "[run-nested] Building local plugin at $SO"
+ make -C "$REPO_ROOT" all TARGET="$SO"
+ 
++# Rotacion del output nested (0 = normal, 1 = 90, 2 = 180, 3 = 270). Con 1 y 3 el
++# monitor queda vertical: es la forma de probar la orientacion sin girar la
++# pantalla de la sesion viva (donde el .so solo cambia al reiniciar Hyprland).
++TRANSFORM="${HYPREXPO_DEV_TRANSFORM:-0}"
++[[ "$TRANSFORM" =~ ^[0-3]$ ]] || { printf 'HYPREXPO_DEV_TRANSFORM must be 0-3, got: %s\n' "$TRANSFORM" >&2; exit 2; }
++TRANSFORM_OPT=""
++[ "$TRANSFORM" != "0" ] && TRANSFORM_OPT=",transform,$TRANSFORM"
++
+ cat > "$CONF" <<EOF
+-monitor=WAYLAND-1,$MODE,0x0,1
+-monitor=WAYLAND-2,$MODE,${MODE_W}x0,1
+-monitor=,$MODE,auto,1
++monitor=WAYLAND-1,$MODE,0x0,1$TRANSFORM_OPT
++monitor=WAYLAND-2,$MODE,${MODE_W}x0,1$TRANSFORM_OPT
++monitor=,$MODE,auto,1$TRANSFORM_OPT
+ 
+ $EXTRA_OUTPUTS
  
  $LAYOUT_BLOCK
  
@@ -2341,7 +2378,7 @@ index 98a8340..13700a2 100755
  debug {
    disable_logs = false
  }
-@@ -135,6 +142,7 @@ plugin {
+@@ -135,6 +150,7 @@ plugin {
      # borders (hypr-style gradient, thicker to showcase)
      border_style = hyprland
      border_width = 4
@@ -2349,7 +2386,7 @@ index 98a8340..13700a2 100755
      border_color_current = rgb(66ccff)
      border_color_focus   = rgb(ffcc66)
  
-@@ -168,6 +176,36 @@ plugin {
+@@ -168,6 +184,36 @@ plugin {
      # demo hyprland style gradient borders
      border_grad_current = rgba(33ccffee) rgba(00ff99ee) 45deg
      border_grad_focus   = rgba(ffdd44ee) rgba(22aaffee) 30deg
@@ -2386,11 +2423,11 @@ index 98a8340..13700a2 100755
    }
  }
  
-diff --git c/scripts/verify-3d.sh w/scripts/verify-3d.sh
+diff --git c/scripts/verify-3d.sh i/scripts/verify-3d.sh
 new file mode 100755
 index 0000000..0456292
 --- /dev/null
-+++ w/scripts/verify-3d.sh
++++ i/scripts/verify-3d.sh
 @@ -0,0 +1,133 @@
 +#!/usr/bin/env bash
 +# verify-3d.sh - automated visual check of the hyprexpo 3D grid.
@@ -2525,10 +2562,10 @@ index 0000000..0456292
 +[ -n "$plugin_line" ] && echo "PLUGIN: $plugin_line"
 +echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
 +exit 0
-diff --git c/tests/OverviewSourceTests.cpp w/tests/OverviewSourceTests.cpp
-index d2e7572..72f1011 100644
+diff --git c/tests/OverviewSourceTests.cpp i/tests/OverviewSourceTests.cpp
+index d2e7572..7e0a092 100644
 --- c/tests/OverviewSourceTests.cpp
-+++ w/tests/OverviewSourceTests.cpp
++++ i/tests/OverviewSourceTests.cpp
 @@ -122,6 +122,67 @@ int main() {
      expect(source.find("if (**PDRAGDROPENABLE && SOURCE)") != std::string::npos && source.find("SOURCE->finishWindowDrag()") != std::string::npos,
             "drag/drop enable configuration gates drag completion");
@@ -2607,3 +2644,21 @@ index d2e7572..72f1011 100644
      const auto enterSubmap = extractFunction(interactionSource, "void enterOverviewSubmap(bool& submapActive) {");
      expect(!enterSubmap.empty(), "keyboard navigation submap entry function exists");
      const auto captureSubmapPos = enterSubmap.find("g_previousSubmap = g_pKeybindManager->getCurrentSubmap().name;");
+@@ -429,6 +487,17 @@ int main() {
+ 
+     const auto renderSource = readFile("OverviewRender.cpp");
+     expect(!renderSource.empty(), "OverviewRender.cpp can be read from repo root");
++    expectContains(renderSource, "outputProjection(MON->m_transformedSize, HYPRUTILS_TRANSFORM_NORMAL)",
++                   "the 3D grid projects with the overlay ortho, not a second monitor transform");
++    expectAbsent(renderSource, "Math::wlTransformToHyprutils(MON->m_transform)",
++                 "the 3D projection never re-applies the monitor transform (rotated monitors rendered off-screen)");
++    const auto threeDSource = readFile("Overview3D.cpp");
++    expect(!threeDSource.empty(), "Overview3D.cpp can be read from repo root");
++    const auto ensureInit = extractFunction(threeDSource, "bool ensureInit() {");
++    expect(ensureInit.find("makeEGLCurrent()") != std::string::npos && ensureInit.find("makeEGLCurrent()") < ensureInit.find("compile(GL_VERTEX_SHADER"),
++           "the cached 3D shader compile makes the compositor EGL context current first");
++    const auto nestedRunner = readFile("scripts/run-nested.sh");
++    expectContains(nestedRunner, "HYPREXPO_DEV_TRANSFORM", "the nested harness can rotate its output to test vertical monitors");
+     const auto closeOverview = extractFunction(renderSource, "void COverview::close(bool switchToSelection) {");
+     expect(!closeOverview.empty(), "overview close function exists");
+     expect(closeOverview.find("resetSubmapIfNeeded();") != std::string::npos,

@@ -65,6 +65,29 @@ if ! grep -q "keep_layers" "$SRC/PluginConfig.cpp" || ! grep -q "keep_layers" "$
     exit 1
 fi
 
+# Guard anti-regresion: la grilla 3D tiene que proyectarse en el mismo espacio
+# que el resto del overlay (ortho de m_transformedSize, SIN componer el transform
+# del monitor). Componerlo rota y anisotropiza la geometria dos veces: en una
+# pantalla vertical la grilla queda casi entera fuera de cuadro y con 180 sale
+# espejada. Ver "2026-11-10 - overview 3D en pantalla girada" en el changes.
+if ! grep -q "outputProjection(MON->m_transformedSize, HYPRUTILS_TRANSFORM_NORMAL)" "$SRC/OverviewRender.cpp"; then
+    echo "error: el patch perdio la projection sin transform (overview 3D roto en pantalla vertical)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
+if grep -q "wlTransformToHyprutils(MON->m_transform)" "$SRC/OverviewRender.cpp"; then
+    echo "error: la projection 3D volvio a componer el transform del monitor" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
+if ! grep -q "makeEGLCurrent" "$SRC/Overview3D.cpp" || ! grep -q "HYPREXPO_DEV_TRANSFORM" "$SRC/scripts/run-nested.sh"; then
+    echo "error: el patch perdio el EGL current del init 3D o la rotacion del harness nested" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
 make -C "$SRC" -j"$(nproc)"
 
 sudo install -Dm755 "$SRC/hyprexpo.so" "$INSTALL_SO"
