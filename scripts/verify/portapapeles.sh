@@ -63,7 +63,7 @@ lastlog() { tail -n "${1:-20}" "$CLIPBOARD_SYNC_LOG" 2>/dev/null; }
 
 # --- 1. texto -------------------------------------------------------------
 msg="prueba-portapapeles-$RANDOM"
-printf '%s' "$msg" | wl-copy
+printf '%s' "$msg" | wl-copy 2>/dev/null
 sleep 0.3
 peer push
 [ "$(wl-paste)" = "$msg" ] && ok "texto: llega al otro equipo" || fail "texto distinto en destino"
@@ -110,7 +110,7 @@ printf 'x' | "$CS" receive 'text/plain' 'zz' >/dev/null 2>&1
 
 # --- 6. otro equipo caído -------------------------------------------------
 msg="sin-ruta-$RANDOM"
-printf '%s' "$msg" | wl-copy
+printf '%s' "$msg" | wl-copy 2>/dev/null
 sleep 0.3
 t0=$(date +%s)
 CLIPBOARD_SYNC_LOCAL_PEER=0 PEER_LAN_ADDR=203.0.113.1 \
@@ -130,7 +130,7 @@ setsid "$CS" watch >/dev/null 2>&1 &
 wpid=$!
 sleep 2
 n0=$(wc -l <"$CLIPBOARD_SYNC_LOG" 2>/dev/null || echo 0)
-printf 'lo que copio con el demonio escuchando' | wl-copy
+printf 'lo que copio con el demonio escuchando' | wl-copy 2>/dev/null
 sleep 2
 tail -n +"$((n0 + 1))" "$CLIPBOARD_SYNC_LOG" 2>/dev/null | grep -q 'push: text/plain' &&
   ok "demonio: empuja solo al copiar" || fail "demonio: no reaccionó"

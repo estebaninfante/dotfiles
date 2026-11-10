@@ -34,7 +34,11 @@ local bg_link     = HOME .. "/.local/state/omarchy/current/background"
 local bg_source   = read_trim(HOME .. "/.config/wallpaper-source") or "static"
 local bg_id       = read_trim(HOME .. "/.config/wallpaper-current") or ""
 local bg_frame    = (bg_id ~= "") and (HOME .. "/.cache/wallpaper-frames/" .. bg_id .. ".png") or nil
-local bg_image    = resolve_image(bg_link)
+-- Se pasa el SYMLINK, no la ruta resuelta: el plugin resuelve y cachea por
+-- (ruta real + mtime + tamano) en cada apertura, y asi un cambio de wallpaper
+-- (que reapunta el symlink) se ve al abrir el overview sin reload. Resolviendo
+-- aca, el plugin se quedaba con la ruta vieja y se veian dos wallpapers.
+local bg_image    = bg_link
 if bg_source == "video" and bg_frame and io.open(bg_frame, "r") then
     bg_image = bg_frame
 end
