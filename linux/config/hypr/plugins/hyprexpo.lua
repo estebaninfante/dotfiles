@@ -60,7 +60,9 @@ local style = {
     gaps_in = 16,
     gaps_out = 22,
     border_width = 2,
-    tile_rounding = 12,
+    -- Esquinas rectas: la grilla se lee como pestanas de workspace, no como
+    -- tarjetas redondeadas (0 = sin radio en el modo plano y en el borde).
+    tile_rounding = 0,
     bg_col = theme.color("darker_background", "#0e160e"),
     border_current = "rgba(ffffff60)",
     border_focus = "rgba(ffe9a9e6)",
@@ -79,11 +81,13 @@ local style = {
     threed_tilt = 15,
     threed_yaw = 0,
     threed_distance = 1.3,
-    threed_radius = 0.04,
-    -- 1 = el borde sigue la esquina redondeada de la miniatura; 0 = borde recto (el de antes)
-    threed_border_round = 1,
+    -- Radio (en UV) de las miniaturas en 3D. 0 = rectas, igual que el modo plano.
+    threed_radius = 0,
+    -- 1 = el borde sigue la esquina redondeada de la miniatura; 0 = borde recto
+    threed_border_round = 0,
     threed_flip_v = 0,
-    threed_fisheye = 0.1,
+    -- Sin lente de pez: la grilla se ve plana en los bordes (0 = sin barril).
+    threed_fisheye = 0,
     threed_fisheye_pow = 2,
     glass_glow_enable = 0,
     glass_glow = 0.7,
