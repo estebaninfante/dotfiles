@@ -29,3 +29,4 @@ lan-mouse.service
 # equipo. Vive con la sesión gráfica: sin Wayland no hay portapapeles.
 clipboard-sync.service
 wallpaper-sync.path
+wallpaper-sync.service
