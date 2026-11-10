@@ -31,7 +31,7 @@ for viejo in developing Projects proyectos dev Work; do
     [[ -e "$HOME/$viejo" ]] && warn "$HOME/$viejo existe (¿raíz duplicada? la única es $DEV_ROOT)"
 done
 [[ -e "$HOME/usr" || -e "$HOME/etc" || -e "$HOME/var" ]] && \
-    bad "pseudo-root de Arch en \$HOME (usr/etc/var): borrar con sudo"
+    bad "pseudo-root de Arch en \$HOME: sudo rm -rf ~/usr ~/etc ~/var ~/hooks ~/kernel"
 [[ -e "$HOME/bin" ]] && warn "\$HOME/bin existe (shadowea /usr/bin si está en PATH)"
 
 head_ "── symlinks ──"
