@@ -25,6 +25,24 @@ Item {
   property string passwordText: ""
   property bool syncingPasswordText: false
 
+  // 0 = nada visible, 1 = lock asentado. La entrada lo lleva de 0 a 1.
+  property real reveal: 0
+  // Segunda fase de la entrada: la sombra del campo florece y después se asienta.
+  property real haloSettle: 0
+  // La salida es la inversa de `reveal` (vuelve a 0). Mientras dura, `exiting`
+  // apaga el velo y abre el blur, así el corte al escritorio se siente como un
+  // enfocar en vez de un salto. El servicio suelta la sesión al terminar.
+  property bool exiting: false
+  readonly property int exitDuration: 280
+  // El lock real dispara la entrada recién cuando la superficie ya está arriba
+  // (secure), porque en ese momento es cuando se ve; el preview la dispara al
+  // mostrarse, para poder verla sin bloquear la sesión.
+  property bool revealOnLoad: true
+  // Estado que publica el servicio. Quickshell aísla el scope de la superficie,
+  // así que Service.qml NO puede tocar este item por id: se comunican por acá.
+  property bool lockSecure: false
+  property bool lockReleasing: false
+
   readonly property string placeholderText: "Enter Password"
   readonly property int fieldWidth: 381
   readonly property int fieldHeight: 67
@@ -87,6 +105,77 @@ Item {
   Component.onCompleted: {
     syncPasswordText()
     if (inputEnabled) Qt.callLater(forcePasswordFocus)
+    // El preview crea el LockView ya visible (loadBackground nace en true), así
+    // que el cambio de propiedad no dispara la entrada: se dispara acá.
+    if (root.revealOnLoad && loadBackground) playReveal()
+    // Si la superficie se crea con la sesión ya segura, el cambio de propiedad
+    // no llega: la entrada y el foco se piden también al nacer.
+    if (root.lockSecure) {
+      playReveal()
+      Qt.callLater(forcePasswordFocus)
+    }
+  }
+
+  onLockSecureChanged: {
+    if (root.lockSecure) {
+      playReveal()
+      Qt.callLater(forcePasswordFocus)
+    }
+  }
+
+  onLockReleasingChanged: {
+    if (root.lockReleasing) playExit()
+  }
+
+  // Entrada del lock. El contenido entra en 620 ms (outCubic: rápido al
+  // principio, se posa suave), el fondo hace un "focus pull" y después la
+  // sombra del campo termina de asentarse en 1.4 s. Una sola pasada: nada late
+  // para siempre, así la pantalla quieta no gasta GPU.
+  function playReveal() {
+    root.exiting = false
+    root.reveal = 0
+    root.haloSettle = 0
+    revealSeq.restart()
+  }
+
+  // Salida: el lock se disuelve (el servicio espera exitDuration antes de
+  // soltar la sesión, así que la pantalla nunca queda expuesta antes de tiempo).
+  function playExit() {
+    root.exiting = true
+    exitAnim.restart()
+  }
+
+  onLoadBackgroundChanged: {
+    if (root.revealOnLoad && loadBackground) playReveal()
+  }
+
+  SequentialAnimation {
+    id: revealSeq
+    NumberAnimation {
+      target: root
+      property: "reveal"
+      from: 0
+      to: 1
+      duration: 620
+      easing.type: Easing.OutCubic
+    }
+    NumberAnimation {
+      target: root
+      property: "haloSettle"
+      from: 0
+      to: 1
+      duration: 1400
+      easing.type: Easing.InOutQuad
+    }
+  }
+
+  NumberAnimation {
+    id: exitAnim
+    target: root
+    property: "reveal"
+    to: 0
+    duration: root.exitDuration
+    easing.type: Easing.InCubic
   }
 
   // Measures the masked password at full size; passwordDotScale compares this
@@ -100,9 +189,13 @@ Item {
   }
 
   Rectangle {
+    id: backdrop
     anchors.fill: parent
     color: Color.background
 
+    // Fondo: el wallpaper de siempre, blur incluido. La entrada hace un "focus
+    // pull" (el blur se cierra y la imagen se asienta) y la salida lo abre del
+    // todo, así el corte al escritorio se siente como un enfocar, no un salto.
     Image {
       id: wallpaper
       anchors.fill: parent
@@ -112,6 +205,7 @@ Item {
       cache: false
       sourceSize.width: width
       sourceSize.height: height
+      scale: (1.045 - 0.045 * root.reveal) + (root.exiting ? 0.05 * (1.0 - root.reveal) : 0)
     }
 
     MultiEffect {
@@ -121,8 +215,37 @@ Item {
       blurEnabled: root.loadBackground && wallpaper.status === Image.Ready
       blur: 1.0
       blurMax: 128
-      blurMultiplier: 1.25
-      contrast: -0.08
+      blurMultiplier: root.exiting ? 1.25 * root.reveal : (1.6 - 0.35 * root.reveal)
+      contrast: root.exiting ? -0.08 * root.reveal : (-0.08 - 0.05 * (1.0 - root.reveal))
+    }
+
+    // Velo: al entrar, el lock aparece saliendo de un oscurecido (cine). Al
+    // salir no participa: ahí se disuelve el contenido y el fondo se aclara.
+    Rectangle {
+      anchors.fill: parent
+      color: "#000000"
+      opacity: root.exiting ? 0 : 0.85 * Math.pow(1.0 - root.reveal, 2)
+    }
+
+    // Sombra suave detrás del campo: le da volumen sobre cualquier wallpaper y
+    // es lo que "florece" durante la entrada.
+    Rectangle {
+      id: fieldShadowShape
+      anchors.centerIn: inputField
+      width: inputField.width + 260
+      height: inputField.height + 160
+      radius: height / 2
+      color: "#000000"
+      visible: false
+    }
+
+    MultiEffect {
+      anchors.fill: fieldShadowShape
+      source: fieldShadowShape
+      blurEnabled: true
+      blur: 1.0
+      blurMax: 96
+      opacity: 0.45 * root.reveal * (1.0 - 0.5 * root.haloSettle)
     }
 
     MouseArea {
@@ -141,6 +264,11 @@ Item {
       borderSpec: root.inputBorderSpec
       radius: Style.cornerRadius
       clip: true
+      // Entrada: micro-zoom (0.97 → 1) y sube 16 px. La salida es la misma
+      // curva al revés: el campo se posa y se disuelve.
+      scale: 0.97 + 0.03 * root.reveal
+      opacity: Math.min(1, root.reveal * 1.25)
+      transform: Translate { y: (1 - root.reveal) * 16 }
 
       TextInput {
         id: passwordInput
@@ -201,6 +329,9 @@ Item {
         anchors.fill: passwordInput
         text: root.authenticatingPassword ? "Checking…" : (root.failureMessage.length > 0 ? root.failureMessage : root.placeholderText)
         visible: passwordInput.text.length === 0
+        // El texto entra último: primero se ve el campo, después el "Enter
+        // Password". Le da secuencia a la entrada.
+        opacity: Math.max(0, (root.reveal - 0.35) / 0.65)
         color: root.authenticatingPassword ? Color.lock.text : (root.failureMessage.length > 0 ? Color.lock.textError : Color.lock.placeholder)
         font.family: Style.font.family
         font.pixelSize: root.fieldFontSize

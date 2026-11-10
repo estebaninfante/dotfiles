@@ -17,6 +17,12 @@ Item {
   readonly property string currentBackgroundLink: stateHome + "/omarchy/current/background"
 
   property bool lockRequested: false
+  property bool releasePending: false
+  // Quickshell aísla el scope de la superficie del lock: Service.qml no puede
+  // tocar el LockView por id (ReferenceError: lockView is not defined). Estos
+  // dos estados los consume el LockView para animarse.
+  property bool lockSecure: false
+  property bool lockReleasing: false
   property bool pendingSessionLock: false
   property bool authenticatingPassword: false
   property bool fingerprintAuthenticating: false
@@ -139,6 +145,11 @@ Item {
     }
 
     resetAuthenticationState()
+    // Si venía una salida animada, se cancela: este bloqueo es nuevo y no debe
+    // soltarse cuando termine el timer de la salida anterior.
+    releaseTimer.stop()
+    releasePending = false
+    lockReleasing = false
     lockRequested = true
     armBlankTimer()
     logEvent("lock-requested")
@@ -152,16 +163,34 @@ Item {
     return true
   }
 
+  // Cerrar el lock no es instantáneo: primero se disuelve en pantalla y recién
+  // después se suelta la sesión. Mientras dura, la sesión sigue bloqueada y
+  // `secure`, así que no hay ningún instante expuesto de más.
   function finishUnlock() {
     if (!root.locked && !lockRequested) return
+    if (releasePending) return
+
+    releasePending = true
+    idleBlankTimer.stop()
+    // El timer se arma ANTES de la animación: si la animación fallara, la sesión
+    // igual se suelta (nunca quedarse colgado en un lock que ya se autenticó).
+    releaseTimer.restart()
+    lockReleasing = true
+  }
+
+  function releaseLock() {
+    releaseTimer.stop()
+    releasePending = false
 
     lockRequested = false
+    lockReleasing = false
+    lockSecure = false
+    sessionLock.locked = false
     pendingSessionLock = false
     sessionLockStabilizeTimer.stop()
     pendingSessionLockTimer.stop()
     resetAuthenticationState()
     idleBlankTimer.stop()
-    sessionLock.locked = false
     logEvent("unlocked")
     runWake()
   }
@@ -264,10 +293,15 @@ Item {
         sessionLockStabilizeTimer.stop()
         pendingSessionLockTimer.stop()
         root.startFingerprint()
-        // El campo pide foco una sola vez, cuando arranca el bloqueo, y eso pasa
-        // ~500ms ANTES de que exista esta superficie: el pedido se pierde y sin
-        // este foco el click era el único camino para poder escribir.
-        Qt.callLater(function() { lockView.forcePasswordFocus() })
+        // Acá la superficie ya está arriba: el LockView reacciona a esto
+        // pidiendo foco y arrancando la animación de entrada. (Antes el campo
+        // pedía foco ~500ms antes de que existiera la superficie, el pedido se
+        // perdía y el click era el único camino para poder escribir.)
+        root.lockSecure = true
+      } else {
+        // Higiene: si la superficie deja de estar segura por cualquier camino,
+        // el próximo bloqueo tiene que volver a disparar la animación y el foco.
+        root.lockSecure = false
       }
     }
 
@@ -283,6 +317,8 @@ Item {
       if (!locked && root.lockRequested) {
         root.lockRequested = false
         root.pendingSessionLock = false
+        root.releasePending = false
+        releaseTimer.stop()
         sessionLockStabilizeTimer.stop()
         pendingSessionLockTimer.stop()
         root.resetAuthenticationState()
@@ -297,23 +333,25 @@ Item {
       LockView {
         id: lockView
         anchors.fill: parent
+        // El reveal se dispara desde acá, cuando la superficie ya está arriba
+        // (`secure`) y por lo tanto se ve; si se disparara al bloquear, la
+        // animación terminaría antes de que el lock apareciera en pantalla.
+        revealOnLoad: false
+        lockSecure: root.lockSecure
+        lockReleasing: root.lockReleasing
         backgroundPath: root.backgroundPath
         backgroundVersion: root.backgroundVersion
         fingerprintConfigured: root.fingerprintConfigured
         authenticatingPassword: root.authenticatingPassword
         failureMessage: root.failureMessage
         failedAttempts: root.failedAttempts
-        inputEnabled: root.lockRequested
+        inputEnabled: root.lockRequested && !root.releasePending
         loadBackground: root.locked
         passwordText: root.enteredPassword
         onPasswordTextEdited: function(password) { root.enteredPassword = password }
         onSubmitPassword: function(password) { root.submitPassword(password) }
         onClearFailureRequested: root.failureMessage = ""
-        onWakeRequested: {
-          root.runWake()
-          // Despertar (click, movimiento o tecla) también asegura el foco.
-          Qt.callLater(function() { lockView.forcePasswordFocus() })
-        }
+        onWakeRequested: root.runWake()
       }
 
     }
@@ -442,6 +480,15 @@ Item {
   Process {
     id: blankProcess
     command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
+  }
+
+  // La salida animada tarda lo que dice LockView.exitDuration (mantenerlos
+  // iguales): recién al terminar se suelta la sesión.
+  Timer {
+    id: releaseTimer
+    interval: 320
+    repeat: false
+    onTriggered: root.releaseLock()
   }
 
   Timer {
