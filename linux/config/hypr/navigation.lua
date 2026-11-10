@@ -9,6 +9,7 @@ local plugin = hl.plugin.hyprexpo
 
 local expo_focus
 local expo_select
+local previous_submap
 local expo_ui_toggle
 local expo_fly_super_up
 
@@ -127,6 +128,18 @@ if plugin ~= nil then
 
     hl.on("keybinds.submap", function(name)
         hl.config({ input = { follow_mouse = name == "hyprexpo" and 0 or 1 } })
+
+        -- La grilla se maneja con el mouse, asi que mientras esta abierta
+        -- lan-mouse suelta la captura del borde: si no, al mover el puntero se
+        -- va a la otra maquina y quedan DOS cursores (el local y el del KVM),
+        -- con el clic cayendo en el equipo equivocado. Al cerrar se re-arma,
+        -- salvo que haya un stream: ahi Moonlight la tiene apagada a proposito.
+        if name == "hyprexpo" then
+            hl.exec_cmd("lan-mouse-capture.sh off")
+        elseif previous_submap == "hyprexpo" and not modes.streaming then
+            hl.exec_cmd("lan-mouse-capture.sh on")
+        end
+        previous_submap = name
         if name ~= "hyprexpo" then
             if expo_hold.open then expo_hold.open = false end
             if expo_fly then
