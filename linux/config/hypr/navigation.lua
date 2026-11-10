@@ -8,6 +8,7 @@ local EXPO_3D = hyprexpo.threed
 local plugin = hl.plugin.hyprexpo
 
 local expo_focus
+local expo_select
 local expo_ui_toggle
 local expo_fly_super_up
 
@@ -21,12 +22,12 @@ if plugin ~= nil then
         hl.bind("down",  function() plugin.kb_focus("down")  end, { repeating = true })
         hl.bind("RETURN", function() plugin.kb_confirm() end)
         hl.bind(main_mod .. " + Y", function() expo_ui_toggle() end)
-        if EXPO_3D then
-            for i = 1, 10 do
-                hl.bind(main_mod .. " + " .. ws_keys[i], function() expo_focus(i) end)
-                hl.bind(ws_keys[i], function() expo_focus(i) end)
-                hl.bind(string.lower(ws_keys[i]), function() expo_focus(i) end)
-            end
+        -- Elegir workspace por numero dentro de la grilla: en 3D pasa por la
+        -- camara (expo_focus); en plano es la seleccion directa del plugin.
+        for i = 1, 10 do
+            hl.bind(main_mod .. " + " .. ws_keys[i], function() expo_select(i) end)
+            hl.bind(ws_keys[i], function() expo_select(i) end)
+            hl.bind(string.lower(ws_keys[i]), function() expo_select(i) end)
         end
         hl.bind("catchall", function() hl.dispatch(hl.dsp.submap("reset")) end)
     end)
@@ -299,6 +300,15 @@ local function expo_fly_back()
     if last_ws_id then
         expo_focus(last_ws_id)
     end
+end
+
+expo_select = function(i)
+    if not EXPO_3D and plugin ~= nil then
+        reset_ws_style()
+        plugin.kb_selectn(i)
+        return
+    end
+    expo_focus(i)
 end
 
 expo_focus = function(i)

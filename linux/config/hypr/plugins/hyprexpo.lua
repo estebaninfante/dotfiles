@@ -51,7 +51,13 @@ end
 -- and no-ops when hyprexpo is already loaded.
 hl.exec_cmd(HOME .. "/.local/bin/hyprexpo-load.sh")
 
-local EXPO_3D = true
+-- Grilla PLANA: el overview se comporta como el de Windows+Tab (o el de
+-- Hyprland nativo): los workspaces se ven derechos, sin tilt/perspectiva, sin
+-- lente de pez y sin vineta. Con la pantalla vertical el tilt deformaba los
+-- previews (cada tile quedaba en trapecio) y la lente curvaba los bordes.
+-- Poniendo esto en true vuelve la grilla 3D del fork (threed_tilt/fisheye/
+-- radius/glow de abajo); el resto de la config es la misma.
+local EXPO_3D = false
 
 local style = {
     hover_select_enable = 1,
@@ -118,8 +124,11 @@ if hl.plugin.hyprexpo ~= nil then
         show_workspace_numbers = 0,
         keynav_enable = 1,
     }
+    -- Orden numpad (1 abajo a la izquierda) y curva de apertura: son del
+    -- overview, no del modo 3D, asi que valen en los dos.
+    config.reverse_rows = 1
+    config.animation = "specialWorkspace"
     if EXPO_3D then
-        config.reverse_rows = 1
         config.background_image = style.background_image
         config.background_dim = style.background_dim
         if hl.get_config("plugin:hyprexpo:background_transparent") ~= nil then
@@ -144,7 +153,6 @@ if hl.plugin.hyprexpo ~= nil then
         config.edge_passthrough = style.edge_passthrough
         config.slide_enable = style.slide_enable
         config.slide_amount = style.slide_amount
-        config.animation = "specialWorkspace"
     end
     if hl.get_config("plugin:hyprexpo:keep_layers") ~= nil then
         config.keep_layers = 1
