@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Vigila la tablet por USB y deja Weylus listo apenas se conecta.
+#
+# Respeta el interruptor de `weylus-toggle`: si el modo está apagado
+# (~/.local/state/weylus/on no existe) no arma nada y saca los túneles.
+set -uo pipefail
+export PATH=/usr/local/bin:/usr/bin:/bin
+WEB_PORT=1701
+WS_PORT=9001
+UI_PORT=1781
+ADB=/usr/bin/adb
+NOTIFY=/usr/bin/notify-send
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/weylus/on"
+armado=0
+
+armar() {
+  $ADB reverse "tcp:$WEB_PORT" "tcp:$WEB_PORT" >/dev/null 2>&1 || return 1
+  $ADB reverse "tcp:$WS_PORT" "tcp:$WS_PORT" >/dev/null 2>&1 || return 1
+  $ADB reverse "tcp:$UI_PORT" "tcp:$UI_PORT" >/dev/null 2>&1 || return 1
+  systemctl --user start weylus.service 2>/dev/null
+  $NOTIFY -a Weylus -i input-tablet "Tablet lista" \
+    "Abrí en su navegador:  http://localhost:$WEB_PORT" 2>/dev/null
+  echo "$(date -Is) tablet lista, tuneles armados"
+}
+
+desarmar() {
+  for puerto in "$WEB_PORT" "$WS_PORT" "$UI_PORT"; do
+    $ADB reverse --remove "tcp:$puerto" >/dev/null 2>&1
+  done
+  echo "$(date -Is) weylus apagado, tuneles retirados"
+}
+
+$ADB start-server >/dev/null 2>&1
+while true; do
+  $ADB wait-for-device >/dev/null 2>&1
+  # Se queda mientras haya tablet conectada y vuelve a mirar cada 3 s: así el
+  # interruptor del menú surte efecto sin desenchufar la tablet.
+  while $ADB get-state 2>/dev/null | grep -q '^device$'; do
+    if [ -e "$STATE" ]; then
+      if [ "$armado" = 0 ] && armar; then
+        armado=1
+      fi
+    elif [ "$armado" = 1 ]; then
+      desarmar
+      armado=0
+    fi
+    sleep 3
+  done
+  armado=0
+  sleep 1
+done
