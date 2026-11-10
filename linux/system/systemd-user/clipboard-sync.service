@@ -1,0 +1,23 @@
+[Unit]
+Description=Portapapeles compartido con el otro equipo (clipboard-sync)
+Documentation=file://%h/dotfiles/linux/bin/clipboard-sync
+After=graphical-session.target network-online.target
+Wants=network-online.target
+# Igual que lan-mouse: si Hyprland reinicia, el `wl-paste --watch` se queda con
+# la conexión vieja y el demonio queda mudo aunque el proceso siga vivo. Con la
+# sesión como PartOf, cada reinicio del compositor lo levanta de cero.
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/clipboard-sync watch
+Restart=always
+RestartSec=5
+# El demonio sabe buscar el socket si falta, pero arrancar con el entorno de la
+# sesión evita el primer ciclo de reintentos.
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+
+[Install]
+WantedBy=graphical-session.target

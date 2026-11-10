@@ -24,3 +24,7 @@ dotfiles-sync.service
 dotfiles-sync.timer
 rig-discord-bot.service
 lan-mouse.service
+
+# Portapapeles + media (capturas, videos, archivos) compartido con el otro
+# equipo. Vive con la sesión gráfica: sin Wayland no hay portapapeles.
+clipboard-sync.service

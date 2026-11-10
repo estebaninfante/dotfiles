@@ -166,6 +166,13 @@ hl.bind(main_mod .. " + ALT + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/bar-posi
 hl.bind(main_mod .. " + ALT + O", hl.dsp.exec_cmd("~/.local/bin/pantalla-orientacion toggle"), { description = "Pantalla: horizontal/vertical" })
 hl.bind(main_mod .. " + ALT + SHIFT + O", hl.dsp.exec_cmd("~/.local/bin/pantalla-orientacion flip"), { description = "Pantalla: invertir el vertical" })
 
+-- Portapapeles compartido con el otro equipo (`clipboard-sync`): el demonio ya
+-- empuja solo cada copia (texto, capturas, videos de screenrecord). Estos dos
+-- atajos son para forzar: repetir un envío que ya se hizo o traer lo que el
+-- otro equipo tenga copiado ahora mismo. J de jalar, Z de zumbar.
+hl.bind(main_mod .. " + SHIFT + Z", hl.dsp.exec_cmd("~/.local/bin/clipboard-sync push --force"), { description = "Portapapeles: enviar al otro equipo" })
+hl.bind(main_mod .. " + SHIFT + J", hl.dsp.exec_cmd("~/.local/bin/clipboard-sync pull"), { description = "Portapapeles: traer del otro equipo" })
+
 hl.bind(main_mod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/ohm"), { description = "Ohm" })
 hl.bind(main_mod .. " + SHIFT + Y", hl.dsp.exec_cmd("~/.local/bin/ohm https://youtube.com/"), { description = "Ohm: YouTube" })
 

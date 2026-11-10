@@ -18,6 +18,8 @@ hl.on("hyprland.start", function()
     -- Suspensión por inactividad (10 min con batería, 30 min con corriente).
     -- Omarchy maneja screensaver/lock; hypridle solo suspende. Ver hypridle.conf.
     hl.exec_cmd("systemctl --user start hypridle.service")
+    -- Portapapeles compartido con el otro equipo (texto, capturas, videos).
+    hl.exec_cmd("systemctl --user start clipboard-sync.service")
     hl.exec_cmd("sleep 2 && systemctl --user start xdg-desktop-portal-hyprland && systemctl --user restart xdg-desktop-portal && systemctl --user start lan-mouse")
 
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")

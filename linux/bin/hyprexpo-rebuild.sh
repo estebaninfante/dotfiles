@@ -91,6 +91,21 @@ if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/Over
     exit 1
 fi
 
+# Guard: el modo "un solo wallpaper" (wallpaper_native) tiene que repintar la capa
+# BACKGROUND real ANTES de los tiles. Si vuelve a quedar despues, el wallpaper tapa
+# la grilla y el overview se ve como el escritorio pelado.
+if ! grep -q "plugin:hyprexpo:wallpaper_native" "$SRC/PluginConfig.cpp" || ! grep -q "wallpaper_native" "$SRC/OverviewRender.cpp"; then
+    echo "error: el patch perdio wallpaper_native (fondo real bajo los tiles)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
+if ! awk '/clearWithColor\(backgroundTransparent/,/for \(size_t y = 0; y < \(size_t\)SHAPE.rows/' "$SRC/OverviewRender.cpp" | grep -q "ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND"; then
+    echo "error: las capas de fondo se pintan despues de los tiles (wallpaper sobre la grilla)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
 if ! grep -q "makeEGLCurrent" "$SRC/Overview3D.cpp" || ! grep -q "HYPREXPO_DEV_TRANSFORM" "$SRC/scripts/run-nested.sh"; then
     echo "error: el patch perdio el EGL current del init 3D o la rotacion del harness nested" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2

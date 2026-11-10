@@ -173,7 +173,7 @@ remote_cmd() {
 ssh_run() { # <destino> <timeout-segundos> <comando>
   local target=$1 tmo=$2 cmd=$3
   if [[ ${CLIPBOARD_SYNC_LOCAL_PEER:-0} == 1 ]]; then
-    timeout "${tmo}" bash -c "${cmd}"
+    timeout "${tmo}" bash -c "${cmd}" 9>&-
     return $?
   fi
   timeout "${tmo}" ssh -T -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
@@ -221,6 +221,10 @@ push_blob() { # <destino> <mime> <digest> <archivo>
     log "push: falló el envío de ${mime} (rc=${rc})"
     drop_peer_cache
     return "${rc}"
+  fi
+  # Sin aviso, copiar una captura se siente como si no hubiera pasado nada.
+  if [[ ${mime} == image/* ]] && (( $(stat -c %s -- "${file}" 2>/dev/null || echo 0) > 51200 )); then
+    notify 󰹑 "Imagen enviada" "Ya se puede pegar en el otro equipo"
   fi
   log "push: ${mime} -> ${target}"
   return 0
@@ -281,7 +285,7 @@ push_files() { # <destino> <uri-list tmp> <digest>
 }
 
 push() { # [--force]
-  local force=0 attempt mime rc
+  local force=0 attempt mime rc=0
   [[ ${1:-} == --force ]] && force=1
 
   ensure_wayland || { log "push: sin sesión Wayland"; return 1; }
@@ -351,7 +355,7 @@ push() { # [--force]
     rm -f "${again}"
     break
   done
-  return 0
+  return "${rc:-0}"
 }
 
 # ---------------------------------------------------------------- recibir ---
@@ -368,7 +372,7 @@ receive() { # <mime> <digest>
   seen_add "${digest}"
   # wl-copy daemoniza el dueño de la selección: tiene que sobrevivir al cierre
   # de la sesión SSH.
-  setsid wl-copy --type "${mime}" <"${tmp}" >/dev/null 2>&1 &
+  setsid wl-copy --type "${mime}" <"${tmp}" >/dev/null 2>&1 9>&- &
   disown 2>/dev/null || true
   rm -f "${tmp}"
   log "receive: ${mime} aplicado (${digest:0:8})"
@@ -422,7 +426,7 @@ receive_files() { # <id remoto>
   local digest
   digest=$(digest_of text/uri-list "${list}")
   seen_add "${digest}"
-  setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 &
+  setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 9>&- &
   disown 2>/dev/null || true
   rm -f "${list}"
 
@@ -446,7 +450,7 @@ send_files() { # <ruta...>
   for p in "${paths[@]}"; do
     printf 'file://%s\r\n' "$(uri_of "${p}")" >>"${list}"
   done
-  setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 &
+  setsid wl-copy --type text/uri-list <"${list}" >/dev/null 2>&1 9>&- &
   disown 2>/dev/null || true
   push --force
   rm -f "${list}"
