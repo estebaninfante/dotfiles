@@ -2,6 +2,11 @@
 Description=LAN-Mouse KVM daemon
 After=graphical-session.target network-online.target
 Wants=network-online.target
+# El daemon se queda con las conexiones Wayland viejas si Hyprland reinicia
+# (log: "input capture exited ... Broken pipe", "emulation ... Broken pipe" y
+# queda con emulación deshabilitada para siempre, aunque el proceso siga vivo).
+# Con la sesión como PartOf, cada reinicio del compositor lo levanta de cero.
+PartOf=graphical-session.target
 
 [Service]
 Type=simple
