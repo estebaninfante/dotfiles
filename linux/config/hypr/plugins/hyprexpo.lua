@@ -128,18 +128,13 @@ if hl.plugin.hyprexpo ~= nil then
     -- overview, no del modo 3D, asi que valen en los dos.
     config.reverse_rows = 1
     config.animation = "specialWorkspace"
-    -- UN SOLO WALLPAPER, sin copias: si el .so lo soporta (`wallpaper_native`),
-    -- el overview repinta la capa BACKGROUND real del compositor debajo de los
-    -- tiles. Nada que sincronizar cuando cambia el fondo (antes el plugin copiaba
-    -- la imagen al cargar la config y un cambio de wallpaper mostraba dos).
-    -- La clave se cablea solo si existe: una maquina con el .so viejo sigue con el
-    -- backdrop por imagen y no se queda sin grilla.
-    if hl.get_config("plugin:hyprexpo:wallpaper_native") ~= nil then
-        config.wallpaper_native = 1
-    end
-    -- Fondo canonico (fallback cuando `wallpaper_native` no esta): NO va dentro del
-    -- bloque 3D, porque tambien es lo que habilita el CTransparentTileGuard (tiles
-    -- sin wallpaper) y el fondo unico detras de la grilla.
+    -- UN SOLO WALLPAPER: el overview pinta el mismo archivo canonico que el
+    -- escritorio y los tiles se capturan sin wallpaper, asi que se ve una sola
+    -- imagen. Ojo: NO va dentro del bloque 3D, es lo que habilita el
+    -- CTransparentTileGuard (tiles sin fondo).
+    -- El .so resuelve el symlink y cachea por mtime+tamano, asi que un cambio de
+    -- wallpaper se ve en la proxima apertura sin reload (antes quedaba cacheada la
+    -- imagen vieja y se veian dos wallpapers distintos).
     config.background_image = style.background_image
     config.background_dim = style.background_dim
     if hl.get_config("plugin:hyprexpo:background_transparent") ~= nil then

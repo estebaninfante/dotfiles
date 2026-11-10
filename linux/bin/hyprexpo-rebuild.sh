@@ -93,17 +93,12 @@ if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/Over
     exit 1
 fi
 
-# Guard: el modo "un solo wallpaper" (wallpaper_native) tiene que repintar la capa
-# BACKGROUND real ANTES de los tiles. Si vuelve a quedar despues, el wallpaper tapa
-# la grilla y el overview se ve como el escritorio pelado.
-if ! grep -q "plugin:hyprexpo:wallpaper_native" "$SRC/PluginConfig.cpp" || ! grep -q "wallpaper_native" "$SRC/OverviewRender.cpp"; then
-    echo "error: el patch perdio wallpaper_native (fondo real bajo los tiles)" >&2
-    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
-    exit 1
-fi
-
-if ! awk '/clearWithColor\(backgroundTransparent/,/for \(size_t y = 0; y < \(size_t\)SHAPE.rows/' "$SRC/OverviewRender.cpp" | grep -q "ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND"; then
-    echo "error: las capas de fondo se pintan despues de los tiles (wallpaper sobre la grilla)" >&2
+# Guard anti-regresion del "un solo wallpaper": la cache de la imagen de fondo
+# tiene que estar indexada por ruta real + mtime + tamano. Indexada solo por el
+# string de ruta, un cambio de wallpaper dejaba el overview mostrando la imagen
+# vieja (dos wallpapers: escritorio nuevo, overview viejo) hasta un reload.
+if ! grep -q "backgroundCacheKey" "$SRC/Overview.cpp" || ! grep -q "last_write_time" "$SRC/Overview.cpp"; then
+    echo "error: el patch perdio la clave de cache del fondo (mtime+tamano); el wallpaper queda viejo" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
