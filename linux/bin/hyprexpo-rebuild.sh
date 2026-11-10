@@ -65,19 +65,27 @@ if ! grep -q "keep_layers" "$SRC/PluginConfig.cpp" || ! grep -q "keep_layers" "$
     exit 1
 fi
 
-# Guard anti-regresion: la grilla 3D tiene que proyectarse en el mismo espacio
-# que el resto del overlay (ortho de m_transformedSize, SIN componer el transform
-# del monitor). Componerlo rota y anisotropiza la geometria dos veces: en una
-# pantalla vertical la grilla queda casi entera fuera de cuadro y con 180 sale
-# espejada. Ver "2026-11-10 - overview 3D en pantalla girada" en el changes.
-if ! grep -q "outputProjection(MON->m_transformedSize, HYPRUTILS_TRANSFORM_NORMAL)" "$SRC/OverviewRender.cpp"; then
-    echo "error: el patch perdio la projection sin transform (overview 3D roto en pantalla vertical)" >&2
+# Guards anti-regresion de orientacion. El overview 3D tiene que usar la MISMA
+# proyeccion que Hyprland tiene puesta para el frame (la que ya usan los tiles del
+# modo plano). Armarla a mano con outputProjection + el transform del monitor metia
+# la rotacion dos veces (y repartia 2/w y 2/h en los ejes contrarios): en vertical
+# la grilla quedaba fuera de cuadro y el fondo girado. Y la captura de los previews
+# tiene que salir en el espacio ya rotado del monitor, sin el flip de 180. Ver
+# "2026-11-10 - overview 3D en pantalla girada" en el changes.
+if ! grep -q "m_renderData.targetProjection" "$SRC/OverviewRender.cpp"; then
+    echo "error: el patch perdio la projection nativa del overview 3D (roto en pantalla girada)" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
 
 if grep -q "wlTransformToHyprutils(MON->m_transform)" "$SRC/OverviewRender.cpp"; then
     echo "error: la projection 3D volvio a componer el transform del monitor" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
+if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/OverviewCapture.cpp" || grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
+    echo "error: la captura de previews volvio a usar el tamano del buffer / el flip de 180 (previews girados)" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi

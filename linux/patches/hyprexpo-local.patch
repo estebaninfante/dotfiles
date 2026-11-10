@@ -2603,7 +2603,7 @@ index 0000000..0456292
 +echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
 +exit 0
 diff --git c/tests/OverviewSourceTests.cpp i/tests/OverviewSourceTests.cpp
-index d2e7572..edd3874 100644
+index d2e7572..d6c4dde 100644
 --- c/tests/OverviewSourceTests.cpp
 +++ i/tests/OverviewSourceTests.cpp
 @@ -122,6 +122,67 @@ int main() {
@@ -2692,11 +2692,11 @@ index d2e7572..edd3874 100644
 +                   "the 3D grid reuses the compositor's own per-frame projection instead of rebuilding it");
 +    expectAbsent(renderSource, "Math::wlTransformToHyprutils(MON->m_transform)",
 +                 "the 3D projection never re-applies the monitor transform (rotated monitors rendered off-screen)");
-+    const auto captureSource = readFile("OverviewCapture.cpp");
-+    expect(!captureSource.empty(), "OverviewCapture.cpp can be read from repo root");
-+    expectContains(captureSource, "captureBox = {{0, 0}, monitorState.transformedSize()};",
++    const auto captureRotationSource = readFile("OverviewCapture.cpp");
++    expect(!captureRotationSource.empty(), "OverviewCapture.cpp can be read from repo root");
++    expectContains(captureRotationSource, "captureBox = {{0, 0}, monitorState.transformedSize()};",
 +                   "rotated monitors capture the already-rotated overlay space");
-+    expectAbsent(captureSource, "HYPRUTILS_TRANSFORM_180",
++    expectAbsent(captureRotationSource, "HYPRUTILS_TRANSFORM_180",
 +                 "previews are no longer compensated with a 180 flip (wrong for 90/270)");
 +    const auto threeDSource = readFile("Overview3D.cpp");
 +    expect(!threeDSource.empty(), "Overview3D.cpp can be read from repo root");
