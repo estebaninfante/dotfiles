@@ -506,6 +506,14 @@ def tick(buttons, settings, states):
 
 
 # ── modos de ejecución ───────────────────────────────────────────────────
+def keyd_pid():
+    """PID actual de keyd, para detectar que se reinició."""
+    try:
+        return subprocess.check_output(["pidof", "keyd"], text=True, timeout=1).strip()
+    except Exception:
+        return ""
+
+
 def run_daemon(source="keyd"):
     settings, buttons = load_config()
     if not buttons:
@@ -522,12 +530,27 @@ def run_daemon(source="keyd"):
     assert out is not None
     log(f"listo (hold={settings['hold_ms']}ms, gap={settings['multi_gap_ms']}ms, "
         f"botones={','.join(sorted(buttons))})")
+    monitor_proc = proc if source == "keyd" else None
+    keyd0 = keyd_pid() if source == "keyd" else None
+    last_check = time.monotonic()
     while True:
         timeout = tick(buttons, settings, states)
         r, _, _ = select.select([out], [], [], timeout)
         if r and not handle_event(out, buttons, settings, states):
             log("el stream de eventos terminó; salgo")
             break
+        # `keyd monitor` no muere cuando keyd se reinicia: queda con el socket
+        # muerto y select() nunca ve EOF. Lo detectamos y salimos para que
+        # systemd nos relance con un monitor nuevo.
+        now = time.monotonic()
+        if now - last_check >= 2:
+            last_check = now
+            if monitor_proc is not None and monitor_proc.poll() is not None:
+                log("keyd monitor murió; salgo")
+                break
+            if source == "keyd" and keyd_pid() != keyd0:
+                log("keyd se reinició; salgo para reconectar")
+                break
 
 
 def run_learn():
