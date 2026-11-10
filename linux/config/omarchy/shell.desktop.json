@@ -91,10 +91,7 @@
         {
           "id": "eztvn.power"
         },
-        null,
-        {
-          "id": "io.github.dragosol.better-displays-pro"
-        }
+        null
       ]
     },
     "position": "right",

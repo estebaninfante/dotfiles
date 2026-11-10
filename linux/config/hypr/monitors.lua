@@ -85,7 +85,7 @@ elseif variables.machine == "desktop" then
     -- 144Hz): quedaban solo en su archivo recordado y cualquier reload los
     -- pisaba con 1/144. Ahora viven acá, que carga después, y no bailan.
     local transform = saved_transform("DP-2", 0)
-    hl.monitor({ output = "DP-2", mode = "2560x1440@144", position = "0x0", scale = 1.25, transform = transform })
+    hl.monitor({ output = "DP-2", mode = "2560x1440@143.97", position = "0x0", scale = 1.25, transform = transform, vrr = true })
     apply_orientation_layout(transform)
 end
 
