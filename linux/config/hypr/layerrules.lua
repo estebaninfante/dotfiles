@@ -53,4 +53,11 @@ hl.layer_rule({
     animation = "none"
 })
 
+-- Barra: fondo negro translúcido con blur detrás. El alpha lo define
+-- backgroundOpacity en plugins/eztvn.bar/Bar.qml; acá solo se habilita el blur.
+hl.layer_rule({
+    match = { namespace = "omarchy-bar" },
+    blur = true
+})
+
 return true

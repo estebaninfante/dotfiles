@@ -81,7 +81,12 @@ Item {
   property bool foregroundAnimationEnabled: true
   // AMOLED: la barra hereda el color de superficie del tema (Color.bar.background),
   // que el override de ~/.config/omarchy/shell.toml fija en #000000 opaco.
-  property color background: Color.bar.background
+  // Fondo negro translúcido: el alpha deja pasar el blur que el compositor
+  // hace detrás de la barra (regla "omarchy-bar" en layerrules.lua). Subí el
+  // número para más negro, bajalo para más vidrio. Para volver al color del
+  // tema: Color.bar.background.
+  readonly property real backgroundOpacity: 0.45
+  property color background: Qt.rgba(0, 0, 0, backgroundOpacity)
   property color urgent: Color.accent
 
   Behavior on barForeground { enabled: root.foregroundAnimationEnabled; ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
