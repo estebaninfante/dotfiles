@@ -3,10 +3,15 @@
 
 No depende de Omar ni de una app con GUI: graba con PipeWire (`parec`),
 transcribe contra el servidor local `dictado` (faster-whisper) y escribe el
-texto en la ventana enfocada con `wtype` (comportamiento por defecto).
-La entrega por portapapeles (`wl-copy` + Ctrl+V / Ctrl+Shift+V) evita que el
-keymap sintético de `wtype` pierda caracteres en textos largos; está disponible
-con `DICTADO_ENTREGA=pegar` mientras se valida en uso real.
+texto en la ventana enfocada por portapapeles (`wl-copy` + Ctrl+V / Ctrl+Shift+V),
+que es byte-exacto.
+Teclear con `wtype` (`DICTADO_ENTREGA=teclear`) está roto en Chromium/Electron:
+wtype 0.4 le asigna un keycode a cada carácter distinto en orden de aparición, y
+los keycodes 1/14/15/28/29 son Escape/Backspace/Tab/Enter/Ctrl físicos. Chromium
+se queda con el significado físico de esos keycodes, así que se come el carácter
+(todas las `a` si la `a` es el 1.º distinto), o actúa: `estás` → `ess` (á en el
+slot 14 = Backspace) o el punto final perdido (slot 29 = Ctrl). Ver
+https://github.com/atx/wtype/issues/71; wtype 0.5 lo arregla.
 Todo lo dictado queda en el historial.
 
 Uso:
@@ -29,7 +34,7 @@ Variables:
   DICTADO_PUERTO     puerto del servidor (default 8091)
   DICTADO_IDIOMA     idioma (default es)
   DICTADO_MAX_S      tope de grabación en segundos (default 180)
-  DICTADO_ENTREGA    "teclear" (default), "pegar" o "auto" (pegar y si falla teclear)
+  DICTADO_ENTREGA    "auto" (default: portapapeles y si falla teclear), "pegar" o "teclear"
 """
 
 from __future__ import annotations
