@@ -82,12 +82,12 @@ modes.close_overview = function()
     end
 end
 
--- Abrir la grilla MANTENIENDO Super queda apagado: mientras Super esta apretado, la
--- grilla toma el teclado y eso hace que lan-mouse suelte la captura, asi que el
--- puntero y el foco se van a la otra maquina (y quedan dos cursores). Con SUPER+Y
--- (un toque) no pasa. Si algun dia se quiere recuperar, poner esto en true y
--- arreglar antes el conflicto con la captura de lan-mouse.
-local EXPO_HOLD_ENABLED = false
+-- Abrir la grilla MANTENIENDO Super. El conflicto con lan-mouse (el puntero se iba a
+-- la otra maquina) venia del GRAB de teclado que Hyprland arma mientras hay una tecla
+-- apretada con binds activos: al entrar en la grilla se suelta abajo
+-- `binds:disable_keybind_grabbing` (igual que hace moonlight.lua) y la captura de
+-- lan-mouse deja de pelearse. Ver el hook de submap.
+local EXPO_HOLD_ENABLED = true
 
 local function expo_hold_arm()
     if not EXPO_HOLD_ENABLED then
@@ -138,6 +138,10 @@ if plugin ~= nil then
 
     hl.on("keybinds.submap", function(name)
         hl.config({ input = { follow_mouse = name == "hyprexpo" and 0 or 1 } })
+        -- Sin grabbing de teclado mientras la grilla esta abierta: con Super apretado
+        -- (hold) el grab hacia que lan-mouse soltara la captura y el puntero se fuera
+        -- a la otra maquina. Es el mismo remedio que usa moonlight.lua para el stream.
+        hl.config({ binds = { disable_keybind_grabbing = name == "hyprexpo" } })
 
         -- La grilla se maneja con el mouse. `lan-mouse-grid.sh off` suelta la
         -- captura SOLO si esta maquina es la que la tiene armada (somos el host del
