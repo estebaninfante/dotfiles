@@ -40,6 +40,10 @@ if plugin ~= nil then
             end
         end
         hl.bind("Print", capture_and_close("~/.local/bin/capture-menu image"))
+        -- El bind por nombre de `Print` sin modificadores no queda registrado en el
+        -- submap (Hyprland lo resuelve contra el global). Por codigo si: code:107 es
+        -- Print/SysRq. Es el que hace que "solo PrintScreen" funcione en la grilla.
+        hl.bind("code:107", capture_and_close("~/.local/bin/capture-menu image"))
         hl.bind("SHIFT + Print", capture_and_close("~/.local/bin/capture-menu record"))
         hl.bind("CTRL + Print", capture_and_close("~/.local/bin/shot -s"))
         hl.bind("CTRL + SHIFT + Print", capture_and_close("~/.local/bin/shot -s full"))
