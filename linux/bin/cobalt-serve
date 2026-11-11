@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# cobalt-serve — sirve cobalt completo en un solo proceso de primer plano.
+#
+#   · API de cobalt   → 127.0.0.1:9000 (la levanta solo si el puerto está libre)
+#   · web (build)     → 127.0.0.1:8792
+#
+# Lo usa webapp-launch (~/Proyectos/cobalt/.webapp.json): al detener el atajo
+# muere el grupo entero (setsid + kill -TERM -pid) y no queda nada suelto.
+set -euo pipefail
+
+ROOT="${COBALT_ROOT:-$HOME/Proyectos/cobalt}"
+NODE="${COBALT_NODE:-$HOME/.local/share/mise/installs/node/24.22.2/bin/node}"
+API_PORT="${COBALT_API_PORT:-9000}"
+WEB_PORT="${COBALT_WEB_PORT:-8792}"
+SERVE="$HOME/.local/bin/cobalt-serve-static"
+
+log() { printf 'cobalt-serve: %s\n' "$*" >&2; }
+
+[[ -x $NODE ]] || NODE="$(command -v node)" || { log "no encuentro node"; exit 1; }
+[[ -x $SERVE ]] || { log "falta $SERVE (corré link-dotfiles.sh)"; exit 1; }
+[[ -d $ROOT/web/build ]] || { log "falta $ROOT/web/build (compilá la web: pnpm build)"; exit 1; }
+
+# ffmpeg-static se descarga sin bit de ejecución en algunas instalaciones; sin
+# esto la conversión de audio/video muere con EACCES al spawnear ffmpeg.
+FFMPEG=$(find "$ROOT/node_modules/.pnpm" -maxdepth 4 -path '*/ffmpeg-static/ffmpeg' -type f 2>/dev/null | head -1)
+[[ -n ${FFMPEG:-} && ! -x $FFMPEG ]] && chmod 755 "$FFMPEG"
+
+api_pid=""
+cleanup() {
+  trap - EXIT TERM INT HUP
+  [[ -n $api_pid ]] && kill "$api_pid" 2>/dev/null
+  wait 2>/dev/null
+}
+trap cleanup EXIT TERM INT HUP
+
+if ss -ltn "sport = :$API_PORT" 2>/dev/null | grep -q LISTEN; then
+  log "la API ya escucha en :$API_PORT (la reuso)"
+else
+  ( cd "$ROOT/api" && exec "$NODE" src/cobalt ) &
+  api_pid=$!
+  ready=0
+  for _ in $(seq 1 80); do
+    kill -0 "$api_pid" 2>/dev/null || { log "la API murió al arrancar"; exit 1; }
+    if [[ $(curl -s -o /dev/null -m 1 -w '%{http_code}' "http://127.0.0.1:$API_PORT/" 2>/dev/null) == 200 ]]; then
+      ready=1
+      break
+    fi
+    sleep 0.25
+  done
+  ((ready)) || { log "la API no respondió en 20s"; exit 1; }
+  log "API lista en http://127.0.0.1:$API_PORT/"
+fi
+
+"$NODE" "$SERVE" --port "$WEB_PORT" --host 127.0.0.1 --root "$ROOT/web/build" &
+serve_pid=$!
+wait "$serve_pid"

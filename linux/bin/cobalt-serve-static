@@ -1,0 +1,76 @@
+#!/usr/bin/env node
+// Sirve el build estático de cobalt (web/build) con fallback `ruta` -> `ruta.html`.
+// Uso: cobalt-serve-static [--port 8792] [--host 127.0.0.1] [--root <dir>]
+import { createServer } from "node:http";
+import { createReadStream, statSync } from "node:fs";
+import { join, extname, normalize, resolve } from "node:path";
+
+const args = process.argv.slice(2);
+const opt = (name, def) => {
+	const i = args.indexOf(name);
+	if (i === -1) return def;
+	const [v] = args.splice(i, 2).slice(1);
+	return v;
+};
+const port = Number(opt("--port", 8792));
+const host = opt("--host", "127.0.0.1");
+const root = resolve(opt("--root", process.cwd()));
+
+const types = {
+	".html": "text/html; charset=utf-8",
+	".js": "text/javascript; charset=utf-8",
+	".mjs": "text/javascript; charset=utf-8",
+	".css": "text/css; charset=utf-8",
+	".json": "application/json; charset=utf-8",
+	".wasm": "application/wasm",
+	".png": "image/png",
+	".jpg": "image/jpeg",
+	".svg": "image/svg+xml",
+	".ico": "image/x-icon",
+	".webmanifest": "application/manifest+json",
+	".txt": "text/plain; charset=utf-8",
+	".xml": "application/xml",
+	".woff": "font/woff",
+	".woff2": "font/woff2",
+	".ttf": "font/ttf",
+	".mp4": "video/mp4",
+	".webm": "video/webm",
+	".map": "application/json; charset=utf-8",
+};
+
+const fileIfReadable = (p) => {
+	try {
+		return statSync(p).isFile() ? p : null;
+	} catch {
+		return null;
+	}
+};
+
+const server = createServer((req, res) => {
+	const url = new URL(req.url, `http://${req.headers.host ?? host}`);
+	const rel = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
+	const base = join(root, rel);
+	const candidates = base.endsWith("/")
+		? [join(base, "index.html"), join(base.replace(/\/$/, "") + ".html")]
+		: [base, base + ".html", join(base, "index.html")];
+
+	const notFound = fileIfReadable(join(root, "404.html"));
+	const file = candidates.map(fileIfReadable).find(Boolean) ?? notFound;
+	if (!file) {
+		res.writeHead(404, { "content-type": "text/plain" });
+		return res.end("not found\n");
+	}
+
+	const headers = {
+		"content-type": types[extname(file).toLowerCase()] ?? "application/octet-stream",
+		"cache-control": file.includes("/_app/") ? "public, max-age=31536000, immutable" : "no-cache",
+	};
+	if (!file.endsWith(".html")) headers["content-length"] = statSync(file).size;
+	res.writeHead(file === notFound ? 404 : 200, headers);
+	if (req.method === "HEAD") return res.end();
+	createReadStream(file).pipe(res);
+});
+
+server.listen(port, host, () => {
+	console.log(`cobalt web on http://${host}:${port}/ (root: ${root})`);
+});

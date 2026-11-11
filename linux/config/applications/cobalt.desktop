@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=cobalt
+Comment=Descargar video y audio de la web, sin anuncios
+Exec=webapp-launch "/home/eztvn/Proyectos/cobalt"
+Icon=cobalt
+Terminal=false
+Categories=AudioVideo;Network;
+Keywords=cobalt;descargar;video;audio;videos;youtube;musica;
+StartupNotify=false
+Actions=stop;
+
+[Desktop Action stop]
+Name=Detener el servidor
+Exec=webapp-launch "/home/eztvn/Proyectos/cobalt" --stop

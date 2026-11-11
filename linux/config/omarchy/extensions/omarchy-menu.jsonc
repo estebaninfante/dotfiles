@@ -52,6 +52,7 @@
   // ~/.local/share/applications/<nombre>.desktop (webapp-launch <dir> --install).
   "proyectos": {"icon":"󰲢","label":"Proyectos"},
   "proyectos.videolab": {"icon":"󰎁","label":"videolab","aliases":["videolab","videos","descomponer","planos"],"description":"Descomponer un video en planos, ver el ritmo y anotar","action":"~/.local/bin/webapp-launch ~/Proyectos/videolab"},
+  "proyectos.cobalt": {"icon":"󰕄","label":"cobalt","aliases":["cobalt","descargar","bajar video","youtube","musica"],"description":"Descargar video y audio de la web (YouTube, Vimeo, Twitter, Reddit y +15 más)","action":"~/.local/bin/webapp-launch ~/Proyectos/cobalt"},
 
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
