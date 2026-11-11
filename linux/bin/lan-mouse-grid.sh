@@ -22,20 +22,32 @@ capture_state() {
     "$CAPTURE" status 2>/dev/null | sed -n 's/^capture: //p' | head -1
 }
 
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/lan-mouse-grid"
+log() {
+    mkdir -p "$LOG_DIR" 2>/dev/null || return 0
+    printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG_DIR/log" 2>/dev/null || true
+}
+
 case "${1:-}" in
     off)
         mkdir -p "$STATE_DIR" 2>/dev/null || true
         # Solo si el puntero está saliendo de acá (nosotros capturamos). Si somos el
         # cliente (capture: released), no se toca: el host sigue mandando el puntero.
         if [ "$(capture_state)" = "active" ]; then
+            log "off: eramos el host (capture active) -> suelto"
             "$CAPTURE" off >/dev/null 2>&1 || true
             : > "$MARK" 2>/dev/null || true
+        else
+            log "off: somos el cliente (capture $(capture_state)) -> no toco nada"
         fi
         ;;
     on)
         if [ -f "$MARK" ]; then
+            log "on: habiamos soltado -> re-armo"
             rm -f "$MARK" 2>/dev/null || true
             "$CAPTURE" on >/dev/null 2>&1 || true
+        else
+            log "on: no habiamos soltado -> no toco nada"
         fi
         ;;
     status)
