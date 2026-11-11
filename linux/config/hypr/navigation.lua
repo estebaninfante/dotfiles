@@ -39,11 +39,13 @@ if plugin ~= nil then
                 hl.exec_cmd(cmd)
             end
         end
-        hl.bind("Print", capture_and_close("~/.local/bin/capture-menu image"))
-        -- El bind por nombre de `Print` sin modificadores no queda registrado en el
-        -- submap (Hyprland lo resuelve contra el global). Por codigo si: code:107 es
-        -- Print/SysRq. Es el que hace que "solo PrintScreen" funcione en la grilla.
-        hl.bind("code:107", capture_and_close("~/.local/bin/capture-menu image"))
+        -- PrintScreen adentro de la grilla = captura de PANTALLA COMPLETA, sin cerrar
+        -- el overview: lo que se quiere capturar es la grilla en si (no hay "ventana
+        -- activa" que capturar ahi, de ahi el error de `shot active`).
+        -- El bind por nombre solo no quedaba registrado en el submap; por keycode
+        -- (code:107 = Print/SysRq) si.
+        hl.bind("Print", function() hl.exec_cmd("~/.local/bin/shot full") end)
+        hl.bind("code:107", function() hl.exec_cmd("~/.local/bin/shot full") end)
         hl.bind("SHIFT + Print", capture_and_close("~/.local/bin/capture-menu record"))
         hl.bind("CTRL + Print", capture_and_close("~/.local/bin/shot -s"))
         hl.bind("CTRL + SHIFT + Print", capture_and_close("~/.local/bin/shot -s full"))
@@ -109,8 +111,24 @@ end
 -- lan-mouse deja de pelearse. Ver el hook de submap.
 local EXPO_HOLD_ENABLED = true
 
+-- ¿Esta maquina esta reenviando el puntero a la otra? (lan-mouse `capture: active`
+-- significa "el puntero esta en el peer"). Con el teclado en el otro equipo, el hold
+-- de Super se ve en LAS DOS maquinas: sin este chequeo, la que no tiene el puntero
+-- tambien abre su grilla y aparecen dos cursores (uno por pantalla) y no se puede
+-- elegir workspace. Solo abre la grilla la maquina donde esta el puntero.
+local function lan_mouse_forwarding()
+    local f = io.popen("lan-mouse-grid.sh state 2>/dev/null")
+    if not f then return false end
+    local out = f:read("*a") or ""
+    f:close()
+    return out:find("active", 1, true) ~= nil
+end
+
 local function expo_hold_arm()
     if not EXPO_HOLD_ENABLED then
+        return
+    end
+    if lan_mouse_forwarding() then
         return
     end
     -- Streameando, el hold de Súper es del sistema remoto.

@@ -30,6 +30,13 @@ log() {
 
 # `observe` = solo registrar el estado, sin tocar lan-mouse. Se usa mientras se
 # diagnostica: deja la linea de tiempo en el log sin interferir.
+# `state` = imprime el estado crudo de la captura (lo lee navigation.lua para no abrir
+# la grilla en la maquina que esta reenviando el puntero).
+if [ "${1:-}" = "state" ]; then
+    capture_state
+    exit 0
+fi
+
 if [ "${1:-}" = "observe" ]; then
     log "observe ${2:-}: capture=$(capture_state) mark=$([ -f "$MARK" ] && echo si || echo no)"
     exit 0
