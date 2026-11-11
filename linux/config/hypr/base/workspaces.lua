@@ -27,10 +27,17 @@ local function is_internal(name)
     return type(name) == "string" and name:match("^eDP") ~= nil
 end
 
-local function monitor_count()
+local function is_headless(name)
+    return type(name) == "string" and name:match("^HEADLESS") ~= nil
+end
+
+-- Sólo cuentan los monitores de verdad: Sunshine crea un HEADLESS-N para
+-- streamear y, si contara, el desktop (una sola pantalla) pasaría a tener "dos"
+-- y se le moverían todos los espacios a 28..36 en mitad del stream.
+local function real_monitor_count()
     local n = 0
-    for _ in ipairs(hl.get_monitors()) do
-        n = n + 1
+    for _, monitor in ipairs(hl.get_monitors()) do
+        if not is_headless(monitor.name) then n = n + 1 end
     end
     return n
 end
@@ -40,7 +47,7 @@ end
 local function base_for(monitor)
     local name = monitor and monitor.name or nil
     if is_internal(name) then return PRIMARY_BASE end
-    if monitor_count() <= 1 then return PRIMARY_BASE end
+    if real_monitor_count() <= 1 then return PRIMARY_BASE end
     return EXTERNAL_BASE
 end
 
@@ -85,8 +92,10 @@ local function main_base()
     local count = 0
     local external
     for _, monitor in ipairs(hl.get_monitors()) do
-        count = count + 1
-        if not is_internal(monitor.name) then external = monitor end
+        if not is_headless(monitor.name) then
+            count = count + 1
+            if not is_internal(monitor.name) then external = monitor end
+        end
     end
     if count > 1 and external then return base_for(external) end
     return PRIMARY_BASE

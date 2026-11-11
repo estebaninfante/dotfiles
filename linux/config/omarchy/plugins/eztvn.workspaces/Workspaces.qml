@@ -24,10 +24,20 @@ BarWidget {
     return win && win.screen && win.screen.name ? win.screen.name : ""
   }
   // Sin nombre de pantalla (arranque raro) se asume la interna: es el set de
-  // siempre y el que menos sorprende si algo falla.
+  // siempre y el que menos sorprende si algo falla. Los HEADLESS (stream de
+  // Sunshine) no cuentan como pantalla: si contaran, el desktop con una sola
+  // pantalla se quedaría con el set 28..36 en mitad de un stream.
+  readonly property int realMonitors: {
+    var n = 0
+    var monitors = Hyprland.monitors.values
+    for (var i = 0; i < monitors.length; i++) {
+      if (String(monitors[i].name).indexOf("HEADLESS") !== 0) n++
+    }
+    return n
+  }
   readonly property int workspaceBase: (screenName === ""
     || screenName.indexOf("eDP") === 0
-    || Hyprland.monitors.values.length <= 1) ? 1 : 28
+    || realMonitors <= 1) ? 1 : 28
   function workspaceId(index) {
     return root.workspaceBase + index - 1
   }

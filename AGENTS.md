@@ -368,6 +368,28 @@ end
 - `hyprpaper.conf` -> monitor `DP-2` (desktop)
 - `hyprpaper-laptop.conf` -> monitor `eDP-1` (laptop)
 
+**El monitor vertical cuelga del desktop o de la laptop.** Es el mismo panel
+(ASUSTek VG27AQL3A): se pide 2560x1440 a escala 1.25, girado (`transform 3`) y en
+`0x0`, así se ve igual en las dos máquinas. En la laptop, `monitors.lua` detecta
+la externa por lo que reporta Hyprland (no por nombre de puerto: da igual HDMI o
+USB-C/DP), la pone a la izquierda y deja el panel interno a su derecha y centrado
+(`1152x574` cuando la vertical está girada). El modo se elige del más alto que
+anuncie el monitor (144 Hz con corriente, 60 con batería) y se re-aplica al
+segundo de conectarse, por si todavía no anunciaba sus modos. `HEADLESS-*` (el
+monitor virtual de Sunshine) no cuenta como externa. El layout acompaña al giro:
+vertical = `scrolling` (franjas de 1/3), horizontal = `dwindle`.
+
+**9 espacios por pantalla** (`linux/config/hypr/base/workspaces.lua`): la interna
+es dueña de 1..9 SIEMPRE; cuando hay una segunda pantalla real, la externa usa
+28..36 (los mismos 9, sin pisarse; 10 es leia/cartridges y 11..20 son de
+`espacios`). Los atajos `SUPER+M/W/V/H/T/N/G/C/R` y `SUPER+SHIFT+...` apuntan a la
+pantalla con foco, igual que el viaje animado de `navigation.lua`, la barra
+(`plugins/eztvn.workspaces`, que calcula su base por pantalla) y la grilla de
+`hyprexpo` (`workspace_method` por monitor + `max_workspace = 36`). Spotify se
+re-registra al último espacio de la pantalla de trabajo (9 o 36). Números que no
+se ven: la barra y el overview no rotulan, así que las dos pantallas se sienten
+igual que el desktop.
+
 **hyprexpo (overview `SUPER+Y`)**: la grilla 3D/fisheye es un parche local del
 plugin (`linux/patches/hyprexpo-local.patch`) que **corre igual en laptop y
 desktop**. `setup-omarchy.sh` lo compila/instala con `linux/bin/hyprexpo-rebuild.sh`
