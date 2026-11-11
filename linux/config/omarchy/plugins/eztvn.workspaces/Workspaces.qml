@@ -14,6 +14,20 @@ BarWidget {
   readonly property int cellSize: Math.max(3, Math.floor((root.barSize - cellMargin * 2 - cellSpacing * 2) / 3))
   readonly property real trailingGap: root.vertical ? 0 : Style.spaceReal(1.5)
 
+  // 9 espacios por pantalla. Esta barra muestra los 9 de SU pantalla: la regla
+  // es la misma que base/workspaces.lua (interna = 1..9, externa = 28..36
+  // cuando hay más de una pantalla); se repite acá porque QML no puede hacer
+  // require de Lua. Si cambia allá, cambia acá.
+  readonly property string screenName: {
+    var win = root.QsWindow ? root.QsWindow.window : null
+    return win && win.screen && win.screen.name ? win.screen.name : ""
+  }
+  readonly property int workspaceBase: (screenName.indexOf("eDP") === 0
+    || Hyprland.monitors.values.length <= 1) ? 1 : 28
+  function workspaceId(index) {
+    return root.workspaceBase + index - 1
+  }
+
   // El espacio activo se marca en verde (el tema es monocromo, así que este
   // acento se define aquí a propósito).
   readonly property color activeColor: "#9ece6a"
@@ -30,12 +44,14 @@ BarWidget {
     return null
   }
 
-  function focusWorkspace(id) {
+  function focusWorkspace(index) {
     if (!root.bar) return
+    var id = root.workspaceId(index)
     root.bar.run("hyprctl dispatch " + Util.shellQuote("hl.dsp.focus({ workspace = \"" + id + "\" })"))
   }
 
-  function stateColor(id) {
+  function stateColor(index) {
+    var id = root.workspaceId(index)
     var workspace = root.workspaceById(id)
     var occupied = workspace !== null && workspace.toplevels.values.length > 0
     var focused = Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === id

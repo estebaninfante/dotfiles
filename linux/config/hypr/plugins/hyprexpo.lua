@@ -1,4 +1,5 @@
 local theme = require("base.theme")
+local spaces = require("base.workspaces")
 
 local HOME = os.getenv("HOME")
 
@@ -112,7 +113,7 @@ if hl.plugin.hyprexpo ~= nil then
         rows = 3,
         dynamic_grid = 0,
         skip_empty = 0,
-        max_workspace = 9,
+        max_workspace = 36,
         gaps_in = style.gaps_in,
         gaps_out = style.gaps_out,
         bg_col = style.bg_col,
@@ -123,7 +124,10 @@ if hl.plugin.hyprexpo ~= nil then
         border_color_focus = style.border_focus,
         border_color_hover = style.border_hover,
         tile_rounding = style.tile_rounding,
-        workspace_method = "first 1",
+        -- La grilla de cada pantalla se ancla en SU primer espacio (1 en la
+        -- interna, 28 en la externa cuando hay dos). max_workspace es el tope
+        -- global: 36 = 28 + 8, si no la grilla de la externa se vacía.
+        workspace_method = spaces.workspace_method(),
         label_enable = 0,
         show_workspace_numbers = 0,
         keynav_enable = 1,
@@ -178,6 +182,14 @@ if hl.plugin.hyprexpo ~= nil then
         config.scrolling_overview = 0
     end
     hl.config({ plugin = { hyprexpo = config } })
+
+    -- Enchufar/desenchufar la vertical cambia qué pantalla es dueña de qué set:
+    -- la grilla se re-ancla sin reload (el plugin lee el valor al abrir).
+    local function reanchor()
+        hl.config({ plugin = { hyprexpo = { workspace_method = spaces.workspace_method() } } })
+    end
+    hl.on("monitor.added", reanchor)
+    hl.on("monitor.removed", reanchor)
 end
 
 -- Curva de apertura/cierre de la grilla (traída del desktop): ease-out más

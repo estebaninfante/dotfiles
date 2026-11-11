@@ -1,6 +1,9 @@
 local variables = require("base.variables")
 local modes = require("base.modes")
 local hyprexpo = require("plugins.hyprexpo")
+-- 9 espacios por pantalla: acá todo se razona con el índice LOCAL 1..9 y
+-- base.workspaces lo traduce al id real de la pantalla con foco. Ver ese archivo.
+local spaces = require("base.workspaces")
 
 local main_mod = variables.main_mod
 local ws_keys = variables.workspace_keys
@@ -247,7 +250,7 @@ fly_commit_now = function()
     if not expo_fly.open then return end
     if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
     if expo_fly.want then
-        plugin.kb_selectn(expo_fly.want)
+        plugin.kb_selecti(expo_fly.want)
     else
         plugin.kb_confirm()
     end
@@ -295,10 +298,10 @@ fly_poll_step = function()
 end
 
 fly_open_and_go = function(n)
-    local cur = hl.get_active_workspace()
+    local cur = spaces.local_of(hl.get_active_workspace())
     plugin.expo("on")
     expo_fly.open = true
-    expo_fly.sel  = cur and ws_grid_index(cur.id) or nil
+    expo_fly.sel  = cur and ws_grid_index(cur) or nil
     expo_fly.want = n
     fly_goto(n)
     fly_schedule_commit()
@@ -347,13 +350,13 @@ local cur_ws_id  = nil
 local last_ws_id = nil
 local ws_travel_guard = false
 local function note_ws()
-    local w = hl.get_active_workspace()
-    if not w then return end
-    if w.id ~= cur_ws_id then
+    -- En índice local: cambiar de pantalla sin cambiar de espacio no es viaje.
+    local id = spaces.local_of(hl.get_active_workspace())
+    if id ~= cur_ws_id then
         if cur_ws_id ~= nil and not ws_travel_guard then
             last_ws_id = cur_ws_id
         end
-        cur_ws_id = w.id
+        cur_ws_id = id
     end
 end
 note_ws()
@@ -368,7 +371,9 @@ end
 expo_select = function(i)
     if not EXPO_3D and plugin ~= nil then
         reset_ws_style()
-        plugin.kb_selectn(i)
+        -- Por ÍNDICE de la grilla, no por número de workspace: la grilla de cada
+        -- pantalla está anclada en su base (1 o 28). Ver plugins/hyprexpo.lua.
+        plugin.kb_selecti(i)
         return
     end
     expo_focus(i)
@@ -377,18 +382,18 @@ end
 expo_focus = function(i)
     reset_ws_style()
     local has_expo = plugin ~= nil
-    local cur      = hl.get_active_workspace()
+    local here     = spaces.local_of(hl.get_active_workspace())
 
     if not EXPO_3D then
-        local same = cur and cur.id == i
-        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
+        local same = here ~= nil and here == i
+        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(spaces.to_global(i)) }))
         return
     end
 
     if not has_expo or i > 9 then
         fly_abort()
-        local same = cur and cur.id == i
-        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
+        local same = here ~= nil and here == i
+        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(spaces.to_global(i)) }))
         return
     end
 
@@ -400,7 +405,7 @@ expo_focus = function(i)
     end
 
     if expo_fly.busy > 0 then
-        if cur and cur.id == i then
+        if here ~= nil and here == i then
             return
         end
         -- El overview anterior todavía se está cerrando (closing == true) y
@@ -414,7 +419,7 @@ expo_focus = function(i)
         return
     end
 
-    if not expo_fly.pending and cur and cur.id == i then
+    if not expo_fly.pending and here ~= nil and here == i then
         expo_fly_back()
         return
     end
@@ -489,10 +494,10 @@ local function travel_step()
         return
     end
     local isLast = (#travel.steps == 0)
-    local cur    = hl.get_active_workspace()
-    local up     = (cur == nil) or (nxt.id > cur.id)
+    local here   = spaces.local_of(hl.get_active_workspace())
+    local up     = (here == nil) or (nxt.id > here)
     local dur    = set_ws_style(nxt.vertical, up, travel.linear and not isLast)
-    hl.dispatch(hl.dsp.focus({ workspace = tostring(nxt.id) }))
+    hl.dispatch(hl.dsp.focus({ workspace = tostring(spaces.to_global(nxt.id)) }))
     ws_style_revert_after(dur + 20)
     if isLast then
         travel_stop()
@@ -505,19 +510,19 @@ local function travel_step()
 end
 
 local function ws_travel(i)
-    local cur = hl.get_active_workspace()
+    local here = spaces.local_of(hl.get_active_workspace())
 
-    if cur and i >= 1 and i <= 9 and cur.id == i and last_ws_id and last_ws_id ~= i then
+    if here and i >= 1 and i <= 9 and here == i and last_ws_id and last_ws_id ~= i then
         i = last_ws_id
     end
 
-    if not cur or i > 9 or i < 1 then
+    if not here or i > 9 or i < 1 then
         travel_stop()
-        local same = cur and cur.id == i
-        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(i) }))
+        local same = here ~= nil and here == i
+        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(spaces.to_global(i)) }))
         return
     end
-    if cur.id == i then
+    if here == i then
         travel_stop()
         return
     end
@@ -525,7 +530,7 @@ local function ws_travel(i)
     local was_traveling = (travel.timer ~= nil) or (#travel.steps > 0)
     local keep_origin   = travel.origin
     travel_stop()
-    local ci     = ws_grid_index(cur.id)
+    local ci     = ws_grid_index(here)
     local ti     = ws_grid_index(i)
     local c, r   = ci % 3, math.floor(ci / 3)
     local tc, tr = ti % 3, math.floor(ti / 3)
@@ -549,7 +554,7 @@ local function ws_travel(i)
 
     travel.steps  = steps
     travel.linear = #steps > 1
-    travel.origin = (was_traveling and keep_origin) or cur.id
+    travel.origin = (was_traveling and keep_origin) or here
     ws_travel_guard = true
     travel_step()
 end
@@ -558,7 +563,12 @@ for i = 1, 10 do
     if i < 10 then
         hl.bind(main_mod .. " + " .. ws_keys[i], function() expo_focus(i) end)
     end
-    hl.bind(main_mod .. " + SHIFT + " .. ws_keys[i], hl.dsp.window.move({ workspace = tostring(i) }))
+    hl.bind(main_mod .. " + SHIFT + " .. ws_keys[i], function()
+        -- El 10 (leia/cartridges) es un espacio extra fuera de los dos sets; se
+        -- mueve al 10 de siempre. Los 9 se mueven al espacio de la pantalla con foco.
+        local target = (i < 10) and spaces.to_global(i) or 10
+        hl.dispatch(hl.dsp.window.move({ workspace = tostring(target) }))
+    end)
 end
 
 local grid_dir = {
@@ -568,9 +578,9 @@ local grid_dir = {
     right = function(c) if (c - 1) % 3 < 2 then return c + 1 end end,
 }
 local function grid_travel(dir)
-    local cur = hl.get_active_workspace()
-    if not cur or cur.id < 1 or cur.id > 9 then return end
-    local target = grid_dir[dir] and grid_dir[dir](cur.id)
+    local here = spaces.local_of(hl.get_active_workspace())
+    if not here then return end
+    local target = grid_dir[dir] and grid_dir[dir](here)
     if target then
         fly_abort()
         travel_stop()
@@ -620,8 +630,8 @@ local function hot_open()
     expo_fly.deliberate = true
     plugin.expo("on")
     expo_fly.open = true
-    local cur = hl.get_active_workspace()
-    expo_fly.sel = cur and ws_grid_index(cur.id) or nil
+    local cur = spaces.local_of(hl.get_active_workspace())
+    expo_fly.sel = cur and ws_grid_index(cur) or nil
     expo_fly.want = nil
 end
 
