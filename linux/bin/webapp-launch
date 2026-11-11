@@ -12,6 +12,7 @@
 #   webapp-launch [DIR] --url          imprime la URL (no abre nada)
 #   webapp-launch [DIR] --install      crea/actualiza el atajo en el lanzador
 #   webapp-launch [DIR] --uninstall    borra el atajo
+#   webapp-launch [DIR] --no-open      levanta el servidor y no abre ventana
 #   webapp-launch --list               proyectos web atajados en el lanzador
 #
 # Config: <DIR>/.webapp.json  (todas las claves son opcionales salvo `cmd` si
@@ -62,6 +63,7 @@ while (($#)); do
     --install) ACTION=install ;;
     --uninstall) ACTION=uninstall ;;
     --list) ACTION=list ;;
+    --no-open) ACTION=noopen ;;
     -h | --help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "opción desconocida: $1 (probá --help)" ;;
     *) DIR="$1" ;;
@@ -228,6 +230,7 @@ case "$ACTION" in
 
   install)
     mkdir -p "$APPS"
+    if [[ $TITLE == "$NAME" ]]; then KW="$NAME;"; else KW="$NAME;$TITLE;"; fi
     cat >"$APPS/$NAME.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
@@ -237,7 +240,7 @@ Exec=webapp-launch "$DIR"
 Icon=$ICON
 Terminal=false
 Categories=${CATEGORIES}
-Keywords=$NAME;$TITLE;
+Keywords=$KW
 StartupNotify=false
 Actions=stop;
 
@@ -257,7 +260,7 @@ DESKTOP
     say "atajo borrado: $APPS/$NAME.desktop"
     exit 0 ;;
 
-  open) ;;
+  open | noopen) ;;
 esac
 
 # ── abrir ─────────────────────────────────────────────────────────────────
@@ -276,6 +279,11 @@ else
     fi
     say "$NAME listo en $URL"
   fi
+fi
+
+if [[ $ACTION == noopen ]]; then
+  say "listo (sin abrir ventana): $URL"
+  exit 0
 fi
 
 open_window

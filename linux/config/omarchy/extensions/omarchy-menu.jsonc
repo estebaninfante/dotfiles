@@ -47,6 +47,12 @@
   // Toques de la tablet: dibuja en la compu los dedos/lápiz que apoyás en Weylus
   "trigger.toggle.wireless-control-toques": {"icon":"󰟸","label":"Toques de la tablet","aliases":["toques","wireless toques","dedos tablet"],"description":"Muestra en la compu dónde tocás la tablet (Wireless Control)","checked":"test -f ~/.local/state/wireless-control-toques/on","action":"~/.local/bin/wireless-control-toques toggle"},
 
+  // Proyectos web propios: cada uno se abre como app (ventana sin navegador) y
+  // levanta su servidor si está apagado. El atajo vive en
+  // ~/.local/share/applications/<nombre>.desktop (webapp-launch <dir> --install).
+  "proyectos": {"icon":"󰲢","label":"Proyectos"},
+  "proyectos.videolab": {"icon":"󰎁","label":"videolab","aliases":["videolab","videos","descomponer","planos"],"description":"Descomponer un video en planos, ver el ritmo y anotar","action":"~/.local/bin/webapp-launch ~/Proyectos/videolab"},
+
   // Notas y aprendizaje (vault de Logseq en ~/alicia)
   "personal": {"icon":"󰎞","label":"Personal"},
   "personal.investigaciones": {"icon":"󰎞","label":"Investigaciones","description":"Notas de investigacion del vault (abre en Logseq)","action":"omarchy-launch-or-focus-tui \"~/.local/bin/investigaciones\""},
