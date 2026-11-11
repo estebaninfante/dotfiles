@@ -1199,7 +1199,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..1e3d31c 100644
+index cb18d2f..9b8e4a2 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1217,23 +1217,7 @@ index cb18d2f..1e3d31c 100644
  #include <hyprland/src/helpers/time/Time.hpp>
  #include <hyprutils/utils/ScopeGuard.hpp>
  #include <hyprland/src/render/OpenGL.hpp>
-@@ -78,6 +83,7 @@ class CMonitorStateGuard {
-   public:
-     CMonitorStateGuard(const PHLMONITOR& monitor, const PHLWORKSPACE& startedOn) : m_monitor(monitor), m_startedOn(startedOn), m_transform(monitor->m_transform),
-                                                                                   m_transformedSize(monitor->m_transformedSize), m_pixelSize(monitor->m_pixelSize),
-+                                                                                  m_scale(monitor->m_scale),
-                                                                                   m_activeWorkspace(monitor->m_activeWorkspace),
-                                                                                   m_activeSpecialWorkspace(monitor->m_activeSpecialWorkspace),
-                                                                                   m_startedOnVisible(startedOn ? startedOn->m_visible : false) {}
-@@ -92,6 +98,7 @@ class CMonitorStateGuard {
-         m_monitor->m_transform              = m_transform;
-         m_monitor->m_transformedSize        = m_transformedSize;
-         m_monitor->m_pixelSize              = m_pixelSize;
-+        m_monitor->m_scale                  = m_scale;
-         m_monitor->m_activeWorkspace        = m_activeWorkspace ? m_activeWorkspace : m_startedOn;
-         m_monitor->m_activeSpecialWorkspace = m_activeSpecialWorkspace;
-         if (m_startedOn)
-@@ -103,6 +110,12 @@ class CMonitorStateGuard {
+@@ -103,6 +108,12 @@ class CMonitorStateGuard {
          return m_transform;
      }
  
@@ -1246,14 +1230,7 @@ index cb18d2f..1e3d31c 100644
      PHLWORKSPACE activeWorkspace() const {
          return m_activeWorkspace;
      }
-@@ -117,12 +130,110 @@ class CMonitorStateGuard {
-     wl_output_transform m_transform;
-     Vector2D            m_transformedSize;
-     Vector2D            m_pixelSize;
-+    float               m_scale = 1.F;
-     PHLWORKSPACE        m_activeWorkspace;
-     PHLWORKSPACE        m_activeSpecialWorkspace;
-     bool                m_startedOnVisible = false;
+@@ -123,6 +134,103 @@ class CMonitorStateGuard {
      bool                m_restored         = false;
  };
  
@@ -1357,38 +1334,12 @@ index cb18d2f..1e3d31c 100644
  bool ensureFramebuffer(SP<Render::IFramebuffer>& framebuffer, const CBox& box, uint32_t drmFormat) {
      if (!framebuffer)
          framebuffer = g_pHyprRenderer->createFB("hyprexpo workspace preview");
-@@ -159,6 +270,20 @@ void notifyOverviewCaptureConfigReload() {
-     g_budgetGeneration.fetch_add(1, std::memory_order_relaxed);
- }
- 
-+// Rotacion inversa a la del monitor: el buffer capturado sale girado igual que la
-+// pantalla; la textura se dibuja en el tile con esta rotacion para enderezarlo.
-+static wl_output_transform inverseTransformOf(wl_output_transform t) {
-+    switch (t) {
-+        case WL_OUTPUT_TRANSFORM_90: return WL_OUTPUT_TRANSFORM_270;
-+        case WL_OUTPUT_TRANSFORM_270: return WL_OUTPUT_TRANSFORM_90;
-+        case WL_OUTPUT_TRANSFORM_180: return WL_OUTPUT_TRANSFORM_180;
-+        case WL_OUTPUT_TRANSFORM_FLIPPED: return WL_OUTPUT_TRANSFORM_FLIPPED;
-+        case WL_OUTPUT_TRANSFORM_FLIPPED_90: return WL_OUTPUT_TRANSFORM_FLIPPED_270;
-+        case WL_OUTPUT_TRANSFORM_FLIPPED_270: return WL_OUTPUT_TRANSFORM_FLIPPED_90;
-+        default: return WL_OUTPUT_TRANSFORM_NORMAL;
-+    }
-+}
-+
- bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render::IFramebuffer>& framebuffer) {
-     if (!request.monitor || !request.monitor->m_output || !request.startedOn || request.box.w <= 0 || request.box.h <= 0)
-         return false;
-@@ -169,13 +294,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -169,8 +277,15 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
          CRendererStateGuard rendererState{g_pHyprRenderer.get()};
          CBox captureBox = request.box;
  
 -        if (isTransformRotated(monitorState.transform())) {
 -            captureBox = {{0, 0}, {captureBox.h, captureBox.w}};
--            request.monitor->m_transform       = WL_OUTPUT_TRANSFORM_NORMAL;
--            request.monitor->m_pixelSize       = captureBox.size();
--            request.monitor->m_transformedSize = captureBox.size();
--        }
--
 +        // En un monitor girado el overlay (y por lo tanto los tiles) vive en el
 +        // espacio YA rotado del monitor, asi que la captura tiene que salir de
 +        // ese mismo espacio: se neutraliza el transform y se toma como tamano el
@@ -1396,16 +1347,12 @@ index cb18d2f..1e3d31c 100644
 +        // usaba el tamano del buffer y se marcaba la textura como rotada 180, lo
 +        // que en 90/270 dejaba los previews girados y estirados (se veia "otro"
 +        // wallpaper adentro de los tiles).
-+        // No se toca NADA del monitor: se captura el buffer tal cual lo dibuja
-+        // Hyprland para este monitor (mismo transform, misma escala, mismos
-+        // tamanos). Cualquier ajuste de transform/escala/tamano hacia que los
-+        // marcos de ventana se dibujaran a una escala y las superficies a otra
-+        // (contenido recortado o al 80%). La textura se marca despues con la
-+        // rotacion INVERSA para que el tile la muestre derecha.
-         if (!ensureFramebuffer(framebuffer, captureBox, framebufferFormatWithAlpha(request.monitor->m_output->state->state().drmFormat)))
-             return false;
- 
-@@ -188,12 +319,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
++        if (monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL) {
++            captureBox = {{0, 0}, monitorState.transformedSize()};
+             request.monitor->m_transform       = WL_OUTPUT_TRANSFORM_NORMAL;
+             request.monitor->m_pixelSize       = captureBox.size();
+             request.monitor->m_transformedSize = captureBox.size();
+@@ -188,12 +303,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
          rendererState.begun();
          g_pHyprRenderer->m_bBlockSurfaceFeedback = g_pHyprRenderer->m_bBlockSurfaceFeedback || request.blockSurfaceFeedback;
@@ -1421,7 +1368,7 @@ index cb18d2f..1e3d31c 100644
              bool activeChanged   = false;
              bool previewApplied  = false;
              bool windowApplied   = false;
-@@ -202,6 +335,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -202,6 +319,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  if (temporaryRestored)
                      return;
                  try {
@@ -1432,7 +1379,7 @@ index cb18d2f..1e3d31c 100644
                      if (windowApplied)
                          restoreWorkspaceWindowGoalState(windowState);
                      if (previewApplied)
-@@ -220,6 +357,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -220,6 +341,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  windowApplied = true;
              }
  
@@ -1452,7 +1399,7 @@ index cb18d2f..1e3d31c 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace = monitorState.activeSpecialWorkspace();
  
-@@ -233,6 +383,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -233,6 +367,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              restoreActiveWorkspaceAfterPreview(request.monitor, previousWS);
              temporaryRestored = true;
  
@@ -1467,7 +1414,7 @@ index cb18d2f..1e3d31c 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace.reset();
          } else {
-@@ -240,15 +398,35 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -240,6 +382,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
          }
  
@@ -1476,36 +1423,20 @@ index cb18d2f..1e3d31c 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-         if (!rendererState.restored())
+@@ -247,7 +391,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
  
--        if (const auto texture = framebuffer->getTexture(); texture)
+         if (const auto texture = framebuffer->getTexture(); texture)
 -            texture->m_transform = isTransformRotated(monitorState.transform()) ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
--        else
-+        if (const auto texture = framebuffer->getTexture(); texture) {
-+            // El buffer viene girado igual que la pantalla, asi que la textura se
-+            // marca con la MISMA rotacion del monitor y el tile la endereza. Con
-+            // la inversa el contenido salia girado 90 (el layout de la ventana se
-+            // veia acostado dentro del tile).
-+            const auto T = monitorState.transform();
-+            static auto* const* PDBG = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:capture_transform")->getDataStaticPtr();
-+            if (PDBG && *PDBG && **PDBG >= 0) {
-+                const int V = std::clamp((int)**PDBG, 0, 3);
-+                texture->m_transform = V == 1 ? HYPRUTILS_TRANSFORM_90 : V == 2 ? HYPRUTILS_TRANSFORM_180 : V == 3 ? HYPRUTILS_TRANSFORM_270 : HYPRUTILS_TRANSFORM_NORMAL;
-+                monitorState.restore();
-+                return true;
-+            }
-+            texture->m_transform = T == WL_OUTPUT_TRANSFORM_90          ? HYPRUTILS_TRANSFORM_90 :
-+                                   T == WL_OUTPUT_TRANSFORM_180         ? HYPRUTILS_TRANSFORM_180 :
-+                                   T == WL_OUTPUT_TRANSFORM_270         ? HYPRUTILS_TRANSFORM_270 :
-+                                   T == WL_OUTPUT_TRANSFORM_FLIPPED     ? HYPRUTILS_TRANSFORM_FLIPPED :
-+                                   T == WL_OUTPUT_TRANSFORM_FLIPPED_90  ? HYPRUTILS_TRANSFORM_FLIPPED_90 :
-+                                   T == WL_OUTPUT_TRANSFORM_FLIPPED_180 ? HYPRUTILS_TRANSFORM_FLIPPED_180 :
-+                                   T == WL_OUTPUT_TRANSFORM_FLIPPED_270 ? HYPRUTILS_TRANSFORM_FLIPPED_270 : HYPRUTILS_TRANSFORM_NORMAL;
-+        } else
++            // El framebuffer capturado sale girado 180 respecto del espacio del
++            // overlay cuando el monitor esta rotado (Hyprland neutraliza el
++            // transform y dibuja el workspace en el buffer sin rotar). Se
++            // compensa con TRANSFORM_180, que es lo que hacia el codigo original:
++            // sin esto los previews se ven invertidos dentro del tile.
++            texture->m_transform = monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
+         else
              return false;
  
-         monitorState.restore();
 diff --git c/OverviewCapture.hpp i/OverviewCapture.hpp
 index fa06d24..c448235 100644
 --- c/OverviewCapture.hpp
@@ -2242,15 +2173,13 @@ index e73c8f6..3943e23 100644
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
 diff --git c/PluginConfig.cpp i/PluginConfig.cpp
-index af2b27a..8526ded 100644
+index af2b27a..26a7fa8 100644
 --- c/PluginConfig.cpp
 +++ i/PluginConfig.cpp
-@@ -42,6 +42,16 @@ void registerHyprexpoConfigValues() {
+@@ -42,6 +42,14 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:enable_drag_move", "legacy drag-move toggle", HyprexpoConfig::LEGACY_ENABLE_DRAG_MOVE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:animate_entry", "legacy entry animation toggle", HyprexpoConfig::LEGACY_ANIMATE_ENTRY_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:wallpaper_bg", "draw the monitor wallpaper behind overview tiles", HyprexpoConfig::WALLPAPER_BG_DEFAULT));
-+    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:capture_transform", "debug: forced texture rotation for workspace previews (-1 = follow monitor)", -1,
-+                                                         Config::Values::SIntValueOptions{.min = -1, .max = 3}));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:tile_transparent", "capture tiles without wallpaper/bar so the shared background_image shows through", HyprexpoConfig::TILE_TRANSPARENT_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:background_transparent", "skip the overview backdrop so whatever the compositor already drew (wallpaper, animated video) shows through", HyprexpoConfig::BACKGROUND_TRANSPARENT_DEFAULT,
 +                                                         Config::Values::SIntValueOptions{.min = 0, .max = 1}));
@@ -2262,7 +2191,7 @@ index af2b27a..8526ded 100644
  
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
-@@ -52,6 +62,40 @@ void registerHyprexpoConfigValues() {
+@@ -52,6 +60,40 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
  
@@ -2303,7 +2232,7 @@ index af2b27a..8526ded 100644
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
                                                           Config::Values::SIntValueOptions{.min = 0, .max = 9}));
-@@ -80,6 +124,10 @@ void registerHyprexpoConfigValues() {
+@@ -80,6 +122,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_current", "current border color", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_focus", "focus border color", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_hover", "hover border color", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT));

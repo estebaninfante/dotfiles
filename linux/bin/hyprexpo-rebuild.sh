@@ -87,13 +87,11 @@ if grep -q "outputProjection(MON->m_transformedSize" "$SRC/OverviewRender.cpp"; 
     exit 1
 fi
 
-# Captura de previews en monitor rotado: NO se toca el estado del monitor (mismo
-# transform, escala y tamanos que en vivo). Ajustarlos hacia que los marcos de
-# ventana y las superficies se dibujaran a escalas distintas (contenido recortado o
-# al 80%). La textura se marca con la rotacion INVERSA para que el tile la muestre
-# derecha: si eso desaparece, los previews salen girados 90/180.
-if ! grep -q "inverseTransformOf" "$SRC/OverviewCapture.cpp" || grep -q "monitorState.transformedSize()" "$SRC/OverviewCapture.cpp"; then
-    echo "error: la captura de previews volvio a manipular el estado del monitor o perdio la rotacion inversa" >&2
+# Captura de previews en monitor rotado: tamano transformado (1440x2560, no el
+# buffer) + flip 180 de la textura. Es la combinacion estable verificada: sin el
+# tamano el preview sale recortado; sin el flip sale invertido.
+if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/OverviewCapture.cpp" || ! grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
+    echo "error: la captura de previews perdio el tamano transformado o el flip de 180" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
