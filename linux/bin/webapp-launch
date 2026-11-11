@@ -231,7 +231,14 @@ case "$ACTION" in
   install)
     mkdir -p "$APPS"
     if [[ $TITLE == "$NAME" ]]; then KW="$NAME;"; else KW="$NAME;$TITLE;"; fi
-    cat >"$APPS/$NAME.desktop" <<DESKTOP
+    # Si el atajo está versionado en el repo (symlink), escribir el destino y no
+    # romper el enlace; si es local, escribir el archivo.
+    DESKTOP_OUT="$APPS/$NAME.desktop"
+    if [[ -L $DESKTOP_OUT ]]; then
+      _t=$(readlink -f "$DESKTOP_OUT")
+      [[ ${_t:-} == "$HOME/dotfiles/"* ]] && DESKTOP_OUT="$_t"
+    fi
+    cat >"$DESKTOP_OUT" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=$TITLE
@@ -248,13 +255,17 @@ Actions=stop;
 Name=Detener el servidor
 Exec=webapp-launch "$DIR" --stop
 DESKTOP
-    chmod 644 "$APPS/$NAME.desktop"
+    chmod 644 "$DESKTOP_OUT"
     have update-desktop-database && update-desktop-database "$APPS" >/dev/null 2>&1
-    say "atajo creado: $APPS/$NAME.desktop"
+    say "atajo creado: $DESKTOP_OUT"
     say "en el lanzador aparece como «$TITLE» (buscá «$NAME»)"
     exit 0 ;;
 
   uninstall)
+    if [[ -L $APPS/$NAME.desktop ]] && [[ $(readlink -f "$APPS/$NAME.desktop") == "$HOME/dotfiles/"* ]]; then
+      say "ese atajo está versionado en dotfiles: borralo de linux/config/applications/"
+      exit 1
+    fi
     rm -f "$APPS/$NAME.desktop"
     have update-desktop-database && update-desktop-database "$APPS" >/dev/null 2>&1
     say "atajo borrado: $APPS/$NAME.desktop"
