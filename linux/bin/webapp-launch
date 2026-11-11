@@ -75,7 +75,7 @@ if [[ $ACTION == list ]]; then
   found=0
   for f in "$APPS"/*.desktop; do
     [[ -e $f ]] || continue
-    exec_line=$(sed -n 's/^Exec=webapp-launch \(.*\)$/\1/p' "$f")
+    exec_line=$(sed -n 's/^Exec=webapp-launch \(.*\)$/\1/p' "$f" | head -1)
     [[ -n $exec_line ]] || continue
     found=1
     printf '%-16s %s\n' "$(basename "$f" .desktop)" "${exec_line//\"/}"
