@@ -39,9 +39,6 @@ BarWidget {
   implicitWidth: cellSize * 3 + cellSpacing * 2 + trailingGap
   implicitHeight: root.barSize
 
-  Component.onCompleted: console.log("eztvn.workspaces DEBUG pantalla=" + root.screenName
-    + " base=" + root.workspaceBase + " monitores=" + Hyprland.monitors.values.length)
-
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
     for (var i = 0; i < values.length; i++) {

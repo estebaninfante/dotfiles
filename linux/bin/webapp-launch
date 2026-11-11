@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# webapp-launch — abre un proyecto web como app de escritorio.
+#
+# Levanta el servidor si no está corriendo, espera a que responda y lo abre en
+# una ventana sin barra de navegador (web app). Si ya hay una ventana abierta,
+# la enfoca en vez de duplicarla.
+#
+# Uso:
+#   webapp-launch [DIR]                abre el proyecto (lo levanta si hace falta)
+#   webapp-launch [DIR] --stop         apaga el servidor del proyecto
+#   webapp-launch [DIR] --status       estado: puerto, pid, respuesta HTTP
+#   webapp-launch [DIR] --url          imprime la URL (no abre nada)
+#   webapp-launch [DIR] --install      crea/actualiza el atajo en el lanzador
+#   webapp-launch [DIR] --uninstall    borra el atajo
+#   webapp-launch --list               proyectos web atajados en el lanzador
+#
+# Config: <DIR>/.webapp.json  (todas las claves son opcionales salvo `cmd` si
+# el proyecto no es estático)
+#   {
+#     "name":    "videolab",                     // id: estado, pidfile, atajo
+#     "title":   "videolab",                     // nombre visible en el lanzador
+#     "comment": "Descomponer videos en planos", // subtítulo del atajo
+#     "port":    8777,
+#     "cmd":     "python3 videolab.py serve --no-browser",
+#     "url":     "/viewer/",                     // ruta relativa al puerto
+#     "icon":    "videolab",                     // nombre del icono instalado
+#     "pattern": "videolab",                     // regex para enfocar la ventana
+#     "categories": "Development;AudioVideo;"
+#   }
+#
+# Sin config intenta adivinar: package.json (dev/start/preview) o un index.html
+# servido con python3. El puerto, si no está, se deriva del nombre para que el
+# origen (y las cookies del navegador) sean siempre el mismo.
+set -uo pipefail
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/webapp"
+APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+WAIT_SECS="${WEBAPP_WAIT:-40}"
+
+die() { printf 'webapp-launch: %s\n' "$*" >&2; exit 1; }
+say() { printf '%s\n' "$*"; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+notify() {
+  local urgency="$1" title="$2" body="$3"
+  if have notify; then
+    notify -u "$urgency" -t 8000 --app-name "$title" "$title" "$body" >/dev/null 2>&1
+  elif have notify-send; then
+    notify-send -a "$title" -u "$urgency" "$title" "$body" >/dev/null 2>&1
+  fi
+}
+
+# ── argumentos ────────────────────────────────────────────────────────────
+DIR=""
+ACTION="open"
+while (($#)); do
+  case "$1" in
+    --stop) ACTION=stop ;;
+    --status) ACTION=status ;;
+    --url) ACTION=url ;;
+    --install) ACTION=install ;;
+    --uninstall) ACTION=uninstall ;;
+    --list) ACTION=list ;;
+    -h | --help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) die "opción desconocida: $1 (probá --help)" ;;
+    *) DIR="$1" ;;
+  esac
+  shift
+done
+
+if [[ $ACTION == list ]]; then
+  found=0
+  for f in "$APPS"/*.desktop; do
+    [[ -e $f ]] || continue
+    exec_line=$(sed -n 's/^Exec=webapp-launch \(.*\)$/\1/p' "$f")
+    [[ -n $exec_line ]] || continue
+    found=1
+    printf '%-16s %s\n' "$(basename "$f" .desktop)" "${exec_line//\"/}"
+  done
+  ((found)) || say "no hay ningún atajo todavía (creá uno con: webapp-launch <dir> --install)"
+  exit 0
+fi
+
+[[ -n $DIR ]] || DIR="$PWD"
+DIR=$(realpath -- "$DIR" 2>/dev/null) || die "no existe el directorio '$DIR'"
+[[ -d $DIR ]] || die "no es un directorio: $DIR"
+CFG="$DIR/.webapp.json"
+
+# ── config ────────────────────────────────────────────────────────────────
+cfg() { # cfg <clave> [default]
+  [[ -f $CFG ]] || { printf '%s' "${2-}"; return; }
+  local v
+  v=$(jq -r --arg k "$1" 'if has($k) and .[$k] != null then (.[$k]|tostring) else empty end' "$CFG" 2>/dev/null)
+  [[ -n $v ]] && printf '%s' "$v" || printf '%s' "${2-}"
+}
+
+NAME=$(cfg name "$(basename "$DIR" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/-$//')")
+TITLE=$(cfg title "$NAME")
+COMMENT=$(cfg comment "")
+PORT=$(cfg port "")
+CMD=$(cfg cmd "")
+PATH_URL=$(cfg url "/")
+ICON=$(cfg icon "applications-internet")
+PATTERN=$(cfg pattern "$NAME")
+CATEGORIES=$(cfg categories "Development;")
+
+# puerto estable derivado del nombre: mismo origen en cada arranque
+if [[ -z $PORT ]]; then
+  if [[ -n $CMD ]] && [[ $CMD =~ --port[=\ ]([0-9]+) ]]; then
+    PORT="${BASH_REMATCH[1]}"
+  else
+    NUM=$(printf '%s' "$NAME" | cksum | cut -d' ' -f1)
+    PORT=$((8900 + NUM % 90))
+  fi
+fi
+[[ $PORT =~ ^[0-9]+$ ]] || die "puerto inválido en $CFG: $PORT"
+[[ $PATH_URL == /* ]] || PATH_URL="/$PATH_URL"
+URL="http://127.0.0.1:$PORT$PATH_URL"
+
+# ── detección ─────────────────────────────────────────────────────────────
+if [[ -z $CMD ]]; then
+  if [[ -f $DIR/package.json ]]; then
+    script=$(jq -r '.scripts | (.dev // .start // .preview // empty)' "$DIR/package.json" 2>/dev/null)
+    [[ -n $script ]] || die "package.json sin scripts dev/start/preview; definí \"cmd\" en $CFG"
+    if [[ -f $DIR/pnpm-lock.yaml ]] && have pnpm; then RUN="pnpm run $script"
+    elif [[ -f $DIR/bun.lockb || -f $DIR/bun.lock ]] && have bun; then RUN="bun run $script"
+    elif [[ -f $DIR/yarn.lock ]] && have yarn; then RUN="yarn $script"
+    else RUN="npm run $script"
+    fi
+    CMD="$RUN -- --port $PORT"
+    [[ $script == dev || $script == start || $script == preview ]] || CMD="$RUN"
+  elif [[ -f $DIR/index.html ]]; then
+    have python3 || die "falta python3 para servir el estático"
+    CMD="python3 -m http.server $PORT --bind 127.0.0.1"
+  else
+    die "no sé cómo levantar $DIR. Creá $CFG con {\"port\": N, \"cmd\": \"...\"}"
+  fi
+fi
+
+PORT_DIR="$STATE/$NAME"
+PIDFILE="$PORT_DIR/pid"
+LOGFILE="$PORT_DIR/log"
+mkdir -p "$PORT_DIR"
+
+# ── helpers de red/proceso ────────────────────────────────────────────────
+port_open() { ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$PORT\$"; }
+
+http_ok() {
+  local code
+  code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' "$URL" 2>/dev/null) || return 1
+  [[ $code =~ ^[23] ]]
+}
+
+running_pid() {
+  [[ -f $PIDFILE ]] || return 1
+  local pid
+  pid=$(<"$PIDFILE")
+  [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null && { printf '%s' "$pid"; return 0; }
+  return 1
+}
+
+stop_server() {
+  local pid
+  if pid=$(running_pid); then
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+    for _ in $(seq 1 20); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.15
+    done
+    kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+    rm -f "$PIDFILE"
+    say "detenido: $NAME (pid $pid, puerto $PORT)"
+  else
+    rm -f "$PIDFILE"
+    if port_open; then
+      say "el puerto $PORT está ocupado por otro proceso (no lo maneja webapp-launch)"
+      return 1
+    fi
+    say "$NAME no estaba corriendo"
+  fi
+}
+
+start_server() {
+  printf '\n── %s · %s\n' "$(date '+%F %T')" "$NAME" >>"$LOGFILE"
+  ( cd "$DIR" && exec setsid bash -c "exec $CMD" >>"$LOGFILE" 2>&1 ) &
+  local pid=$!
+  printf '%s' "$pid" >"$PIDFILE"
+  say "arrancando $NAME en :$PORT (pid $pid)"
+}
+
+wait_ready() {
+  local i
+  for ((i = 0; i < WAIT_SECS * 4; i++)); do
+    http_ok && return 0
+    if ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+      sleep 0.3
+      http_ok && return 0
+      return 1
+    fi
+    sleep 0.25
+  done
+  return 1
+}
+
+open_window() {
+  if have hyprctl && hyprctl clients -j >/dev/null 2>&1; then
+    exec omarchy-launch-or-focus-webapp "$PATTERN" "$URL"
+  fi
+  exec xdg-open "$URL"
+}
+
+# ── acciones ──────────────────────────────────────────────────────────────
+case "$ACTION" in
+  stop) stop_server; exit $? ;;
+
+  status)
+    say "proyecto: $DIR"
+    say "nombre:   $NAME"
+    say "url:      $URL"
+    say "puerto:   $(port_open && echo 'escuchando' || echo 'libre')"
+    if pid=$(running_pid); then say "pid:      $pid"; else say "pid:      —"; fi
+    say "http:     $(curl -s -o /dev/null -m 2 -w '%{http_code}' "$URL" 2>/dev/null || echo 'sin respuesta')"
+    say "log:      $LOGFILE"
+    exit 0 ;;
+
+  url) say "$URL"; exit 0 ;;
+
+  install)
+    mkdir -p "$APPS"
+    cat >"$APPS/$NAME.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=$TITLE
+Comment=${COMMENT:-$TITLE}
+Exec=webapp-launch "$DIR"
+Icon=$ICON
+Terminal=false
+Categories=${CATEGORIES}
+Keywords=$NAME;$TITLE;
+StartupNotify=false
+Actions=stop;
+
+[Desktop Action stop]
+Name=Detener el servidor
+Exec=webapp-launch "$DIR" --stop
+DESKTOP
+    chmod 644 "$APPS/$NAME.desktop"
+    have update-desktop-database && update-desktop-database "$APPS" >/dev/null 2>&1
+    say "atajo creado: $APPS/$NAME.desktop"
+    say "en el lanzador aparece como «$TITLE» (buscá «$NAME»)"
+    exit 0 ;;
+
+  uninstall)
+    rm -f "$APPS/$NAME.desktop"
+    have update-desktop-database && update-desktop-database "$APPS" >/dev/null 2>&1
+    say "atajo borrado: $APPS/$NAME.desktop"
+    exit 0 ;;
+
+  open) ;;
+esac
+
+# ── abrir ─────────────────────────────────────────────────────────────────
+if http_ok; then
+  say "$NAME ya responde en $URL"
+else
+  if port_open; then
+    say "el puerto $PORT está ocupado por otro proceso; abro igual" >&2
+  else
+    start_server || die "no pude arrancar el servidor"
+    if ! wait_ready; then
+      say "── últimas líneas de $LOGFILE ──" >&2
+      tail -n 20 "$LOGFILE" >&2
+      notify critical "$TITLE" "El servidor no respondió en ${WAIT_SECS}s. Ver $LOGFILE"
+      exit 1
+    fi
+    say "$NAME listo en $URL"
+  fi
+fi
+
+open_window
