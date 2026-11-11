@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# delegar-claude — lanza y monitorea una delegación a Claude Code (CLI `claude`).
+#
+# Por qué existe: `claude -p` imprime todo al final, y lanzarlo con `nohup ... &`
+# desde una tool suelta hace que el proceso muera con el shell. Acá se desprende con
+# setsid, se guarda el log y el pid, y se puede consultar el estado y el resultado.
+#
+# Uso:
+#   delegar-claude start <brief.md> [--name NOMBRE] [--force]
+#   delegar-claude status [NOMBRE]
+#   delegar-claude read   [NOMBRE]        # salida completa
+#   delegar-claude tail   [NOMBRE]        # sigue el log
+#   delegar-claude list                   # sesiones, con estado
+#   delegar-claude stop   [NOMBRE]
+#
+# Estado en ~/.local/state/delegar-claude/<nombre>/{brief.md,out.log,pid,meta}
+set -uo pipefail
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/delegar-claude"
+CLAUDE="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || true)}"
+
+usage() {
+    sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+}
+
+resolve_name() {
+    if [ -n "${1:-}" ]; then echo "$1"; return; fi
+    # la sesión más reciente
+    local d
+    d="$(ls -1dt "$STATE"/*/ 2>/dev/null | head -1)"
+    [ -n "$d" ] && basename "$d"
+}
+
+session_dir() { echo "$STATE/$(resolve_name "${1:-}")"; }
+
+is_running() {
+    local pidf="$1/pid"
+    [ -f "$pidf" ] || return 1
+    local pid; pid="$(cat "$pidf" 2>/dev/null)"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+cmd_start() {
+    local brief="" name="" force=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) name="${2:-}"; shift 2 ;;
+            --force) force=1; shift ;;
+            *) [ -z "$brief" ] && brief="$1"; shift ;;
+        esac
+    done
+    [ -n "$brief" ] || usage
+    [ -f "$brief" ] || { echo "delegar-claude: no existe el brief: $brief" >&2; exit 1; }
+    [ -n "$CLAUDE" ] || { echo "delegar-claude: no encontré el CLI 'claude'" >&2; exit 1; }
+
+    # una delegación a la vez (salvo --force)
+    local running
+    running="$(for d in "$STATE"/*/; do [ -d "$d" ] || continue; is_running "${d%/}" && basename "$d"; done 2>/dev/null | head -1)"
+    if [ -n "$running" ] && [ "$force" != 1 ]; then
+        echo "delegar-claude: ya hay una delegación corriendo ($running). Usá --force o esperá." >&2
+        exit 1
+    fi
+
+    [ -n "$name" ] || name="$(date +%Y%m%d-%H%M%S)"
+    local dir="$STATE/$name"
+    mkdir -p "$dir" || exit 1
+    cp "$brief" "$dir/brief.md" || exit 1
+    printf 'inicio: %s\nbrief: %s\n' "$(date -Iseconds)" "$(readlink -f "$brief")" > "$dir/meta"
+
+    # OJO: nada de un `< /dev/null` extra acá — la última redirección de stdin gana y
+    # el brief se perdía ("Input must be provided..."). El stdin del brief ES el prompt.
+    setsid "$CLAUDE" -p --permission-mode bypassPermissions < "$dir/brief.md" \
+        > "$dir/out.log" 2>&1 &
+    local pid=$!
+    echo "$pid" > "$dir/pid"
+
+    sleep 2
+    if is_running "$dir"; then
+        printf 'delegacion lanzada: %s\n  pid:  %s\n  log:  %s\n  brief: %s\n' \
+            "$name" "$pid" "$dir/out.log" "$dir/brief.md"
+    else
+        printf 'delegar-claude: el proceso no quedó vivo. Últimas líneas:\n' >&2
+        tail -5 "$dir/out.log" >&2
+        exit 1
+    fi
+}
+
+cmd_status() {
+    local dir; dir="$(session_dir "${1:-}")"
+    [ -d "$dir" ] || { echo "delegar-claude: no hay sesión en $dir" >&2; exit 1; }
+    if is_running "$dir"; then
+        printf 'estado: corriendo (pid %s)\n' "$(cat "$dir/pid")"
+    else
+        printf 'estado: terminado\n'
+    fi
+    printf 'sesion: %s\nlog: %s\n' "$(basename "$dir")" "$dir/out.log"
+    printf -- '--- ultimas lineas ---\n'
+    tail -15 "$dir/out.log" 2>/dev/null
+}
+
+cmd_read() {
+    local dir; dir="$(session_dir "${1:-}")"
+    [ -f "$dir/out.log" ] || { echo "delegar-claude: sin salida en $dir" >&2; exit 1; }
+    cat "$dir/out.log"
+}
+
+cmd_tail() {
+    local dir; dir="$(session_dir "${1:-}")"
+    [ -f "$dir/out.log" ] || { echo "delegar-claude: sin salida en $dir" >&2; exit 1; }
+    tail -f "$dir/out.log"
+}
+
+cmd_list() {
+    [ -d "$STATE" ] || { echo "(sin delegaciones)"; return 0; }
+    local d
+    for d in $(ls -1dt "$STATE"/*/ 2>/dev/null); do
+        d="${d%/}"
+        local st="terminado"
+        is_running "$d" && st="corriendo"
+        printf '%-24s %-11s %s\n' "$(basename "$d")" "$st" "$(tail -c 120 "$d/out.log" 2>/dev/null | tr '\n' ' ')"
+    done
+}
+
+cmd_stop() {
+    local dir; dir="$(session_dir "${1:-}")"
+    is_running "$dir" || { echo "delegar-claude: no está corriendo"; return 0; }
+    local pid; pid="$(cat "$dir/pid")"
+    kill -TERM "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+    sleep 1
+    is_running "$dir" && kill -KILL "-$pid" 2>/dev/null
+    echo "detenida: $(basename "$dir")"
+}
+
+case "${1:-}" in
+    start)  shift; cmd_start "$@" ;;
+    status) shift; cmd_status "${1:-}" ;;
+    read)   shift; cmd_read "${1:-}" ;;
+    tail)   shift; cmd_tail "${1:-}" ;;
+    list)   shift; cmd_list ;;
+    stop)   shift; cmd_stop "${1:-}" ;;
+    *) usage ;;
+esac

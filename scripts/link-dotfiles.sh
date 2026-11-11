@@ -142,6 +142,20 @@ for name in "${HOME_FILES[@]}"; do
     link_path "${HOME_SRC}/${name}" "${HOME}/${name}" true
 done
 
+header "DeepSeek Harness (instrucciones globales + skills propias)"
+# ~/.dsh/AGENTS.md son las instrucciones globales del harness (se leen en toda sesión,
+# en cualquier workspace): traen la regla de delegar a Claude cuando un problema se
+# estanca. Las skills propias del repo se enlazan a ~/.agents/skills, igual que las
+# que instala Omarchy.
+link_path "${REPO}/linux/agents/delegacion-claude.md" "${HOME}/.dsh/AGENTS.md" true
+if [ -d "${REPO}/linux/agents/skills" ]; then
+    mkdir -p "${HOME}/.agents/skills"
+    for d in "${REPO}/linux/agents/skills"/*/; do
+        [ -d "$d" ] || continue
+        link_path "${d%/}" "${HOME}/.agents/skills/$(basename "${d%/}")" true
+    done
+fi
+
 header "VS Code User (~/.config/Code/User)"
 if [ -d "$VSCODE_SRC" ]; then
     mkdir -p "$VSCODE_DST"

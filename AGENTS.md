@@ -303,6 +303,23 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 5. Ejecutar `~/dotfiles/scripts/publish.sh` para commitear y pushear (único dueño de git).
 6. Correr `~/dotfiles/scripts/doctor.sh` si tocaste rutas del filesystem o worktrees.
 
+## Delegación a Claude Code (agentes atascados)
+
+Cuando un problema no se resuelve tras 2-3 intentos serios (o cada arreglo rompe otra
+cosa), **no seguir acumulando variantes**: delegar a Claude Code. Está cableado así:
+
+- Regla global del harness: `linux/agents/delegacion-claude.md` -> `~/.dsh/AGENTS.md`
+  (la lee DeepSeek Harness en toda sesión, en cualquier workspace).
+- Skill: `linux/agents/skills/delegate-a-claude/SKILL.md` -> `~/.agents/skills/`
+  (tiene el procedimiento y la plantilla del brief que funciona).
+- Helper: `linux/bin/delegar-claude` (`start <brief.md> [--name X]`, `status`, `read`,
+  `tail`, `list`, `stop`). Deja brief+log+pid en `~/.local/state/delegar-claude/<nombre>/`
+  y desprende el proceso con `setsid` (un `nohup ... &` suelto muere con el shell).
+
+`scripts/link-dotfiles.sh` crea los tres symlinks. El brief tiene que incluir **lo ya
+probado y qué resultó** y qué no se puede romper: es lo que hizo que Claude resolviera
+en un intento un caso donde el agente llevaba horas.
+
 ## Multi-maquina (laptop + desktop)
 
 ### Configs machine-specific
