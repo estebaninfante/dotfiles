@@ -187,6 +187,29 @@ index a53afc5..02e557f 100644
 +
 +Config::INTEGER* intValuePtr(const std::string& name);
  }
+diff --git c/IOverviewSession.cpp i/IOverviewSession.cpp
+index 443d939..ff8fab4 100644
+--- c/IOverviewSession.cpp
++++ i/IOverviewSession.cpp
+@@ -4,6 +4,7 @@
+ #include "ScrollingLayoutAdapter.hpp"
+ #include "ScrollingOverview.hpp"
+ #include "globals.hpp"
++#include "HyprlandConfigCompat.hpp"
+ 
+ #include <hyprland/src/debug/log/Logger.hpp>
+ #include <hyprland/src/plugins/PluginAPI.hpp>
+@@ -27,7 +28,9 @@ std::unique_ptr<IOverviewSession> createOverviewSession(const PHLWORKSPACE& star
+     static std::atomic<uint64_t> nextGeneration = 1;
+     const uint64_t generation = nextGeneration.fetch_add(1, std::memory_order_relaxed);
+ 
+-    const bool detectedScrolling = Hyprexpo::Scrolling::workspaceUsesScrollingLayout(startedOn);
++    // Fork: plugin:hyprexpo:scrolling_overview = 0 deja la grilla de workspaces
++    // tambien con el layout scrolling (la vista nativa por columnas es otra UI).
++    const bool detectedScrolling = CompatHyprlandAPI::intValue("plugin:hyprexpo:scrolling_overview") != 0 && Hyprexpo::Scrolling::workspaceUsesScrollingLayout(startedOn);
+     if (detectedScrolling) {
+         const auto snapshot = Hyprexpo::Scrolling::snapshotWorkspace(startedOn);
+         const bool emptyScrolling = startedOn && startedOn->getWindowCount() <= 0 && snapshot.failure == Hyprexpo::Scrolling::ESnapshotFailure::MissingScrollingData;
 diff --git c/IOverviewSession.hpp i/IOverviewSession.hpp
 index ca7ba7c..59f35f5 100644
 --- c/IOverviewSession.hpp
@@ -1199,7 +1222,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..9b8e4a2 100644
+index cb18d2f..935258e 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1217,7 +1240,16 @@ index cb18d2f..9b8e4a2 100644
  #include <hyprland/src/helpers/time/Time.hpp>
  #include <hyprutils/utils/ScopeGuard.hpp>
  #include <hyprland/src/render/OpenGL.hpp>
-@@ -103,6 +108,12 @@ class CMonitorStateGuard {
+@@ -96,6 +101,8 @@ class CMonitorStateGuard {
+         m_monitor->m_activeSpecialWorkspace = m_activeSpecialWorkspace;
+         if (m_startedOn)
+             m_startedOn->m_visible = m_startedOnVisible;
++        // Las proyecciones cacheadas vuelven a las del monitor real.
++        m_monitor->updateMatrix();
+         m_restored = true;
+     }
+ 
+@@ -103,6 +110,12 @@ class CMonitorStateGuard {
          return m_transform;
      }
  
@@ -1230,7 +1262,7 @@ index cb18d2f..9b8e4a2 100644
      PHLWORKSPACE activeWorkspace() const {
          return m_activeWorkspace;
      }
-@@ -123,6 +134,103 @@ class CMonitorStateGuard {
+@@ -123,6 +136,103 @@ class CMonitorStateGuard {
      bool                m_restored         = false;
  };
  
@@ -1334,25 +1366,33 @@ index cb18d2f..9b8e4a2 100644
  bool ensureFramebuffer(SP<Render::IFramebuffer>& framebuffer, const CBox& box, uint32_t drmFormat) {
      if (!framebuffer)
          framebuffer = g_pHyprRenderer->createFB("hyprexpo workspace preview");
-@@ -169,8 +277,15 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -169,11 +279,23 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
          CRendererStateGuard rendererState{g_pHyprRenderer.get()};
          CBox captureBox = request.box;
  
 -        if (isTransformRotated(monitorState.transform())) {
 -            captureBox = {{0, 0}, {captureBox.h, captureBox.w}};
 +        // En un monitor girado el overlay (y por lo tanto los tiles) vive en el
-+        // espacio YA rotado del monitor, asi que la captura tiene que salir de
-+        // ese mismo espacio: se neutraliza el transform y se toma como tamano el
-+        // transformado (vertical: 1440x2560, no el buffer 2560x1440). Antes se
-+        // usaba el tamano del buffer y se marcaba la textura como rotada 180, lo
-+        // que en 90/270 dejaba los previews girados y estirados (se veia "otro"
-+        // wallpaper adentro de los tiles).
++        // espacio YA rotado del monitor, asi que la captura sale de ese mismo
++        // espacio: transform neutralizado y tamano transformado (vertical:
++        // 1440x2560). m_size/m_scale quedan como estan (logico * escala ==
++        // transformado, coherente).
++        //
++        // CLAVE: CMonitor cachea las proyecciones (m_projMatrix, m_projOutputMatrix)
++        // y solo las recalcula updateMatrix(). Sin llamarlo, las superficies se
++        // proyectaban con la matriz vieja (rotada, tamano del buffer) y los marcos
++        // con la del framebuffer: contenido al 80%/recortado dentro del marco y la
++        // captura girada 180. Con updateMatrix() todo sale derecho y 1:1.
 +        if (monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL) {
 +            captureBox = {{0, 0}, monitorState.transformedSize()};
              request.monitor->m_transform       = WL_OUTPUT_TRANSFORM_NORMAL;
              request.monitor->m_pixelSize       = captureBox.size();
              request.monitor->m_transformedSize = captureBox.size();
-@@ -188,12 +303,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
++            request.monitor->updateMatrix();
+         }
+ 
+         if (!ensureFramebuffer(framebuffer, captureBox, framebufferFormatWithAlpha(request.monitor->m_output->state->state().drmFormat)))
+@@ -188,12 +310,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
          rendererState.begun();
          g_pHyprRenderer->m_bBlockSurfaceFeedback = g_pHyprRenderer->m_bBlockSurfaceFeedback || request.blockSurfaceFeedback;
@@ -1368,7 +1408,7 @@ index cb18d2f..9b8e4a2 100644
              bool activeChanged   = false;
              bool previewApplied  = false;
              bool windowApplied   = false;
-@@ -202,6 +319,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -202,6 +326,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  if (temporaryRestored)
                      return;
                  try {
@@ -1379,7 +1419,7 @@ index cb18d2f..9b8e4a2 100644
                      if (windowApplied)
                          restoreWorkspaceWindowGoalState(windowState);
                      if (previewApplied)
-@@ -220,6 +341,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -220,6 +348,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  windowApplied = true;
              }
  
@@ -1399,7 +1439,7 @@ index cb18d2f..9b8e4a2 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace = monitorState.activeSpecialWorkspace();
  
-@@ -233,6 +367,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -233,6 +374,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              restoreActiveWorkspaceAfterPreview(request.monitor, previousWS);
              temporaryRestored = true;
  
@@ -1414,7 +1454,7 @@ index cb18d2f..9b8e4a2 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace.reset();
          } else {
-@@ -240,6 +382,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -240,6 +389,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
          }
  
@@ -1423,17 +1463,13 @@ index cb18d2f..9b8e4a2 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-@@ -247,7 +391,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -247,7 +398,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
  
          if (const auto texture = framebuffer->getTexture(); texture)
 -            texture->m_transform = isTransformRotated(monitorState.transform()) ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
-+            // El framebuffer capturado sale girado 180 respecto del espacio del
-+            // overlay cuando el monitor esta rotado (Hyprland neutraliza el
-+            // transform y dibuja el workspace en el buffer sin rotar). Se
-+            // compensa con TRANSFORM_180, que es lo que hacia el codigo original:
-+            // sin esto los previews se ven invertidos dentro del tile.
-+            texture->m_transform = monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
++            // Con las matrices recalculadas la captura ya sale en el espacio del overlay.
++            texture->m_transform = HYPRUTILS_TRANSFORM_NORMAL;
          else
              return false;
  
@@ -2173,7 +2209,7 @@ index e73c8f6..3943e23 100644
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
 diff --git c/PluginConfig.cpp i/PluginConfig.cpp
-index af2b27a..26a7fa8 100644
+index af2b27a..6cfc739 100644
 --- c/PluginConfig.cpp
 +++ i/PluginConfig.cpp
 @@ -42,6 +42,14 @@ void registerHyprexpoConfigValues() {
@@ -2191,7 +2227,7 @@ index af2b27a..26a7fa8 100644
  
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
-@@ -52,6 +60,40 @@ void registerHyprexpoConfigValues() {
+@@ -52,6 +60,43 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
  
@@ -2200,6 +2236,9 @@ index af2b27a..26a7fa8 100644
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:block_pointer_lock",
 +                                                         "ignore zwp_pointer_constraints lock requests; avoids a core activate/simulateMouseMovement recursion crash (2026-10-09)",
 +                                                         1, Config::Values::SIntValueOptions{.min = 0, .max = 1}));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:scrolling_overview",
++                                                         "use the native scrolling overview on scrolling-layout workspaces (0 = always the workspace grid)", 1,
++                                                         Config::Values::SIntValueOptions{.min = 0, .max = 1}));
 +    // Experimental true-perspective grid (custom shader). Disabled by default so
 +    // the live session is unaffected until explicitly enabled + tested.
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:threed_enable", "render the grid with a real 3D perspective warp", 0));
@@ -2232,7 +2271,7 @@ index af2b27a..26a7fa8 100644
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
                                                           Config::Values::SIntValueOptions{.min = 0, .max = 9}));
-@@ -80,6 +122,10 @@ void registerHyprexpoConfigValues() {
+@@ -80,6 +125,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_current", "current border color", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_focus", "focus border color", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_hover", "hover border color", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT));
@@ -2635,7 +2674,7 @@ index 0000000..0456292
 +echo "OPT3D: enable=[$opt3d] tilt=[$opttilt]"
 +exit 0
 diff --git c/tests/OverviewSourceTests.cpp i/tests/OverviewSourceTests.cpp
-index d2e7572..5420287 100644
+index d2e7572..a9d9a75 100644
 --- c/tests/OverviewSourceTests.cpp
 +++ i/tests/OverviewSourceTests.cpp
 @@ -122,6 +122,67 @@ int main() {
@@ -2716,7 +2755,7 @@ index d2e7572..5420287 100644
      const auto enterSubmap = extractFunction(interactionSource, "void enterOverviewSubmap(bool& submapActive) {");
      expect(!enterSubmap.empty(), "keyboard navigation submap entry function exists");
      const auto captureSubmapPos = enterSubmap.find("g_previousSubmap = g_pKeybindManager->getCurrentSubmap().name;");
-@@ -429,6 +487,23 @@ int main() {
+@@ -429,6 +487,25 @@ int main() {
  
      const auto renderSource = readFile("OverviewRender.cpp");
      expect(!renderSource.empty(), "OverviewRender.cpp can be read from repo root");
@@ -2730,6 +2769,8 @@ index d2e7572..5420287 100644
 +                   "rotated monitors capture the already-rotated overlay space");
 +    expectAbsent(captureRotationSource, "HYPRUTILS_TRANSFORM_180",
 +                 "previews are no longer compensated with a 180 flip (wrong for 90/270)");
++    expect(captureRotationSource.find("request.monitor->updateMatrix();") != std::string::npos && captureRotationSource.find("m_monitor->updateMatrix();") != std::string::npos,
++           "the capture refreshes the cached monitor projections after faking the transform and after restoring it");
 +    const auto threeDSource = readFile("Overview3D.cpp");
 +    expect(!threeDSource.empty(), "Overview3D.cpp can be read from repo root");
 +    const auto ensureInit = extractFunction(threeDSource, "bool ensureInit() {");

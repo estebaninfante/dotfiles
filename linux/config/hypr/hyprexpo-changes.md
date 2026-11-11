@@ -1,5 +1,63 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-10e — previews 1:1 en el monitor girado, grilla con `scrolling` y hold de Súper con lan-mouse
+
+**Motivo**: (1) en el desktop vertical (DP-2, `transform 3`, escala 1.25) el contenido
+de cada ventana se veía al 80% y recortado dentro de su marco; (2) el usuario quiere
+en vertical tres franjas iguales de ancho completo, una debajo de otra (`scrolling`),
+pero con ese layout la grilla salía como un bloque gris y negro; (3) con el teclado
+en el desktop y el puntero en la laptop, mantener Súper abría la grilla en las dos
+máquinas (dos punteros), y el gate anterior la dejaba muerta en ambas.
+
+**Causa**:
+
+1. `CMonitor` cachea sus proyecciones (`m_projMatrix`, `m_projOutputMatrix`) y solo
+   las recalcula `updateMatrix()`. La captura neutralizaba `m_transform` y cambiaba
+   `m_pixelSize`/`m_transformedSize` sin recalcularlas: las superficies se proyectaban
+   con la matriz vieja (rotada, tamaño del buffer 2560x1440) y los marcos con la del
+   framebuffer. De ahí el 80%/recorte, y el flip de 180 que "enderezaba" a medias.
+   Las variantes 1-7 de `-10b/-10c/-10d` tocaban tamaños/escala, nunca la matriz.
+2. No era el offset del scroll: `createOverviewSession` elige `CScrollingOverview`
+   (la vista nativa por columnas, otra UI) cuando el workspace usa `scrolling`.
+3. El hook `input.keyboard.key` corre antes del inhibidor de atajos de lan-mouse:
+   el desktop ve el hold aunque esté reenviando (por eso `SUPER+Y` no se duplica).
+   El `active` de `lan-mouse cli list` es "cliente habilitado" (true en los dos).
+
+**Implementación**:
+
+- `OverviewCapture.cpp`: `request.monitor->updateMatrix()` después de falsear el
+  transform y `m_monitor->updateMatrix()` al final de `CMonitorStateGuard::restore()`;
+  la textura queda en `HYPRUTILS_TRANSFORM_NORMAL` (sin flip de 180).
+- `PluginConfig.cpp` + `IOverviewSession.cpp`: opción del fork
+  `plugin:hyprexpo:scrolling_overview` (default 1 = upstream; 0 = siempre la grilla).
+  `plugins/hyprexpo.lua` la pone en 0 si existe.
+- `monitors.lua`: en vertical `scrolling` (`direction = down`, `column_width = 0.3333`,
+  `fullscreen_on_one_column = true`) si el `.so` cargado conoce `scrolling_overview`;
+  si no, sigue en `master` para no romper la grilla con un build viejo.
+- `navigation.lua`: `lan_mouse_forwarding()` busca la capa `LAN Mouse Sharing` con
+  `interactivity == 1` (lan-mouse 0.11 la pone en EXCLUSIVE en `grab()` y en NONE en
+  `ungrab()`). Gatea el hold (al bajar Súper y al vencer el timer) y el hot corner.
+  La posición del cursor NO sirve: `block_pointer_lock` impide que el lock lo congele.
+  Se borró `lan-mouse-grid.sh` y el log de diagnóstico del hook de submap.
+- `hyprexpo-rebuild.sh`: guards de `updateMatrix()` (y ausencia del flip 180) y de
+  `scrolling_overview`. `tests/OverviewSourceTests.cpp` exige `updateMatrix()`.
+
+**Verificado**:
+
+- Harness anidado en el desktop (salida Wayland 1440x810, `transform 3`, escala 1.25,
+  ventana fijada con 1 px en pantalla y opacidad 0.02 para que reciba frames sin
+  verse): con `master` los previews llenan cada marco y salen derechos; con
+  `scrolling` la grilla muestra las tres franjas apiladas; con 4 ventanas el tile
+  muestra la porción visible; `transform 0` + `dwindle` sin cambios.
+- Capas de lan-mouse con el puntero en la laptop: desktop `interactivity=1`,
+  laptop `interactivity=0`.
+- `OverviewSourceTests`: 10 FAIL que ya estaban en la base (11 antes: el que
+  sobraba era "sin flip de 180", que ahora pasa).
+
+**Revertir**: `scrolling_overview = 1` (o sacar la línea de `plugins/hyprexpo.lua`) y
+`monitors.lua` vuelve solo a `master`. La captura: revertir el hunk de
+`OverviewCapture.cpp` en el patch + `hyprexpo-rebuild.sh` + reiniciar Hyprland.
+
 ## Cambio 2026-11-10d — grilla usable con el mouse (lan-mouse) y previews bien encuadrados
 
 **Motivo**: (1) con la grilla abierta el mouse se "duplicaba": el puntero cruzaba el

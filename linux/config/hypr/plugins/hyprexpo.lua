@@ -172,6 +172,11 @@ if hl.plugin.hyprexpo ~= nil then
     if hl.get_config("plugin:hyprexpo:block_pointer_lock") ~= nil then
         config.block_pointer_lock = 1
     end
+    -- Grilla de workspaces tambien con el layout scrolling (vertical en el desktop),
+    -- no la vista nativa por columnas. Ver monitors.lua.
+    if hl.get_config("plugin:hyprexpo:scrolling_overview") ~= nil then
+        config.scrolling_overview = 0
+    end
     hl.config({ plugin = { hyprexpo = config } })
 end
 

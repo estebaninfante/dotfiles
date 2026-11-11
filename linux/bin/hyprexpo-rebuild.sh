@@ -87,10 +87,21 @@ if grep -q "outputProjection(MON->m_transformedSize" "$SRC/OverviewRender.cpp"; 
     exit 1
 fi
 
-# Captura de previews en monitor rotado: tamano transformado + flip 180 (la version
-# que mejor se ve: previews derechos y con el marco alineado).
-if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/OverviewCapture.cpp" || ! grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
-    echo "error: la captura de previews perdio el tamano transformado o el flip de 180" >&2
+# Captura de previews en monitor rotado: tamano transformado + updateMatrix() al
+# falsear el transform y al restaurarlo (sin eso las superficies usan la proyeccion
+# cacheada del monitor real: contenido al 80%/recortado), y SIN flip de 180.
+if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/OverviewCapture.cpp" \
+    || ! grep -q "request.monitor->updateMatrix();" "$SRC/OverviewCapture.cpp" \
+    || ! grep -q "m_monitor->updateMatrix();" "$SRC/OverviewCapture.cpp" \
+    || grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
+    echo "error: la captura de previews perdio updateMatrix() o volvio el flip de 180" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
+# Grilla tambien con layout scrolling (monitors.lua usa scrolling en vertical).
+if ! grep -q "plugin:hyprexpo:scrolling_overview" "$SRC/IOverviewSession.cpp" || ! grep -q "plugin:hyprexpo:scrolling_overview" "$SRC/PluginConfig.cpp"; then
+    echo "error: el patch perdio scrolling_overview (la grilla con layout scrolling)" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
