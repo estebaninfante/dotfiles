@@ -1,5 +1,6 @@
 local variables = require("base.variables")
 local power = require("base.power")
+local spaces = require("base.workspaces")
 
 -- Los nombres de salida van en variables a propósito (no como texto literal en
 -- las reglas). omarchy-hyprland-monitor-clamshell busca el PRIMER
@@ -11,28 +12,105 @@ local power = require("base.power")
 -- literal que leer, ese script deja la escala en manos de Hyprland, que es la
 -- única que manda acá.
 local internal = "eDP-2"
-local external = "HDMI-A-1"
 
--- ¿Hay un monitor HDMI realmente conectado? Preguntamos a Hyprland en vez de
--- leer /sys/class/drm: al arrancar el sysfs puede decir "connected" un instante
--- (sin monitor real) y eso dejaba la laptop a escala 1 (todo chiquito).
-local function hdmi_connected()
-    for _, m in ipairs(hl.get_monitors()) do
-        if m.name == external then return true end
+-- La vertical colgada de la laptop tiene que verse EXACTAMENTE como cuando
+-- cuelga del desktop: mismo panel, mismo modo, misma escala y mismo giro
+-- (2560x1440 @ 1.25 con transform 3 = 1152x2048 lógicos). Ver la rama desktop.
+local EXTERNAL_SCALE = 1.25
+local EXTERNAL_DEFAULT_TRANSFORM = 3
+local INTERNAL_MODE = "2880x1800"
+
+-- ¿Qué monitor es la vertical? Cualquiera que no sea el panel interno ni un
+-- headless (Sunshine crea HEADLESS-N para streamear). Se pregunta a Hyprland en
+-- vez de asumir un puerto: da igual si entra por HDMI o por USB-C/DP, y al
+-- arrancar no se cree "conectado" un monitor que todavía no está.
+local function external_monitor()
+    for _, monitor in ipairs(hl.get_monitors()) do
+        if monitor.name ~= internal and not monitor.name:match("^HEADLESS") then
+            return monitor
+        end
     end
-    return false
+    return nil
 end
+
+-- Mejor modo del monitor: resolución nativa (la de mayor área) y, dentro de eso,
+-- el refresh más alto que no pase el tope (144 con corriente, 60 con batería).
+-- Así la vertical queda a 144 Hz igual que en el desktop, y si el puerto no
+-- banca ese modo cae al más rápido que sí exista.
+local function best_mode(monitor, cap)
+    local modes = monitor.available_modes or {}
+    local native_area = 0
+    for _, md in ipairs(modes) do
+        if md.width * md.height > native_area then native_area = md.width * md.height end
+    end
+    local within, fastest
+    for _, md in ipairs(modes) do
+        if md.width * md.height == native_area then
+            if md.refresh_rate <= cap and (within == nil or md.refresh_rate > within.refresh_rate) then
+                within = md
+            end
+            if fastest == nil or md.refresh_rate > fastest.refresh_rate then fastest = md end
+        end
+    end
+    local chosen = within or fastest
+    if not chosen then return nil end
+    return string.format("%dx%d@%.2f", chosen.width, chosen.height, chosen.refresh_rate)
+end
+
+-- Adelantada: la usa apply_laptop_monitors, que está definida antes.
+local apply_orientation_layout
+local saved_transform
 
 local function apply_laptop_monitors()
     local refresh = power.low_power() and 60 or 120
-    if hdmi_connected() then
-        hl.monitor({ output = internal, mode = "1920x1080@" .. refresh, position = "0x0", scale = 1 })
-        hl.monitor({ output = external, mode = "1920x1080@60", position = "0x0", scale = 1, mirror = internal })
-    else
-        hl.monitor({ output = internal, mode = "2880x1800@" .. refresh, position = "0x0", scale = 2 })
-        hl.monitor({ output = external, mode = "preferred", position = "auto", scale = 1, mirror = internal })
+    local external = external_monitor()
+
+    if not external then
+        -- Laptop sola: el panel interno a pantalla completa, como siempre.
+        hl.monitor({ output = internal, mode = INTERNAL_MODE .. "@" .. refresh, position = "0x0", scale = 2 })
+        apply_orientation_layout(0)
+        return
     end
+
+    local transform = saved_transform(external.name, EXTERNAL_DEFAULT_TRANSFORM)
+    local mode = best_mode(external, power.low_power() and 60 or 144)
+    if not mode then mode = "preferred" end
+
+    -- Tamaño lógico de la vertical, sacado del modo elegido (no del estado
+    -- actual del monitor, que puede ser el de antes de aplicar la regla).
+    local ext_w, ext_h = external.width, external.height
+    local mode_w, mode_h = mode:match("^(%d+)x(%d+)@")
+    if mode_w then
+        ext_w, ext_h = tonumber(mode_w), tonumber(mode_h)
+    end
+    if ext_w == nil or ext_w == 0 then ext_w, ext_h = 2560, 1440 end
+    if transform % 2 == 1 then ext_w, ext_h = ext_h, ext_w end
+    ext_w = math.floor(ext_w / EXTERNAL_SCALE + 0.5)
+    ext_h = math.floor(ext_h / EXTERNAL_SCALE + 0.5)
+
+    -- La laptop queda a la derecha de la vertical y centrada en vertical, que
+    -- es la posición de siempre: vertical a la izquierda, laptop en el centro.
+    local internal_h = math.floor(tonumber(INTERNAL_MODE:match("x(%d+)$")) / 2 + 0.5)
+    local internal_y = math.max(0, math.floor((ext_h - internal_h) / 2 + 0.5))
+
+    hl.monitor({
+        output = external.name,
+        mode = mode,
+        position = "0x0",
+        scale = EXTERNAL_SCALE,
+        transform = transform,
+    })
+    hl.monitor({
+        output = internal,
+        mode = INTERNAL_MODE .. "@" .. refresh,
+        position = ext_w .. "x" .. internal_y,
+        scale = 2,
+    })
+
+    -- Mismo layout que en el desktop: en vertical, `scrolling` (franjas).
+    apply_orientation_layout(transform)
 end
+
 
 -- Orientación guardada por `pantalla-orientacion` (SUPER+ALT+O). Girar no
 -- reescribe este archivo: el guion aplica el cambio en vivo con `hyprctl eval`
@@ -40,7 +118,7 @@ end
 -- horizontal. Qué es cada valor: 0 = normal, 1 = 90° horario, 2 = 180°, 3 = 90°
 -- antihorario (1 y 3 son las dos verticales). Si el giro sale espejado al revés,
 -- el otro vertical es el que falta: SUPER+ALT+SHIFT+O alterna entre 1 y 3.
-local function saved_transform(output, fallback)
+saved_transform = function(output, fallback)
     local file = io.open(os.getenv("HOME") .. "/.local/state/omarchy/display-orientation", "r")
     if not file then return fallback end
     local transform = fallback
@@ -69,7 +147,7 @@ end
 -- siempre la grilla. Si el .so cargado todavia no conoce esa opcion (build viejo,
 -- falta reiniciar Hyprland), se queda en `master` para no romper la grilla.
 -- En horizontal vuelve dwindle, que es lo de siempre.
-local function apply_orientation_layout(transform)
+apply_orientation_layout = function(transform)
     if transform % 2 == 1 then
         if hl.get_config("plugin:hyprexpo:scrolling_overview") ~= nil then
             hl.config({
@@ -88,9 +166,21 @@ local function apply_orientation_layout(transform)
 end
 
 if variables.machine == "laptop" then
-    apply_laptop_monitors()
-    hl.on("monitor.added", apply_laptop_monitors)
-    hl.on("monitor.removed", apply_laptop_monitors)
+    local function reapply()
+        apply_laptop_monitors()
+        -- Las reglas de ventanas fijas apuntan al último espacio de la pantalla
+        -- de trabajo (Spotify): se re-registran cuando cambia cuál es.
+        spaces.apply_window_rules()
+    end
+
+    reapply()
+    hl.on("monitor.added", function()
+        reapply()
+        -- Un monitor recién agregado a veces todavía no anuncia sus modos; se
+        -- re-aplica al segundo para no quedarse en el modo de cortesía (60 Hz).
+        hl.timer(function() reapply() end, { timeout = 1500, type = "oneshot" })
+    end)
+    hl.on("monitor.removed", reapply)
     hl.monitor({ output = "HEADLESS-2", mode = "1920x1080@60", position = "0x1500", scale = 2 })
 elseif variables.machine == "desktop" then
     -- La escala y el modo son los que eligió el panel de Better Displays (1.25 y

@@ -152,22 +152,30 @@ def main():
         return 2
     current = json.loads(out)["id"]
 
+    # 9 espacios por pantalla: la externa (vertical) usa 28..36 cuando hay más
+    # de una pantalla. La ruta se arma en índices locales 1..9 (la grilla de
+    # siempre) y se despacha con el id real de la pantalla donde estamos.
+    base = 28 if current >= 28 else 1
+    current_local = current - base + 1
+
     if current == target:
         return 0
 
-    if target == 10 or not 1 <= current <= 9:
-        dispatch(target, sock_dir)
+    if target == 10 or not 1 <= current_local <= 9:
+        dispatch(base + target - 1 if target != 10 else target, sock_dir)
         return 0
 
     ws_out = hyprctl(["workspaces"])
     occupied = set()
     if ws_out:
         try:
-            occupied = {w["id"] for w in json.loads(ws_out)}
+            occupied = {w["id"] - base + 1
+                        for w in json.loads(ws_out)
+                        if base <= w["id"] < base + 9}
         except ValueError:
             pass
 
-    path = best_path(current, target, occupied)
+    path = best_path(current_local, target, occupied)
     steps = len(path) - 1
     per_step = max(TOTAL_MS / steps, MIN_STEP_MS) / 1000.0
     t0 = time.monotonic()
@@ -184,12 +192,12 @@ def main():
 
     try:
         for i, w in enumerate(path[1:]):
-            dispatch(w, sock_dir)
+            dispatch(base + w - 1, sock_dir)
             deadline = t0 + per_step * (i + 1)
             if reader:
                 while time.monotonic() < deadline:
                     line = reader.next_line(deadline - time.monotonic())
-                    if line is None or event_matches(line, w):
+                    if line is None or event_matches(line, base + w - 1):
                         break
             rem = deadline - time.monotonic()
             if rem > 0:

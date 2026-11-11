@@ -51,7 +51,9 @@ hl.window_rule({ match = { class = "leia" }, workspace = "10" })
 hl.window_rule({ match = { class = "leia" }, fullscreen = 1 })
 hl.window_rule({ match = { class = "libreoffice.*" }, workspace = "empty" })
 hl.window_rule({ match = { class = "soffice.*" }, workspace = "empty" })
-hl.window_rule({ match = { class = "Spotify" }, workspace = "9" })
+-- Spotify: al último espacio de la pantalla de trabajo, que depende de qué
+-- pantallas haya (9 con una sola, 36 con la vertical enchufada). Esa regla la
+-- registra base/workspaces.lua y se re-registra al enchufar/desenchufar.
 hl.window_rule({ match = { class = "xdg-desktop-portal-gtk" }, max_size = "1260 560" })
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, workspace = "10" })
 hl.window_rule({ match = { class = ".*[Cc]artridges.*" }, fullscreen = 1 })
@@ -71,5 +73,9 @@ hl.window_rule({
   center = true,
   size = { 1100, 700 },
 })
+
+-- Va al final a propósito: las reglas que dependen de qué pantallas hay se
+-- registran después de las fijas (la última que matchea gana).
+require("base.workspaces").apply_window_rules()
 
 return true
