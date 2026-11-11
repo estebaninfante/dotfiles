@@ -1199,7 +1199,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..3e3304d 100644
+index cb18d2f..62e121e 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1217,7 +1217,23 @@ index cb18d2f..3e3304d 100644
  #include <hyprland/src/helpers/time/Time.hpp>
  #include <hyprutils/utils/ScopeGuard.hpp>
  #include <hyprland/src/render/OpenGL.hpp>
-@@ -103,6 +108,12 @@ class CMonitorStateGuard {
+@@ -78,6 +83,7 @@ class CMonitorStateGuard {
+   public:
+     CMonitorStateGuard(const PHLMONITOR& monitor, const PHLWORKSPACE& startedOn) : m_monitor(monitor), m_startedOn(startedOn), m_transform(monitor->m_transform),
+                                                                                   m_transformedSize(monitor->m_transformedSize), m_pixelSize(monitor->m_pixelSize),
++                                                                                  m_scale(monitor->m_scale),
+                                                                                   m_activeWorkspace(monitor->m_activeWorkspace),
+                                                                                   m_activeSpecialWorkspace(monitor->m_activeSpecialWorkspace),
+                                                                                   m_startedOnVisible(startedOn ? startedOn->m_visible : false) {}
+@@ -92,6 +98,7 @@ class CMonitorStateGuard {
+         m_monitor->m_transform              = m_transform;
+         m_monitor->m_transformedSize        = m_transformedSize;
+         m_monitor->m_pixelSize              = m_pixelSize;
++        m_monitor->m_scale                  = m_scale;
+         m_monitor->m_activeWorkspace        = m_activeWorkspace ? m_activeWorkspace : m_startedOn;
+         m_monitor->m_activeSpecialWorkspace = m_activeSpecialWorkspace;
+         if (m_startedOn)
+@@ -103,6 +110,12 @@ class CMonitorStateGuard {
          return m_transform;
      }
  
@@ -1230,7 +1246,14 @@ index cb18d2f..3e3304d 100644
      PHLWORKSPACE activeWorkspace() const {
          return m_activeWorkspace;
      }
-@@ -123,6 +134,103 @@ class CMonitorStateGuard {
+@@ -117,12 +130,110 @@ class CMonitorStateGuard {
+     wl_output_transform m_transform;
+     Vector2D            m_transformedSize;
+     Vector2D            m_pixelSize;
++    float               m_scale = 1.F;
+     PHLWORKSPACE        m_activeWorkspace;
+     PHLWORKSPACE        m_activeSpecialWorkspace;
+     bool                m_startedOnVisible = false;
      bool                m_restored         = false;
  };
  
@@ -1334,7 +1357,7 @@ index cb18d2f..3e3304d 100644
  bool ensureFramebuffer(SP<Render::IFramebuffer>& framebuffer, const CBox& box, uint32_t drmFormat) {
      if (!framebuffer)
          framebuffer = g_pHyprRenderer->createFB("hyprexpo workspace preview");
-@@ -169,8 +277,21 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -169,9 +280,23 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
          CRendererStateGuard rendererState{g_pHyprRenderer.get()};
          CBox captureBox = request.box;
  
@@ -1348,17 +1371,19 @@ index cb18d2f..3e3304d 100644
 +        // que en 90/270 dejaba los previews girados y estirados (se veia "otro"
 +        // wallpaper adentro de los tiles).
 +        if (monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL) {
-+            // El render del workspace usa el tamano LOGICO del monitor (m_size /
-+            // escala): en el desktop vertical son 1152x2048, no los 1440x2560
-+            // fisicos. Capturar al tamano fisico dejaba el contenido en el 80%
-+            // (1/1.25) del framebuffer, anclado arriba a la izquierda: el preview
-+            // se veia recortado y con una franja del wallpaper al costado.
-+            const double capScale = request.monitor->m_scale > 0 ? request.monitor->m_scale : 1.0;
-+            captureBox = {{0, 0}, monitorState.transformedSize() / capScale};
++            // Se captura al tamano fisico YA ROTADO (1440x2560 en vertical) y con
++            // escala 1. Con la escala fraccional del monitor (1.25) los marcos de
++            // ventana se dibujaban a una escala y las superficies a otra: el
++            // preview mostraba el marco bien y el contenido al 80%, recortado. Con
++            // escala 1 el workspace se re-tilea a ese tamano (misma proporcion) y
++            // todo se dibuja 1:1 dentro del framebuffer.
++            captureBox = {{0, 0}, monitorState.transformedSize()};
              request.monitor->m_transform       = WL_OUTPUT_TRANSFORM_NORMAL;
++            request.monitor->m_scale           = 1.F;
              request.monitor->m_pixelSize       = captureBox.size();
              request.monitor->m_transformedSize = captureBox.size();
-@@ -188,12 +309,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+         }
+@@ -188,12 +313,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
          rendererState.begun();
          g_pHyprRenderer->m_bBlockSurfaceFeedback = g_pHyprRenderer->m_bBlockSurfaceFeedback || request.blockSurfaceFeedback;
@@ -1374,7 +1399,7 @@ index cb18d2f..3e3304d 100644
              bool activeChanged   = false;
              bool previewApplied  = false;
              bool windowApplied   = false;
-@@ -202,6 +325,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -202,6 +329,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  if (temporaryRestored)
                      return;
                  try {
@@ -1385,7 +1410,7 @@ index cb18d2f..3e3304d 100644
                      if (windowApplied)
                          restoreWorkspaceWindowGoalState(windowState);
                      if (previewApplied)
-@@ -220,6 +347,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -220,6 +351,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  windowApplied = true;
              }
  
@@ -1405,7 +1430,7 @@ index cb18d2f..3e3304d 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace = monitorState.activeSpecialWorkspace();
  
-@@ -233,6 +373,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -233,6 +377,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              restoreActiveWorkspaceAfterPreview(request.monitor, previousWS);
              temporaryRestored = true;
  
@@ -1420,7 +1445,7 @@ index cb18d2f..3e3304d 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace.reset();
          } else {
-@@ -240,6 +388,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -240,6 +392,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
          }
  
@@ -1429,7 +1454,7 @@ index cb18d2f..3e3304d 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-@@ -247,7 +397,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -247,7 +401,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
  
          if (const auto texture = framebuffer->getTexture(); texture)

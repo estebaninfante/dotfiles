@@ -87,12 +87,11 @@ if grep -q "outputProjection(MON->m_transformedSize" "$SRC/OverviewRender.cpp"; 
     exit 1
 fi
 
-# Captura de previews en monitor rotado: tamano LOGICO (m_size / escala: 1152x2048
-# en vertical, no los 1440x2560 fisicos) Y flip 180 de la textura. El tamano logico es
-# el que usa el render del workspace, asi que el contenido llena el framebuffer; con
-# el fisico quedaba al 80% y el tile mostraba el preview recortado. El flip endereza
-# el contenido (sin el se ve invertido).
-if ! grep -q "monitorState.transformedSize() / capScale" "$SRC/OverviewCapture.cpp" || ! grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
+# Captura de previews en monitor rotado: tamano fisico YA ROTADO (1440x2560 en
+# vertical) con la escala en 1, mas el flip 180 de la textura. Con la escala 1.25 del
+# monitor, los marcos se dibujaban a una escala y las superficies a otra (contenido al
+# 80%, recortado); con escala 1 todo entra 1:1. El flip endereza el contenido.
+if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/OverviewCapture.cpp" || ! grep -q "m_scale           = 1.F" "$SRC/OverviewCapture.cpp" || ! grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
     echo "error: la captura de previews perdio el tamano transformado o el flip de 180 (previews estirados o invertidos)" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
