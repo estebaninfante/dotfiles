@@ -87,12 +87,10 @@ if grep -q "outputProjection(MON->m_transformedSize" "$SRC/OverviewRender.cpp"; 
     exit 1
 fi
 
-# Captura de previews en monitor rotado: estado CONSISTENTE en escala 1 (m_size,
-# m_pixelSize y m_transformedSize iguales al tamano logico) + flip 180 de la textura.
-# Si falta m_size, el renderer sigue en el tamano fisico con escala fraccional y el
-# contenido de las ventanas sale a otra escala que su marco (se ve recortado).
-if ! grep -q "monitorState.transformedSize() / capScale" "$SRC/OverviewCapture.cpp" || ! grep -q "m_scale           = 1.F" "$SRC/OverviewCapture.cpp" || ! grep -q "m_size            = captureBox.size()" "$SRC/OverviewCapture.cpp" || ! grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
-    echo "error: la captura de previews perdio el estado consistente en escala 1 o el flip 180" >&2
+# Captura de previews en monitor rotado: tamano transformado + flip 180 (la version
+# que mejor se ve: previews derechos y con el marco alineado).
+if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/OverviewCapture.cpp" || ! grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
+    echo "error: la captura de previews perdio el tamano transformado o el flip de 180" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
