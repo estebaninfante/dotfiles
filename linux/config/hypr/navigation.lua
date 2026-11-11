@@ -9,7 +9,6 @@ local plugin = hl.plugin.hyprexpo
 
 local expo_focus
 local expo_select
-local previous_submap
 local expo_ui_toggle
 local expo_fly_super_up
 
@@ -111,17 +110,26 @@ end
 -- lan-mouse deja de pelearse. Ver el hook de submap.
 local EXPO_HOLD_ENABLED = true
 
--- ¿Esta maquina esta reenviando el puntero a la otra? (lan-mouse `capture: active`
--- significa "el puntero esta en el peer"). Con el teclado en el otro equipo, el hold
--- de Super se ve en LAS DOS maquinas: sin este chequeo, la que no tiene el puntero
--- tambien abre su grilla y aparecen dos cursores (uno por pantalla) y no se puede
--- elegir workspace. Solo abre la grilla la maquina donde esta el puntero.
+-- ¿Esta maquina esta reenviando el puntero a la otra por lan-mouse? Con el teclado
+-- conectado aca y el puntero en el peer, el hold de Super se ve en LAS DOS maquinas
+-- (el hook de teclado de abajo corre antes del inhibidor de atajos de lan-mouse, por
+-- eso SUPER+Y no se duplica pero el hold si): sin este chequeo las dos abren su
+-- grilla y aparecen dos cursores. Solo abre la maquina donde esta el puntero.
+--
+-- Criterio: lan-mouse (backend layer-shell) pone su capa "LAN Mouse Sharing" en
+-- keyboard_interactivity EXCLUSIVE en grab() y la vuelve a NONE en ungrab(), asi que
+-- interactivity == 1 es exactamente "estoy capturando y reenviando". NO sirven
+-- `lan-mouse cli list` (active = cliente habilitado, true en los dos lados) ni la
+-- posicion del cursor (block_pointer_lock del fork impide que el lock lo congele).
 local function lan_mouse_forwarding()
-    local f = io.popen("lan-mouse-grid.sh state 2>/dev/null")
-    if not f then return false end
-    local out = f:read("*a") or ""
-    f:close()
-    return out:find("active", 1, true) ~= nil
+    local ok, layers = pcall(hl.get_layers)
+    if not ok or type(layers) ~= "table" then return false end
+    for _, layer in ipairs(layers) do
+        if layer.namespace == "LAN Mouse Sharing" and layer.interactivity == 1 then
+            return true
+        end
+    end
+    return false
 end
 
 local function expo_hold_arm()
@@ -141,7 +149,8 @@ local function expo_hold_arm()
     expo_hold_cancel_timer()
     expo_hold.timer = hl.timer(function()
         expo_hold.timer = nil
-        if expo_hold.super_down and not expo_hold.suppressed and not expo_hold.open then
+        if expo_hold.super_down and not expo_hold.suppressed and not expo_hold.open
+            and not lan_mouse_forwarding() then
             reset_ws_style()
             expo_hold.open = true
             if expo_fly then expo_fly.deliberate = true end
@@ -181,19 +190,6 @@ if plugin ~= nil then
         -- a la otra maquina. Es el mismo remedio que usa moonlight.lua para el stream.
         hl.config({ binds = { disable_keybind_grabbing = name == "hyprexpo" } })
 
-        -- La grilla se maneja con el mouse. `lan-mouse-grid.sh off` suelta la
-        -- captura SOLO si esta maquina es la que la tiene armada (somos el host del
-        -- puntero); en la maquina cliente no toca nada, porque soltar ahi hace que
-        -- el host suelte y el puntero se vaya a la otra pantalla. Al cerrar,
-        -- re-arma solo si fuimos nosotros los que soltamos.
-        -- DIAGNOSTICO: por ahora solo se registra el estado (no se toca lan-mouse),
-        -- para ver en el log quien tiene la captura al abrir/cerrar la grilla.
-        if name == "hyprexpo" then
-            hl.exec_cmd("lan-mouse-grid.sh observe open")
-        elseif previous_submap == "hyprexpo" then
-            hl.exec_cmd("lan-mouse-grid.sh observe close")
-        end
-        previous_submap = name
         if name ~= "hyprexpo" then
             if expo_hold.open then expo_hold.open = false end
             if expo_fly then
@@ -666,7 +662,10 @@ if plugin ~= nil then
                 -- que al salir de la captura con el puntero en la esquina no
                 -- salte el overview.
                 hot_armed = false
-            elseif hot_armed and not expo_fly.open and not expo_hold.open and expo_fly.busy == 0 then
+            elseif hot_armed and not expo_fly.open and not expo_hold.open and expo_fly.busy == 0
+                and not lan_mouse_forwarding() then
+                -- Reenviando por lan-mouse el cursor local se mueve igual (sin pointer
+                -- lock), asi que la esquina no es del usuario: no abrir la grilla aca.
                 hot_open()
             end
         elseif p.x > HOT_REARM or p.y > HOT_REARM then
