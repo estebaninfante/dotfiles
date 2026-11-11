@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
@@ -22,7 +23,10 @@ BarWidget {
     var win = root.QsWindow ? root.QsWindow.window : null
     return win && win.screen && win.screen.name ? win.screen.name : ""
   }
-  readonly property int workspaceBase: (screenName.indexOf("eDP") === 0
+  // Sin nombre de pantalla (arranque raro) se asume la interna: es el set de
+  // siempre y el que menos sorprende si algo falla.
+  readonly property int workspaceBase: (screenName === ""
+    || screenName.indexOf("eDP") === 0
     || Hyprland.monitors.values.length <= 1) ? 1 : 28
   function workspaceId(index) {
     return root.workspaceBase + index - 1
@@ -34,6 +38,9 @@ BarWidget {
 
   implicitWidth: cellSize * 3 + cellSpacing * 2 + trailingGap
   implicitHeight: root.barSize
+
+  Component.onCompleted: console.log("eztvn.workspaces DEBUG pantalla=" + root.screenName
+    + " base=" + root.workspaceBase + " monitores=" + Hyprland.monitors.values.length)
 
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
