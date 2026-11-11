@@ -59,16 +59,20 @@ end
 -- hyprland-auto-layout): una ventana ancha para leer o codear y el resto a mano.
 -- En horizontal vuelve dwindle, que es lo de siempre.
 --
--- mfact = 0.6 le deja el 60% de la altura a la principal; new_status = "slave"
--- hace que la ventana nueva entre en la pila de abajo sin mover la principal
--- (si no, cada cosa que abrís te corre la ventana grande). Para darle la vuelta
--- a mano: SUPER+J cambia el split y `hyprctl dispatch layoutmsg swapwithmaster`
--- cambia cuál manda.
+-- mfact = 1/3: la principal ocupa un tercio de la altura y la pila de abajo se
+-- reparte el resto. Con 3 ventanas eso da TRES FRANJAS IGUALES de arriba abajo
+-- (0.333 + 0.333 + 0.333), que es lo que se pidió para la pantalla vertical; con
+-- 2 ventanas queda 1/3 + 2/3 y con 4 o más la pila se divide en partes iguales
+-- entre las de abajo.
+-- new_status = "slave" hace que la ventana nueva entre en la pila de abajo sin
+-- mover la principal (si no, cada cosa que abrís te corre la ventana grande).
+-- Para darle la vuelta a mano: SUPER+J cambia el split y
+-- `hyprctl dispatch layoutmsg swapwithmaster` cambia cuál manda.
 local function apply_orientation_layout(transform)
     if transform % 2 == 1 then
         hl.config({
             general = { layout = "master" },
-            master = { orientation = "top", new_status = "slave", mfact = 0.6 }
+            master = { orientation = "top", new_status = "slave", mfact = 0.3333 }
         })
     else
         hl.config({ general = { layout = "dwindle" } })
