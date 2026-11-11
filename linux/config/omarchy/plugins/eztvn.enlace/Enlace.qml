@@ -50,6 +50,7 @@ Item {
   property real linkEdge: 0
   property real edgeGlow: 0
   property color edgeColor: Color.accent
+  property string edgeLabel: ""
   property real crossGlow: 0
   // Coordenada global del cruce (x o y según el borde); -1 = centro del borde.
   property real crossX: -1
@@ -58,11 +59,6 @@ Item {
   property string peerPosition: "right"
   property string peerName: "peer"
   property string localName: "este equipo"
-  property string machine: ""
-  // Tamaño real de la pantalla del peer (el desktop está vertical: 1152x2048).
-  // Sale de peer-screens.json; 1920x1080 si el archivo no está.
-  property real peerWidth: 1920
-  property real peerHeight: 1080
   property bool linked: false
   // true mientras el puntero está del lado del peer (salimos y no ha vuelto).
   property bool sentPointer: false
@@ -78,10 +74,13 @@ Item {
   readonly property bool active: streamActive || linkActive
 
   readonly property bool horizontalEdge: peerPosition === "left" || peerPosition === "right"
+  readonly property string positionText: ({
+    left: "izquierdo", right: "derecho", top: "superior", bottom: "inferior"
+  })[peerPosition] || peerPosition
 
   // La pantalla que tiene el borde por donde se cruza (la más extrema en la
   // dirección del peer). Con un solo monitor es esa, siempre.
-  readonly property var edgeScreenRef: {
+  readonly property string edgeScreen: {
     var screens = Quickshell.screens
     var best = null
     for (var i = 0; i < screens.length; i++) {
@@ -93,16 +92,8 @@ Item {
       else if (peerPosition === "bottom" && s.y + s.height > best.y + best.height) best = s
       else if (peerPosition === "top" && s.y < best.y) best = s
     }
-    return best
+    return best ? String(best.name) : ""
   }
-
-  readonly property string edgeScreen: edgeScreenRef ? String(edgeScreenRef.name) : ""
-
-  // Tamaño real de esta pantalla: el diagrama dibuja cada equipo con el suyo y
-  // una sola escala, así la vertical del desktop no aparece acostada ni del
-  // mismo tamaño que la laptop.
-  readonly property real hostWidth: edgeScreenRef ? edgeScreenRef.width : 1920
-  readonly property real hostHeight: edgeScreenRef ? edgeScreenRef.height : 1080
 
   function parse(json) {
     try { return JSON.parse(String(json || "{}")) || {} } catch (e) { return {} }
@@ -156,6 +147,7 @@ Item {
     if (Tokens.reduced) return
     linkDownAnim.stop(); crossAnim.stop()
     edgeColor = Color.accent
+    edgeLabel = ""
     linkUpAnim.restart()
   }
 
@@ -163,6 +155,7 @@ Item {
     if (Tokens.reduced) return
     if (linkUpAnim.running) return
     edgeColor = Color.muted
+    edgeLabel = "lan-mouse · " + peerName + " desconectado"
     linkDownAnim.restart()
   }
 
@@ -172,34 +165,27 @@ Item {
     cursorProc.running = true
   }
 
-  // Un cruce abre y cierra la conexión: eso es rutina, no un enlace que
-  // aparece. El aviso grande (escena + tarjeta) sale sólo cuando la conexión
-  // se sostiene `stableMs` sin un cruce en el medio, o sea cuando el peer
-  // arrancó o se cayó de verdad. Antes cada cruce pintaba la escena entera y
-  // quedaba parpadeando "conectado / desconectado".
-  readonly property int stableMs: 4000
-
   function onLog(line) {
     if (paused) return
     var s = String(line)
     var now = Date.now()
+    // "acknowledged" es la confirmación real de que el peer aceptó: el
+    // título/captura pueden existir sin conexión. Se repite por cada Enter,
+    // así que sólo anima al pasar de desconectado a conectado.
     if (/acknowledged the connection!|dtls client connected/.test(s)) {
-      // Conexión viva: candidata a enlace estable, se confirma en stableMs.
-      // Sólo cuenta si no venimos de un cruce: el cruce del peer deja la
-      // conexión abierta mientras el puntero está de su lado, y eso no es
-      // "se enlazaron las pantallas".
-      dropSettle.stop()
-      if (!linked && !sentPointer && now - Math.max(lastCrossIn, lastCrossOut) > stableMs) upSettle.restart()
+      if (!linked) {
+        linked = true
+        if (now - lastLinkUp > 15000) { lastLinkUp = now; linkUp() }
+      }
     } else if (/entering client/.test(s)) {
       // El puntero salió de este equipo hacia el peer. Sólo ocurre con la
       // captura armada; los intentos fallidos loguean "no active client".
       sentPointer = true
-      upSettle.stop(); dropSettle.stop()
       if (now - lastCrossOut > 700) { lastCrossOut = now; cross("out") }
     } else if (/entered this device/.test(s)) {
       // El puntero llegó desde el peer a esta máquina.
+      linked = true
       sentPointer = false
-      upSettle.stop(); dropSettle.stop()
       if (now - lastCrossIn > 700) { lastCrossIn = now; cross("in") }
     } else if (/left remote client device region/.test(s)) {
       // El peer soltó la captura: el puntero volvió. Un Leave espurio (enlace
@@ -209,37 +195,11 @@ Item {
         if (now - lastCrossIn > 700) { lastCrossIn = now; cross("in") }
       }
     } else if (/connection closed|active connections: \[\]|deactivated client|compositor released mouse|no active client at this position/.test(s)) {
-      // Se cerró la conexión: si había un enlace estable, se confirma la caída
-      // en stableMs (un cruce normal vuelve a conectar enseguida y no avisa).
-      upSettle.stop()
-      if (linked) dropSettle.restart()
-    }
-  }
-
-  Timer {
-    id: upSettle
-    interval: root.stableMs
-    onTriggered: {
-      if (root.sentPointer) return
-      root.linked = true
-      // El aviso es de "enlace establecido", no de cada cruce: 30 min.
-      if (Date.now() - root.lastLinkUp > 1800000) {
-        root.lastLinkUp = Date.now()
-        root.linkUp()
-      }
-    }
-  }
-
-  Timer {
-    id: dropSettle
-    interval: root.stableMs
-    onTriggered: {
-      if (root.sentPointer || upSettle.running) return
-      root.linked = false
-      if (Date.now() - root.lastLinkDown > 1800000) {
-        root.lastLinkDown = Date.now()
-        root.linkDown()
-      }
+      // Enlace caído o captura desactivada. "no active client at this
+      // position" es el borde tocado con el cliente apagado: avisar una vez,
+      // no fingir un cruce.
+      if (linked || sentPointer) { linked = false; sentPointer = false }
+      if (now - lastLinkDown > 15000) { lastLinkDown = now; linkDown() }
     }
   }
 
@@ -370,9 +330,9 @@ Item {
     }
   }
 
-  // Tamaño real de la pantalla del peer, por máquina: el desktop está vertical
-  // (1152x2048) y la laptop horizontal (1440x900). Un solo archivo para las dos
-  // máquinas; la clave es la que corre el shell.
+  // Proporción de la pantalla del peer, por máquina: el desktop está vertical
+  // (1152x2048 → 0.5625), la laptop horizontal (1440x900 → 1.6). Un solo
+  // archivo para las dos máquinas; la clave es la que corre el shell.
   FileView {
     id: peerScreens
     path: root.home + "/.config/omarchy/plugins/eztvn.enlace/peer-screens.json"
@@ -380,10 +340,7 @@ Item {
     onLoaded: {
       var map = root.parse(text())
       var v = root.machine ? map[root.machine] : undefined
-      if (v && Number(v.width) > 0 && Number(v.height) > 0) {
-        root.peerWidth = Number(v.width)
-        root.peerHeight = Number(v.height)
-      }
+      if (typeof v === "number" && v > 0.1 && v < 10) root.peerAspect = v
     }
   }
 
@@ -429,8 +386,7 @@ Item {
       return JSON.stringify({ veil: root.veil, scrim: root.linkScrim, card: root.linkCard, edge: root.edgeGlow,
         cross: root.crossGlow, edgeScreen: root.edgeScreen, pos: root.peerPosition, bg: String(Color.background),
         accent: String(Color.accent), paused: root.paused, machine: root.machine,
-        peerWidth: root.peerWidth, peerHeight: root.peerHeight,
-        hostWidth: root.hostWidth, hostHeight: root.hostHeight })
+        peerAspect: root.peerAspect, hostAspect: root.hostAspect })
     }
   }
 
@@ -445,16 +401,27 @@ Item {
 
     Rectangle {
       anchors.fill: parent
+      radius: Math.min(width, height) * 0.08
       color: Color.background
     }
 
-    // Marco recto: sin esquinas redondeadas ni brillo de vidrio (nada de
-    // "burbuja": la pantalla se dibuja como un rectángulo, que es lo que es).
     Rectangle {
       anchors.fill: parent
+      radius: Math.min(width, height) * 0.08
       color: Qt.rgba(tile.tint.r, tile.tint.g, tile.tint.b, 0.06 + 0.10 * tile.lit)
       border.width: 2
       border.color: Qt.rgba(tile.tint.r, tile.tint.g, tile.tint.b, 0.25 + 0.65 * tile.lit)
+
+      // Brillo interior arriba: sugiere vidrio sin dibujar un monitor literal.
+      Rectangle {
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 2 }
+        height: parent.height * 0.45
+        radius: parent.radius
+        gradient: Gradient {
+          GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.07 * tile.lit) }
+          GradientStop { position: 1; color: "transparent" }
+        }
+      }
 
       Text {
         anchors.centerIn: parent
@@ -631,22 +598,21 @@ Item {
     }
   }
 
-  // Escena de lan-mouse: las dos pantallas encajadas por el borde compartido,
-  // cada una con su tamaño real y una sola escala (la vertical del desktop
-  // queda alta y angosta al lado de la laptop). Sin texto ni esquinas
-  // redondeadas: sólo el dibujo, el borde compartido y el punto de cruce.
+  // Escena de lan-mouse: dos pantallas que encajan por el borde compartido.
+  // Cada una con su proporción real (la del desktop está vertical) y la misma
+  // dimensión sobre el borde común, así el par se lee como el escritorio real.
   component LinkCard: Item {
     id: card
     readonly property real unit: Math.min(width, height) / 900
     readonly property string pos: root.peerPosition
     readonly property bool beside: pos === "left" || pos === "right"
-    // Una sola escala para las dos pantallas: la mayor dimensión mide `span`.
-    readonly property real span: 250 * unit
-    readonly property real px: span / Math.max(root.hostWidth, root.hostHeight, root.peerWidth, root.peerHeight)
-    readonly property real hostW: root.hostWidth * px
-    readonly property real hostH: root.hostHeight * px
-    readonly property real peerW: root.peerWidth * px
-    readonly property real peerH: root.peerHeight * px
+    readonly property real tileH: 150 * unit
+    readonly property real tileW: 210 * unit
+    // Dimensión compartida: el alto si van al lado, el ancho si van arriba/abajo.
+    readonly property real hostW: beside ? tileH * root.hostAspect : tileW
+    readonly property real hostH: beside ? tileH : tileW / root.hostAspect
+    readonly property real peerW: beside ? tileH * root.peerAspect : tileW
+    readonly property real peerH: beside ? tileH : tileW / root.peerAspect
     // Centro del peer relativo al centro de esta pantalla, ya encajado.
     readonly property real dx: pos === "right" ? (hostW + peerW) / 2 : (pos === "left" ? -(hostW + peerW) / 2 : 0)
     readonly property real dy: pos === "bottom" ? (hostH + peerH) / 2 : (pos === "top" ? -(hostH + peerH) / 2 : 0)
@@ -668,6 +634,7 @@ Item {
 
       ScreenTile {
         anchors.fill: parent
+        label: root.localName
       }
 
       ScreenTile {
@@ -676,6 +643,7 @@ Item {
         x: card.hostW / 2 + card.dx + card.fx - card.peerW / 2
         y: card.hostH / 2 + card.dy + card.fy - card.peerH / 2
         opacity: Math.min(1, root.linkJoin * 1.3)
+        label: root.peerName
       }
 
       // El borde compartido: se traza desde el centro hacia los extremos, con
@@ -713,6 +681,30 @@ Item {
               : (seam.height - height) / 2 + (index % 2 ? 1 : -1) * (p - 0.5) * 34
           }
         }
+      }
+    }
+
+    Column {
+      anchors { horizontalCenter: parent.horizontalCenter; top: parent.verticalCenter; topMargin: card.hostH / 2 + (card.pos === "bottom" ? card.peerH : 0) + 80 * card.unit }
+      spacing: 8 * card.unit
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "Pantallas enlazadas"
+        color: Color.foreground
+        font.family: Style.fontFamily
+        font.pixelSize: Math.round(28 * card.unit)
+        font.weight: Font.Light
+        font.letterSpacing: 2
+      }
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "lan-mouse  ·  el puntero cruza por el borde " + root.positionText
+        color: Color.accent
+        font.family: Style.fontFamily
+        font.pixelSize: Math.round(14 * card.unit)
+        font.letterSpacing: 1
+        opacity: root.linkEdge
       }
     }
   }
@@ -756,6 +748,20 @@ Item {
         y: edge.pos === "bottom" ? parent.height - height : 0
         color: root.edgeColor
       }
+    }
+
+    Text {
+      visible: root.edgeLabel !== ""
+      opacity: root.edgeGlow
+      text: root.edgeLabel
+      color: Color.foreground
+      font.family: Style.fontFamily
+      font.pixelSize: 14
+      font.letterSpacing: 1
+      x: edge.pos === "right" ? edge.width - width - edge.depth - 10
+        : edge.pos === "left" ? edge.depth + 10 : (edge.width - width) / 2
+      y: edge.pos === "bottom" ? edge.height - height - edge.depth - 10
+        : edge.pos === "top" ? edge.depth + 10 : (edge.height - height) / 2
     }
 
     // Punto de cruce: un segmento corto centrado donde pasó el puntero.
