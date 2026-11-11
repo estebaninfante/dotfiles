@@ -148,6 +148,26 @@ header "DeepSeek Harness (instrucciones globales + skills propias)"
 # estanca. Las skills propias del repo se enlazan a ~/.agents/skills, igual que las
 # que instala Omarchy.
 link_path "${REPO}/linux/agents/delegacion-claude.md" "${HOME}/.dsh/AGENTS.md" true
+# Plugins propios del harness (comandos /claude y /skills): el repo es la fuente y
+# ~/.dsh/plugins es symlink; después se asegura que el perfil web lo tenga instalado
+# y con su entrada en el patch (si no, el harness no lo carga al arrancar).
+if [ -d "${REPO}/linux/dsh/plugins" ]; then
+    mkdir -p "${HOME}/.dsh/plugins"
+    for d in "${REPO}/linux/dsh/plugins"/*/; do
+        [ -d "$d" ] || continue
+        link_path "${d%/}" "${HOME}/.dsh/plugins/$(basename "${d%/}")" true
+    done
+    PATCH="${HOME}/.dsh/profiles/web/cordis.patch.yml"
+    if [ -f "$PATCH" ] && ! grep -q "dsh-local-claude-visible" "$PATCH"; then
+        printf '\n# Comandos propios: /claude (delegaciones a Claude Code) y /skills (catálogo de skills).\n- insert:\n    - id: local-claude-visible\n      name: dsh-local-claude-visible\n' >> "$PATCH"
+        ok "patch del perfil web: + local-claude-visible"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-claude-visible" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "file:${HOME}/.dsh/plugins/claude-visible" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-claude-visible instalado" \
+            || warn "no pude instalar el plugin en el perfil web (correr: dsh plugin --profile web add file:~/.dsh/plugins/claude-visible)"
+    fi
+fi
 if [ -d "${REPO}/linux/agents/skills" ]; then
     mkdir -p "${HOME}/.agents/skills"
     for d in "${REPO}/linux/agents/skills"/*/; do

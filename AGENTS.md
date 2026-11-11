@@ -316,6 +316,27 @@ cosa), **no seguir acumulando variantes**: delegar a Claude Code. Está cableado
   `tail`, `list`, `stop`). Deja brief+log+pid en `~/.local/state/delegar-claude/<nombre>/`
   y desprende el proceso con `setsid` (un `nohup ... &` suelto muere con el shell).
 
+### Plugins propios del harness (comandos `/claude` y `/skills`)
+
+`linux/dsh/plugins/claude-visible/` es un plugin local del DeepSeek Harness (sin
+dependencias: no importa nada del harness) que agrega dos comandos al chat:
+
+- `/claude [list|status [n]|read [n]|start <brief.md>]`: ver las delegaciones a Claude
+  (estado y salida, leídas de `~/.local/state/delegar-claude/`) y lanzar una.
+- `/skills [<nombre>]`: listar todas las skills instaladas en `~/.agents/skills` con su
+  descripción, o el `SKILL.md` de una.
+
+Se enlaza a `~/.dsh/plugins/claude-visible` y `link-dotfiles.sh` asegura su entrada en
+`~/.dsh/profiles/web/cordis.patch.yml` (forma `- insert:`) y la dependencia
+`file:` en el perfil web. **El servidor del harness carga los plugins al arrancar**:
+después de instalarlo hay que reiniciar con `dsh-web --restart` (o el próximo inicio).
+Ojo: reiniciar el servidor corta la sesión en curso, así que no lo hagas a mitad de un
+turno largo.
+
+Un panel *en vivo* dentro de la UI (no sólo comandos) requeriría un bundle de cliente
+(React + slots internos), que no viene en el paquete instalado: los comandos son la vía
+soportada en esta instalación.
+
 `scripts/link-dotfiles.sh` crea los tres symlinks. El brief tiene que incluir **lo ya
 probado y qué resultó** y qué no se puede romper: es lo que hizo que Claude resolviera
 en un intento un caso donde el agente llevaba horas.
