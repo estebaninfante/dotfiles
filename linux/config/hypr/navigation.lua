@@ -82,7 +82,17 @@ modes.close_overview = function()
     end
 end
 
+-- Abrir la grilla MANTENIENDO Super queda apagado: mientras Super esta apretado, la
+-- grilla toma el teclado y eso hace que lan-mouse suelte la captura, asi que el
+-- puntero y el foco se van a la otra maquina (y quedan dos cursores). Con SUPER+Y
+-- (un toque) no pasa. Si algun dia se quiere recuperar, poner esto en true y
+-- arreglar antes el conflicto con la captura de lan-mouse.
+local EXPO_HOLD_ENABLED = false
+
 local function expo_hold_arm()
+    if not EXPO_HOLD_ENABLED then
+        return
+    end
     -- Streameando, el hold de Súper es del sistema remoto.
     if modes.streaming then
         return
