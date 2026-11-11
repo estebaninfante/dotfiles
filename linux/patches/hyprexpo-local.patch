@@ -1199,7 +1199,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..f20d599 100644
+index cb18d2f..1e3d31c 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1467,7 +1467,7 @@ index cb18d2f..f20d599 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace.reset();
          } else {
-@@ -240,15 +398,28 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -240,15 +398,35 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
          }
  
@@ -1488,6 +1488,13 @@ index cb18d2f..f20d599 100644
 +            // la inversa el contenido salia girado 90 (el layout de la ventana se
 +            // veia acostado dentro del tile).
 +            const auto T = monitorState.transform();
++            static auto* const* PDBG = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:capture_transform")->getDataStaticPtr();
++            if (PDBG && *PDBG && **PDBG >= 0) {
++                const int V = std::clamp((int)**PDBG, 0, 3);
++                texture->m_transform = V == 1 ? HYPRUTILS_TRANSFORM_90 : V == 2 ? HYPRUTILS_TRANSFORM_180 : V == 3 ? HYPRUTILS_TRANSFORM_270 : HYPRUTILS_TRANSFORM_NORMAL;
++                monitorState.restore();
++                return true;
++            }
 +            texture->m_transform = T == WL_OUTPUT_TRANSFORM_90          ? HYPRUTILS_TRANSFORM_90 :
 +                                   T == WL_OUTPUT_TRANSFORM_180         ? HYPRUTILS_TRANSFORM_180 :
 +                                   T == WL_OUTPUT_TRANSFORM_270         ? HYPRUTILS_TRANSFORM_270 :
@@ -2235,13 +2242,15 @@ index e73c8f6..3943e23 100644
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
 diff --git c/PluginConfig.cpp i/PluginConfig.cpp
-index af2b27a..26a7fa8 100644
+index af2b27a..8526ded 100644
 --- c/PluginConfig.cpp
 +++ i/PluginConfig.cpp
-@@ -42,6 +42,14 @@ void registerHyprexpoConfigValues() {
+@@ -42,6 +42,16 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:enable_drag_move", "legacy drag-move toggle", HyprexpoConfig::LEGACY_ENABLE_DRAG_MOVE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:animate_entry", "legacy entry animation toggle", HyprexpoConfig::LEGACY_ANIMATE_ENTRY_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:wallpaper_bg", "draw the monitor wallpaper behind overview tiles", HyprexpoConfig::WALLPAPER_BG_DEFAULT));
++    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:capture_transform", "debug: forced texture rotation for workspace previews (-1 = follow monitor)", -1,
++                                                         Config::Values::SIntValueOptions{.min = -1, .max = 3}));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:tile_transparent", "capture tiles without wallpaper/bar so the shared background_image shows through", HyprexpoConfig::TILE_TRANSPARENT_DEFAULT));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:background_transparent", "skip the overview backdrop so whatever the compositor already drew (wallpaper, animated video) shows through", HyprexpoConfig::BACKGROUND_TRANSPARENT_DEFAULT,
 +                                                         Config::Values::SIntValueOptions{.min = 0, .max = 1}));
@@ -2253,7 +2262,7 @@ index af2b27a..26a7fa8 100644
  
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
-@@ -52,6 +60,40 @@ void registerHyprexpoConfigValues() {
+@@ -52,6 +62,40 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
  
@@ -2294,7 +2303,7 @@ index af2b27a..26a7fa8 100644
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
                                                           Config::Values::SIntValueOptions{.min = 0, .max = 9}));
-@@ -80,6 +122,10 @@ void registerHyprexpoConfigValues() {
+@@ -80,6 +124,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_current", "current border color", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_focus", "focus border color", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_hover", "hover border color", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT));
