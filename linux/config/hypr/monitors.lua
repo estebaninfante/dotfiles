@@ -65,9 +65,14 @@ end
 -- En horizontal vuelve dwindle, que es lo de siempre.
 local function apply_orientation_layout(transform)
     if transform % 2 == 1 then
+        -- OJO: `scrolling` da el reparto que se pidio (tres franjas iguales de arriba
+        -- abajo), pero hyprexpo captura mal los workspaces con ese layout (la grilla
+        -- sale como un bloque gris y negro). Hasta arreglar esa captura, en vertical
+        -- queda `master` con mfact 1/3: alturas iguales, aunque las dos de abajo van
+        -- lado a lado. Ver hyprexpo-changes.md.
         hl.config({
-            general = { layout = "scrolling" },
-            scrolling = { direction = "down", column_width = 0.3333, fullscreen_on_one_column = true }
+            general = { layout = "master" },
+            master = { orientation = "top", new_status = "slave", mfact = 0.3333 }
         })
     else
         hl.config({ general = { layout = "dwindle" } })
