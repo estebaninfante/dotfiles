@@ -30,6 +30,22 @@ if plugin ~= nil then
             hl.bind(ws_keys[i], function() expo_select(i) end)
             hl.bind(string.lower(ws_keys[i]), function() expo_select(i) end)
         end
+        -- Capturar desde la grilla: cierra el overview y lanza la captura. Sin esto
+        -- el `catchall` se come la tecla (solo resetea el submap) y parecia que no
+        -- se podia capturar mientras la grilla estaba abierta.
+        local function capture_and_close(cmd)
+            return function()
+                if plugin ~= nil then plugin.expo("close") end
+                hl.exec_cmd(cmd)
+            end
+        end
+        hl.bind("Print", capture_and_close("~/.local/bin/capture-menu image"))
+        hl.bind("SHIFT + Print", capture_and_close("~/.local/bin/capture-menu record"))
+        hl.bind("CTRL + Print", capture_and_close("~/.local/bin/shot -s"))
+        hl.bind("CTRL + SHIFT + Print", capture_and_close("~/.local/bin/shot -s full"))
+        hl.bind(main_mod .. " + Print", capture_and_close("~/.local/bin/shot active"))
+        hl.bind(main_mod .. " + SHIFT + Print", capture_and_close("~/.local/bin/shot -e"))
+
         hl.bind("catchall", function() hl.dispatch(hl.dsp.submap("reset")) end)
     end)
 end
