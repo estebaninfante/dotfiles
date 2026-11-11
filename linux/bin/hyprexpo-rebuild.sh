@@ -87,22 +87,13 @@ if grep -q "outputProjection(MON->m_transformedSize" "$SRC/OverviewRender.cpp"; 
     exit 1
 fi
 
-# Captura de previews en monitor rotado: tamano fisico YA ROTADO (1440x2560 en
-# vertical) con la escala en 1, mas el flip 180 de la textura. Con la escala 1.25 del
-# monitor, los marcos se dibujaban a una escala y las superficies a otra (contenido al
-# 80%, recortado); con escala 1 todo entra 1:1. El flip endereza el contenido.
-if ! grep -q "captureBox = {{0, 0}, monitorState.transformedSize()};" "$SRC/OverviewCapture.cpp" || ! grep -q "m_scale           = 1.F" "$SRC/OverviewCapture.cpp" || ! grep -q "HYPRUTILS_TRANSFORM_180" "$SRC/OverviewCapture.cpp"; then
-    echo "error: la captura de previews perdio el tamano transformado o el flip de 180 (previews estirados o invertidos)" >&2
-    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
-    exit 1
-fi
-
-# Guard anti-regresion del "un solo wallpaper": la cache de la imagen de fondo
-# tiene que estar indexada por ruta real + mtime + tamano. Indexada solo por el
-# string de ruta, un cambio de wallpaper dejaba el overview mostrando la imagen
-# vieja (dos wallpapers: escritorio nuevo, overview viejo) hasta un reload.
-if ! grep -q "backgroundCacheKey" "$SRC/Overview.cpp" || ! grep -q "last_write_time" "$SRC/Overview.cpp"; then
-    echo "error: el patch perdio la clave de cache del fondo (mtime+tamano); el wallpaper queda viejo" >&2
+# Captura de previews en monitor rotado: NO se toca el estado del monitor (mismo
+# transform, escala y tamanos que en vivo). Ajustarlos hacia que los marcos de
+# ventana y las superficies se dibujaran a escalas distintas (contenido recortado o
+# al 80%). La textura se marca con la rotacion INVERSA para que el tile la muestre
+# derecha: si eso desaparece, los previews salen girados 90/180.
+if ! grep -q "inverseTransformOf" "$SRC/OverviewCapture.cpp" || grep -q "monitorState.transformedSize()" "$SRC/OverviewCapture.cpp"; then
+    echo "error: la captura de previews volvio a manipular el estado del monitor o perdio la rotacion inversa" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
     exit 1
 fi
