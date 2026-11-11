@@ -551,8 +551,13 @@ y AC, si no CPU (Vosk, sin VRAM). Servicio `talk-command.service` (unit en
 **Dictado del escritorio:** `SUPER+I` / `F7` / gesto de trackpad →
 `linux/bin/dictado`. Graba con `parec`, transcribe contra `dictado.service`
 (`linux/dictado/servidor.py`: faster-whisper large-v3-turbo en GPU; si no hay
-VRAM libre cae a `small` en GPU y después a CPU) y escribe con `wtype` en la
-ventana enfocada. El gesto es alterno: la primera pulsación abre la grabación,
+VRAM libre cae a `small` en GPU y después a CPU) y escribe en la ventana
+enfocada pegando por portapapeles (`wl-copy` + Ctrl+V / Ctrl+Shift+V vía
+`ydotoold` o el inyector de Hyprland): byte-exacto. Tecleando con `wtype` 0.4 se
+perdían o corrompían caracteres en Chromium/Electron (asigna un keycode por
+carácter distinto y los keycodes 1/14/15/28/29 son Escape/Backspace/Tab/Enter/
+Ctrl físicos; `atx/wtype#71`), por eso quedó sólo como último recurso y de
+`DICTADO_ENTREGA=teclear`. El gesto es alterno: la primera pulsación abre la grabación,
 la segunda la cierra y pega. Enter mientras dictás cierra, pega y presiona
 Enter (submap `dictado`, `linux/config/hypr/dictado-submap.lua`, que replaysa
 los binds globales). `SUPER+CTRL+I` abre el historial
