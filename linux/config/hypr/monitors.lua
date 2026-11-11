@@ -52,13 +52,6 @@ local function saved_transform(output, fallback)
     return transform
 end
 
--- En vertical la pantalla es alta y angosta, y dwindle no es lo más cómodo:
--- reparte en columnas angostas. Lo que se recomienda para portrait es el layout
--- "master" con la principal arriba ocupando el ancho entero y la pila abajo
--- (es lo que pide la mitad de los hilos de r/hyprland, y lo que automatiza
--- hyprland-auto-layout): una ventana ancha para leer o codear y el resto a mano.
--- En horizontal vuelve dwindle, que es lo de siempre.
---
 -- En vertical (pantalla alta y angosta) el layout es `scrolling` con las columnas
 -- hacia abajo: cada ventana ocupa una franja horizontal de ancho completo.
 --
@@ -75,17 +68,6 @@ local function apply_orientation_layout(transform)
         hl.config({
             general = { layout = "scrolling" },
             scrolling = { direction = "down", column_width = 0.3333, fullscreen_on_one_column = true }
-        })
-    else
-        hl.config({ general = { layout = "dwindle" } })
-    end
-end
-
-local function apply_orientation_layout(transform)
-    if transform % 2 == 1 then
-        hl.config({
-            general = { layout = "master" },
-            master = { orientation = "top", new_status = "slave", mfact = 0.3333 }
         })
     else
         hl.config({ general = { layout = "dwindle" } })
