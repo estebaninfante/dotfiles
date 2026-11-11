@@ -134,10 +134,12 @@ if plugin ~= nil then
         -- puntero); en la maquina cliente no toca nada, porque soltar ahi hace que
         -- el host suelte y el puntero se vaya a la otra pantalla. Al cerrar,
         -- re-arma solo si fuimos nosotros los que soltamos.
+        -- DIAGNOSTICO: por ahora solo se registra el estado (no se toca lan-mouse),
+        -- para ver en el log quien tiene la captura al abrir/cerrar la grilla.
         if name == "hyprexpo" then
-            hl.exec_cmd("lan-mouse-grid.sh off")
-        elseif previous_submap == "hyprexpo" and not modes.streaming then
-            hl.exec_cmd("lan-mouse-grid.sh on")
+            hl.exec_cmd("lan-mouse-grid.sh observe open")
+        elseif previous_submap == "hyprexpo" then
+            hl.exec_cmd("lan-mouse-grid.sh observe close")
         end
         previous_submap = name
         if name ~= "hyprexpo" then

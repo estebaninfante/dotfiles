@@ -28,6 +28,13 @@ log() {
     printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG_DIR/log" 2>/dev/null || true
 }
 
+# `observe` = solo registrar el estado, sin tocar lan-mouse. Se usa mientras se
+# diagnostica: deja la linea de tiempo en el log sin interferir.
+if [ "${1:-}" = "observe" ]; then
+    log "observe ${2:-}: capture=$(capture_state) mark=$([ -f "$MARK" ] && echo si || echo no)"
+    exit 0
+fi
+
 case "${1:-}" in
     off)
         mkdir -p "$STATE_DIR" 2>/dev/null || true
