@@ -1199,7 +1199,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..aeda7ec 100644
+index cb18d2f..f20d599 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1467,7 +1467,7 @@ index cb18d2f..aeda7ec 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace.reset();
          } else {
-@@ -240,6 +398,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -240,15 +398,28 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
          }
  
@@ -1476,20 +1476,29 @@ index cb18d2f..aeda7ec 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-@@ -247,7 +407,12 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+         if (!rendererState.restored())
              return false;
  
-         if (const auto texture = framebuffer->getTexture(); texture)
+-        if (const auto texture = framebuffer->getTexture(); texture)
 -            texture->m_transform = isTransformRotated(monitorState.transform()) ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
-+            // El framebuffer capturado sale girado 180 respecto del espacio del
-+            // overlay cuando el monitor esta rotado (Hyprland neutraliza el
-+            // transform y dibuja el workspace en el buffer sin rotar). Se
-+            // compensa con TRANSFORM_180, que es lo que hacia el codigo original:
-+            // sin esto los previews se ven invertidos dentro del tile.
-+            texture->m_transform = monitorState.transform() != WL_OUTPUT_TRANSFORM_NORMAL ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
-         else
+-        else
++        if (const auto texture = framebuffer->getTexture(); texture) {
++            // El buffer viene girado igual que la pantalla, asi que la textura se
++            // marca con la MISMA rotacion del monitor y el tile la endereza. Con
++            // la inversa el contenido salia girado 90 (el layout de la ventana se
++            // veia acostado dentro del tile).
++            const auto T = monitorState.transform();
++            texture->m_transform = T == WL_OUTPUT_TRANSFORM_90          ? HYPRUTILS_TRANSFORM_90 :
++                                   T == WL_OUTPUT_TRANSFORM_180         ? HYPRUTILS_TRANSFORM_180 :
++                                   T == WL_OUTPUT_TRANSFORM_270         ? HYPRUTILS_TRANSFORM_270 :
++                                   T == WL_OUTPUT_TRANSFORM_FLIPPED     ? HYPRUTILS_TRANSFORM_FLIPPED :
++                                   T == WL_OUTPUT_TRANSFORM_FLIPPED_90  ? HYPRUTILS_TRANSFORM_FLIPPED_90 :
++                                   T == WL_OUTPUT_TRANSFORM_FLIPPED_180 ? HYPRUTILS_TRANSFORM_FLIPPED_180 :
++                                   T == WL_OUTPUT_TRANSFORM_FLIPPED_270 ? HYPRUTILS_TRANSFORM_FLIPPED_270 : HYPRUTILS_TRANSFORM_NORMAL;
++        } else
              return false;
  
+         monitorState.restore();
 diff --git c/OverviewCapture.hpp i/OverviewCapture.hpp
 index fa06d24..c448235 100644
 --- c/OverviewCapture.hpp
