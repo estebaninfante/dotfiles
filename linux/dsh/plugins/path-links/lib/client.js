@@ -21,7 +21,7 @@ window.__ModuleLoader__.load({
 		const MAX_TOKEN_CHARS = 400;
 		const FILE_EXTENSIONS = "md|markdown|txt|json|jsonl|ya?ml|toml|ini|cfg|conf|service|sh|bash|zsh|fish|py|js|mjs|cjs|ts|tsx|jsx|css|scss|sass|less|html?|vue|svelte|rs|go|rb|java|kt|swift|c|h|cc|cpp|hpp|cs|php|lua|pl|sql|db|sqlite|png|jpe?g|gif|webp|svg|ico|pdf|csv|tsv|xlsx?|docx?|pptx?|zip|tar|gz|tgz|log|lock|env|desktop|tmpl|template|patch|diff";
 
-		const CSS = [
+		const STYLE_CSS = [
 			"::highlight(" + HIGHLIGHT_NAME + "){text-decoration:underline dotted;text-underline-offset:2px;text-decoration-color:var(--dsw-alias-state-business-primary,#6ea8fe)}",
 			".dsh-path-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483002;max-width:min(560px,calc(100vw - 32px));box-sizing:border-box;padding:9px 14px;border:1px solid var(--dsw-alias-border-l2,#3a3d42);border-radius:10px;background:var(--dsw-specific-input-major,#202226);color:var(--dsw-alias-label-primary,#e9e9ec);font:400 12px/1.4 system-ui,-apple-system,sans-serif;box-shadow:0 10px 30px #0009;white-space:pre-wrap;word-break:break-word}"
 		].join("\n");
@@ -36,7 +36,7 @@ window.__ModuleLoader__.load({
 			if (document.getElementById(STYLE_ID) !== null) return;
 			const style = document.createElement("style");
 			style.id = STYLE_ID;
-			style.textContent = CSS;
+			style.textContent = STYLE_CSS;
 			document.head.appendChild(style);
 		}
 
@@ -100,6 +100,9 @@ window.__ModuleLoader__.load({
 			if (!token.includes("/")) return new RegExp(`\\.(?:${FILE_EXTENSIONS})$`, "iu").test(token);
 			if (/^(?:~|\.{1,2}\/|\/)/u.test(token)) return true;
 			if (token.endsWith("/")) return token.split("/").filter((part) => part.length > 0).length >= 1;
+			// Relativa: el primer segmento tiene que parecer un nombre, no un número
+			// (así `12/11/2026` o `3/4` no se toman por rutas).
+			if (!/^[A-Za-z_.@-]/u.test(token)) return false;
 			return /^[\w.@+-]+\/[\w.@+./-]+$/u.test(token);
 		}
 
@@ -122,14 +125,15 @@ window.__ModuleLoader__.load({
 		}
 
 		function setHighlight(range) {
-			if (typeof Highlight !== "function" || typeof CSS === "undefined" || CSS.highlights === void 0) return;
+			const highlights = globalThis.CSS?.highlights;
+			if (typeof globalThis.Highlight !== "function" || highlights === void 0) return;
 			highlightRange = range;
-			CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(range));
+			highlights.set(HIGHLIGHT_NAME, new globalThis.Highlight(range));
 		}
 
 		function clearHighlight() {
 			highlightRange = null;
-			if (typeof CSS !== "undefined" && CSS.highlights !== void 0) CSS.highlights.delete(HIGHLIGHT_NAME);
+			globalThis.CSS?.highlights?.delete(HIGHLIGHT_NAME);
 		}
 
 		function showToast(message) {
@@ -235,6 +239,8 @@ window.__ModuleLoader__.load({
 		function apply(ctx) {
 			ctxRef = ctx;
 			ensureStyle();
+			// Introspección mínima para probar la heurística sin servidor.
+			globalThis.__dshPathLinks = { pathAtPoint, tokenAt, looksLikePath, openPath, clearHighlight };
 			document.addEventListener("mousemove", onMouseMove, true);
 			document.addEventListener("mouseleave", onMouseLeave, true);
 			document.addEventListener("click", onClick, true);

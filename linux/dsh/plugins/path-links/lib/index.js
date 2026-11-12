@@ -62,9 +62,17 @@ function encodePath(path) {
 	return path.split("/").map((segment) => encodeURIComponent(segment).replace(/%3A/gi, ":")).join("/");
 }
 
-/** `dsh-resource://file/session/<id>/<path>` igual que el chat. */
-function fileAddress(sessionId, absolutePath) {
-	return `${FILE_ADDRESS_PREFIX}session/${encodeURIComponent(sessionId)}/${encodePath(absolutePath.replace(/\\/g, "/"))}`;
+/**
+ * `dsh-resource://file/session/<id>/<path>` con la misma regla que el chat: si
+ * el archivo vive dentro del workspace de la sesión, se direcciona relativo.
+ */
+function fileAddress(sessionId, absolutePath, cwd) {
+	const normalized = absolutePath.replace(/\\/g, "/");
+	const root = typeof cwd === "string" ? cwd.replace(/\\/g, "/").replace(/\/+$/, "") : "";
+	let relative = normalized;
+	if (root !== "" && normalized === root) relative = "";
+	else if (root !== "" && normalized.startsWith(`${root}/`)) relative = normalized.slice(root.length + 1);
+	return `${FILE_ADDRESS_PREFIX}session/${encodeURIComponent(sessionId)}/${encodePath(relative)}`;
 }
 
 /** Expande `~` y resuelve relativas contra el cwd de la sesión. */
@@ -133,7 +141,7 @@ export function apply(ctx) {
 			sendJson(res, 200, { kind: "error", absolute });
 			return;
 		}
-		const address = sessionId.length === 0 ? `${FILE_ADDRESS_PREFIX}absolute/${encodePath(absolute)}` : fileAddress(sessionId, absolute);
+		const address = sessionId.length === 0 ? `${FILE_ADDRESS_PREFIX}absolute/${encodePath(absolute)}` : fileAddress(sessionId, absolute, session?.header?.cwd);
 		sendJson(res, 200, { kind: "file", absolute, address, size: info.size });
 	};
 
