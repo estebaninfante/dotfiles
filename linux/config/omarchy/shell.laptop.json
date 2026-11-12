@@ -83,7 +83,12 @@
           "id": "io.github.dragosol.better-displays-pro"
         },
         {
-          "id": "akitaonrails.ai-usagebar"
+          "colorCodeUsage": true,
+          "id": "akitaonrails.ai-usagebar",
+          "lastSelectedEntryId": "opencode-go",
+          "showAll": true,
+          "showProvider": true,
+          "tabNames": true
         }
       ]
     },
