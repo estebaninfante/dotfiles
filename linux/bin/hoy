@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""hoy — qué hay que hacer hoy, en un solo bloque.
+
+Lee un PROYECTO.md por proyecto (~/Proyectos/*/PROYECTO.md) y los tickets
+bloqueados, y muestra solo lo accionable: los frentes activos con su siguiente
+paso, lo que espera una decisión del usuario, y cuántas carpetas están sin
+clasificar. Nada más: si la salida no se lee en 30 segundos, falló.
+
+Uso:
+  hoy            el tablero del día
+  hoy --todo     además lista las carpetas sin PROYECTO.md
+  hoy --dias N   marca sin revisar a partir de N días (default 14)
+"""
+
+import datetime
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+RAIZ = Path.home() / "Proyectos"
+EXCLUIR = {"_archivo", ".rig-worktrees"}
+CAMPOS = ("Qué es", "Estado", "En qué quedó", "Sigue", "Te necesita", "Última revisión")
+TODOS = "--todo" in sys.argv
+DIAS = 14
+if "--dias" in sys.argv:
+    try:
+        DIAS = int(sys.argv[sys.argv.index("--dias") + 1])
+    except (IndexError, ValueError):
+        pass
+
+ttys = sys.stdout.isatty()
+B = "\033[1m" if ttys else ""
+D = "\033[2m" if ttys else ""
+N = "\033[0m" if ttys else ""
+
+
+def leer_estado(ruta):
+    datos = {}
+    for linea in ruta.read_text(encoding="utf-8", errors="replace").splitlines():
+        if linea.startswith("**") and ":**" in linea:
+            clave, _, valor = linea[2:].partition(":**")
+            datos[clave.strip()] = valor.strip()
+    return datos
+
+
+def proyectos():
+    salida = []
+    for md in sorted(RAIZ.glob("*/PROYECTO.md")):
+        if md.parent.name in EXCLUIR:
+            continue
+        d = leer_estado(md)
+        d["_dir"] = md.parent.name
+        salida.append(d)
+    return salida
+
+
+def sin_clasificar():
+    fuera = []
+    for p in sorted(RAIZ.iterdir()):
+        if not p.is_dir() or p.name in EXCLUIR or p.name.startswith("."):
+            continue
+        if not (p / "PROYECTO.md").exists():
+            fuera.append(p.name)
+    return fuera
+
+
+def bloqueados():
+    try:
+        r = subprocess.run(
+            ["agent-os-cli", "ticket", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=6,
+        )
+        tickets = json.loads(r.stdout or "[]")
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return []
+    return [t for t in tickets if t.get("status") == "blocked"]
+
+
+def hace_dias(fecha):
+    try:
+        d = datetime.date.fromisoformat(fecha[:10])
+    except (ValueError, TypeError):
+        return None
+    return (datetime.date.today() - d).days
+
+
+hoy = datetime.date.today().isoformat()
+todos = proyectos()
+if not todos:
+    print(f"No hay ningún PROYECTO.md todavía.")
+    print(f"Creá {RAIZ}/<proyecto>/PROYECTO.md con el formato de "
+          f"~/dotfiles/linux/agents/protocolo-proyectos.md")
+    sys.exit(0)
+
+activos = [p for p in todos if p.get("Estado", "").lower().startswith("activ")]
+pausados = [p for p in todos if p.get("Estado", "").lower().startswith("paus")]
+
+print(f"{B}HOY · {hoy} · {len(activos)} frente(s) activo(s){N}")
+if len(activos) > 3:
+    print(f"  {B}AVISO:{N} hay {len(activos)} activos. El tope es 3: pausá uno y escribí por qué.")
+
+print(f"\n{B}ACTIVOS{N}")
+if not activos:
+    print("  ninguno. Activá uno escribiendo **Estado:** activo en su PROYECTO.md")
+for p in activos:
+    dias = hace_dias(p.get("Última revisión", ""))
+    edad = "" if dias is None else (f"{D}rev. hace {dias}d{N}" if dias < DIAS
+                                    else f"{B}SIN REVISAR hace {dias}d{N}")
+    print(f"\n▸ {B}{p['_dir']}{N}  {edad}")
+    print(f"  Sigue:       {p.get('Sigue', '(sin definir)')}")
+    necesita = p.get("Te necesita", "").strip()
+    if necesita and necesita.lower() not in ("nada", "-"):
+        print(f"  Te necesita: {necesita}")
+
+bloqueados_ = bloqueados()
+if bloqueados_:
+    print(f"\n{B}ESPERANDO UNA DECISIÓN TUYA ({len(bloqueados_)}){N}")
+    for t in bloqueados_[:5]:
+        print(f"  · {t.get('id')} · {t.get('project')} — {(t.get('title') or '')[:70]}")
+
+if pausados:
+    print(f"\n{D}pausados: {', '.join(p['_dir'] for p in pausados)}{N}")
+
+sueltas = sin_clasificar()
+if sueltas:
+    print(f"\n{D}SIN CLASIFICAR: {len(sueltas)} carpetas sin PROYECTO.md"
+          f"{'' if TODOS else '  (hoy --todo para verlas)'}{N}")
+    if TODOS:
+        for nombre in sueltas:
+            print(f"  - {nombre}")
