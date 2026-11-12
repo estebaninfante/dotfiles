@@ -135,7 +135,22 @@ window.__ModuleLoader__.load({
 .mr-pill select{
   appearance:none;-webkit-appearance:none;border:0;background:transparent;color:inherit;
   font:inherit;font-size:12px;cursor:pointer;outline:none;padding:0;margin:0;max-width:120px}
-.mr-pill select option{background:#17191d;color:#ecedef}
+.mr-chev{color:var(--fg3);flex:none;transition:transform .13s ease}
+.mr-pill[data-open="1"]{border-color:#3b4048;background:var(--hover);color:var(--fg)}
+.mr-pill[data-open="1"] .mr-chev{transform:rotate(180deg);color:var(--fg2)}
+.mr-menu{
+  position:fixed;z-index:2147483000;padding:5px;border:1px solid var(--line2);border-radius:10px;
+  background:#17191d;box-shadow:0 18px 42px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);
+  display:flex;flex-direction:column;gap:1px;animation:mr-pop .1s ease-out}
+@keyframes mr-pop{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+.mr-menu button{
+  display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 9px;
+  border:0;border-radius:7px;background:transparent;color:var(--fg2);
+  font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.mr-menu button[data-focus="1"]{background:#23262f;color:var(--fg)}
+.mr-menu button[data-cur="1"]{color:var(--fg)}
+.mr-menu .check{margin-left:auto;font-size:11px;color:var(--accent);opacity:0}
+.mr-menu button[data-cur="1"] .check{opacity:1}
 .mr-age{font-variant-numeric:tabular-nums;color:var(--fg2)}
 .mr-age[data-stale="1"]{color:var(--warn)}
 .mr-remote{display:inline-flex;align-items:center;gap:6px;color:var(--fg2);font-size:12px}
@@ -248,6 +263,153 @@ window.__ModuleLoader__.load({
 					d:
 						"M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.34c-2.22.48-2.69-1.07-2.69-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.81.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.77-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z",
 				}),
+			);
+		}
+
+		function IconChevron() {
+			return h(
+				"svg",
+				{
+					className: "mr-chev",
+					width: 9,
+					height: 9,
+					viewBox: "0 0 10 10",
+					fill: "none",
+					"aria-hidden": "true",
+				},
+				h("path", {
+					d: "M2 4l3 3 3-3",
+					stroke: "currentColor",
+					strokeWidth: 1.5,
+					strokeLinecap: "round",
+					strokeLinejoin: "round",
+				}),
+			);
+		}
+
+		function StateMenu(props) {
+			const value = props.value;
+			const onChange = props.onChange;
+			const [open, setOpen] = React.useState(false);
+			const [pos, setPos] = React.useState(null);
+			const [focus, setFocus] = React.useState(0);
+			const triggerRef = React.useRef(null);
+			const menuRef = React.useRef(null);
+
+			const openAt = React.useCallback(() => {
+				const el = triggerRef.current;
+				if (!el) return;
+				const rect = el.getBoundingClientRect();
+				const height = STATES.length * 31 + 10;
+				const below = rect.bottom + 6;
+				const top = below + height > window.innerHeight - 8 ? rect.top - height - 6 : below;
+				setPos({
+					top: Math.max(8, top),
+					left: Math.min(rect.left, window.innerWidth - 198),
+					width: 186,
+				});
+				setFocus(Math.max(0, STATES.indexOf(value)));
+				setOpen(true);
+			}, [value]);
+
+			React.useEffect(() => {
+				if (!open) return;
+				const onDown = (event) => {
+					if (menuRef.current && menuRef.current.contains(event.target)) return;
+					if (triggerRef.current && triggerRef.current.contains(event.target)) return;
+					setOpen(false);
+				};
+				const onKey = (event) => {
+					if (event.key === "Escape") {
+						event.stopPropagation();
+						setOpen(false);
+						return;
+					}
+					if (event.key === "ArrowDown") {
+						event.preventDefault();
+						setFocus((f) => (f + 1) % STATES.length);
+						return;
+					}
+					if (event.key === "ArrowUp") {
+						event.preventDefault();
+						setFocus((f) => (f - 1 + STATES.length) % STATES.length);
+						return;
+					}
+					if (event.key === "Enter") {
+						event.preventDefault();
+						onChange(STATES[focus]);
+						setOpen(false);
+					}
+				};
+				const onScroll = () => setOpen(false);
+				document.addEventListener("mousedown", onDown);
+				document.addEventListener("keydown", onKey, true);
+				window.addEventListener("scroll", onScroll, true);
+				window.addEventListener("resize", onScroll);
+				return () => {
+					document.removeEventListener("mousedown", onDown);
+					document.removeEventListener("keydown", onKey, true);
+					window.removeEventListener("scroll", onScroll, true);
+					window.removeEventListener("resize", onScroll);
+				};
+			}, [open, focus, onChange]);
+
+			const trigger = h(
+				"button",
+				{
+					ref: triggerRef,
+					type: "button",
+					className: "mr-pill",
+					"data-open": open ? 1 : 0,
+					title: "Cambiar estado",
+					onClick: (event) => {
+						event.stopPropagation();
+						if (open) setOpen(false);
+						else openAt();
+					},
+				},
+				h("span", { className: "mr-dot", style: { background: DOT[value] } }),
+				LABEL[value] || value,
+				h(IconChevron),
+			);
+
+			if (!open || !pos) return trigger;
+
+			return h(
+				React.Fragment,
+				null,
+				trigger,
+				h(
+					"div",
+					{
+						ref: menuRef,
+						className: "mr-menu",
+						role: "listbox",
+						style: { top: pos.top, left: pos.left, width: pos.width },
+					},
+					STATES.map((state, index) =>
+						h(
+							"button",
+							{
+								key: state,
+								type: "button",
+								role: "option",
+								"aria-selected": state === value ? "true" : "false",
+								"data-cur": state === value ? 1 : 0,
+								"data-focus": index === focus ? 1 : 0,
+								onMouseEnter: () => setFocus(index),
+								onClick: (event) => {
+									event.stopPropagation();
+									setOpen(false);
+									onChange(state);
+								},
+							},
+							h("span", { className: "mr-dot", style: { background: DOT[state] } }),
+							LABEL[state],
+							h("span", { className: "check" }, "✓"),
+						),
+					),
+				),
 			);
 		}
 
@@ -522,20 +684,10 @@ window.__ModuleLoader__.load({
 										h(
 											"td",
 											{ onClick: (event) => event.stopPropagation() },
-											h(
-												"span",
-												{ className: "mr-pill" },
-												h("span", { className: "mr-dot", style: { background: DOT[p.state] } }),
-												h(
-													"select",
-													{
-														value: p.state,
-														onChange: (event) => changeState(p.slug, event.target.value),
-														title: "Cambiar estado",
-													},
-													STATES.map((s) => h("option", { key: s, value: s }, LABEL[s])),
-												),
-											),
+											h(StateMenu, {
+												value: p.state,
+												onChange: (next) => changeState(p.slug, next),
+											}),
 										),
 										h("td", { className: "mr-age", "data-stale": stale ? 1 : 0 }, ageLabel(p.age_days)),
 										h(
