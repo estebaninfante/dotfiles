@@ -215,12 +215,23 @@ window.__ModuleLoader__.load({
 			panelQuote = "";
 		}
 
+		/** La respuesta alarga el globo: que no se vaya abajo de la pantalla. */
+		function keepPanelInView() {
+			if (panel === null) return;
+			const height = panel.offsetHeight;
+			const top = Number.parseFloat(panel.style.top || "0");
+			if (top + height > window.innerHeight - MARGIN) {
+				panel.style.top = `${clamp(window.innerHeight - height - MARGIN, MARGIN, window.innerHeight - height - MARGIN)}px`;
+			}
+		}
+
 		/** Pide la respuesta al host. No toca la sesión. */
 		async function ask(question, ui) {
 			ui.submit.disabled = true;
 			ui.answer.dataset.open = "1";
 			ui.answer.dataset.error = "0";
 			ui.answer.replaceChildren(paragraph("Pensando"));
+			keepPanelInView();
 			ui.answer.firstElementChild.className = "dsh-sideq-dots";
 			try {
 				const response = await fetch(ENDPOINT, {
@@ -241,9 +252,11 @@ window.__ModuleLoader__.load({
 				if (!response.ok) throw new Error(typeof payload.message === "string" ? payload.message : `error ${response.status}`);
 				ui.answer.dataset.error = "0";
 				ui.answer.replaceChildren(paragraph(typeof payload.answer === "string" ? payload.answer : "(respuesta vacía)"));
+				keepPanelInView();
 			} catch (error) {
 				ui.answer.dataset.error = "1";
 				ui.answer.replaceChildren(paragraph(`No pude responder: ${error instanceof Error ? error.message : String(error)}`));
+				keepPanelInView();
 			} finally {
 				ui.submit.disabled = false;
 			}
@@ -296,12 +309,17 @@ window.__ModuleLoader__.load({
 			hideBubble();
 		}
 
+		function onResize() {
+			hideBubble();
+			keepPanelInView();
+		}
+
 		function dispose() {
 			document.removeEventListener("mouseup", onMouseUp, true);
 			document.removeEventListener("mousedown", onMouseDown, true);
 			document.removeEventListener("keydown", onKeyDown, true);
 			document.removeEventListener("scroll", onScroll, true);
-			window.removeEventListener("resize", hideBubble);
+			window.removeEventListener("resize", onResize);
 			hideBubble();
 			closePanel();
 			document.getElementById(STYLE_ID)?.remove();
@@ -313,7 +331,7 @@ window.__ModuleLoader__.load({
 			document.addEventListener("mousedown", onMouseDown, true);
 			document.addEventListener("keydown", onKeyDown, true);
 			document.addEventListener("scroll", onScroll, true);
-			window.addEventListener("resize", hideBubble);
+			window.addEventListener("resize", onResize);
 			if (ctx !== void 0 && typeof ctx.effect === "function") ctx.effect(() => dispose, "side-questions: selection bubble");
 			return dispose;
 		}
