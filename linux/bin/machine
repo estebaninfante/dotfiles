@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""machine — el computador como base de datos.
+
+Una sola base SQLite (`~/.local/share/machine/machine.db`) que indexa las
+entidades de la máquina: proyectos, tareas, ideas, servicios.
+
+Dos capas, y la diferencia importa:
+
+  - HECHOS: se leen del disco (git, systemd, archivos). `scan` los recalcula.
+    Nadie los escribe a mano, así que no se pueden desactualizar.
+  - DECISIONES: `state`, `kind` y `note`. Las escribe el humano. `scan` nunca
+    las toca.
+
+Comandos:
+  machine init                       crea la base y el esquema
+  machine scan                       recorre ~/Proyectos y refresca hechos
+  machine ls [--kind K] [--state S]  lista entidades
+  machine show <slug>                ficha con todos los hechos
+  machine set <slug> [opciones]      cambia kind/state/note
+  machine stats                      conteos por estado y kind
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import subprocess
+import sqlite3
+import sys
+from pathlib import Path
+
+DB = Path(os.environ.get("MACHINE_DB", Path.home() / ".local/share/machine/machine.db"))
+ROOT = Path(os.environ.get("MACHINE_ROOT", Path.home() / "Proyectos"))
+SKIP = {"_archivo", ".rig-worktrees"}
+TICKETS = Path.home() / ".config/opencode/tickets.json"
+SYSTEMD = Path.home() / ".config/systemd/user"
+
+KINDS = ("project", "product", "experiment", "service", "app", "idea", "task")
+STATES = ("unclassified", "active", "paused", "done", "archived")
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version    INTEGER NOT NULL,
+    applied_at TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sources (
+    name         TEXT PRIMARY KEY,
+    path         TEXT NOT NULL,
+    last_scan_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS entities (
+    id         INTEGER PRIMARY KEY,
+    kind       TEXT    NOT NULL,
+    slug       TEXT    NOT NULL,
+    title      TEXT,
+    state      TEXT    NOT NULL DEFAULT 'active',
+    note       TEXT,
+    source     TEXT    NOT NULL DEFAULT 'scan',
+    created_at TEXT    NOT NULL,
+    updated_at TEXT    NOT NULL,
+    UNIQUE (kind, slug)
+);
+
+CREATE TABLE IF NOT EXISTS facts (
+    entity_id   INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
+    key         TEXT    NOT NULL,
+    value       TEXT,
+    observed_at TEXT    NOT NULL,
+    PRIMARY KEY (entity_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entities_state ON entities (state);
+CREATE INDEX IF NOT EXISTS idx_entities_kind  ON entities (kind);
+CREATE INDEX IF NOT EXISTS idx_facts_key      ON facts (key);
+"""
+
+
+def now() -> str:
+    return dt.datetime.now().replace(microsecond=0).isoformat()
+
+
+def connect() -> sqlite3.Connection:
+    if not DB.exists():
+        sys.exit(f"machine: no existe la base ({DB}). Corré: machine init")
+    con = sqlite3.connect(DB)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA foreign_keys=ON")
+    return con
+
+
+def cmd_init(args) -> None:
+    DB.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(DB)
+    con.execute("PRAGMA journal_mode=WAL")
+    con.executescript(SCHEMA)
+    row = con.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
+    if not row[0]:
+        con.execute("INSERT INTO schema_version (version, applied_at) VALUES (1, ?)", (now(),))
+    con.commit()
+    print(f"base:   {DB}")
+    print(f"esquema: version {con.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]}")
+
+
+def git(path: Path, *argv: str) -> str:
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(path), *argv],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def title_of(path: Path) -> str:
+    for name in ("README.md", "AGENTS.md", "readme.md"):
+        f = path / name
+        if not f.is_file():
+            continue
+        try:
+            for line in f.read_text(encoding="utf-8", errors="replace").splitlines()[:20]:
+                if line.startswith("# "):
+                    return line[2:].strip()
+        except OSError:
+            pass
+    return path.name
+
+
+def tickets_by_project() -> dict[str, tuple[int, int]]:
+    """(total, abiertos) por proyecto. Lee el archivo viejo sin modificarlo."""
+    if not TICKETS.is_file():
+        return {}
+    try:
+        raw = json.loads(TICKETS.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    data = raw.get("tickets", []) if isinstance(raw, dict) else raw
+    if not isinstance(data, list):
+        return {}
+    out: dict[str, list[int]] = {}
+    for t in data:
+        if not isinstance(t, dict):
+            continue
+        p = (t.get("project") or "").strip()
+        if not p:
+            continue
+        acc = out.setdefault(p, [0, 0])
+        acc[0] += 1
+        if t.get("status") != "done":
+            acc[1] += 1
+    return {k: (v[0], v[1]) for k, v in out.items()}
+
+
+def systemd_units() -> str:
+    try:
+        return "\n".join(f.read_text(encoding="utf-8", errors="replace")
+                         for f in SYSTEMD.glob("*.service"))
+    except OSError:
+        return ""
+
+
+def collect(path: Path, units: str, tickets: dict[str, tuple[int, int]]) -> dict[str, str]:
+    slug = path.name
+    is_git = bool(git(path, "rev-parse", "--git-dir"))
+    facts: dict[str, str] = {"path": str(path)}
+
+    if is_git:
+        last = git(path, "log", "-1", "--format=%cs")
+        facts["git"] = "true"
+        facts["branch"] = git(path, "rev-parse", "--abbrev-ref", "HEAD") or "?"
+        facts["last_commit"] = last or "?"
+        status = git(path, "status", "--porcelain")
+        facts["dirty"] = str(len(status.splitlines())) if status else "0"
+        ahead = git(path, "rev-list", "--count", "@{u}..HEAD")
+        facts["ahead"] = ahead if ahead else "?"
+        remote = git(path, "remote", "get-url", "origin")
+        facts["remote_url"] = remote
+        host = ""
+        if "github.com" in remote:
+            host = "github"
+        elif "gitlab" in remote:
+            host = "gitlab"
+        elif remote:
+            host = "other"
+        facts["remote_host"] = host or "none"
+    else:
+        facts["git"] = "false"
+        facts["last_commit"] = dt.date.fromtimestamp(path.stat().st_mtime).isoformat()
+
+    facts["has_readme"] = "true" if (path / "README.md").is_file() else "false"
+    facts["has_agents"] = "true" if (path / "AGENTS.md").is_file() else "false"
+    facts["has_webapp"] = "true" if (path / ".webapp.json").is_file() else "false"
+    facts["systemd"] = "true" if f"Proyectos/{slug}" in units else "false"
+    total, opened = tickets.get(slug, (0, 0))
+    facts["tickets_total"] = str(total)
+    facts["tickets_open"] = str(opened)
+    return facts
+
+
+def cmd_scan(args) -> None:
+    con = connect()
+    units = systemd_units()
+    tickets = tickets_by_project()
+    stamp = now()
+    seen = 0
+
+    for path in sorted(ROOT.iterdir()):
+        if not path.is_dir() or path.name in SKIP or path.name.startswith("."):
+            continue
+        seen += 1
+        facts = collect(path, units, tickets)
+        row = con.execute(
+            "SELECT id, title FROM entities WHERE kind='project' AND slug=?", (path.name,)
+        ).fetchone()
+        title = title_of(path)
+        if row:
+            entity_id = row["id"]
+            con.execute("UPDATE entities SET title=?, updated_at=? WHERE id=?",
+                        (title, stamp, entity_id))
+        else:
+            cur = con.execute(
+                "INSERT INTO entities (kind, slug, title, state, source, created_at, updated_at)"
+                " VALUES ('project', ?, ?, 'unclassified', 'scan', ?, ?)",
+                (path.name, title, stamp, stamp),
+            )
+            entity_id = cur.lastrowid
+        con.executemany(
+            "INSERT INTO facts (entity_id, key, value, observed_at) VALUES (?,?,?,?)"
+            " ON CONFLICT (entity_id, key) DO UPDATE SET value=excluded.value,"
+            " observed_at=excluded.observed_at",
+            [(entity_id, k, v, stamp) for k, v in facts.items()],
+        )
+
+    con.execute(
+        "INSERT INTO sources (name, path, last_scan_at) VALUES ('projects', ?, ?)"
+        " ON CONFLICT (name) DO UPDATE SET last_scan_at=excluded.last_scan_at",
+        (str(ROOT), stamp),
+    )
+    con.commit()
+
+    with_remote = con.execute(
+        "SELECT COUNT(*) FROM facts WHERE key='remote_host' AND value IN ('github','gitlab')"
+    ).fetchone()[0]
+    print(f"{seen} proyectos escaneados · {with_remote} con remoto git · {stamp}")
+
+
+def fmt_age(last: str) -> str:
+    try:
+        d = dt.date.fromisoformat(last[:10])
+    except (ValueError, TypeError):
+        return "?"
+    return f"{(dt.date.today() - d).days}d"
+
+
+def cmd_ls(args) -> None:
+    con = connect()
+    where, params = [], []
+    if args.kind:
+        where.append("e.kind = ?")
+        params.append(args.kind)
+    if args.state:
+        where.append("e.state = ?")
+        params.append(args.state)
+    if args.archived is False:
+        where.append("e.state != 'archived'")
+    sql = (
+        "SELECT e.slug, e.kind, e.state, e.title,"
+        "       MAX(CASE WHEN f.key='last_commit' THEN f.value END) AS last_commit,"
+        "       MAX(CASE WHEN f.key='remote_host' THEN f.value END) AS remote_host,"
+        "       MAX(CASE WHEN f.key='tickets_open' THEN f.value END) AS tickets_open,"
+        "       MAX(CASE WHEN f.key='dirty' THEN f.value END) AS dirty"
+        "  FROM entities e LEFT JOIN facts f ON f.entity_id = e.id"
+        + (" WHERE " + " AND ".join(where) if where else "")
+        + " GROUP BY e.id ORDER BY e.state, last_commit DESC"
+    )
+    rows = con.execute(sql, params).fetchall()
+    if not rows:
+        print("(vacío)")
+        return
+    print(f"{'SLUG':20} {'KIND':9} {'STATE':9} {'AGE':>5} {'REMOTE':8} {'DIRTY':>5} {'TK':>3}")
+    for r in rows:
+        print(f"{r['slug'][:20]:20} {r['kind']:9} {r['state']:9} "
+              f"{fmt_age(r['last_commit'] or ''):>5} {r['remote_host'] or '-':8} "
+              f"{r['dirty'] or '-':>5} {r['tickets_open'] or '-':>3}")
+
+
+def cmd_show(args) -> None:
+    con = connect()
+    row = con.execute("SELECT * FROM entities WHERE slug=?", (args.slug,)).fetchone()
+    if not row:
+        sys.exit(f"machine: no existe el proyecto '{args.slug}'")
+    print(f"{row['slug']}  [{row['kind']} · {row['state']}]")
+    print(f"  title:  {row['title']}")
+    if row["note"]:
+        print(f"  note:   {row['note']}")
+    facts = con.execute(
+        "SELECT key, value FROM facts WHERE entity_id=? ORDER BY key", (row["id"],)
+    ).fetchall()
+    for f in facts:
+        print(f"  {f['key']:14} {f['value']}")
+
+
+def cmd_set(args) -> None:
+    con = connect()
+    row = con.execute("SELECT id FROM entities WHERE slug=?", (args.slug,)).fetchone()
+    if not row:
+        sys.exit(f"machine: no existe el proyecto '{args.slug}'")
+    sets, params = [], []
+    if args.state:
+        if args.state not in STATES:
+            sys.exit(f"machine: state inválido. Opciones: {', '.join(STATES)}")
+        sets.append("state = ?")
+        params.append(args.state)
+    if args.kind:
+        if args.kind not in KINDS:
+            sys.exit(f"machine: kind inválido. Opciones: {', '.join(KINDS)}")
+        sets.append("kind = ?")
+        params.append(args.kind)
+    if args.note is not None:
+        sets.append("note = ?")
+        params.append(args.note)
+    if not sets:
+        sys.exit("machine: nada que cambiar (usá --state, --kind o --note)")
+    sets.append("updated_at = ?")
+    params.append(now())
+    params.append(row["id"])
+    con.execute(f"UPDATE entities SET {', '.join(sets)} WHERE id = ?", params)
+    con.commit()
+    after = con.execute("SELECT kind, state, note FROM entities WHERE id=?", (row["id"],)).fetchone()
+    print(f"{args.slug}: {after['kind']} · {after['state']}"
+          + (f" · {after['note']}" if after["note"] else ""))
+
+
+def cmd_stats(args) -> None:
+    con = connect()
+    print("por estado:")
+    for r in con.execute("SELECT state, COUNT(*) n FROM entities GROUP BY state ORDER BY n DESC"):
+        print(f"  {r['state']:9} {r['n']}")
+    print("por kind:")
+    for r in con.execute("SELECT kind, COUNT(*) n FROM entities GROUP BY kind ORDER BY n DESC"):
+        print(f"  {r['kind']:9} {r['n']}")
+    src = con.execute("SELECT name, last_scan_at FROM sources").fetchall()
+    for r in src:
+        print(f"último scan {r['name']}: {r['last_scan_at']}")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="machine", description="el computador como base de datos")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("init", help="crea la base").set_defaults(func=cmd_init)
+    sub.add_parser("scan", help="refresca hechos desde el disco").set_defaults(func=cmd_scan)
+
+    ls = sub.add_parser("ls", help="lista entidades")
+    ls.add_argument("--kind")
+    ls.add_argument("--state")
+    ls.add_argument("--all", dest="archived", action="store_true", default=True,
+                    help="incluye archivados (default)")
+    ls.set_defaults(func=cmd_ls)
+
+    show = sub.add_parser("show", help="ficha de una entidad")
+    show.add_argument("slug")
+    show.set_defaults(func=cmd_show)
+
+    s = sub.add_parser("set", help="cambia una decisión")
+    s.add_argument("slug")
+    s.add_argument("--state")
+    s.add_argument("--kind")
+    s.add_argument("--note")
+    s.set_defaults(func=cmd_set)
+
+    sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
+
+    args = p.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
