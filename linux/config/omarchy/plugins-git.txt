@@ -1,3 +1,4 @@
+akitaonrails.ai-usagebar https://github.com/akitaonrails/ai-usagebar.git
 bredda.localsend https://github.com/cryptobredda/omarchy-localsend
 io.github.dragosol.better-displays-pro https://github.com/dragosol/omarchy-better-displays.git
 io.github.keegan-sucks.flowstate https://github.com/keegan-sucks/omarchy-flowstate.git

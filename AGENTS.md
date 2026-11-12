@@ -366,6 +366,32 @@ sesión: no suma mensajes ni crece el transcript.
   `cordis.patch.yml`; se activa al reiniciar (`dsh-web --restart`). Para apagarlo,
   borrar la línea `id: local-side-questions` del patch y reiniciar.
 
+### `path-links`: rutas del chat clicables
+
+`linux/dsh/plugins/path-links/` (host + cliente) hace tocables las rutas que el
+agente menciona (`~/dotfiles/linux/bin/agent-os-cli`, `~/.config/opencode/tickets.json`,
+`Proyectos/…`), estén en un párrafo, una tabla o backticks. Clic en **archivo** →
+panel lateral derecho con el preview que corresponda; clic en **carpeta** → gestor
+de archivos (xdg-open); ruta inexistente → aviso abajo, sin abrir nada.
+
+- `lib/client.js` no toca el DOM de React: en `mousemove` convierte el punto en
+  un caret (`caretRangeFromPoint`), lee el token bajo el cursor, valida la
+  heurística de ruta y subraya con la **CSS Custom Highlight API**
+  (`::highlight(dsh-path-hover)`); el `click` manda el token al host. Ignora
+  links, botones, campos de texto y selecciones activas (así no pelea con el
+  globo de `side-questions`). Ojo: la variable local `CSS` de estilos shadowea el
+  global; usar `globalThis.CSS.highlights`.
+- `lib/index.js` resuelve en `POST /path-links/open` (header `x-dsh-path-links: 1`):
+  expande `~` con `os.homedir()`, resuelve relativas contra `session.header.cwd`,
+  hace `stat` y devuelve `{kind: file|dir|missing}`. El archivo viaja como
+  `dsh-resource://file/session/<id>/<rel>` con la misma regla que el chat
+  (`fileAddressFor`): relativo si está dentro del workspace, absoluto si no.
+- `harness.html` es la página de prueba aislada (loader simulado, `fetch` falso y
+  `ctx.sidebarRight` de mentira): abrirla y pasar el mouse / hacer clic.
+- Instalado como dependencia `file:` + entrada `- insert:` en `cordis.patch.yml`;
+  se activa al reiniciar (`dsh-web --restart`). Para apagarlo, borrar la línea
+  `id: local-path-links` del patch y reiniciar.
+
 ### `machine`: la página de proyectos del harness
 
 `linux/dsh/plugins/machine/` (host + cliente) monta una **página completa**
