@@ -21,8 +21,10 @@
 #     entero en cada turno.
 #   - No lee el razonamiento (pensamiento) ni las tarjetas de herramientas, solo
 #     lo que el tutor le dice al alumno.
-#   - Respeta el interruptor de `leer` (~/.local/state/voice/leer-respuesta.json)
-#     y el maestro de la voz (`voice tts`).
+#   - Respeta DOS interruptores, y basta que uno esté apagado: el de la app
+#     (Ajustes → General → Read replies aloud, en su propio settings.json)
+#     y el histórico de `leer` (~/.local/state/voice/leer-respuesta.json),
+#     más el maestro de la voz (`voice tts`).
 #
 # Uso:
 #   lh-leer            vigila en bucle (lo corre el servicio systemd)
@@ -44,6 +46,7 @@ from pathlib import Path
 
 HOME = Path(os.path.expanduser("~"))
 CHATS = Path(os.environ.get("LH_CHATS_DIR") or HOME / ".config/LearnHarness/data/chats")
+SETTINGS = Path(os.environ.get("LH_SETTINGS_FILE") or CHATS.parent / "settings.json")
 STATE = Path(os.environ.get("LH_LEER_STATE") or HOME / ".local/state/voice/lh-leer.json")
 TOGGLE = Path(os.environ.get("PI_LEER_CONFIG") or HOME / ".local/state/voice/leer-respuesta.json")
 DRY = os.environ.get("LH_LEER_DRY") == "1"
@@ -84,8 +87,24 @@ def activada() -> bool:
         return False
     if env in ("1", "true"):
         return True
+    # Dos interruptores, cualquiera puede callar: el de la app (Ajustes →
+    # General → Read replies aloud, written into the app's own settings
+    # record) y el histórico de `leer` (PI_LEER_CONFIG). El de la app manda
+    # cuando está presente; el archivo sigue sirviendo al CLI y a pi.
+    if not ajuste_de_la_app():
+        return False
     try:
         return json.loads(TOGGLE.read_text(encoding="utf-8")).get("activado", True) is not False
+    except Exception:
+        return True
+
+
+def ajuste_de_la_app() -> bool:
+    """general.readAloud del registro de LearnHarness; ausente = encendido."""
+    try:
+        record = json.loads(SETTINGS.read_text(encoding="utf-8"))
+        value = (record.get("general") or {}).get("readAloud")
+        return value is not False
     except Exception:
         return True
 

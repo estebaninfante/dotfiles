@@ -75,6 +75,15 @@ class Entorno:
     def apagar(self) -> None:
         self.toggle.write_text('{"activado": false}', encoding="utf-8")
 
+    def ajuste_de_la_app(self, valor) -> None:
+        """settings.json del app en `chats.parent` (el default del puente)."""
+        record: dict = {"version": 1, "general": {}}
+        if valor is not None:
+            record["general"]["readAloud"] = valor
+        (self.chats.parent / "settings.json").write_text(
+            json.dumps(record), encoding="utf-8"
+        )
+
 
 # 1) Al arrancar NO lee el historial: toma línea base y calla.
 e = Entorno()
