@@ -84,6 +84,9 @@
         },
         {
           "colorCodeUsage": true,
+          "hiddenBarEntries": [
+            "copilot"
+          ],
           "id": "akitaonrails.ai-usagebar",
           "lastSelectedEntryId": "opencode-go",
           "showAll": true,
