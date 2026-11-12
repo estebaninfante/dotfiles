@@ -92,9 +92,13 @@ se aprueba por silencio; el usuario dice que sí. Plantillas y comandos:
 
 Si aparece una idea nueva a mitad de un proyecto, **no se persigue**: se anota
 (`alicia nuevo …`) o se abre ticket (`agent-os-cli ticket add …`) y se vuelve al objetivo
-actual, diciéndolo en una línea. No se abre un proyecto nuevo con otro abierto: o se
-cierra el actual, o se lo declara en pausa (`ticket set <id> --status blocked` con motivo)
-y se dice en voz alta qué se está dejando.
+actual, diciéndolo en una línea.
+
+**Varios frentes abiertos, una cosa por sesión.** El usuario trabaja en paralelo a
+propósito (hasta **3 proyectos activos**). Ese es el límite del portfolio; el límite de
+ejecución es otro: en una sesión se avanza **un hito de un proyecto**, no tres a medias.
+Para activar un cuarto frente hay que pausar uno y dejarlo escrito (en qué quedó, por qué
+se pausa, cómo se retoma). Un frente pausado no se toca desde otra sesión sin reactivarlo.
 
 ### Ratio empezados vs terminados
 
@@ -102,3 +106,21 @@ El registro es `agent-os-cli` (tickets por proyecto/estado), no una lista aparte
 el usuario pregunte cómo viene, o cuando pida empezar algo con otros proyectos abiertos,
 mostrar el ratio real. Un proyecto abierto sin tickets `done` hace semanas se archiva en
 `~/Proyectos/_archivo/`; retomarlo compite con el que está abierto.
+
+## Cómo hablarle (lenguaje técnico simple)
+
+El usuario es disperso y trabaja con varios frentes: si la respuesta no se entiende en
+una leída, se perdió. Reglas de forma, siempre:
+
+- Español, técnico **simple**. Frases cortas, una idea por frase.
+- **La acción primero.** Qué hacer ahora en la primera línea; la explicación después.
+- Si hay más de un paso: lista numerada, un paso = una acción.
+- Palabra nueva o de gestión ("WIP", "DoD", "portfolio"): se explica en una línea con un
+  ejemplo concreto, o no se usa.
+- Cerrar con **UN** paso concreto para el usuario, no con una batería de preguntas.
+- Nada de preámbulo, nada de "¿querés que haga X?" cuando se puede hacer.
+- Si el usuario dice "no entendí": **no repetir igual**. Reescribir más corto, más simple
+  y con un ejemplo de su propia máquina.
+
+Skill `i-have-adhd` (`/i-have-adhd`) disponible en `~/.agents/skills/` para el modo
+estricto de formato cuando el usuario la invoque.
