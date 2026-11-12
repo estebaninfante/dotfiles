@@ -28,8 +28,17 @@ if [ -z "${BG:-}" ] || [ ! -f "$BG" ]; then
 fi
 
 # 1. hyprpaper.conf apunta al mismo archivo (persistencia entre reinicios).
+#    `changed` marca si el fondo canónico es distinto del que ya estaba: solo
+#    entonces hace falta el reload del final.
+changed=0
 if [ -f "$HYPR_CONF" ] && grep -q 'path =' "$HYPR_CONF"; then
-    sed -i "s|^\(\s*path = \).*|\1$BG|" "$HYPR_CONF"
+    current="$(sed -n 's|^[[:space:]]*path = ||p' "$HYPR_CONF" | head -1)"
+    if [ "$current" != "$BG" ]; then
+        changed=1
+        sed -i "s|^\(\s*path = \).*|\1$BG|" "$HYPR_CONF"
+    fi
+else
+    changed=1
 fi
 
 # 1b. Overview (hyprexpo): pasarle la ruta nueva en caliente si el plugin ya esta
@@ -52,7 +61,11 @@ if pgrep -x hyprpaper >/dev/null 2>&1; then
     done
 fi
 
-if [ "${SYNC_WALLPAPER_NO_RELOAD:-0}" != "1" ]; then
+# 3. Reload SOLO si el fondo cambió de verdad. `wallpaper-sync.timer` corre
+#    cada 2 minutos como red de seguridad; recargar sin cambios re-aplica la
+#    config de monitores (en batería, el panel pasa a 60 Hz) y deja el OLED en
+#    negro ~1.5 s. Eso se ve como "la pantalla se apaga y vuelve", cada 2 min.
+if [ "${SYNC_WALLPAPER_NO_RELOAD:-0}" != "1" ] && [ "$changed" = 1 ]; then
     hyprctl reload >/dev/null 2>&1 || true
 fi
 

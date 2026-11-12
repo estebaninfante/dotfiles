@@ -20,7 +20,10 @@
 # (sin metodo _ON) y dejaria la GPU inutil hasta reiniciar.
 set -uo pipefail
 
-BIN_DIR="${HOME}/dotfiles/linux/bin"
+# HOME no existe en el entorno de la unit de sistema (corre como root, sin login
+# shell): con `set -u` eso abortaba el script en la primera linea, asi que el
+# guard nunca aplicaba nada (ASPM, NMI watchdog, dGPU, brillo, syncthing).
+BIN_DIR="${HOME:-/home/eztvn}/dotfiles/linux/bin"
 BRIGHT_SAVE="/var/lib/power-guard/brightness-ac"
 GUARD_DIR="/var/lib/power-guard"
 USER_NAME="eztvn"
