@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>side-questions harness</title>
+<style>
+  body { margin: 0; background: #101114; color: #e6e6ea; font: 15px/1.5 system-ui, sans-serif; }
+  .conversation { height: 100vh; overflow-y: auto; padding: 24px 40px; box-sizing: border-box; }
+  .msg { max-width: 680px; margin: 0 auto 18px; }
+  .user { background: #1c3f6e; border-radius: 14px; padding: 10px 14px; }
+  .asst p { margin: 0 0 10px; }
+</style>
+</head>
+<body>
+<div data-conversation-content data-conversation-session="session-test-123">
+  <div class="conversation" data-conversation-scroll>
+    <div class="msg user">Contame cómo viene el proyecto.</div>
+    <div class="msg asst" id="asst">
+      <p>Tenés 37 carpetas de proyectos y 47 tareas abiertas.</p>
+      <p>Las carpetas salen de ~/Proyectos y las tareas del registro de agent-os-cli.</p>
+      <p>El resto está en pausa desde la semana pasada.</p>
+    </div>
+  </div>
+</div>
+<script>
+  window.__ModuleLoader__ = {
+    load(entry) {
+      window.__loaded = entry;
+      window.__plugin = entry.factory(() => ({}));
+    }
+  };
+  window.__requests = [];
+  window.fetch = async (url, init) => {
+    window.__requests.push({ url, init });
+    await new Promise((r) => setTimeout(r, 250));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ answer: "Las 47 tareas salen del registro de agent-os-cli, según la segunda línea del mensaje.", model: "stub" })
+    };
+  };
+</script>
+<script src="lib/client.js"></script>
+<script>
+  window.__plugin.apply({ effect: (fn) => { window.__dispose = fn; } });
+</script>
+</body>
+</html>
