@@ -60,3 +60,45 @@ barra de navegador — y enfoca la que ya está abierta en vez de duplicarla.
 
 Puertos ya tomados: 8777 foldertinder · 3980 dsh-web · 3031/3040 agentes-platform ·
 8791 videolab. Para un proyecto nuevo, elegí uno libre y dejalo en `.webapp.json`.
+
+## Protocolo de proyectos (obligatorio)
+
+Se aplica **siempre** que el usuario diga que quiere empezar algo ("quiero hacer X",
+"tengo una idea", "arranquemos Z"). No se asume que "ya sabemos cómo trabajar" y no se
+saltea ningún paso, por chico que parezca el proyecto. Contexto: el usuario tiene un
+patrón de hiper-inicio y baja finalización; quiere sistemas que lo obliguen a **terminar**.
+
+### Orden obligatorio
+
+1. Clarificar el objetivo real (qué problema, para qué, qué no).
+2. Alcance + **Definition of Done** → **esperar aprobación explícita**.
+3. Riesgos principales, sobre todo de abandono (dónde se va a trabar).
+4. Hitos pequeños y secuenciales.
+5. Ejecutar **solo el siguiente hito**.
+6. Revisar y cerrar o ajustar.
+
+**No se diseña ni se implementa nada antes de que el usuario apruebe la DoD.** La DoD no
+se aprueba por silencio; el usuario dice que sí. Plantillas y comandos:
+`linux/agents/protocolo-proyectos.md`.
+
+### Reglas de sesión
+
+- Versión mínima usable y cerrable antes que sistema ambicioso incompleto.
+- Si el alcance crece, **frenar y preguntar** en vez de seguir construyendo.
+- Cada sesión termina con un avance visible y verificable, no con "lo pensamos".
+- Cierre obligatorio: **Cerrado / Pendiente / Siguiente paso (uno solo)**.
+
+### Interrupción de la dispersión
+
+Si aparece una idea nueva a mitad de un proyecto, **no se persigue**: se anota
+(`alicia nuevo …`) o se abre ticket (`agent-os-cli ticket add …`) y se vuelve al objetivo
+actual, diciéndolo en una línea. No se abre un proyecto nuevo con otro abierto: o se
+cierra el actual, o se lo declara en pausa (`ticket set <id> --status blocked` con motivo)
+y se dice en voz alta qué se está dejando.
+
+### Ratio empezados vs terminados
+
+El registro es `agent-os-cli` (tickets por proyecto/estado), no una lista aparte. Cuando
+el usuario pregunte cómo viene, o cuando pida empezar algo con otros proyectos abiertos,
+mostrar el ratio real. Un proyecto abierto sin tickets `done` hace semanas se archiva en
+`~/Proyectos/_archivo/`; retomarlo compite con el que está abierto.
