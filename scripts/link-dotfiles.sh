@@ -167,6 +167,17 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
             && ok "perfil web: dsh-local-claude-visible instalado" \
             || warn "no pude instalar el plugin en el perfil web (correr: dsh plugin --profile web add file:~/.dsh/plugins/claude-visible)"
     fi
+
+    # Página de proyectos: inventario vivo desde ~/.local/share/machine/machine.db.
+    if [ -f "$PATCH" ] && ! grep -q "local-machine" "$PATCH"; then
+        printf '\n# Página de proyectos: inventario vivo desde machine.db (estado, hechos, tareas).\n- insert:\n    - id: local-machine\n      name: dsh-local-machine\n' >> "$PATCH"
+        ok "patch del perfil web: + local-machine"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-machine" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "file:${HOME}/.dsh/plugins/machine" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-machine instalado" \
+            || warn "no pude instalar el plugin machine (correr: dsh plugin --profile web add file:~/.dsh/plugins/machine)"
+    fi
 fi
 if [ -d "${REPO}/linux/agents/skills" ]; then
     mkdir -p "${HOME}/.agents/skills"

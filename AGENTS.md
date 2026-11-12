@@ -366,6 +366,40 @@ sesión: no suma mensajes ni crece el transcript.
   `cordis.patch.yml`; se activa al reiniciar (`dsh-web --restart`). Para apagarlo,
   borrar la línea `id: local-side-questions` del patch y reiniciar.
 
+### `machine`: la página de proyectos del harness
+
+`linux/dsh/plugins/machine/` (host + cliente) monta una **página completa**
+encima del chat con el inventario de `~/Proyectos`: resumen (cuántos sin
+decisión, cuántos activos, cuántos sin tocar +30 días, cuántos con cambios sin
+guardar), tabla con selector de estado por fila, y ficha al costado con hechos
+del disco, nota y tareas. Se abre con la pestaña vertical `proyectos` del borde
+izquierdo; se cierra con Esc o el botón.
+
+- **La base es la fuente de verdad**: `~/.local/share/machine/machine.db`
+  (SQLite, WAL). Tablas `entities` (kind, slug, title, state, note, parent_id),
+  `facts` (hechos observados), `sources`, `schema_version` (migraciones
+  numeradas en `MIGRATIONS` del CLI, nunca se edita una aplicada).
+- **Dos capas, y no se mezclan**: los *hechos* los recalcula `machine scan`
+  desde el disco (git, remoto, rama, archivos sin guardar, commits sin subir,
+  systemd, `.webapp.json`); las *decisiones* (`kind`, `state`, `note`) las
+  escribe el humano y `scan` **nunca** las pisa.
+- **Estados**: `unclassified` · `active` · `paused` · `done` · `archived`.
+  `done` solo tiene sentido en `project` y `experiment`; un `product` se pausa o
+  se archiva, nunca se "termina".
+- **Un solo motor**: el SQL vive en el CLI `machine`
+  (`~/dotfiles/linux/bin/machine`: `init`, `scan`, `ls`, `show`, `set`,
+  `task add|ls|done`, `stats`, todo con `--json`). El plugin solo lo invoca por
+  `execFile`, así el panel, los agentes y la terminal leen lo mismo.
+- **Rutas** del plugin: `GET /machine/projects`, `GET /machine/project?slug=`,
+  `POST /machine/{scan,entity,task,task-done}`; los POST exigen el header
+  `x-dsh-machine: 1`.
+- Instalado como dependencia `file:` + entrada `- insert:` en
+  `cordis.patch.yml` (`link-dotfiles.sh` lo asegura). **Requiere reiniciar el
+  servidor** (`dsh-web --restart`) porque los clientes se componen al arrancar.
+- Verificación sin tocar el servidor vivo: levantar otra instancia
+  (`dsh --profile web --no-open --port 3999`), pedir `/machine/projects` y
+  revisar que el manifiesto del boot incluya `dsh-local-machine`.
+
 **Un panel en vivo sí es posible**: cada paquete `@deepseek-ai/dsh-client-ui-*`
 instalado trae su bundle de cliente (`lib/client.js`, formato
 `window.__ModuleLoader__.load({ id, factory })` con `exports.apply`), y el loader
