@@ -296,9 +296,93 @@ TERMINALES = {
     "com.raggesilver.blackbox", "blackbox",
 }
 
-# ydotool usa códigos evdev: 29 = ctrl, 42 = shift, 47 = v.
-_PEGAR = ("29:1", "47:1", "47:0", "29:0")
-_PEGAR_TERMINAL = ("29:1", "42:1", "47:1", "47:0", "42:0", "29:0")
+# ydotool usa códigos evdev, que son FÍSICOS. Con un layout Dvorak (acá
+# `dvk_prog`) la tecla física de la `v` escribe `k`: mandar 47 (KEY_V) pegaba
+# Ctrl+K —en Chromium eso enfoca la barra de direcciones— y el texto nunca
+# aparecía. Por eso la tecla se resuelve contra el layout activo; ver
+# `clave_v_evdev`.
+EVDEV_CTRL = 29
+EVDEV_SHIFT = 42
+_XKB_A_EVDEV = 8  # los keycodes de xkbcommon van 8 arriba de los evdev
+
+
+def teclado_activo() -> tuple[str, str, int]:
+    """(layout, variante, grupo activo) del teclado que mueve el seat.
+
+    `dvk_prog,es,us` son tres layouts; el índice dice cuál está puesto ahora,
+    porque la tecla que escribe `v` cambia con el grupo.
+    """
+    try:
+        salida = subprocess.run(["hyprctl", "-j", "devices"], check=False,
+                                capture_output=True, text=True, timeout=2).stdout
+        teclados = json.loads(salida or "{}").get("keyboards") or []
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return "", "", 0
+    if not teclados:
+        return "", "", 0
+    teclado = next((t for t in teclados if t.get("main")), teclados[0])
+    try:
+        grupo = int(teclado.get("active_layout_index") or 0)
+    except (TypeError, ValueError):
+        grupo = 0
+    return (str(teclado.get("layout") or ""), str(teclado.get("variant") or ""), grupo)
+
+
+def clave_v_evdev() -> int | None:
+    """Keycode evdev de la tecla que escribe `v` en el layout activo.
+
+    Le pregunta al mismo xkbcommon que usa Hyprland (`xkbcli how-to-type`), así
+    funciona igual con Dvorak, Colemak o QWERTY. Devuelve None si no se pudo
+    resolver: en ese caso NO hay que mandar la tecla física, porque en otro
+    layout (Dvorak, por ejemplo) escribiría otra letra.
+    """
+    layout, variante, grupo = teclado_activo()
+    if not layout:
+        return None
+    orden = ["xkbcli", "how-to-type", "--layout", layout]
+    if variante.strip(", "):
+        orden += ["--variant", variante]
+    orden.append("v")
+    try:
+        salida = subprocess.run(orden, check=False, capture_output=True, text=True,
+                                timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    # `xkbcli how-to-type` imprime varias tablas; la que sirve es
+    #   === Direct access ===
+    #   KEYCODE  KEY NAME  LAYOUT  LAYOUT NAME          LEVEL#  MODIFIERS
+    #   60       AB09      1       Dvorak Programador…  1       [ ]
+    # (LAYOUT es 1-based). Nos quedamos con la fila del grupo activo; si no
+    # aparece, la primera.
+    dentro = False
+    primera = None
+    for fila in salida.splitlines():
+        if fila.startswith("==="):
+            dentro = "Direct access" in fila
+            continue
+        if not dentro:
+            continue
+        partes = fila.split()
+        if len(partes) < 3 or not partes[0].isdigit() or not partes[2].isdigit():
+            continue
+        clave = int(partes[0]) - _XKB_A_EVDEV
+        if int(partes[2]) == grupo + 1:
+            return clave
+        if primera is None:
+            primera = clave
+    return primera
+
+
+def secuencia_pegar(terminal: bool) -> tuple[str, ...]:
+    """Eventos `ydotool key` de Ctrl+V (Ctrl+Shift+V en terminales)."""
+    clave = clave_v_evdev()
+    if clave is None:
+        return ()
+    mods = [EVDEV_CTRL] + ([EVDEV_SHIFT] if terminal else [])
+    seq = [f"{m}:1" for m in mods]
+    seq += [f"{clave}:1", f"{clave}:0"]
+    seq += [f"{m}:0" for m in reversed(mods)]
+    return tuple(seq)
 
 
 def clase_activa() -> str:
@@ -315,8 +399,8 @@ def pegar_hyprland(terminal: bool) -> bool:
     """Ctrl+V (o Ctrl+Shift+V) con el inyector del compositor.
 
     No pasa por el keymap sintético de `wtype` y no necesita `ydotoold`.
-    Ojo: `hyprctl dispatch` devuelve "ok" aunque el dispatcher falle, así que
-    acá sólo se comprueba que la orden llegue; los modos y la tecla son fijos.
+    `hyprctl dispatch` sí devuelve error cuando el dispatcher no existe o falla
+    (verificado con uno inexistente), así que el código de salida alcanza.
     """
     mods = "CTRL SHIFT" if terminal else "CTRL"
     expr = f'hl.dsp.send_shortcut({{ mods = "{mods}", key = "v" }})'
@@ -332,19 +416,26 @@ def pegar_hyprland(terminal: bool) -> bool:
 def atajo_pegar(terminal: bool) -> bool:
     """Manda Ctrl+V (o Ctrl+Shift+V) a la ventana con foco.
 
-    ydotoold primero (evdev real); si no está vivo, el inyector del compositor.
+    ydotoold primero (evdev real, con la tecla resuelta al layout activo); si no
+    está vivo o no se pudo resolver la tecla, el inyector del compositor
+    (keysym: ya es agnóstico del layout).
     `wtype` queda último: con su keymap sintético el Ctrl cae en el keycode 1
     (= Escape), no llega como modificador y la app escribe una `v` en vez de
     pegar.
     """
-    seq = _PEGAR_TERMINAL if terminal else _PEGAR
-    try:
-        hecho = subprocess.run(["ydotool", "key", *seq], check=False, timeout=5,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if hecho.returncode == 0:
-            return True
-    except (OSError, subprocess.SubprocessError):
-        pass
+    seq = secuencia_pegar(terminal)
+    if seq:
+        try:
+            # -d 20: sin pausa entre eventos Hyprland/libinput agrupa el Ctrl y la
+            # `v` en el mismo frame y la app recibe una `v` suelta.
+            hecho = subprocess.run(["ydotool", "key", "-d", "20", *seq], check=False,
+                                   timeout=5, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+            if hecho.returncode == 0:
+                log_entrega(f"pegado con ydotool ({' '.join(seq)})")
+                return True
+        except (OSError, subprocess.SubprocessError):
+            pass
     if pegar_hyprland(terminal):
         return True
     orden = ["wtype"]
