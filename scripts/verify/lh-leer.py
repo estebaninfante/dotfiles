@@ -170,6 +170,39 @@ try:
 except AssertionError as exc:
     falla(f"apagada: {exc}")
 
+# 6) El interruptor de la app (general.readAloud=false) calla aunque el
+#    archivo de `leer` esté prendido; ausente o true no estorba.
+e.toggle.write_text('{"activado": true}', encoding="utf-8")
+e.ajuste_de_la_app(False)
+escribir_chat(
+    e.chat,
+    [
+        mensaje("user", "AI Engineer", 1),
+        mensaje("assistant", [{"type": "text", "text": "Mensaje con el interruptor de la app apagado."}], 6),
+    ],
+)
+try:
+    dicho = e.correr()
+    assert dicho.strip() == "", f"habló con readAloud=false: {dicho!r}"
+    ok("el interruptor de la app apagado calla al lector")
+except AssertionError as exc:
+    falla(f"interruptor de la app: {exc}")
+
+e.ajuste_de_la_app(True)
+escribir_chat(
+    e.chat,
+    [
+        mensaje("user", "AI Engineer", 1),
+        mensaje("assistant", [{"type": "text", "text": "Mensaje con el interruptor de la app prendido."}], 7),
+    ],
+)
+try:
+    dicho = e.correr()
+    assert "prendido" in dicho, f"no habló con readAloud=true: {dicho!r}"
+    ok("con el interruptor de la app prendido vuelve a hablar")
+except AssertionError as exc:
+    falla(f"interruptor de la app prendido: {exc}")
+
 if fallas:
     print(f"lh-leer: {fallas} falla(s)")
     sys.exit(1)
