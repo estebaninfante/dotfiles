@@ -90,7 +90,6 @@ window.__ModuleLoader__.load({
 .mr-kpi .h{margin-top:3px;font-size:11px;color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mr-kpi .bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--line)}
 .mr-kpi .bar i{display:block;height:100%;border-radius:0 2px 2px 0}
-.mr-dot{width:6px;height:6px;border-radius:50%;flex:none}
 .mr-filters{display:flex;align-items:center;gap:6px;padding:0 26px 14px;flex:none;flex-wrap:wrap}
 .mr-chip{
   height:27px;padding:0 11px;display:inline-flex;align-items:center;gap:7px;
@@ -375,8 +374,7 @@ window.__ModuleLoader__.load({
 						else openAt();
 					},
 				},
-				h("span", { className: "mr-dot", style: { background: DOT[value] } }),
-				LABEL[value] || value,
+				h("span", { style: { color: DOT[value] } }, LABEL[value] || value),
 				h(IconChevron),
 			);
 
@@ -411,8 +409,7 @@ window.__ModuleLoader__.load({
 									onChange(state);
 								},
 							},
-							h("span", { className: "mr-dot", style: { background: DOT[state] } }),
-							LABEL[state],
+							h("span", { style: { color: DOT[state] } }, LABEL[state]),
 							h("span", { className: "check" }, "✓"),
 						),
 					),
@@ -568,12 +565,7 @@ window.__ModuleLoader__.load({
 				h(
 					"div",
 					{ className: "mr-kpi", key: label },
-					h(
-						"div",
-						{ className: "k" },
-						h("span", { className: "mr-dot", style: { background: color } }),
-						label,
-					),
+					h("div", { className: "k", style: { color } }, label),
 					h("div", { className: "v" }, String(value)),
 					h("div", { className: "h" }, hint),
 					h(
@@ -610,8 +602,11 @@ window.__ModuleLoader__.load({
 							"data-on": filter === s ? 1 : 0,
 							onClick: () => setFilter(s),
 						},
-						s !== "all" ? h("span", { className: "mr-dot", style: { background: DOT[s] } }) : null,
-						s === "all" ? "todos" : LABEL[s],
+						h(
+							"span",
+							{ style: s === "all" ? undefined : { color: DOT[s] } },
+							s === "all" ? "todos" : LABEL[s],
+						),
 						h("span", { className: "n" }, String(s === "all" ? counts.total : counts.by[s] || 0)),
 					),
 				),
