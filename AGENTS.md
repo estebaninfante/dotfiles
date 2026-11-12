@@ -341,9 +341,39 @@ después de instalarlo hay que reiniciar con `dsh-web --restart` (o el próximo 
 Ojo: reiniciar el servidor corta la sesión en curso, así que no lo hagas a mitad de un
 turno largo.
 
-Un panel *en vivo* dentro de la UI (no sólo comandos) requeriría un bundle de cliente
-(React + slots internos), que no viene en el paquete instalado: los comandos son la vía
-soportada en esta instalación.
+### `side-questions`: preguntas laterales sobre texto seleccionado
+
+`linux/dsh/plugins/side-questions/` (host + cliente) resuelve "subrayo algo y
+pregunto ahí mismo" sin ensuciar el chat: seleccionás texto en la conversación,
+aparece un botón **Preguntar** pegado a la selección y la respuesta llega a un
+globo flotante (`position: fixed`) que se cierra con Esc. Nada se escribe en la
+sesión: no suma mensajes ni crece el transcript.
+
+- `lib/index.js` registra `POST /side-questions/ask` en el `webServer` del
+  perfil. El body lleva `{sessionId, quote, question, transcript}`; el handler
+  resuelve provider/modelo de `sessions.get(id).requestHeader().config` y hace
+  una llamada corta a `ctx.llm.stream` (system propio + extracto del final de la
+  conversación, máx. 14k chars, 700 tokens). Exige el header
+  `x-dsh-side-question: 1` (un sitio externo no puede mandarlo sin preflight).
+- `lib/client.js` es DOM plano (sin React): escucha `mouseup`/`mousedown`/`scroll`
+  en captura, valida que la selección esté dentro de
+  `[data-conversation-scroll]` y no en un campo de texto, y pinta globo + panel
+  con los tokens `--dsw-*` de la app.
+- `harness.html` es la página de prueba aislada (loader simulado + `fetch` de
+  mentira): abrirla en el navegador y seleccionar texto para ver la UI sin
+  servidor.
+- Instalado como dependencia `file:` del perfil web y entrada `- insert:` en
+  `cordis.patch.yml`; se activa al reiniciar (`dsh-web --restart`). Para apagarlo,
+  borrar la línea `id: local-side-questions` del patch y reiniciar.
+
+**Un panel en vivo sí es posible**: cada paquete `@deepseek-ai/dsh-client-ui-*`
+instalado trae su bundle de cliente (`lib/client.js`, formato
+`window.__ModuleLoader__.load({ id, factory })` con `exports.apply`), y el loader
+del navegador lo sirve desde el perfil. Un plugin local puede traer su media
+cliente declarando en `package.json` `exports["./client"]` + `dsh.client`
+(`platform: web`), sin React: DOM plano basta (ver `side-questions`). Igual
+necesita reinicio del servidor, porque el grafo de clientes se compone al
+arrancar.
 
 `scripts/link-dotfiles.sh` crea los tres symlinks. El brief tiene que incluir **lo ya
 probado y qué resultó** y qué no se puede romper: es lo que hizo que Claude resolviera
