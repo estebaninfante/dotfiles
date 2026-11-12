@@ -52,7 +52,6 @@ window.__ModuleLoader__.load({
   --fg2: var(--dsw-alias-label-secondary, #a8adb6);
   --fg3: var(--dsw-alias-label-tertiary, #767b85);
   --bg: var(--dsw-alias-bg-base, #0c0d0f);
-  --card: var(--dsw-alias-bg-overlay, #141619);
   --hover: var(--dsw-alias-interactive-bg-hover, #191b1f);
   --accent: #4c8dff;
   --warn: #d8a33a;
@@ -162,28 +161,36 @@ window.__ModuleLoader__.load({
 .mr-empty{padding:56px 26px;text-align:center;color:var(--fg3);font-size:12.5px}
 .mr-sheet{
   width:420px;flex:none;border-left:1px solid var(--line);display:flex;flex-direction:column;
-  min-height:0;background:var(--card);animation:mr-in .14s ease-out}
+  min-height:0;background:#101215;animation:mr-in .14s ease-out}
 @keyframes mr-in{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}
-.mr-sheet-head{display:flex;align-items:flex-start;gap:10px;padding:18px 18px 12px;flex:none}
+.mr-sheet-head{display:flex;align-items:flex-start;gap:10px;padding:18px 18px 14px;flex:none;
+  border-bottom:1px solid var(--line)}
 .mr-sheet-head h2{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em;word-break:break-word}
-.mr-sheet-head p{margin:3px 0 0;font-size:11.5px;color:var(--fg3);word-break:break-all}
+.mr-sheet-head p{margin:3px 0 0;font-size:11.5px;color:var(--fg3)}
 .mr-x{
   margin-left:auto;width:26px;height:26px;flex:none;display:grid;place-items:center;
-  border:0;border-radius:6px;background:transparent;color:var(--fg3);cursor:pointer;font-size:15px;line-height:1}
-.mr-x:hover{background:var(--hover);color:var(--fg)}
-.mr-sheet-body{flex:1;min-height:0;overflow:auto;padding:0 18px 22px}
-.mr-facts{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
-  border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.mr-facts div{background:var(--card);padding:9px 11px;min-width:0}
-.mr-facts dt{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--fg3);font-weight:600}
-.mr-facts dd{margin:3px 0 0;font-size:12px;color:var(--fg);word-break:break-all;line-height:1.35}
-.mr-facts div[data-wide="1"]{grid-column:1 / -1}
+  border:0;border-radius:6px;background:transparent;color:var(--fg3);cursor:pointer;font-size:16px;line-height:1}
+.mr-x:hover{background:#1b1e23;color:var(--fg)}
+.mr-sheet-body{flex:1;min-height:0;overflow:auto;padding:14px 18px 26px}
+.mr-rows{display:flex;flex-direction:column;margin:0}
+.mr-rows > div{display:flex;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid #191b1f;min-width:0}
+.mr-rows > div:last-child{border-bottom:0}
+.mr-rows dt{flex:none;width:104px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--fg3);font-weight:600}
+.mr-rows dd{margin:0;flex:1;min-width:0;font-size:12.5px;color:var(--fg);word-break:break-all;
+  overflow-wrap:anywhere;line-height:1.4}
+.mr-rows dd[data-warn="1"]{color:var(--warn)}
+.mr-rows a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(76,141,255,.35)}
+.mr-rows a:hover{border-bottom-color:var(--accent)}
+.mr-path{margin-top:10px;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--fg3);word-break:break-all}
+.mr-sheet-state{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .mr-label{margin:18px 0 7px;font-size:10px;letter-spacing:.055em;text-transform:uppercase;
   color:var(--fg3);font-weight:600;display:flex;align-items:center;gap:8px}
 .mr-label::after{content:"";flex:1;height:1px;background:var(--line)}
 .mr textarea{
-  width:100%;min-height:74px;resize:vertical;padding:9px 10px;border:1px solid var(--line2);
-  border-radius:9px;background:rgba(255,255,255,.015);color:var(--fg);font:inherit;font-size:12.5px;
+  width:100%;min-height:88px;resize:none;padding:9px 10px;border:1px solid var(--line2);
+  border-radius:9px;background:#0c0e11;color:var(--fg);font:inherit;font-size:12.5px;
   line-height:1.45;outline:none;transition:border-color .12s}
 .mr textarea:focus{border-color:#3b4048}
 .mr textarea::placeholder{color:var(--fg3)}
@@ -727,7 +734,7 @@ window.__ModuleLoader__.load({
 						h(
 							"div",
 							{ className: "mr-sheet-head" },
-							h("h2", null, selected),
+							h("div", null, h("h2", null, selected)),
 							h("button", { className: "mr-x", onClick: close }, "×"),
 						),
 						h("div", { className: "mr-sheet-body" }, h("p", { className: "mr-muted" }, "cargando…")),
@@ -735,8 +742,31 @@ window.__ModuleLoader__.load({
 				}
 				const f = detail.facts || {};
 				const tasks = detail.tasks || [];
-				const fact = (k, v, wide) =>
-					h("div", { key: k, "data-wide": wide ? 1 : 0 }, h("dt", null, k), h("dd", null, String(v)));
+				const open_tasks = tasks.filter((t) => t.state !== "done").length;
+				const dirty = Number(f.dirty || 0);
+				const ahead = String(f.ahead ?? "0");
+				const subtitle = shortTitle(detail) || KIND_LABEL[detail.kind] || detail.kind;
+				const remote = f.remote_url || "";
+				const webRemote = remote.replace(/^git@([^:]+):/, "https://$1/").replace(/\.git$/, "");
+				const commitAge = ageLabel(detail.age_days);
+
+				const row = (label, value, options) => {
+					const opts = options || {};
+					let content = value;
+					if (opts.link) {
+						content = h(
+							"a",
+							{ href: opts.link, target: "_blank", rel: "noreferrer noopener" },
+							value,
+						);
+					}
+					return h(
+						"div",
+						{ key: label },
+						h("dt", null, label),
+						h("dd", { "data-warn": opts.warn ? 1 : 0 }, content),
+					);
+				};
 
 				return h(
 					"div",
@@ -748,7 +778,7 @@ window.__ModuleLoader__.load({
 							"div",
 							{ style: { minWidth: 0 } },
 							h("h2", null, detail.slug),
-							h("p", null, shortTitle(detail) || KIND_LABEL[detail.kind] || detail.kind),
+							h("p", null, subtitle),
 						),
 						h("button", { className: "mr-x", onClick: close, title: "Cerrar (Esc)" }, "×"),
 					),
@@ -757,16 +787,29 @@ window.__ModuleLoader__.load({
 						{ className: "mr-sheet-body" },
 						h(
 							"div",
-							{ className: "mr-facts" },
-							fact("estado", LABEL[detail.state] || detail.state),
-							fact("tipo", KIND_LABEL[detail.kind] || detail.kind),
-							fact("rama", f.branch || "—"),
-							fact("último commit", f.last_commit || "—"),
-							fact("sin guardar", `${f.dirty || 0} archivo(s)`),
-							fact("sin subir", `${f.ahead ?? "—"} commit(s)`),
-							fact("ruta", f.path || "—", true),
-							fact("remoto", f.remote_url || "sin remoto", true),
+							{ className: "mr-sheet-state" },
+							h(StateMenu, {
+								value: detail.state,
+								onChange: async (next) => {
+									setDetail({ ...detail, state: next });
+									await changeState(detail.slug, next);
+								},
+							}),
+							h("span", { className: "mr-muted", style: { fontSize: 11.5 } }, KIND_LABEL[detail.kind] || detail.kind),
 						),
+						h(
+							"dl",
+							{ className: "mr-rows" },
+							row("rama", f.branch || "—"),
+							row("último commit", commitAge === "—" ? f.last_commit || "—" : `${f.last_commit} · ${commitAge}`),
+							row("sin guardar", dirty > 0 ? `${dirty} archivo(s)` : "nada", { warn: dirty > 0 }),
+							row("sin subir", `${ahead} commit(s)`, { warn: ahead !== "0" && ahead !== "?" }),
+							remote
+								? row("remoto", webRemote.replace(/^https?:\/\//, ""), { link: webRemote })
+								: row("remoto", "sin remoto"),
+							row("tipo", KIND_LABEL[detail.kind] || detail.kind),
+						),
+						h("div", { className: "mr-path" }, f.path || ""),
 						h("div", { className: "mr-label" }, "nota"),
 						h("textarea", {
 							key: `${detail.slug}-${detail.updated_at}`,
@@ -780,12 +823,12 @@ window.__ModuleLoader__.load({
 								setProjects((prev) => prev.map((p) => (p.slug === detail.slug ? { ...p, note } : p)));
 							},
 						}),
-						h("div", { className: "mr-label" }, `tareas · ${tasks.filter((t) => t.state !== "done").length}`),
+						h("div", { className: "mr-label" }, `tareas · ${open_tasks}`),
 						h(
 							"ul",
 							{ className: "mr-tasks" },
 							tasks.length === 0
-								? h("li", null, h("span", { className: "mr-muted" }, "sin tareas"))
+								? h("li", null, h("span", { className: "mr-muted" }, "todavía no hay tareas"))
 								: tasks.map((t) =>
 										h(
 											"li",
