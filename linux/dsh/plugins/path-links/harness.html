@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>path-links harness</title>
+<style>
+  body { margin: 0; background: #101114; color: #e6e6ea; font: 15px/1.6 system-ui, sans-serif; }
+  .conversation { height: 100vh; overflow-y: auto; padding: 24px 40px; box-sizing: border-box; }
+  .msg { max-width: 720px; margin: 0 auto 18px; }
+  code { font-family: ui-monospace, monospace; background: #1d2026; border-radius: 4px; padding: 1px 4px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #2a2d33; padding: 6px 10px; text-align: left; }
+</style>
+</head>
+<body>
+<div data-conversation-content data-conversation-session="session-path-test">
+  <div class="conversation" data-conversation-scroll>
+    <div class="msg">
+      <p>En <code>~/dotfiles/linux/bin/agent-os-cli</code> está el CLI. El registro vive en ~/.config/opencode/tickets.json y los proyectos en ~/Proyectos.</p>
+      <p>Otra cosa: la versión es 12/11/2026 y el link https://example.com/a/b no debería abrir nada.</p>
+    </div>
+    <div class="msg">
+      <table>
+        <tr><td><code>~/dotfiles/linux/bin/agent-os-cli</code></td><td><code>~/.config/opencode/tickets.json</code></td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+  window.__ModuleLoader__ = {
+    load(entry) {
+      window.__plugin = entry.factory(() => ({}));
+    }
+  };
+  window.__calls = [];
+  window.__opened = null;
+  window.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    window.__calls.push(body);
+    const kind = body.path.includes("tickets.json") ? "file"
+      : body.path.includes("Proyectos") ? "dir"
+      : body.path.includes("nope") ? "missing"
+      : "file";
+    return {
+      ok: true,
+      status: 200,
+      json: async () => kind === "file"
+        ? { kind: "file", absolute: "/home/eztvn/" + body.path.replace(/^~\//, ""), address: "dsh-resource://file/session/session-path-test/x", size: 12 }
+        : kind === "dir"
+          ? { kind: "dir", absolute: "/home/eztvn/Proyectos", opened: true }
+          : { kind: "missing", absolute: "/home/eztvn/nope" }
+    };
+  };
+</script>
+<script src="lib/client.js"></script>
+<script>
+  window.__plugin.apply({
+    sidebarRight: { openResource: (address) => { window.__opened = address; } },
+    effect: (fn) => { window.__dispose = fn; }
+  });
+</script>
+</body>
+</html>
