@@ -321,19 +321,20 @@ cosa), **no seguir acumulando variantes**: delegar a Claude Code. Está cableado
   (la lee DeepSeek Harness en toda sesión, en cualquier workspace).
 - Skill: `linux/agents/skills/delegate-a-claude/SKILL.md` -> `~/.agents/skills/`
   (tiene el procedimiento y la plantilla del brief que funciona).
-- Helper: `linux/bin/delegar-claude` (`start <brief.md> [--name X]`, `status`, `read`,
-  `tail`, `list`, `stop`). Deja brief+log+pid en `~/.local/state/delegar-claude/<nombre>/`
-  y desprende el proceso con `setsid` (un `nohup ... &` suelto muere con el shell).
+- **Sin archivos**: la delegación es un subagente del hilo; el brief viaja en el prompt
+  y Claude lo lee por stdin. No hay listado, ni log, ni pid que mantener.
 
-### Plugins propios del harness (comandos `/claude` y `/skills`)
+### Plugin propio del harness (comando `/skills`)
 
 `linux/dsh/plugins/claude-visible/` es un plugin local del DeepSeek Harness (sin
-dependencias: no importa nada del harness) que agrega dos comandos al chat:
+dependencias: no importa nada del harness). Le queda un solo comando:
 
-- `/claude [list|status [n]|read [n]|start <brief.md>]`: ver las delegaciones a Claude
-  (estado y salida, leídas de `~/.local/state/delegar-claude/`) y lanzar una.
 - `/skills [<nombre>]`: listar todas las skills instaladas en `~/.agents/skills` con su
   descripción, o el `SKILL.md` de una.
+
+La mitad de **panel de delegaciones** (`/claude-visible/*`) y el comando `/claude` se
+**eliminaron**: la delegación ahora corre como **subagente del hilo** y no deja estado en
+disco (ni brief, ni log, ni pid).
 
 Se enlaza a `~/.dsh/plugins/claude-visible` y `link-dotfiles.sh` asegura su entrada en
 `~/.dsh/profiles/web/cordis.patch.yml` (forma `- insert:`) y la dependencia
