@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# dictado-boca — cierre del dictado por gesto de boca, con envío.
+#
+# Gesto "boca abierta" (`mouth.open`): la primera vez abre el dictado; la
+# segunda lo cierra, pega y **presiona Enter**, igual que la palabra clave
+# "enter" del asistente.
+#
+# No se usa `dictado --enter` a secas porque, sin dictado abierto, `--enter`
+# presiona Enter en la ventana con foco: abrir la boca en cualquier app mandaría
+# un Enter suelto. Acá se consulta el estado primero.
+#
+# Variable: DICTADO_BIN (para pruebas con un stub).
+set -uo pipefail
+
+dictado="${DICTADO_BIN:-$HOME/.local/bin/dictado}"
+estado="$("$dictado" --estado 2>/dev/null || true)"
+
+if [[ "$estado" == "grabando" ]]; then
+    exec "$dictado" --enter
+fi
+exec "$dictado"
