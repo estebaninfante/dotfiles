@@ -159,6 +159,22 @@ Un proyecto tiene **tres cosas** y nada más:
 - `machine task add <slug> "<tarea>"`, `machine task done <tarea>`, `machine task ls <slug>`.
 - `machine set <slug> --state active|paused|done|archived|unclassified`.
 
+## Cómo se editan archivos (candado del harness)
+
+**Siempre con las herramientas `edit` y `write`.** Nunca con `python3` ni con scripts
+dentro de bash.
+
+- El plugin `linux/dsh/plugins/bash-guard/` registra un guard global del tool `bash`:
+  si el comando invoca python y escribe (`open(…, 'w'|'a'|'x')`, `write_text`,
+  `write_bytes`, `shutil.*`, `os.remove/rename`, `json.dump`, `yaml.dump`…), el
+  harness lo **rechaza antes de ejecutarlo** y el modelo ve el motivo.
+- Es determinista: no pregunta al modelo ni al usuario. Verificador:
+  `scripts/verify/bash-guard.sh`.
+- Motivo del candado: con `edit`/`write` el usuario ve el diff al final del turno y
+  la escritura respeta el guard de versión del archivo.
+- Límite: mira el comando, no lo que hace un `.py` por dentro. La regla escrita sigue
+  valiendo para eso.
+
 ## Cómo hablarle (lenguaje técnico simple)
 
 El usuario es disperso y trabaja con varios frentes: si la respuesta no se entiende en
