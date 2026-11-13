@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Panel de skills del harness: matriz de tarjetas, Markdown renderizado y edición del SKILL.md",
+  "description": "Panel de skills del harness: matriz de tarjetas, Markdown renderizado, edición y borrado a papelera",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

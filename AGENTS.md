@@ -502,6 +502,11 @@ cliente se ven al refrescar la página; una ruta nueva necesita reinicio.
   valida que el frontmatter nuevo siga teniendo `name` kebab-case y `description`,
   y rechaza renombrar a un nombre ya ocupado. Escribe un temporal al lado y lo
   renombra (resuelve el symlink a dotfiles y conserva los permisos).
+- **Eliminar es mover, no borrar**: `POST /skills/delete` con `{name}` mueve la
+  carpeta (o el archivo `<nombre>.md`) a `~/.local/share/skills/trash/<fecha>/`.
+  Si la skill es un symlink a dotfiles se mueve **el enlace**, así el repo queda
+  intacto. Recuperar = copiar la carpeta de vuelta al root. La ruta del último
+  borrado queda escrita bajo la matriz, con la fecha de la papelera.
 - El Markdown (`##`, `**`, listas, código, tablas, citas) se renderiza con un
   parser propio, sin dependencias ni HTML crudo; los links solo se aceptan
   `http(s)://`.

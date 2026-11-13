@@ -86,6 +86,8 @@ window.__ModuleLoader__.load({
 .sk-btn.primary{border-color:transparent;background:var(--sk-info);color:#fff}
 .sk-btn.primary:hover{filter:brightness(1.08)}
 .sk-btn.quiet{border-color:transparent;padding:0 8px}
+.sk-btn.danger{color:var(--sk-bad);border-color:color-mix(in srgb, var(--sk-bad) 35%, transparent)}
+.sk-btn.danger:hover{background:color-mix(in srgb, var(--sk-bad) 14%, transparent);color:var(--sk-bad)}
 
 /* --- Matriz de tarjetas -------------------------------------------------- */
 .sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;margin-top:20px}
@@ -432,8 +434,9 @@ window.__ModuleLoader__.load({
 		}
 
 		function Detail(props) {
-			const { skill, status, error, onBack, onSaved, onRetry } = props;
+			const { skill, status, error, onBack, onSaved, onDeleted, onRetry } = props;
 			const [editing, setEditing] = React.useState(false);
+			const [deleting, setDeleting] = React.useState(false);
 			const [draft, setDraft] = React.useState("");
 			const [saving, setSaving] = React.useState(false);
 			const [saveError, setSaveError] = React.useState("");
@@ -514,6 +517,34 @@ window.__ModuleLoader__.load({
 				}
 			}
 
+			async function remove() {
+				if (deleting) return;
+				const ok = window.confirm(
+					`¿Eliminar la skill "${skill.name}"?\n\nSe mueve a la papelera (~/.local/share/skills/trash), así que se puede recuperar.`,
+				);
+				if (!ok) return;
+				setDeleting(true);
+				setSaveError("");
+				try {
+					const res = await fetch("/skills/delete", {
+						method: "POST",
+						headers: { "content-type": "application/json", "x-dsh-skills": "1" },
+						body: JSON.stringify({ name: skill.name }),
+					});
+					const payload = await res.json().catch(() => null);
+					if (!res.ok || payload === null || payload.ok !== true) {
+						if (res.status === 404 || res.status === 405) {
+							throw new Error("el servidor todavía no tiene la ruta de borrado: reiniciá dsh-web");
+						}
+						throw new Error((payload && payload.error) || `HTTP ${res.status}`);
+					}
+					onDeleted(payload);
+				} catch (failure) {
+					setSaveError(failure instanceof Error ? failure.message : String(failure));
+					setDeleting(false);
+				}
+			}
+
 			function leave() {
 				if (dirty && !window.confirm("Tenés cambios sin guardar. ¿Salir igual?")) return;
 				onBack();
@@ -557,6 +588,13 @@ window.__ModuleLoader__.load({
 									copied ? "Copiada" : "Copiar ruta",
 								)
 							: null,
+						editing
+							? null
+							: h(
+									"button",
+									{ type: "button", className: "sk-btn danger", onClick: remove, disabled: deleting },
+									deleting ? "Eliminando…" : "Eliminar",
+								),
 						editing ? null : h("button", { type: "button", className: "sk-btn primary", onClick: startEdit }, "Editar"),
 					),
 				),
@@ -611,6 +649,7 @@ window.__ModuleLoader__.load({
 			const [query, setQuery] = React.useState("");
 			const [detail, setDetail] = React.useState(null);
 			const [notice, setNotice] = React.useState("");
+			const [lastTrash, setLastTrash] = React.useState("");
 			const searchRef = React.useRef(null);
 
 			const load = React.useCallback(async () => {
@@ -677,6 +716,12 @@ window.__ModuleLoader__.load({
 						onSaved: (skill) => {
 							setDetail({ status: "ready", name: skill.name, skill });
 							setNotice("Guardado");
+							load();
+						},
+						onDeleted: (payload) => {
+							setDetail(null);
+							setNotice("Eliminada");
+							setLastTrash(`${payload.name} → ${payload.trash}`);
 							load();
 						},
 					}),
@@ -761,6 +806,13 @@ window.__ModuleLoader__.load({
 					: null,
 				ready && visible.length === 0
 					? h("p", { className: "sk-empty" }, query ? `Nada coincide con “${query}”.` : "No hay skills cargadas.")
+					: null,
+				ready && lastTrash.length > 0
+					? h(
+							"p",
+							{ className: "sk-note" },
+							`Última eliminada: ${lastTrash} · se recupera copiando esa carpeta de vuelta`,
+						)
 					: null,
 				ready && state.data.ignored.length > 0
 					? h(

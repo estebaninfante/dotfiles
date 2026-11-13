@@ -325,6 +325,25 @@ function writeSkillFile(file, content) {
 	renameSync(temp, target);
 }
 
+function stamp() {
+	return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+}
+
+/**
+ * Saca una skill del catálogo moviéndola a la papelera. Nunca `rm -rf`:
+ * si la entrada es un symlink (las skills enlazadas a dotfiles) se mueve el
+ * enlace y el contenido del repo queda intacto.
+ */
+function moveToTrash(skill) {
+	const file = skill.realPath;
+	const entry = basename(file) === "SKILL.md" ? dirname(file) : file;
+	const isLink = lstatSync(entry).isSymbolicLink();
+	const target = join(TRASH_DIR, stamp(), basename(entry));
+	mkdirSync(dirname(target), { recursive: true });
+	renameSync(entry, target);
+	return { target, isLink };
+}
+
 export function apply(ctx) {
 	const routes = [
 		{
@@ -438,6 +457,46 @@ export function apply(ctx) {
 							description: nextDescription,
 						};
 					sendJson(res, 200, { ok: true, skill: { ...publicSkill(updated), content } });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
+			path: "/skills/delete",
+			method: "POST",
+			handler: async (req, res) => {
+				if (req.headers["x-dsh-skills"] !== "1") {
+					sendJson(res, 403, { ok: false, error: "falta el header x-dsh-skills" });
+					return;
+				}
+				const body = await readJsonBody(req).catch(() => null);
+				const name = typeof body?.name === "string" ? body.name.trim() : "";
+				if (name.length === 0 || name.length > MAX_NAME_CHARS || !NAME_RE.test(name)) {
+					sendJson(res, 400, { ok: false, error: "nombre inválido" });
+					return;
+				}
+				try {
+					const { skills } = await collect(ctx, "");
+					const match = skills.find((skill) => skill.name === name);
+					if (match === undefined) {
+						sendJson(res, 404, { ok: false, error: "esa skill no está en el catálogo" });
+						return;
+					}
+					if (typeof match.realPath !== "string" || !existsSync(match.realPath)) {
+						sendJson(res, 409, { ok: false, error: "la skill no tiene archivo propio (viene de un plugin)" });
+						return;
+					}
+					const moved = moveToTrash(match);
+					const after = await collect(ctx, "");
+					ctx.logger?.info?.(`skills: "${match.name}" movida a ${moved.target}`);
+					sendJson(res, 200, {
+						ok: true,
+						name: match.name,
+						trash: displayPath(moved.target),
+						symlink: moved.isLink,
+						count: after.skills.length,
+					});
 				} catch (error) {
 					fail(res, error);
 				}
