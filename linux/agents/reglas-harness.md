@@ -161,18 +161,20 @@ Un proyecto tiene **tres cosas** y nada más:
 
 ## Cómo se editan archivos (candado del harness)
 
-**Siempre con las herramientas `edit` y `write`.** Nunca con `python3` ni con scripts
-dentro de bash.
+**Siempre con las herramientas `edit` y `write`.** Ningún archivo se edita desde bash.
 
-- El plugin `linux/dsh/plugins/bash-guard/` registra un guard global del tool `bash`:
-  si el comando invoca python y escribe (`open(…, 'w'|'a'|'x')`, `write_text`,
-  `write_bytes`, `shutil.*`, `os.remove/rename`, `json.dump`, `yaml.dump`…), el
-  harness lo **rechaza antes de ejecutarlo** y el modelo ve el motivo.
-- Es determinista: no pregunta al modelo ni al usuario. Verificador:
+- El plugin `linux/dsh/plugins/bash-guard/` registra un guard global del tool `bash`.
+  Rechaza, antes de ejecutar: redirecciones a archivo (`>`, `>>`, `2>`), `sed -i`,
+  `perl -i`, `awk -i inplace`, `tee`, `sponge`, `truncate -s`, `dd of=`, y escritura
+  inline con `python`, `node` o `ruby`.
+- Deja pasar lo que no es una edición ad-hoc: leer (`cat`, `grep`, `sed -n`, `python`
+  de lectura), operar (`cp`, `mv`, `rm`, `ln`, `chmod`, `git`, `npm`, `curl -o`) y
+  correr scripts existentes (`scripts/publish.sh`, `machine scan`).
+- Es determinista: el harness devuelve error y no ejecuta el comando. Verificador:
   `scripts/verify/bash-guard.sh`.
-- Motivo del candado: con `edit`/`write` el usuario ve el diff al final del turno y
-  la escritura respeta el guard de versión del archivo.
-- Límite: mira el comando, no lo que hace un `.py` por dentro. La regla escrita sigue
+- Motivo: con `edit`/`write` el usuario ve el diff al final del turno y la escritura
+  respeta el guard de versión del archivo.
+- Límite: mira el comando, no lo que hace un script por dentro. La regla escrita sigue
   valiendo para eso.
 
 ## Cómo hablarle (lenguaje técnico simple)

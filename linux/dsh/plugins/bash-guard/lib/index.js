@@ -33,10 +33,11 @@ const HARMLESS_TARGET = /^\/(?:dev\/(?:null|stdout|stderr|zero|full)|proc\/self\
 
 /** Intérpretes y comandos que escriben archivos en el mismo comando. */
 const WRITE_PATTERNS = [
-	[/\bsed\b[^\n|;&]*\s-i/, "sed -i"],
-	[/\bperl\b[^\n|;&]*\s-[a-zA-Z]*i/, "perl -i"],
+	[/\bsed\b[^\n|;&]*\s(?:-i|--in-place)/, "sed -i"],
+	[/\bperl\b[^\n|;&]*\s(?:-[a-zA-Z]*i|--in-place)/, "perl -i"],
 	[/\bawk\b[^\n|;&]*\binplace\b/, "awk -i inplace"],
 	[/\btee\b(?:\s+-[a-zA-Z]+)*\s+\S/, "tee"],
+	[/\bsponge\b/, "sponge"],
 	[/\btruncate\b[^\n|;&]*\s-s\b/, "truncate -s"],
 	[/\bdd\b[^\n|;&]*\bof=/, "dd of="],
 	[/\bmkfifo\b/, "mkfifo"],
