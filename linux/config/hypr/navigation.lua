@@ -382,21 +382,19 @@ end
 expo_focus = function(i)
     reset_ws_style()
     local has_expo = plugin ~= nil
-    local here     = spaces.local_of(hl.get_active_workspace())
 
-    if not EXPO_3D then
-        -- Ir al espacio i EN LA PANTALLA DEL PUNTERO. El foco se le da primero a
-        -- esa pantalla porque Hyprland crea los espacios nuevos en el monitor
-        -- enfocado: sin esto, tocar SUPER+1 con el puntero en la laptop podía
-        -- crear/mostrar el espacio en la vertical.
-        local monitor = spaces.monitor_under_pointer()
-        if monitor ~= nil then hl.dispatch(hl.dsp.focus({ monitor = monitor.name })) end
-        here = spaces.local_of(hl.get_active_workspace())
-        local same = here ~= nil and here == i
-        hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(spaces.to_global(i)) }))
-        return
-    end
+    -- La grilla vuela en la pantalla donde está el puntero: se le da el foco a esa
+    -- pantalla antes de abrirla, porque Hyprland crea los espacios nuevos en el
+    -- monitor enfocado. Sin esto, tocar SUPER+1 con el puntero en la laptop podía
+    -- crear/mostrar el espacio en la vertical.
+    local monitor = spaces.monitor_under_pointer()
+    if monitor ~= nil then hl.dispatch(hl.dsp.focus({ monitor = monitor.name })) end
 
+    local here = spaces.local_of(hl.get_active_workspace())
+
+    -- El viaje (abrir la grilla, volar al espacio y cerrar sobre él) es la
+    -- animación de hyprexpo para cambiar de espacio. Ya no depende de EXPO_3D:
+    -- la grilla plana también vuela (antes caía a un cambio directo = slide).
     if not has_expo or i > 9 then
         fly_abort()
         local same = here ~= nil and here == i
@@ -433,6 +431,10 @@ expo_focus = function(i)
 
     fly_open_and_go(i)
 end
+
+-- Expuesto para probar el viaje en caliente con `hyprctl eval` (misma prueba que
+-- hicieron los 3D). No lo usa ningún bind.
+_G.expo_focus = expo_focus
 
 local TRAVEL_SPEED = 4
 local TRAVEL_FADE_PCT = 100

@@ -88,9 +88,12 @@ ORDEN_ENVIAR_RX = re.compile(
 ORDEN_ENVIAR_SUELTA_RX = re.compile(
     r"(?:^|(?<=[\s,;:.!?]))(?:" + _ENVIAR + r")\b", re.I)
 ORDEN_PAUSAR_RX = re.compile(
-    r"(?:^|(?<=[\s,;:.!?]))(?:deja de (?:transcribir|dictar)|para de (?:transcribir|dictar)"
-    r"|pausa (?:la transcripci[oó]n|el dictado)|termina el dictado|ya no (?:transcribas|dictes))" + _FIN
-    + "|" + _APARTE + r"(?:pausa|stop)" + _FIN,
+    r"(?:^|(?<=[\s,;:.!?]))(?:(?:deja|para|termina) de (?:transcribir|dictar)"
+    r"|pausa (?:la transcripci[oó]n|el dictado)"
+    r"|(?:termina|terminar|cierra|cerrar|acaba|fin del?|det[eé]n|para) (?:el |la )?(?:dictado|transcripci[oó]n)"
+    r"|ya no (?:transcribas|dictes))" + _FIN
+    # "dicta" otra vez (o "dicta, dicta, dicta") como frase aparte: la misma palabra que lo abrió lo cierra
+    + "|" + _APARTE + r"(?:pausa|stop|(?:dicta(?:do)?[\s.,!]*){1,4})" + _FIN,
     re.I)
 
 
@@ -247,9 +250,16 @@ def separar_orden(texto: str, cerrado_con_enter: bool = False) -> tuple[str, str
     además la última aparición de la orden aunque Whisper haya dejado una
     coletilla detrás: "... enter. ¿Ahí está?".
     """
-    for accion, rx in (("enviar", ORDEN_ENVIAR_RX), ("pausar", ORDEN_PAUSAR_RX)):
-        if m := rx.search(texto):
-            return texto[: m.start()].rstrip(" ,;:\t"), accion
+    accion = None
+    seguir = True
+    while seguir:  # "… Dicta, dicta. Termina dictado." -> quita todas las órdenes del final
+        seguir = False
+        for nombre, rx in (("enviar", ORDEN_ENVIAR_RX), ("pausar", ORDEN_PAUSAR_RX)):
+            if m := rx.search(texto):
+                texto, accion, seguir = texto[: m.start()].rstrip(" ,;:\t"), accion or nombre, True
+                break
+    if accion:
+        return texto.strip(), accion
     if cerrado_con_enter:
         ultimo = None
         for m in ORDEN_ENVIAR_SUELTA_RX.finditer(texto):
