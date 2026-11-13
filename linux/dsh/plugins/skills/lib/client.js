@@ -91,7 +91,7 @@ window.__ModuleLoader__.load({
 
 /* --- Matriz de tarjetas -------------------------------------------------- */
 .sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;margin-top:20px}
-.sk-card{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:10px;min-height:120px;
+.sk-card{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:8px;min-height:108px;
   padding:13px 14px;text-align:left;color:inherit;cursor:pointer;
   border:.5px solid var(--sk-l2);border-radius:var(--sk-r-md);background:var(--sk-card)}
 .sk-card:hover{border-color:var(--sk-l3);background:var(--sk-hover)}
@@ -101,12 +101,8 @@ window.__ModuleLoader__.load({
 .sk-card-desc{font-size:12px;line-height:17px;color:var(--sk-fg2);
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .sk-card-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
-.sk-marks{display:flex;gap:6px;align-items:center;min-width:0;color:var(--sk-fg3)}
-.sk-mark{font-size:10.5px;line-height:15px;color:var(--sk-fg3);white-space:nowrap}
-.sk-mark.glyph{font-family:var(--sk-mono);font-weight:500}
-.sk-mark svg{display:block}
 .sk-del{position:absolute;top:7px;right:7px;width:26px;height:26px;display:grid;place-items:center;padding:0;
-  border:0;border-radius:var(--sk-r-sm);background:transparent;color:var(--sk-cap);opacity:.55;cursor:pointer}
+  border:0;border-radius:var(--sk-r-sm);background:transparent;color:var(--sk-cap);opacity:.35;cursor:pointer}
 .sk-del:hover,.sk-del:focus-visible{opacity:1;background:var(--sk-hover);color:var(--sk-bad)}
 .sk-del[disabled]{opacity:.4;cursor:default}
 .sk-del-busy{width:10px;height:10px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;
@@ -119,7 +115,7 @@ window.__ModuleLoader__.load({
 .sk-note{margin:20px 0 0;font-size:11.5px;line-height:17px;color:var(--sk-fg3);overflow-wrap:anywhere}
 .sk-error{margin:12px 0 0;font-size:12.5px;line-height:18px;color:var(--sk-bad)}
 .sk-skel{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;margin-top:20px}
-.sk-sk{height:120px;border-radius:var(--sk-r-md);background:var(--sk-l1);border:.5px solid var(--sk-l1);
+.sk-sk{height:108px;border-radius:var(--sk-r-md);background:var(--sk-l1);border:.5px solid var(--sk-l1);
   animation:sk-pulse 1.4s ease-in-out infinite}
 @keyframes sk-pulse{0%,100%{opacity:.45}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.sk-sk{animation:none;opacity:.7}}
@@ -139,6 +135,7 @@ window.__ModuleLoader__.load({
 .sk-dmain{display:flex;flex-direction:column;gap:6px;min-width:0}
 .sk-dtitle{margin:0;font-size:19px;font-weight:500;line-height:26px;font-family:var(--sk-mono);overflow-wrap:anywhere}
 .sk-dmeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11.5px;line-height:17px;color:var(--sk-cap)}
+.sk-dmeta .sep{color:var(--sk-fg3)}
 .sk-dmeta .p{font-family:var(--sk-mono);color:var(--sk-fg3);overflow-wrap:anywhere}
 .sk-ddesc{margin:0;font-size:12.5px;line-height:18px;color:var(--sk-fg2);max-width:760px}
 .sk-dactions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:none}
@@ -187,7 +184,7 @@ window.__ModuleLoader__.load({
   .sk-card-title{padding-right:30px}
   .sk-card-title{font-size:12px;line-height:17px}
   .sk-card-desc{font-size:11.5px;line-height:16px;-webkit-line-clamp:2}
-  .sk-src{display:none}
+  .sk-src{font-size:10px;line-height:14px;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .sk-skel{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sk-detail{padding-top:14px}
   .sk-dtitle{font-size:17px;line-height:24px}
@@ -421,35 +418,15 @@ window.__ModuleLoader__.load({
 			return blocks;
 		}
 
-		/**
-		 * Una sola marca, sin color de fondo: destello si el modelo la ve, una
-		 * barra si solo se puede llamar por `/comando`. El `title` explica.
-		 */
-		function statusMark(skill, size) {
-			if (skill.model) {
-				return h(
-					"span",
-					{ className: "sk-mark", title: skill.user ? "La ve el modelo y se puede llamar por comando" : "La ve el modelo" },
-					h(
-						"svg",
-						{ width: size, height: size, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
-						h("path", {
-							d: "M7 1.8 8.35 5.1 11.7 6.45 8.35 7.8 7 11.1 5.65 7.8 2.3 6.45 5.65 5.1Z",
-							fill: "currentColor",
-						}),
-					),
-				);
-			}
-			if (skill.user) {
-				return h("span", { className: "sk-mark glyph", title: `Solo por comando: /${skill.name}` }, "/");
-			}
-			return h("span", { className: "sk-mark", title: "Oculta para el modelo y para /comando" }, "·");
-		}
-
+		/** Texto corto y sin color para la fila: qué superficie puede invocarla. */
 		function statusText(skill) {
-			if (skill.model) return skill.user ? "modelo y comando" : "solo modelo";
+			if (skill.model) return skill.user ? "modelo + comando" : "solo modelo";
 			if (skill.user) return "solo /comando";
 			return "oculta";
+		}
+
+		function footerText(skill) {
+			return `${SOURCE_LABEL[skill.source] ?? skill.source} · ${statusText(skill)}`;
 		}
 
 		function SkillCard(props) {
@@ -496,8 +473,7 @@ window.__ModuleLoader__.load({
 				h(
 					"div",
 					{ className: "sk-card-foot" },
-					h("div", { className: "sk-marks" }, statusMark(skill, 11)),
-					h("span", { className: "sk-src" }, SOURCE_LABEL[skill.source] ?? skill.source),
+					h("span", { className: "sk-src" }, statusText(skill)),
 				),
 			);
 		}
@@ -604,8 +580,8 @@ window.__ModuleLoader__.load({
 						h(
 							"div",
 							{ className: "sk-dmeta" },
-							h("span", { className: "sk-marks" }, statusMark(skill, 12), h("span", { className: "sk-mark" }, statusText(skill))),
-							h("span", null, SOURCE_LABEL[skill.source] ?? skill.source),
+							h("span", null, footerText(skill)),
+							skill.path ? h("span", { className: "sep", "aria-hidden": "true" }, "·") : null,
 							skill.path ? h("span", { className: "p" }, skill.path) : null,
 						),
 					),
@@ -686,6 +662,8 @@ window.__ModuleLoader__.load({
 			const [detail, setDetail] = React.useState(null);
 			const [notice, setNotice] = React.useState("");
 			const [lastTrash, setLastTrash] = React.useState("");
+			const [deleting, setDeleting] = React.useState("");
+			const [actionError, setActionError] = React.useState("");
 			const searchRef = React.useRef(null);
 
 			const load = React.useCallback(async () => {
@@ -718,6 +696,41 @@ window.__ModuleLoader__.load({
 					setDetail({ status: "error", name, error: error instanceof Error ? error.message : String(error) });
 				}
 			}, []);
+
+			/** Un solo lugar borra: la tarjeta y el detalle llaman acá. */
+			const deleteSkill = React.useCallback(
+				async (name) => {
+					const ok = window.confirm(
+						`¿Eliminar la skill "${name}"?\n\nSe mueve a la papelera (~/.local/share/skills/trash), así que se puede recuperar.`,
+					);
+					if (!ok) return;
+					setDeleting(name);
+					setActionError("");
+					try {
+						const res = await fetch("/skills/delete", {
+							method: "POST",
+							headers: { "content-type": "application/json", "x-dsh-skills": "1" },
+							body: JSON.stringify({ name }),
+						});
+						const payload = await res.json().catch(() => null);
+						if (!res.ok || payload === null || payload.ok !== true) {
+							if (res.status === 404 || res.status === 405) {
+								throw new Error("el servidor todavía no tiene la ruta de borrado: reiniciá dsh-web");
+							}
+							throw new Error((payload && payload.error) || `HTTP ${res.status}`);
+						}
+						setDetail((prev) => (prev !== null && (prev.name === name || prev.skill?.name === name) ? null : prev));
+						setNotice("Eliminada");
+						setLastTrash(`${payload.name} → ${payload.trash}`);
+						load();
+					} catch (failure) {
+						setActionError(failure instanceof Error ? failure.message : String(failure));
+					} finally {
+						setDeleting("");
+					}
+				},
+				[load],
+			);
 
 			React.useEffect(() => {
 				function onKey(event) {
@@ -754,12 +767,7 @@ window.__ModuleLoader__.load({
 							setNotice("Guardado");
 							load();
 						},
-						onDeleted: (payload) => {
-							setDetail(null);
-							setNotice("Eliminada");
-							setLastTrash(`${payload.name} → ${payload.trash}`);
-							load();
-						},
+						onDelete: deleteSkill,
 					}),
 				);
 			}
@@ -833,11 +841,16 @@ window.__ModuleLoader__.load({
 							[0, 1, 2, 3, 4, 5].map((i) => h("span", { key: i, className: "sk-sk" })),
 						)
 					: null,
+				actionError.length > 0
+					? h("p", { className: "sk-error" }, `No se eliminó: ${actionError}`)
+					: null,
 				ready
 					? h(
 							"div",
 							{ className: "sk-grid" },
-							visible.map((skill) => h(SkillCard, { key: skill.name, skill, onOpen: openSkill })),
+							visible.map((skill) =>
+								h(SkillCard, { key: skill.name, skill, onOpen: openSkill, onDelete: deleteSkill, deleting }),
+							),
 						)
 					: null,
 				ready && visible.length === 0

@@ -497,8 +497,11 @@ de `Plugins`** en la barra lateral: una **matriz de tarjetas** (título +
 descripción) con todas las skills, su origen (`~/.agents/skills`,
 `~/.dsh/skills`, proyecto) y la ruta del `SKILL.md`; marca cuáles ve el modelo y
 cuáles son solo por comando, filtra con un buscador y, al abrir una, **renderiza
-el Markdown** y deja **editarlo** (⌘/Ctrl+S guarda, Esc cancela). Los cambios de
-cliente se ven al refrescar la página; una ruta nueva necesita reinicio.
+el Markdown** y deja **editarlo** (⌘/Ctrl+S guarda, Esc cancela). Cada tarjeta
+trae un tacho para borrar sin abrirla, y el estado de invocación va como texto
+chico y sin color (`modelo + comando` / `solo /comando`), nunca como pastilla.
+Los cambios de cliente se ven al refrescar la página; una ruta nueva necesita
+reinicio.
 
 - **No lee `ctx.skills` como fuente**: el bundle web **desactiva** el
   `skill-filesystem` de host (`dsh-web-app/cordis.patch.yml: - id: skill-filesystem
