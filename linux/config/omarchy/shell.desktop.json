@@ -92,7 +92,10 @@
         {
           "id": "eztvn.power"
         },
-        null
+        null,
+        {
+          "id": "akitaonrails.ai-usagebar"
+        }
       ]
     },
     "position": "left",
