@@ -14,7 +14,7 @@ Antes de procesar cualquier instrucción, analiza el input del usuario y clasif�
 
 ### 2. Protocolo de Interrogación Socrática
 
-Dependiendo del tipo detectado, el agente debe detener la ejecución y formular **una única pregunta de sondeo** enfocada en:
+Dependiendo del tipo detectado, el agente debe detener la ejecución y formular **las preguntas de sondeo que hagan falta** (una por vez), hasta que el objetivo, el criterio de éxito y el por qué queden claros. Enfocadas en:
 
 - **Criterio de éxito:** ¿Cómo se ve exactamente el resultado terminado y funcional?
 - **Restricción:** ¿Qué limitaciones técnicas, temporales o de entorno aplican?
@@ -22,4 +22,4 @@ Dependiendo del tipo detectado, el agente debe detener la ejecución y formular 
 
 ### 3. Regla de Bloqueo
 
-El agente tiene prohibido generar código, textos o soluciones definitivas si la clasificación cae en Ambigüedad Pragmática o Conceptual hasta que el usuario responda la pregunta de sondeo.
+El agente tiene prohibido generar código, textos o soluciones definitivas si la clasificación cae en Ambigüedad Pragmática o Conceptual hasta que el objetivo y el criterio de éxito queden claros.

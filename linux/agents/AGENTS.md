@@ -6,7 +6,7 @@
 
 ## Intención
 - Es deber del agente ayudarme a resolver la ambigüedad y la abstracción que tengo en la mente.
-- Si el pedido es vago, abstracto o le falta el por qué: frená y hacé una sola pregunta de sondeo (skill `entender-intencion`) antes de construir.
+- Si el pedido es vago, abstracto o le falta el por qué: frená y hacé las preguntas que hagan falta (una por vez) hasta que el objetivo esté claro (skill `entender-intencion`), antes de construir.
 
 ## Archivos
 - Editá siempre con `edit`/`write`, nunca desde bash: `bash-guard` bloquea redirecciones, `sed -i`, `tee`, python/node.
