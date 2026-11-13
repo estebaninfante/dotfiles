@@ -1991,6 +1991,68 @@ input.mr-field{height:36px;padding:0 12px}
 							),
 						),
 					),
+					d.kind !== "project"
+						? h(
+								"section",
+								{ className: "mr-section" },
+								h("div", { className: "mr-promo" },
+									h(
+										"p",
+										null,
+										"Una idea pasa a ser proyecto cuando aprobás su Definition of Done. Todavía no la tiene.",
+									),
+									h(
+										"button",
+										{
+											type: "button",
+											className: "mr-btn",
+											"data-variant": "solid",
+											disabled: promoting,
+											onClick: async () => {
+												const defaultName = /^idea-\d+$/.test(d.slug) ? "" : d.slug;
+												const name = window.prompt("Nombre de la carpeta del proyecto (sin espacios):", defaultName);
+												if (!name) return;
+												const dodText = window.prompt(
+													"DoD en una línea: qué tiene que quedar funcionando y cómo se comprueba.",
+													"",
+												);
+												setPromoting(true);
+												try {
+													const out = await api("/machine/promote", {
+														slug: d.slug,
+														to: name.trim(),
+														dod: dodText ? `# DoD — ${name.trim()}\n\n${dodText.trim()}\n` : "",
+													});
+													setFlash(`${name.trim()} ahora es un proyecto.`);
+													await load();
+													setSelected(out.project?.slug || name.trim());
+													refreshDetail(out.project?.slug || name.trim());
+												} catch (err) {
+													setError(err.message);
+												}
+												setPromoting(false);
+											},
+										},
+										promoting ? "Convirtiendo…" : "Convertir en proyecto",
+									),
+								),
+							)
+						: null,
+					f.dod
+						? h(
+								"section",
+								{ className: "mr-section" },
+								h("h2", { className: "mr-section-head" }, "Definition of Done"),
+								h("pre", { className: "mr-dod" }, f.dod),
+							)
+						: null,
+					d.kind === "project" && !f.path
+						? h(
+								"p",
+								{ className: "mr-path" },
+								`Sin carpeta todavía: existe en la base, pero ~/Proyectos/${d.slug} no existe.`,
+							)
+						: null,
 					h(
 						"section",
 						{ className: "mr-section" },
