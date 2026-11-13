@@ -293,7 +293,6 @@ Item {
       Keys.onReturnPressed: root.confirmCapture()
       Keys.onEnterPressed: root.confirmCapture()
       Keys.onPressed: function(event) {
-        console.log("capture-key key=" + event.key + " mods=" + event.modifiers + " text=" + event.text)
         if (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_Z) {
           drawing.undo()
           event.accepted = true

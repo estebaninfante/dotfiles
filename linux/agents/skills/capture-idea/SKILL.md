@@ -68,7 +68,7 @@ machine task add <slug> "first task"
 ```
 
 No explicit approval ceremony: show the plan in those three lines and keep going.
-The full protocol is in `reglas-harness.md`, "Protocolo de proyectos (simple)".
+The full protocol is in `linux/agents/AGENTS.md`.
 
 ## Limits
 

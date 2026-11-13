@@ -1,7 +1,7 @@
 # Protocolo de proyectos — plantillas y comandos
 
 Las reglas (obligatorias, en `~/.dsh/AGENTS.md`) están resumidas en
-`linux/agents/reglas-harness.md`. Este archivo tiene lo operativo: las plantillas
+`linux/agents/AGENTS.md`. Este archivo tiene lo operativo: las plantillas
 que se usan al empezar y al cerrar, y los comandos del registro.
 
 ## Definition of Done (plantilla)
