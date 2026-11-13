@@ -19,7 +19,7 @@ existe — **no la reescribas**.
    duplicar).
 2. Un caso completo ya resuelto: `~/Proyectos/videolab`. Mirá `.webapp.json`,
    `~/dotfiles/linux/config/applications/videolab.desktop` y la última sección de
-   `~/dotfiles/linux/agents/reglas-harness.md`.
+   `~/dotfiles/linux/agents/AGENTS.md`.
 3. Reglas del repo: se edita **dentro de `~/dotfiles/`**, nunca `~/.config/` ni
    `/usr/share/omarchy/`. Se publica con `~/dotfiles/scripts/publish.sh --yes`.
 

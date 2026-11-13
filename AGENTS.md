@@ -254,8 +254,8 @@ el estándar con `@../../agents/estandar-ideas.md`. Editar solo la regla canóni
 
 ### Protocolo de proyectos (`linux/agents/`)
 
-Un proyecto es **objetivo + tareas + la prueba** (ver "Protocolo de proyectos (simple)"
-en `linux/agents/reglas-harness.md`). El usuario rechazó explícitamente la ceremonia de
+Un proyecto es **objetivo + tareas + la prueba** (las reglas viven en
+`linux/agents/AGENTS.md`, el `AGENTS.md` global del harness). El usuario rechazó la ceremonia de
 "Definition of Done" y el "qué entra / qué no entra": no volver a proponerla. Las
 plantillas viejas en `linux/agents/protocolo-proyectos.md` quedan como referencia
 histórica; los comandos vigentes son `machine idea / promote / task`.
@@ -317,7 +317,7 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 Cuando un problema no se resuelve tras 2-3 intentos serios (o cada arreglo rompe otra
 cosa), **no seguir acumulando variantes**: delegar a Claude Code. Está cableado así:
 
-- Regla global del harness: `linux/agents/reglas-harness.md` -> `~/.dsh/AGENTS.md`
+- Regla global del harness: `linux/agents/AGENTS.md` -> `~/.dsh/AGENTS.md`
   (la lee DeepSeek Harness en toda sesión, en cualquier workspace).
 - Skill: `linux/agents/skills/delegate-a-claude/SKILL.md` -> `~/.agents/skills/`
   (tiene el procedimiento y la plantilla del brief que funciona).
@@ -340,8 +340,8 @@ Se enlaza a `~/.dsh/plugins/claude-visible` y `link-dotfiles.sh` asegura su entr
 `~/.dsh/profiles/web/cordis.patch.yml` (forma `- insert:`) y la dependencia
 `file:` en el perfil web. **El servidor del harness carga los plugins al arrancar**:
 después de instalarlo hay que reiniciar con `dsh-web --restart` (o el próximo inicio).
-**El reinicio lo hace el usuario, no el agente** (ver `linux/agents/reglas-harness.md`,
-"Regla dura: no reinicies el harness"): parar el servidor mata el turno en curso y deja
+**El reinicio lo hace el usuario, no el agente** (ver `linux/agents/AGENTS.md`,
+"Harness"): parar el servidor mata el turno en curso y deja
 las sesiones en "reconectar". El agente termina, verifica y cierra con ese paso para el
 usuario; `dsh-web --restart` desde un shell del agente ahora se niega, y
 `dsh-web-guard.timer` levanta el servidor en ≤30 s si algo lo tiró.
