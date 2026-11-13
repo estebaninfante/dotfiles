@@ -46,6 +46,9 @@ detect_machine() {
 
 MACHINE="$(detect_machine)"
 LAN_IP=""; KVM_IP=""; PEER_IP=""
+# Interfaz elegida para llevar la IP KVM (la deja ensure_kvm; la lee el
+# dispatcher para no avisar de conflictos en interfaces ajenas).
+KVM_IFACE=""
 case "$MACHINE" in
     laptop)  LAN_IP="192.168.1.240"; KVM_IP="192.168.1.240"; PEER_IP="192.168.1.241" ;;
     desktop) LAN_IP="192.168.1.241"; KVM_IP="192.168.1.241"; PEER_IP="192.168.1.240" ;;
@@ -103,10 +106,12 @@ restart_lan_mouse() {
 # Idempotente. Return 0 = sin cambios; 1 = hubo cambios (conviene restart).
 ensure_kvm() {
     local iface changed=0
+    KVM_IFACE=""
     [ -n "$KVM_IP" ] || return 0
     iface=$(home_ethernet_iface)
     [ -z "$iface" ] && home_wifi_up && iface="$WIFI_IF"
     [ -z "$iface" ] && return 0
+    KVM_IFACE="$iface"
 
     # 1. IP KVM en la interfaz elegida (si falta).
     if ! ip -4 addr show dev "$iface" 2>/dev/null | grep -q " $KVM_IP/"; then

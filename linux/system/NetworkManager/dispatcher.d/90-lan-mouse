@@ -93,7 +93,10 @@ case "$ACTION" in
         if [ "$?" -eq 1 ] || is_home_context; then
             restart_lan_mouse
         fi
-        if [ "$ACTION" = "up" ]; then
+        # Solo se avisa de conflictos en la interfaz que DEBE llevar la IP KVM.
+        # Los "up" de lo/tailscale0/docker0/br-*/dock no llevan ni van a llevar
+        # esa IP: antes disparaban avisos falsos de "IP no configurada".
+        if [ "$ACTION" = "up" ] && [ -n "$KVM_IFACE" ] && [ "$IFACE" = "$KVM_IFACE" ]; then
             check_ip_conflict &
         fi
         ;;
