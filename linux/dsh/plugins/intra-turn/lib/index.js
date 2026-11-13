@@ -130,21 +130,24 @@ const cleanOptions = (list, max, exclude) =>
 		.filter((option, index, all) => option.length > 0 && option !== exclude && all.indexOf(option) === index)
 		.slice(0, max);
 
-/** El modelo a veces envuelve el JSON en ```json … ``` o agrega una frase. */
+/**
+ * El modelo a veces envuelve el JSON en ```json … ``` o agrega una frase.
+ * null = no hubo JSON legible (respuesta vacía o cortada), distinto de un
+ * pedido preciso que vuelve con listas vacías.
+ */
 function parsePayload(text, draft) {
-	const empty = { assumptions: [], missing: [] };
 	const cleaned = text
 		.replace(/^\s*```(?:json)?/i, "")
 		.replace(/```\s*$/i, "")
 		.trim();
 	const start = cleaned.indexOf("{");
 	const end = cleaned.lastIndexOf("}");
-	if (start < 0 || end <= start) return empty;
+	if (start < 0 || end <= start) return null;
 	let parsed;
 	try {
 		parsed = JSON.parse(cleaned.slice(start, end + 1));
 	} catch {
-		return empty;
+		return null;
 	}
 	const items = (list) => (Array.isArray(list) ? list : []).filter((item) => item !== null && typeof item === "object");
 	// Sin anclaje en el texto no se muestra: la UI vive pegada a las palabras.
@@ -216,13 +219,19 @@ export function apply(ctx) {
 			// Sin razonamiento: con el esfuerzo de la sesión el modelo se gastaba los
 			// tokens pensando y el JSON llegaba cortado (la mitad de las veces, vacío).
 			// Si el proveedor no admite "off", se reintenta como la sesión.
-			let text;
-			try {
-				text = await call("off");
-			} catch {
-				text = await call(target.reasoningEffort);
-			}
-			sendJson(res, 200, payload?.debug === true ? { ...parsePayload(text, draft), raw: text } : parsePayload(text, draft)); // DEBUG-TEMP
+			let effort = "off";
+			const attempt = async () => {
+				try {
+					return await call(effort);
+				} catch (error) {
+					if (effort === target.reasoningEffort) throw error;
+					effort = target.reasoningEffort;
+					return await call(effort);
+				}
+			};
+			// A veces el proveedor cierra sin texto: un reintento antes de rendirse.
+			const parsed = parsePayload(await attempt(), draft) ?? parsePayload(await attempt(), draft);
+			sendJson(res, 200, parsed ?? { assumptions: [], missing: [] });
 		} catch (error) {
 			sendJson(res, 500, {
 				error: "llm-failed",
