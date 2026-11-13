@@ -24,7 +24,7 @@ Item {
   Rectangle {
     id: card
     width: layout.implicitWidth + Style.space(16)
-    height: layout.implicitHeight + Style.space(12)
+    height: layout.implicitHeight
     radius: Math.max(Style.space(8), Style.cornerRadius)
     color: Color.menu.background
     border.width: Math.max(1, Style.space(1))
