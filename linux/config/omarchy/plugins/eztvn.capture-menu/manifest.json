@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "eztvn.capture-menu",
   "name": "Capture menu",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "author": "eztvn",
   "license": "MIT",
-  "description": "Barra mínima de PrintScreen: capturar o grabar zona/ventana/pantalla, o dibujar sobre la pantalla antes de capturarla",
+  "description": "Barra mínima de PrintScreen: capturar o grabar zona/ventana/pantalla, o dibujar sobre la pantalla antes de capturarla, con selector de color",
   "kinds": [
     "menu"
   ],

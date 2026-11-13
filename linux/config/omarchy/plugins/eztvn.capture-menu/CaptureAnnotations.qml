@@ -10,10 +10,10 @@ Item {
   id: root
 
   property bool drawMode: false
+  property bool pickerOpen: false
   property string tool: "pencil"
   property string color: "#ffffff"
   property int strokeWidth: 4
-  property var palette: []
   property real reveal: 0
 
   signal modePicked(string mode)
@@ -34,6 +34,14 @@ Item {
     { key: "rect", label: "Recuadro" },
     { key: "arrow", label: "Flecha" }
   ]
+
+  function openPicker() {
+    root.pickerOpen = true
+  }
+
+  function closePicker() {
+    root.pickerOpen = false
+  }
 
   implicitWidth: card.width
   implicitHeight: card.height
@@ -217,49 +225,36 @@ Item {
             color: Util.alpha(Color.menu.text, 0.15)
           }
 
-          Repeater {
-            model: root.palette
-
-            delegate: Item {
-              id: swatch
-              required property var modelData
-
-              readonly property bool current: root.color === modelData
-
-              width: Style.space(24)
-              height: Style.space(30)
-
-              Rectangle {
-                anchors.centerIn: parent
-                width: Style.space(16)
-                height: width
-                radius: width / 2
-                color: "transparent"
-                border.width: swatch.current ? Math.max(2, Style.space(2)) : Math.max(1, Style.space(1))
-                border.color: swatch.current ? Color.menu.text : Util.alpha(Color.menu.text, 0.25)
-              }
-
-              Rectangle {
-                anchors.centerIn: parent
-                width: Style.space(10)
-                height: width
-                radius: width / 2
-                color: swatch.modelData
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                onClicked: root.colorPicked(swatch.modelData)
-              }
-            }
-          }
-
+          // Color del trazo: el círculo muestra el actual; clic abre el selector.
           Rectangle {
-            Layout.preferredWidth: Math.max(1, Style.space(1))
-            Layout.preferredHeight: Style.space(18)
-            Layout.leftMargin: Style.space(3)
-            Layout.rightMargin: Style.space(3)
-            color: Util.alpha(Color.menu.text, 0.15)
+            id: colorButton
+            width: Style.space(30)
+            height: Style.space(30)
+            radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
+            color: colorArea.containsMouse || root.pickerOpen
+              ? Color.menu.selectedBackground
+              : "transparent"
+
+            Behavior on color {
+              ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
+
+            Rectangle {
+              anchors.centerIn: parent
+              width: Style.space(16)
+              height: width
+              radius: width / 2
+              color: root.color
+              border.width: Math.max(1, Style.space(1))
+              border.color: Util.alpha(Color.menu.text, 0.35)
+            }
+
+            MouseArea {
+              id: colorArea
+              anchors.fill: parent
+              hoverEnabled: true
+              onClicked: root.pickerOpen = !root.pickerOpen
+            }
           }
 
           // Grosor: el punto muestra el tamaño; clic para el siguiente.
@@ -345,5 +340,15 @@ Item {
         }
       }
     }
+  }
+
+  // Selector de color: se abre encima de la barra, centrado.
+  CaptureColorPicker {
+    id: picker
+    x: (root.width - width) / 2
+    y: -height - Style.space(8)
+    opened: root.pickerOpen
+    color: root.color
+    onPicked: function(color) { root.colorPicked(color) }
   }
 }

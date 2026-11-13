@@ -48,11 +48,6 @@ Item {
   readonly property real selW: Math.abs(dragX1 - dragX0)
   readonly property real selH: Math.abs(dragY1 - dragY0)
   readonly property bool selectionValid: selW >= 4 && selH >= 4
-  readonly property var palette: [
-    Annotations.colorHex(Color.accent),
-    Annotations.colorHex(Color.urgent),
-    Annotations.colorHex(Color.foreground)
-  ]
 
   Behavior on reveal {
     NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
@@ -80,6 +75,8 @@ Item {
     root.interaction = "area"
     root.resetDrag()
     drawing.clear()
+    // El selector de color nunca queda abierto de una captura a la siguiente.
+    annotations.closePicker()
     // El PNG congelado es del monitor con foco: el overlay debe vivir ahí.
     var mon = String(p.monitor || "")
     if (mon !== "") {
@@ -159,6 +156,7 @@ Item {
       root.interaction = "area"
       drawing.clear()
     }
+    annotations.closePicker()
     keys.forceActiveFocus()
   }
 
@@ -167,6 +165,7 @@ Item {
     if (mode !== "area" && mode !== "draw") return
     root.interaction = mode
     root.dragging = false
+    annotations.closePicker()
     keys.forceActiveFocus()
   }
 
@@ -301,9 +300,13 @@ Item {
           root.pointerY = y
           if (drawing.drawing) drawing.extend(x, y)
         }
-        onDrawingStarted: function(x, y) { drawing.begin(x, y) }
+        onDrawingStarted: function(x, y) {
+          annotations.closePicker()
+          drawing.begin(x, y)
+        }
         onDrawingEnded: drawing.end()
         onDragStarted: function(x, y) {
+          annotations.closePicker()
           root.dragging = true
           root.dragX0 = x
           root.dragY0 = y
@@ -321,19 +324,29 @@ Item {
           // Grabar arranca al soltar; capturar espera confirmación.
           if (root.intent === "video") root.finishVideoRegion()
         }
-        onClickAt: function(x, y) { root.captureWindow(x, y) }
+        onClickAt: function(x, y) {
+          annotations.closePicker()
+          root.captureWindow(x, y)
+        }
         onCancelled: root.finish(null)
         onConfirmed: root.confirmCapture()
       }
 
+      // Con el selector de color abierto, el primer clic afuera lo cierra.
+      MouseArea {
+        anchors.fill: parent
+        visible: annotations.pickerOpen
+        onClicked: annotations.closePicker()
+      }
+
       CaptureAnnotations {
+        id: annotations
         visible: root.intent === "image"
         reveal: root.reveal
         drawMode: root.drawMode
         tool: root.drawTool
         color: root.drawColor
         strokeWidth: root.drawWidth
-        palette: root.palette
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Style.space(28)
