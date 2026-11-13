@@ -101,3 +101,5 @@ alias y='yay -S'                       # instalar (AUR)
 
 # Added by Antigravity CLI installer
 export PATH="/home/eztvn/.local/bin:$PATH"
+
+. "$HOME/.local/share/../bin/env"
