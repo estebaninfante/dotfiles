@@ -40,6 +40,8 @@ const allowed = [
 	["python de lectura", "python3 -c \"print(open('README.md').read())\""],
 	["node de lectura", "node -e \"console.log(require('fs').readFileSync('p','utf8'))\""],
 	["sed sin -i", "sed -n '1,10p' archivo.md"],
+	["flecha en un mensaje", "git commit -m 'antes -> despues'"],
+	["comparación", "test 3 -ge 2 && [ 5 >= 3 ]"],
 ];
 
 const denied = [

@@ -66,7 +66,7 @@ const PY_WRITE_CALLS = [
  * @returns {boolean}
  */
 function redirectsToFile(command) {
-	for (const match of command.matchAll(/(?:^|[^&<])>{1,2}(?!&)\s*([^\s|;&<>]+)/g)) {
+	for (const match of command.matchAll(/(?:^|[^&<\-=])>{1,2}(?!&|=)\s*([^\s|;&<>]+)/g)) {
 		if (HARMLESS_TARGET.test(match[1])) continue;
 		return true;
 	}
