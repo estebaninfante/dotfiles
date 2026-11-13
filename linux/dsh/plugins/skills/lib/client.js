@@ -214,6 +214,10 @@ window.__ModuleLoader__.load({
 .sk-prose a:hover{text-decoration:underline}
 
 /* --- Editor -------------------------------------------------------------- */
+.sk-edit{display:flex;flex-direction:column;gap:12px}
+.sk-edit>.sk-editbar{order:1}
+.sk-edit>.sk-ai{order:2}
+.sk-edit>.sk-editor{order:3}
 .sk-editor{width:100%;min-height:340px;padding:13px 14px;border:.5px solid var(--sk-l4);border-radius:var(--sk-r-sm);
   background:var(--sk-field);color:var(--sk-fg);font-family:var(--sk-mono);font-size:12.5px;line-height:19px;
   resize:vertical;tab-size:2;overflow:hidden}
@@ -798,8 +802,8 @@ window.__ModuleLoader__.load({
 				saveError ? h("p", { className: "sk-error" }, `No se guardó: ${saveError}`) : null,
 				editing
 					? h(
-							React.Fragment,
-							null,
+							"div",
+							{ className: "sk-edit" },
 							h("textarea", {
 								ref: editorRef,
 								className: "sk-editor",

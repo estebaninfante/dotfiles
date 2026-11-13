@@ -551,6 +551,16 @@ reinicio.
 - El Markdown (`##`, `**`, listas, código, tablas, citas) se renderiza con un
   parser propio, sin dependencias ni HTML crudo; los links solo se aceptan
   `http(s)://`.
+- **Menú de vista** (botón de sliders junto al buscador, como el de Workspaces):
+  agrupar por origen/estado, ordenar por nombre/origen/modificadas y filtrar
+  (todas / las ve el modelo / solo comando / con archivo propio). La elección se
+  guarda en `localStorage` (`dsh.skills.view`). "Modificadas" necesita que el host
+  devuelva `modified` (mtime del SKILL.md).
+- **Editar con IA** (dentro del modo edición): manda el SKILL.md y una instrucción
+  a `POST /skills/ai-edit`, que usa `ctx.get("llm")` con el modelo por defecto
+  (`agentDefaultModel.currentSelection()`). Devuelve una propuesta que **no se
+  guarda sola**: se aplica al editor y recién queda con Guardar. El cerco
+  `x-dsh-skills: 1` también aplica acá.
 - Verificación sin reiniciar: un `ctx` falso que capture las rutas registradas
   (probar `apply` con `node` y un `req/res` de mentira) y el cliente con loader
   falso. Reiniciar (`dsh-web --restart`) solo hace falta cuando cambian las rutas.
