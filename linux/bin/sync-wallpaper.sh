@@ -73,11 +73,18 @@ fi
 #    (con un monitor virtual de Sunshine el escritorio y el stream no coincidian) y
 #    hyprpaper solo re-lee la config al reiniciar. Cada monitor recibe el suyo de
 #    wallpaper-monitors.conf (o el canonico si no tiene linea propia).
+#    Sólo se aplica lo que está DISTINTO de lo que hyprpaper ya tiene: re-aplicar el
+#    mismo archivo rearma su textura/transición y se ve como si el wallpaper de esa
+#    pantalla se reiniciara cada 2 min (lo que hace el timer de red de seguridad).
 if pgrep -x hyprpaper >/dev/null 2>&1; then
     monitors="$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name // empty' 2>/dev/null || true)"
     [ -z "$monitors" ] && monitors="DP-2"
+    active="$(hyprctl hyprpaper listactive 2>/dev/null || true)"
     for mon in $monitors; do
-        hyprctl hyprpaper wallpaper "$mon,$(monitor_wallpaper "$mon" "$BG")" >/dev/null 2>&1 || true
+        target="$(monitor_wallpaper "$mon" "$BG")"
+        current="$(printf '%s\n' "$active" | sed -n "s|^${mon}: ||p" | head -1)"
+        [ "$current" = "$target" ] && continue
+        hyprctl hyprpaper wallpaper "$mon,$target" >/dev/null 2>&1 || true
     done
 fi
 
