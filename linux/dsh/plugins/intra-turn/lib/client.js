@@ -111,9 +111,8 @@ window.__ModuleLoader__.load({
 
 #${SUMMARY_ID}{display:flex;flex-direction:column;gap:2px;padding:0 6px 8px;box-sizing:border-box;width:100%;min-width:0;max-width:100%;
   font:400 14px/1.6 var(--dsw-font-family,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary,#adb2b8)}
-#${SUMMARY_ID} .line{display:grid;grid-template-columns:1.4rem minmax(0,1fr) auto;align-items:baseline;gap:0 6px}
-#${SUMMARY_ID} .emo{text-align:center}
-#${SUMMARY_ID} .phrase{all:unset;cursor:pointer;border-radius:3px;color:var(--dsw-alias-label-secondary,#cfd3d6);
+#${SUMMARY_ID} .line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:0 8px}
+#${SUMMARY_ID} .phrase{all:unset;display:inline;cursor:pointer;border-radius:3px;white-space:pre-wrap;color:var(--dsw-alias-label-secondary,#cfd3d6);
   text-decoration:underline dotted 1.5px;text-underline-offset:4px;text-decoration-color:var(--dsw-alias-label-caption,#81858c)}
 #${SUMMARY_ID} .phrase:hover,#${SUMMARY_ID} .phrase[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover,#ffffff14)}
 #${SUMMARY_ID} .phrase:focus-visible{outline:2px solid var(--dsw-alias-border-l4,#fff6);outline-offset:1px}
@@ -158,7 +157,7 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-primary-foreground,#0f1115);font-weight:500}
 #${CARD_ID} button.btn.primary:disabled{opacity:.4;cursor:default}
 @media (max-width:${NARROW_PX}px){
-  #${SUMMARY_ID} .line{grid-template-columns:1.4rem minmax(0,1fr)}
+  #${SUMMARY_ID} .line{grid-template-columns:minmax(0,1fr)}
   #${SUMMARY_ID} .acts{grid-column:1 / -1}
   #${CARD_ID} footer .note{display:none}
   #${CARD_ID} button.chip{height:34px}
@@ -342,6 +341,14 @@ window.__ModuleLoader__.load({
 				summary.addEventListener("focusin", onSummaryFocus);
 			}
 			if (summary.parentElement !== host.parentElement || summary.nextElementSibling !== host) host.parentElement.insertBefore(summary, host);
+			// El compositor suele ser más angosto que su columna: el resumen se pega a
+			// SU caja, no a la del contenedor, o queda corrido a la izquierda.
+			const box = host.getBoundingClientRect();
+			if (box.width > 0) {
+				summary.style.width = `${Math.round(box.width)}px`;
+				const self = summary.getBoundingClientRect();
+				if (self.width > 0) summary.style.marginLeft = `${Math.round(box.left - self.left)}px`;
+			}
 			// Las acciones van en la última línea, no en una fila propia: aparecer no
 			// corre el compositor (ni la tarjeta anclada a una palabra).
 			const acts =
@@ -352,9 +359,9 @@ window.__ModuleLoader__.load({
 				lines
 					.map(
 						(item, index) =>
-							`<div class="line" role="listitem"><span class="emo" aria-hidden="true">${esc(item.emoji || "•")}</span><span>${esc(item.label)}: ${summaryPhrase(item)}</span>${index === lines.length - 1 ? acts : "<span></span>"}</div>`,
+							`<div class="line" role="listitem"><span>${esc(item.label)}: ${summaryPhrase(item)}</span>${index === lines.length - 1 ? acts : "<span></span>"}</div>`,
 					)
-					.join("") || `<div class="line"><span></span><span></span>${acts}</div>`;
+					.join("") || `<div class="line"><span></span>${acts}</div>`;
 			// Se llama en cada tecla: repintar sin cambios le quitaría el foco a una frase.
 			if (summary.__html === html) return;
 			summary.__html = html;
@@ -441,7 +448,7 @@ window.__ModuleLoader__.load({
 				.map((choice) => `<button type="button" class="chip" data-item="${index}" data-choice="${esc(choice)}" aria-pressed="${answer.picked.includes(choice)}">${esc(choice)}</button>`)
 				.join("");
 			const other = answer.other;
-			const label = item.kind === "assumption" ? `${item.emoji ? `${esc(item.emoji)} ` : ""}${esc(item.label)}` : esc(item.label);
+			const label = esc(item.label);
 			return `
 <section data-item="${index}">
   <div class="q"><span>${label}</span>${multi ? '<span class="hint">elegí las que quieras</span>' : ""}${multi ? "" : `<span class="now" data-now="${index}">${esc(chosenText(item))}</span>`}</div>
