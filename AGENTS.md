@@ -471,6 +471,11 @@ Lo que importa acá:
 - **Doble toque para activar**: sin `touch-action: manipulation` el primer toque se
   pierde esperando si es zoom. Ponerlo en las zonas que importan (la barra lateral),
   no en `*`: en el editor y el scroll pelea con los gestos.
+- **Doble toque por `:hover`** (la causa real en la lista de sesiones): el primer
+  toque aplica `:hover`, y si eso cambia un `display` (aparece el menú `⋯`, se va la
+  hora) WebKit se come el click. En `@media (hover:none)` el `:hover` no puede cambiar
+  `display`/`visibility`. El arreglo de la shell vive en `~/.dsh/plugins/ntfy/lib/client.js`
+  (bloque `MOBILE_CSS` + `installMobileShell`).
 - **`position: fixed` para superponer la barra** rompe el hit-testing del chat: la
   barra se ve pero los toques caen en el panel de abajo. Si se quiere overlay, hay que
   hacerlo junto con `pointer-events`, no como parche aislado.

@@ -2,8 +2,10 @@
  * dsh-local-machine — client half.
  *
  * Panel del harness (barra lateral + contenido del centro, no overlay).
- * Inventario de proyectos con jerarquía: cabecera, KPIs, filtros, buscador
- * y tabla densa; la ficha aparece solo cuando elegís un proyecto.
+ * Copia el lenguaje de la página de Plugins del propio harness: columna
+ * centrada de 960px, título 20/500, grupos con conteo, filas planas separadas
+ * por un hilo de .5px, menús translúcidos y diálogo con máscara. Nada de
+ * tarjetas KPI ni gradientes; el color va en el texto, nunca en puntos.
  *
  * Datos: /machine/* (el plugin host invoca el CLI `machine`).
  */
@@ -19,6 +21,7 @@ window.__ModuleLoader__.load({
 
 		const PANEL_ID = "machine";
 		const STYLE_ID = "dsh-machine-style";
+		const TRASH_DIR = "~/.local/share/machine/trash/";
 		const STATES = ["unclassified", "active", "paused", "done", "archived"];
 		const LABEL = {
 			unclassified: "sin decidir",
@@ -27,12 +30,20 @@ window.__ModuleLoader__.load({
 			done: "terminado",
 			archived: "archivado",
 		};
-		const DOT = {
-			unclassified: "#d8a33a",
-			active: "#3f9f63",
-			paused: "#8b8f98",
-			done: "#4c8dff",
-			archived: "#4b5058",
+		const GROUP = {
+			unclassified: "Sin decidir",
+			active: "Activos",
+			paused: "Pausados",
+			done: "Terminados",
+			archived: "Archivados",
+		};
+		// Tono por estado: el color va en el texto del control, no en un punto.
+		const TONE = {
+			unclassified: "warn",
+			active: "ok",
+			paused: "plain",
+			done: "info",
+			archived: "quiet",
 		};
 		const KINDS = ["project", "product", "experiment", "service", "app", "idea"];
 		const KIND_LABEL = {
@@ -44,207 +55,278 @@ window.__ModuleLoader__.load({
 			idea: "idea",
 			task: "tarea",
 		};
+		const SORTS = [
+			{ value: "attention", label: "Por estado" },
+			{ value: "recent", label: "Más recientes" },
+			{ value: "stale", label: "Más olvidados" },
+			{ value: "name", label: "Por nombre" },
+		];
 
 		const CSS = `
 .mr{
-  --line: var(--dsw-alias-border-l1, #1e2026);
-  --line2: var(--dsw-alias-border-l2, #2c2f36);
-  --fg: var(--dsw-alias-label-primary, #ecedef);
-  --fg2: var(--dsw-alias-label-secondary, #a8adb6);
-  --fg3: var(--dsw-alias-label-tertiary, #767b85);
-  --bg: var(--dsw-alias-bg-base, #0c0d0f);
-  --hover: var(--dsw-alias-interactive-bg-hover, #191b1f);
-  --accent: #4c8dff;
-  --warn: #d8a33a;
-  --bad: #e5484d;
-  height: 100%; min-height: 0; display: flex; flex-direction: column;
-  background: var(--bg); color: var(--fg);
-  font: 400 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
+  --mr-fg: var(--dsw-alias-label-primary, #eceef2);
+  --mr-fg2: var(--dsw-alias-label-secondary, #a3a8b3);
+  --mr-fg3: var(--dsw-alias-label-tertiary, #737985);
+  --mr-cap: var(--dsw-alias-label-caption, #737985);
+  --mr-dim: var(--dsw-alias-label-dimmed, #4a4f59);
+  --mr-l1: var(--dsw-alias-border-l1, #ffffff0f);
+  --mr-l2: var(--dsw-alias-border-l2, #ffffff1f);
+  --mr-l3: var(--dsw-alias-border-l3, #ffffff29);
+  --mr-l4: var(--dsw-alias-border-l4, #ffffff33);
+  --mr-hover: var(--dsw-alias-interactive-bg-hover, #ffffff14);
+  --mr-active: var(--dsw-alias-interactive-bg-active, #ffffff24);
+  --mr-card: var(--dsw-alias-settings-card-fill, var(--dsw-alias-bg-layer-2, #1d2027));
+  --mr-card-line: var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l4, #ffffff33));
+  --mr-field: var(--dsw-alias-bg-layer-1, transparent);
+  --mr-ok: var(--dsw-alias-state-success-primary, #2fb36b);
+  --mr-info: var(--dsw-alias-state-business-primary, #4d6bfe);
+  --mr-warn: var(--dsw-alias-state-warn-primary, #e5a00d);
+  --mr-bad: var(--dsw-alias-state-error-primary, #f25a5a);
+  --mr-r-sm: var(--dsw-radius-sm, 8px);
+  --mr-r-md: var(--dsw-radius-md, 12px);
+  --mr-r-lg: var(--dsw-radius-lg, 16px);
+  --mr-r-xl: var(--dsw-radius-xl, 20px);
+  --mr-mono: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --mr-ring: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--mr-info));
+  box-sizing:border-box;height:100%;min-height:0;overflow:auto;color:var(--mr-fg);
+  display:flex;flex-direction:column;align-items:center;gap:28px;
+  padding:0 clamp(24px,4vw,48px) 48px;font-size:13px;line-height:20px;
 }
-.mr *{box-sizing:border-box}
-.mr-head{display:flex;align-items:flex-start;gap:16px;padding:22px 26px 18px;flex:none}
-.mr-title{min-width:0}
-.mr-title h1{margin:0;font-size:19px;line-height:1.2;font-weight:600;letter-spacing:-.015em}
-.mr-title p{margin:4px 0 0;font-size:11.5px;color:var(--fg3)}
-.mr-tools{margin-left:auto;display:flex;align-items:center;gap:8px}
-.mr-search{position:relative}
-.mr-search input{
-  width:220px;height:30px;padding:0 10px 0 28px;border:1px solid var(--line2);border-radius:8px;
-  background:transparent;color:var(--fg);font:inherit;font-size:12.5px;outline:none;transition:border-color .12s}
-.mr-search input:focus{border-color:#3b4048}
-.mr-search svg{position:absolute;left:9px;top:8px;color:var(--fg3)}
-.mr-btn{
-  height:30px;padding:0 11px;display:inline-flex;align-items:center;gap:6px;
-  border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--fg2);
-  font:inherit;font-size:12.5px;cursor:pointer;transition:background .12s,color .12s}
-.mr-btn:hover{background:var(--hover);color:var(--fg)}
-.mr-btn[disabled]{opacity:.5;cursor:default}
-.mr-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0 26px 18px;flex:none}
-.mr-kpi{
-  position:relative;padding:13px 15px 12px;border:1px solid var(--line);border-radius:11px;
-  background:linear-gradient(180deg,rgba(255,255,255,.022),rgba(255,255,255,0));overflow:hidden}
-.mr-kpi .k{display:flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.05em;
-  text-transform:uppercase;color:var(--fg3);font-weight:600}
-.mr-kpi .v{margin-top:7px;font-size:26px;line-height:1;font-weight:600;letter-spacing:-.02em;
+.mr *,.mr-layer *{box-sizing:border-box}
+.mr>*{width:100%;max-width:960px}
+.mr>.mr-layer{max-width:none}
+:where(.mr) button{font:inherit}
+.mr :focus-visible,.mr-layer :focus-visible{outline:var(--mr-ring);outline-offset:1px}
+
+/* --- Cabecera ------------------------------------------------------------ */
+.mr-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-top:28px}
+[data-platform=darwin] .mr-head{padding-top:calc(28px + var(--dsh-frame-top-clearance,0px))}
+.mr-h1{margin:0;font-size:20px;font-weight:500;line-height:28px}
+.mr-intro{margin:4px 0 0;font-size:13px;line-height:20px;color:var(--mr-fg2);display:flex;flex-wrap:wrap;gap:0 6px}
+.mr-intro b{font-weight:500;color:var(--mr-fg);font-variant-numeric:tabular-nums}
+.mr-intro [data-warn="1"] b{color:var(--mr-warn)}
+.mr-intro i{font-style:normal;color:var(--mr-cap)}
+.mr-toolbar{display:flex;align-items:center;gap:8px;flex:none}
+.mr-search{display:inline-flex;align-items:center;gap:6px;height:32px;width:220px;padding:0 10px;
+  border:.5px solid var(--mr-l4);border-radius:var(--mr-r-md);background:var(--mr-field)}
+.mr-search:focus-within{border-color:var(--mr-info)}
+.mr-search svg{flex:none;color:var(--mr-fg3)}
+.mr-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--mr-fg);
+  font:inherit;font-size:13px;line-height:20px}
+.mr-search input::placeholder{color:var(--mr-dim)}
+.mr-search kbd{font:inherit;font-size:11px;color:var(--mr-cap)}
+
+/* --- Botones (mismas medidas que Button sm/md del harness) --------------- */
+.mr-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;
+  border:.5px solid var(--mr-l4);border-radius:var(--mr-r-md);background:transparent;color:var(--mr-fg);
+  font-size:13px;line-height:20px;cursor:pointer;white-space:nowrap}
+.mr-btn:hover:not(:disabled){background:var(--mr-hover)}
+.mr-btn:active:not(:disabled){background:var(--mr-active)}
+.mr-btn:disabled{opacity:.4;cursor:default}
+.mr-btn[data-size=sm]{height:28px;padding:0 10px;font-size:12px;line-height:18px;border-radius:var(--mr-r-sm)}
+.mr-btn[data-variant=ghost]{border-color:transparent;color:var(--mr-fg2)}
+.mr-btn[data-variant=ghost]:hover:not(:disabled){color:var(--mr-fg)}
+.mr-btn[data-variant=danger]{color:var(--mr-bad);border-color:color-mix(in srgb,var(--mr-bad) 30%,transparent)}
+.mr-btn[data-variant=danger]:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger,color-mix(in srgb,var(--mr-bad) 10%,transparent))}
+.mr-btn[data-variant=solid-danger]{border-color:transparent;background:var(--mr-bad);color:#fff;font-weight:500}
+.mr-btn[data-variant=solid-danger]:hover:not(:disabled){background:color-mix(in srgb,var(--mr-bad) 88%,#000)}
+.mr-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;padding:0;
+  border:0;border-radius:var(--mr-r-sm);background:transparent;color:var(--mr-cap);cursor:pointer}
+.mr-icon:hover:not(:disabled){background:var(--mr-hover);color:var(--mr-fg2)}
+.mr-icon[data-danger="1"]:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger,var(--mr-hover));color:var(--mr-bad)}
+.mr-icon:disabled{opacity:.4;cursor:default}
+
+/* --- Avisos --------------------------------------------------------------- */
+.mr-note{display:flex;align-items:flex-start;gap:10px;margin:0;padding:8px 12px;border-radius:var(--mr-r-md);
+  font-size:13px;line-height:20px;color:var(--mr-fg)}
+.mr-note[data-tone=ok]{background:color-mix(in srgb,var(--mr-ok) 10%,transparent)}
+.mr-note[data-tone=bad]{background:color-mix(in srgb,var(--mr-bad) 10%,transparent)}
+.mr-note[data-tone=warn]{background:var(--dsw-alias-state-warn-tertiary,color-mix(in srgb,var(--mr-warn) 12%,transparent))}
+.mr-note span{flex:1;min-width:0;overflow-wrap:anywhere}
+.mr-note button{flex:none;margin:-4px -6px -4px 0}
+
+/* --- Filtros: Pill del harness ------------------------------------------- */
+.mr-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:-12px}
+.mr-pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:0;border-radius:999px;
+  background:transparent;color:var(--mr-fg2);font-size:12.5px;line-height:18px;cursor:pointer}
+.mr-pill:hover{background:var(--mr-hover);color:var(--mr-fg)}
+.mr-pill[aria-pressed=true]{color:var(--mr-fg);font-weight:500;
+  background:var(--dsw-alias-button-ghost-active-fill,var(--mr-hover));
+  box-shadow:inset 0 0 0 .5px var(--dsw-alias-button-ghost-active-border,var(--mr-l3))}
+.mr-pill .n{font-size:11.5px;font-weight:400;color:var(--mr-cap);font-variant-numeric:tabular-nums}
+.mr-pill[data-empty="1"]{color:var(--mr-fg3)}
+.mr-bar .mr-spacer{flex:1}
+
+/* --- Lista: filas planas como las de Plugins ------------------------------ */
+.mr-groups{display:flex;flex-direction:column;gap:28px}
+.mr-group{display:flex;flex-direction:column;gap:6px}
+.mr-group-head{display:flex;align-items:baseline;gap:8px;margin:0;font-size:14px;font-weight:500;line-height:22px}
+.mr-group-head .n{font-size:14px;font-weight:400;color:var(--mr-cap);font-variant-numeric:tabular-nums}
+.mr-group-head .hint{margin-left:auto;font-size:12px;font-weight:400;color:var(--mr-fg3)}
+.mr-rows{display:flex;flex-direction:column;margin:0 -10px;padding:0;list-style:none}
+.mr-row{position:relative;display:grid;align-items:center;gap:12px;min-height:52px;padding:7px 10px;
+  grid-template-columns:minmax(0,1fr) 84px 112px 132px 116px 28px;
+  border-radius:var(--mr-r-md);cursor:pointer}
+.mr-row::after{content:"";position:absolute;left:10px;right:10px;bottom:0;height:.5px;background:var(--mr-l2)}
+.mr-row:last-child::after,.mr-row:hover::after,.mr-row:has(+ .mr-row:hover)::after{display:none}
+.mr-row:hover,.mr-row[data-open="1"]{background:var(--mr-hover)}
+.mr-row:focus-visible{outline:var(--mr-ring);outline-offset:-2px}
+.mr-who{display:flex;flex-direction:column;min-width:0}
+.mr-name{font-size:13.5px;font-weight:500;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mr-sub{font-size:12px;line-height:18px;color:var(--mr-fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mr-cell{font-size:12.5px;line-height:18px;color:var(--mr-fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-variant-numeric:tabular-nums}
-.mr-kpi .h{margin-top:3px;font-size:11px;color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mr-kpi .bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--line)}
-.mr-kpi .bar i{display:block;height:100%;border-radius:0 2px 2px 0}
-.mr-filters{display:flex;align-items:center;gap:6px;padding:0 26px 14px;flex:none;flex-wrap:wrap}
-.mr-chip{
-  height:27px;padding:0 11px;display:inline-flex;align-items:center;gap:7px;
-  border:1px solid transparent;border-radius:7px;background:transparent;color:var(--fg2);
-  font:inherit;font-size:12.5px;cursor:pointer;transition:background .12s,color .12s}
-.mr-chip:hover{background:var(--hover);color:var(--fg)}
-.mr-chip[data-on="1"]{background:var(--hover);border-color:var(--line2);color:var(--fg);font-weight:500}
-.mr-chip .n{font-size:11px;color:var(--fg3);font-variant-numeric:tabular-nums}
-.mr-chip[data-on="1"] .n{color:var(--fg2)}
-.mr-sort{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--fg3)}
-.mr-sort select{
-  height:26px;border:1px solid transparent;border-radius:7px;background:transparent;
-  color:var(--fg2);font:inherit;font-size:12px;padding:0 4px;cursor:pointer}
-.mr-sort select:hover{background:var(--hover);color:var(--fg)}
-.mr-main{flex:1;min-height:0;display:flex;border-top:1px solid var(--line)}
-.mr-head,.mr-kpis,.mr-filters,.mr-main{width:100%;max-width:1200px;margin-left:auto;margin-right:auto}
-.mr-detail{flex:1;min-height:0;width:100%;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;
-  padding:0 26px;animation:mr-in .14s ease-out}
-.mr-detail .mr-sheet-head{padding:18px 0 14px}
-.mr-detail .mr-sheet-body{padding:14px 0 40px}
-.mr-back{
-  display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 8px;margin-bottom:2px;
-  border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--fg2);
-  font:inherit;font-size:12px;cursor:pointer}
-.mr-back:hover{background:var(--hover);color:var(--fg)}
-.mr-kind{margin-left:auto;display:flex;align-items:center;gap:6px}
-.mr-kind select{
-  height:26px;border:1px solid var(--line2);border-radius:7px;background:transparent;
-  color:var(--fg);font:inherit;font-size:12px;padding:0 6px;cursor:pointer;outline:none}
-.mr-kind select:hover{background:var(--hover)}
-.mr-list{flex:1;min-width:0;overflow:auto}
-.mr table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;table-layout:fixed}
-.mr thead th{
-  position:sticky;top:0;z-index:2;background:var(--bg);text-align:left;
-  padding:9px 12px;font-size:10.5px;letter-spacing:.055em;text-transform:uppercase;
-  color:var(--fg3);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
-.mr thead th:first-child{padding-left:26px}
-.mr thead th:last-child{padding-right:26px;text-align:right}
-.mr tbody td{
-  padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mr tbody td:first-child{padding-left:26px}
-.mr tbody td:last-child{padding-right:26px;text-align:right}
-.mr tbody tr{cursor:pointer;transition:background .1s}
-.mr tbody tr:hover td{background:var(--hover)}
-.mr tbody tr[data-sel="1"] td{background:var(--hover)}
-.mr tbody tr[data-sel="1"] td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
-.mr .name{display:flex;align-items:baseline;gap:8px;min-width:0}
-.mr .name b{font-weight:550;font-size:13px;letter-spacing:-.005em}
-.mr .name em{font-style:normal;font-size:11px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis}
-.mr-pill{
-  display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 7px;
-  border:1px solid transparent;border-radius:6px;background:transparent;
-  color:var(--fg2);font:inherit;font-size:12px;cursor:pointer;max-width:100%}
-.mr-pill:hover{background:var(--hover);border-color:var(--line2);color:var(--fg)}
-.mr-pill select{
-  appearance:none;-webkit-appearance:none;border:0;background:transparent;color:inherit;
-  font:inherit;font-size:12px;cursor:pointer;outline:none;padding:0;margin:0;max-width:120px}
-.mr-chev{color:var(--fg3);flex:none;transition:transform .13s ease}
-.mr-pill[data-open="1"]{border-color:#3b4048;background:var(--hover);color:var(--fg)}
-.mr-pill[data-open="1"] .mr-chev{transform:rotate(180deg);color:var(--fg2)}
-.mr-menu{
-  position:fixed;z-index:2147483000;padding:5px;border:1px solid var(--line2);border-radius:10px;
-  background:#17191d;box-shadow:0 18px 42px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);
-  display:flex;flex-direction:column;gap:1px;animation:mr-pop .1s ease-out}
-@keyframes mr-pop{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
-.mr-menu button{
-  display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 9px;
-  border:0;border-radius:7px;background:transparent;color:var(--fg2);
-  font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
-.mr-menu button[data-focus="1"]{background:#23262f;color:var(--fg)}
-.mr-menu button[data-cur="1"]{color:var(--fg)}
-.mr-menu .check{margin-left:auto;font-size:11px;color:var(--accent);opacity:0}
-.mr-menu button[data-cur="1"] .check{opacity:1}
-.mr-age{font-variant-numeric:tabular-nums;color:var(--fg2)}
-.mr-age[data-stale="1"]{color:var(--warn)}
-.mr-remote{display:inline-flex;align-items:center;gap:6px;color:var(--fg2);font-size:12px}
-.mr-remote[data-none="1"]{color:var(--fg3)}
-.mr-warn{display:inline-flex;align-items:center;gap:5px;color:var(--warn);font-size:12px;
-  font-variant-numeric:tabular-nums}
-.mr-muted{color:var(--fg3)}
-.mr-num{font-variant-numeric:tabular-nums;color:var(--fg2)}
-.mr-empty{padding:56px 26px;text-align:center;color:var(--fg3);font-size:12.5px}
-.mr-sheet{
-  width:420px;flex:none;border-left:1px solid var(--line);display:flex;flex-direction:column;
-  min-height:0;background:#101215;animation:mr-in .14s ease-out}
-@keyframes mr-in{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}
-.mr-sheet-head{display:flex;align-items:flex-start;gap:10px;padding:18px 18px 14px;flex:none;
-  border-bottom:1px solid var(--line)}
-.mr-sheet-head h2{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em;word-break:break-word}
-.mr-sheet-head p{margin:3px 0 0;font-size:11.5px;color:var(--fg3)}
-.mr-x{
-  margin-left:auto;width:26px;height:26px;flex:none;display:grid;place-items:center;
-  border:0;border-radius:6px;background:transparent;color:var(--fg3);cursor:pointer;font-size:16px;line-height:1}
-.mr-x:hover{background:#1b1e23;color:var(--fg)}
-.mr-sheet-body{flex:1;min-height:0;overflow:auto;padding:14px 18px 26px}
-.mr-rows{display:flex;flex-direction:column;margin:0}
-.mr-rows > div{display:flex;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid #191b1f;min-width:0}
-.mr-rows > div:last-child{border-bottom:0}
-.mr-rows dt{flex:none;width:104px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
-  color:var(--fg3);font-weight:600}
-.mr-rows dd{margin:0;flex:1;min-width:0;font-size:12.5px;color:var(--fg);word-break:break-all;
-  overflow-wrap:anywhere;line-height:1.4}
-.mr-rows dd[data-warn="1"]{color:var(--warn)}
-.mr-rows a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(76,141,255,.35)}
-.mr-rows a:hover{border-bottom-color:var(--accent)}
-.mr-path{margin-top:10px;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
-  color:var(--fg3);word-break:break-all}
-.mr-sheet-state{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-.mr-label{margin:18px 0 7px;font-size:10px;letter-spacing:.055em;text-transform:uppercase;
-  color:var(--fg3);font-weight:600;display:flex;align-items:center;gap:8px}
-.mr-label::after{content:"";flex:1;height:1px;background:var(--line)}
-.mr textarea{
-  width:100%;min-height:88px;resize:none;padding:9px 10px;border:1px solid var(--line2);
-  border-radius:9px;background:#0c0e11;color:var(--fg);font:inherit;font-size:12.5px;
-  line-height:1.45;outline:none;transition:border-color .12s}
-.mr textarea:focus{border-color:#3b4048}
-.mr textarea::placeholder{color:var(--fg3)}
-.mr-tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.mr-tasks li{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);
-  font-size:12.5px;line-height:1.3}
-.mr-tasks li:last-child{border-bottom:0}
-.mr-tasks li[data-done="1"] span{text-decoration:line-through;color:var(--fg3)}
-.mr-tasks input{margin:2px 0 0;accent-color:var(--accent)}
-.mr-add{display:flex;gap:7px;margin-top:9px}
-.mr-add input{
-  flex:1;min-width:0;height:30px;padding:0 10px;border:1px solid var(--line2);border-radius:8px;
-  background:transparent;color:var(--fg);font:inherit;font-size:12.5px;outline:none}
-.mr-add input:focus{border-color:#3b4048}
-.mr-add input::placeholder{color:var(--fg3)}
-/* --- Celular: la ficha manda, la tabla se achica --------------------------- */
+.mr-cell[data-tone=warn]{color:var(--mr-warn)}
+.mr-cell[data-tone=quiet]{color:var(--mr-fg3)}
+.mr-cell svg{vertical-align:-2px;margin-right:5px}
+.mr-row .mr-icon{opacity:0;transition:opacity .12s}
+.mr-row:hover .mr-icon,.mr-row:focus-within .mr-icon{opacity:1}
+.mr-empty{margin:0;padding:28px 0;color:var(--mr-fg3);font-size:13px;line-height:20px}
+
+/* Esqueleto mientras carga (mismo pulso que Plugins) */
+.mr-sk{display:block;height:12px;border-radius:var(--dsw-radius-xs,4px);background:var(--dsw-alias-bg-skeleton,#ffffff14);
+  animation:mr-pulse 2s cubic-bezier(.36,0,.64,1) infinite}
+@keyframes mr-pulse{0%{opacity:1}40%{opacity:.6}80%,to{opacity:1}}
+
+/* --- Control de estado (Tag del harness, desplegable) ---------------------- */
+.mr-tag{display:inline-flex;align-items:center;gap:4px;height:24px;max-width:100%;padding:0 6px 0 9px;
+  border:0;border-radius:999px;background:transparent;font-size:12px;line-height:18px;font-weight:500;
+  color:var(--mr-fg2);cursor:pointer;white-space:nowrap;box-shadow:inset 0 0 0 .5px var(--mr-l4)}
+.mr-tag[data-tone=ok]{color:var(--mr-ok);box-shadow:none;background:color-mix(in srgb,var(--mr-ok) 10%,transparent)}
+.mr-tag[data-tone=info]{color:var(--mr-info);box-shadow:none;background:color-mix(in srgb,var(--mr-info) 10%,transparent)}
+.mr-tag[data-tone=warn]{color:var(--mr-warn);box-shadow:none;background:color-mix(in srgb,var(--mr-warn) 12%,transparent)}
+.mr-tag[data-tone=quiet]{color:var(--mr-fg3)}
+.mr-tag:hover{filter:brightness(1.18)}
+.mr-tag[data-plain="1"]{padding:0 6px 0 8px;box-shadow:none;color:var(--mr-fg2);font-weight:400}
+.mr-tag[data-plain="1"]:hover{filter:none;background:var(--mr-hover);color:var(--mr-fg)}
+.mr-chev{flex:none;opacity:.7;transition:transform .16s}
+.mr-tag[aria-expanded=true] .mr-chev{transform:rotate(180deg)}
+
+/* --- Menú (Menu + MenuSurface del harness) -------------------------------- */
+.mr-menu{position:fixed;z-index:1100;display:flex;flex-direction:column;gap:0;padding:4px;min-width:168px;
+  border-radius:var(--mr-r-lg);isolation:isolate;color:var(--mr-fg);font-size:13px;line-height:20px;
+  --dsw-elevation-stroke-color:var(--mr-l1);
+  box-shadow:var(--dsw-elevation-prominent,0 0 0 .5px var(--mr-l1),0 3px 8px #0000000a,0 0 20px #0000000d);
+  animation:mr-fade .12s ease-out}
+.mr-menu::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;
+  background:var(--dsw-menu-surface-fill,#2a2c31f2);backdrop-filter:var(--dsw-menu-backdrop-filter,blur(40px) saturate(150%))}
+.mr-menu-label{padding:5px 8px 3px;font-size:11px;line-height:16px;color:var(--mr-fg3)}
+.mr-menu button{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:4px 8px;border:0;
+  border-radius:var(--mr-r-md);background:transparent;color:var(--mr-fg);font-size:13px;line-height:20px;
+  text-align:left;cursor:pointer}
+.mr-menu button[data-focus="1"]:not(:disabled){background:var(--mr-hover)}
+.mr-menu button:disabled{opacity:.4;cursor:not-allowed}
+.mr-menu button[data-tone=ok] .t{color:var(--mr-ok)}
+.mr-menu button[data-tone=info] .t{color:var(--mr-info)}
+.mr-menu button[data-tone=warn] .t{color:var(--mr-warn)}
+.mr-menu button[data-tone=quiet] .t{color:var(--mr-fg2)}
+.mr-menu .hint{margin-left:auto;padding-left:12px;font-size:11.5px;color:var(--mr-fg3)}
+.mr-menu .check{margin-left:auto;padding-left:12px;color:var(--mr-fg2);visibility:hidden}
+.mr-menu .hint + .check{margin-left:0}
+.mr-menu button[aria-selected=true] .check{visibility:visible}
+@keyframes mr-fade{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
+
+/* --- Ficha ---------------------------------------------------------------- */
+.mr-detail{display:flex;flex-direction:column;gap:32px;padding-top:28px}
+[data-platform=darwin] .mr-detail{padding-top:calc(28px + var(--dsh-frame-top-clearance,0px))}
+.mr-crumb{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;padding:0;border:0;background:transparent;
+  color:var(--mr-fg3);font-size:12.5px;line-height:18px;cursor:pointer}
+.mr-crumb:hover{color:var(--mr-fg)}
+.mr-dhead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-top:-12px}
+.mr-dmain{display:flex;flex-direction:column;gap:6px;min-width:0}
+.mr-dtitle{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.mr-dtitle h1{margin:0;font-size:20px;font-weight:500;line-height:28px;overflow-wrap:anywhere}
+.mr-ddesc{margin:0;font-size:14px;line-height:22px;color:var(--mr-fg2)}
+.mr-dpath{margin:0;font-family:var(--mr-mono);font-size:12px;line-height:18px;color:var(--mr-fg3);overflow-wrap:anywhere}
+.mr-dactions{display:flex;align-items:center;gap:8px;flex:none}
+.mr-section{display:flex;flex-direction:column;gap:12px}
+.mr-section-head{display:flex;align-items:baseline;gap:10px;margin:0;font-size:14px;font-weight:500;line-height:20px}
+.mr-section-head .n{font-size:12px;font-weight:400;color:var(--mr-fg2)}
+.mr-section-head .aside{margin-left:auto;font-size:12px;font-weight:400;color:var(--mr-fg3)}
+.mr-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;
+  border:.5px solid var(--mr-card-line);border-radius:var(--mr-r-xl);background:var(--mr-card)}
+.mr-kv{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:48px;padding:10px 16px}
+.mr-kv + .mr-kv{border-top:.5px solid var(--mr-l2)}
+.mr-kv dt{flex:none;font-size:13px;line-height:20px;color:var(--mr-fg2)}
+.mr-kv dd{margin:0;min-width:0;text-align:right;font-size:13px;line-height:20px;color:var(--mr-fg);
+  overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.mr-kv dd[data-tone=warn]{color:var(--mr-warn)}
+.mr-kv dd[data-tone=quiet]{color:var(--mr-fg3)}
+.mr-kv dd small{display:block;font-size:12px;line-height:18px;color:var(--mr-fg3)}
+.mr-kv a{color:var(--mr-fg);text-decoration:underline;text-decoration-color:var(--mr-l4);text-underline-offset:3px}
+.mr-kv a:hover{text-decoration-color:currentColor}
+.mr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.mr-field{width:100%;padding:10px 14px;border:.5px solid var(--mr-l4);border-radius:var(--mr-r-md);
+  background:var(--mr-field);color:var(--mr-fg);font:inherit;font-size:13px;line-height:20px;outline:none}
+.mr-field:focus{border-color:var(--mr-info);box-shadow:inset 0 0 0 .5px var(--mr-info)}
+.mr-field::placeholder{color:var(--mr-dim)}
+textarea.mr-field{min-height:96px;resize:vertical;display:block}
+input.mr-field{height:36px;padding:0 12px}
+.mr-tasks{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}
+.mr-tasks li{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;font-size:13px;line-height:20px}
+.mr-tasks li + li{border-top:.5px solid var(--mr-l2)}
+.mr-tasks li[data-done="1"] span{color:var(--mr-fg3);text-decoration:line-through}
+.mr-tasks input{flex:none;width:16px;height:16px;margin:2px 0 0;accent-color:var(--dsw-alias-brand-primary,var(--mr-info))}
+.mr-tasks .mr-empty{padding:12px 16px}
+.mr-add{display:flex;gap:8px}
+.mr-add .mr-field{flex:1;min-width:0}
+.mr-danger{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px}
+.mr-danger p{margin:0;font-size:13px;line-height:20px;color:var(--mr-fg2)}
+.mr-danger p b{display:block;font-weight:500;color:var(--mr-fg)}
+
+/* --- Diálogo de borrado (Modal + RiskConfirmation del harness) ------------ */
+.mr-layer{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+  padding:max(24px,var(--dsh-frame-overlay-top,24px)) 24px;color:var(--mr-fg);font-size:13px;line-height:20px}
+.mr-mask{position:absolute;inset:var(--dsh-frame-chrome-top,0px) 0 0;backdrop-filter:var(--dsw-mask-blur,none);
+  background:var(--dsw-alias-bg-mask-1,#00000080);animation:mr-fade .16s ease-out}
+.mr-dialog{position:relative;z-index:1;display:flex;flex-direction:column;gap:20px;width:min(460px,100%);max-height:100%;
+  padding:0 0 24px;overflow:hidden;border-radius:var(--dsw-radius-panel,28px);background:var(--dsw-alias-bg-layer-2,#1d2027);
+  --dsw-elevation-stroke-color:var(--mr-l1);
+  box-shadow:var(--dsw-elevation-prominent,0 0 0 .5px var(--mr-l1),0 3px 8px #0000000a,0 0 20px #0000000d);
+  animation:mr-fade .16s ease-out}
+.mr-dialog header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:22px 14px 0 24px}
+.mr-dialog h2{margin:0;font-size:16px;font-weight:500;line-height:24px;overflow-wrap:anywhere}
+.mr-dialog-body{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto;padding:0 24px;overscroll-behavior:contain}
+.mr-dialog-body p{margin:0;font-size:14px;line-height:22px;color:var(--mr-fg2)}
+.mr-dialog-body code{font-family:var(--mr-mono);font-size:12px;color:var(--mr-fg)}
+.mr-risks{display:flex;flex-direction:column;gap:6px;margin:0;padding:10px 12px;list-style:none;border-radius:var(--mr-r-md);
+  background:var(--dsw-alias-state-warn-tertiary,color-mix(in srgb,var(--mr-warn) 12%,transparent))}
+.mr-risks[data-tone=ok]{background:color-mix(in srgb,var(--mr-ok) 10%,transparent)}
+.mr-risks[data-tone=bad]{background:color-mix(in srgb,var(--mr-bad) 10%,transparent)}
+.mr-risks li{display:flex;gap:8px;font-size:12.5px;line-height:18px;color:var(--mr-fg)}
+.mr-risks li svg{flex:none;margin-top:1px;color:var(--mr-warn)}
+.mr-risks[data-tone=ok] li svg{color:var(--mr-ok)}
+.mr-risks[data-tone=bad] li svg{color:var(--mr-bad)}
+.mr-risks small{display:block;color:var(--mr-fg2)}
+.mr-confirm{display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:20px;color:var(--mr-fg2)}
+.mr-confirm b{font-family:var(--mr-mono);font-weight:500;font-size:12.5px;color:var(--mr-fg)}
+.mr-confirm .mr-field{height:40px;padding:0 14px;font-family:var(--mr-mono);font-size:13px;background:var(--dsw-alias-bg-layer-3,var(--mr-field))}
+.mr-reason{margin:0;font-size:12px;line-height:18px;color:var(--mr-bad);white-space:pre-wrap;overflow-wrap:anywhere}
+.mr-dialog footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 24px}
+
+/* --- Celular -------------------------------------------------------------- */
 @media (max-width:820px){
-  .mr-head{flex-wrap:wrap;gap:12px;padding:16px 16px 12px}
-  .mr-tools{width:100%;margin-left:0}
-  .mr-search{flex:1}
-  .mr-search input{width:100%}
-  .mr-kpis{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 16px 14px}
-  .mr-filters{padding:0 16px 10px}
-  .mr-sort{margin-left:0}
-  .mr table{table-layout:auto}
-  .mr thead th:first-child,.mr tbody td:first-child{padding-left:16px}
-  .mr thead th:last-child,.mr tbody td:last-child{padding-right:16px}
-  .mr col:nth-child(4),.mr col:nth-child(5),.mr col:nth-child(6),
-  .mr thead th:nth-child(4),.mr thead th:nth-child(5),.mr thead th:nth-child(6),
-  .mr tbody td:nth-child(4),.mr tbody td:nth-child(5),.mr tbody td:nth-child(6){display:none}
-  .mr td,.mr th{padding-left:8px;padding-right:8px}
-  .mr .name{flex-direction:column;align-items:flex-start;gap:2px}
-  .mr .name em{font-size:10.5px}
-  .mr-detail{padding:0 16px}
-  .mr-detail .mr-sheet-head{padding:14px 0 10px}
-  .mr-rows dt{width:86px}
-  .mr-pill select{max-width:96px}
+  .mr{padding:0 16px 32px;gap:22px}
+  .mr-head{flex-direction:column;align-items:stretch;padding-top:18px}
+  .mr-search{flex:1;width:auto;height:40px}
+  .mr-search input,.mr-field,.mr-confirm .mr-field{font-size:16px}
+  .mr-search kbd{display:none}
+  .mr-btn{height:40px}
+  .mr-pill{height:36px}
+  .mr-row{grid-template-columns:minmax(0,1fr) auto;min-height:60px;touch-action:manipulation}
+  .mr-row > .mr-cell,.mr-row > .mr-icon{display:none}
+  .mr-tag{height:32px}
+  .mr-detail{padding-top:18px}
+  .mr-dhead{flex-direction:column;align-items:stretch}
+  .mr-grid{grid-template-columns:minmax(0,1fr)}
+  .mr-danger{flex-direction:column;align-items:stretch}
+  .mr-menu button{min-height:40px}
 }
 `;
+
+		/* ------------------------------------------------------------------ */
+		/* Utilidades                                                          */
+		/* ------------------------------------------------------------------ */
 
 		async function api(path, body) {
 			const options = body
@@ -256,17 +338,24 @@ window.__ModuleLoader__.load({
 				: { method: "GET" };
 			const res = await fetch(path, options);
 			const data = await res.json().catch(() => ({}));
-			if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
+			if (!res.ok) {
+				const error = new Error(data.message || data.error || `HTTP ${res.status}`);
+				error.status = res.status;
+				throw error;
+			}
 			return data;
 		}
 
 		function useStyles() {
 			React.useEffect(() => {
-				if (document.getElementById(STYLE_ID)) return;
-				const style = document.createElement("style");
-				style.id = STYLE_ID;
-				style.textContent = CSS;
-				document.head.appendChild(style);
+				let style = document.getElementById(STYLE_ID);
+				if (!style) {
+					style = document.createElement("style");
+					style.id = STYLE_ID;
+					document.head.appendChild(style);
+				}
+				// Siempre se reescribe: al refrescar el chunk el CSS nuevo pisa al viejo.
+				if (style.textContent !== CSS) style.textContent = CSS;
 			}, []);
 		}
 
@@ -276,30 +365,109 @@ window.__ModuleLoader__.load({
 			if (days === 1) return "ayer";
 			if (days < 30) return `hace ${days} d`;
 			const months = Math.floor(days / 30);
-			return months === 1 ? "hace 1 mes" : `hace ${months} meses`;
+			if (months < 12) return months === 1 ? "hace 1 mes" : `hace ${months} meses`;
+			const years = Math.floor(days / 365);
+			return years <= 1 ? "hace 1 año" : `hace ${years} años`;
 		}
 
 		function shortTitle(p) {
 			const t = (p.title || "").trim();
 			if (!t) return "";
 			if (t.toLowerCase() === p.slug.toLowerCase()) return "";
-			return t.replace(/^AGENTS\.md\s*—\s*/i, "").replace(/^#\s*/, "");
+			const clean = t.replace(/^AGENTS\.md\s*—\s*/i, "").replace(/^#\s*/, "");
+			return clean.toLowerCase() === p.slug.toLowerCase() ? "" : clean;
 		}
 
-		function IconSearch() {
+		function plural(n, one, many) {
+			return `${n} ${n === 1 ? one : many}`;
+		}
+
+		/** Lo que se pierde (o impide) mandar un proyecto a la papelera. */
+		function trashRisks(p) {
+			const f = p.facts || {};
+			const dirty = Number(f.dirty || 0);
+			const ahead = String(f.ahead ?? "0");
+			const path = f.path || "";
+			const parent = path.replace(/\/+$/, "").split("/").slice(-2, -1)[0];
+			const blockers = [];
+			const losses = [];
+			if (!path) blockers.push(["No tiene carpeta registrada", "No hay nada que mover; correr Actualizar."]);
+			else if (parent !== "Proyectos")
+				blockers.push(["La carpeta no está directamente en ~/Proyectos", "Por seguridad solo se mueven carpetas de ahí."]);
+			if (f.systemd === "true")
+				blockers.push([
+					"Tiene un servicio systemd",
+					"Deshabilitá la unit primero; si no, queda reiniciándose en bucle.",
+				]);
+			if (dirty > 0) losses.push([plural(dirty, "archivo sin guardar", "archivos sin guardar"), "Cambios que nunca entraron en un commit."]);
+			if (ahead === "?") losses.push(["La rama no tiene copia remota", "Ningún commit de esta rama está subido."]);
+			else if (ahead !== "0" && Number(ahead) > 0)
+				losses.push([plural(Number(ahead), "commit sin subir", "commits sin subir"), "Solo existen en esta máquina."]);
+			if (!f.remote_url) losses.push(["Sin remoto", "No hay copia en GitHub ni en ningún otro lado."]);
+			return { blockers, losses };
+		}
+
+		/* ------------------------------------------------------------------ */
+		/* Iconos (16px, trazo 1.3 como los del harness)                       */
+		/* ------------------------------------------------------------------ */
+
+		function svg(size, children, extra) {
 			return h(
 				"svg",
-				{ width: 13, height: 13, viewBox: "0 0 16 16", fill: "none" },
-				h("circle", { cx: 7, cy: 7, r: 4.6, stroke: "currentColor", strokeWidth: 1.4 }),
-				h("path", {
-					d: "M10.4 10.4 14 14",
-					stroke: "currentColor",
-					strokeWidth: 1.4,
-					strokeLinecap: "round",
-				}),
+				Object.assign(
+					{ width: size, height: size, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+					extra || {},
+				),
+				...children,
 			);
 		}
+		const stroke = { stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round" };
 
+		function IconSearch() {
+			return svg(14, [
+				h("circle", Object.assign({ key: 1, cx: 7, cy: 7, r: 4.5 }, stroke)),
+				h("path", Object.assign({ key: 2, d: "M10.4 10.4 13.5 13.5" }, stroke)),
+			]);
+		}
+		function IconChevron(props) {
+			return svg(
+				props && props.size ? props.size : 12,
+				[h("path", Object.assign({ key: 1, d: "M4.5 6.5 8 10l3.5-3.5" }, stroke))],
+				{ className: "mr-chev" },
+			);
+		}
+		function IconBack() {
+			return svg(14, [h("path", Object.assign({ key: 1, d: "M9.5 4 5.5 8l4 4" }, stroke))]);
+		}
+		function IconTrash() {
+			return svg(16, [
+				h("path", Object.assign({ key: 1, d: "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.1c.05.8.7 1.4 1.5 1.4h2.8c.8 0 1.45-.6 1.5-1.4l.6-8.1" }, stroke)),
+				h("path", Object.assign({ key: 2, d: "M6.8 7.2v4M9.2 7.2v4" }, stroke)),
+			]);
+		}
+		function IconClose() {
+			return svg(16, [h("path", Object.assign({ key: 1, d: "M4.5 4.5l7 7M11.5 4.5l-7 7" }, stroke))]);
+		}
+		function IconFolder() {
+			return svg(14, [
+				h("path", Object.assign({ key: 1, d: "M2 4.5c0-.8.7-1.5 1.5-1.5h2.6l1.5 1.5h4.9c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9c-.8 0-1.5-.7-1.5-1.5v-7Z" }, stroke)),
+			]);
+		}
+		function IconAlert() {
+			return svg(14, [
+				h("path", Object.assign({ key: 1, d: "M8 2.2 14.3 13H1.7L8 2.2Z" }, stroke)),
+				h("path", Object.assign({ key: 2, d: "M8 6.5v3M8 11.3v.1" }, stroke)),
+			]);
+		}
+		function IconCheck() {
+			return svg(14, [h("path", Object.assign({ key: 1, d: "M3.5 8.3 6.5 11l6-6.5" }, stroke))]);
+		}
+		function IconBlock() {
+			return svg(14, [
+				h("circle", Object.assign({ key: 1, cx: 8, cy: 8, r: 5.5 }, stroke)),
+				h("path", Object.assign({ key: 2, d: "M4.2 11.8l7.6-7.6" }, stroke)),
+			]);
+		}
 		function IconGithub() {
 			return h(
 				"svg",
@@ -311,51 +479,62 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		function IconChevron() {
-			return h(
-				"svg",
-				{
-					className: "mr-chev",
-					width: 9,
-					height: 9,
-					viewBox: "0 0 10 10",
-					fill: "none",
-					"aria-hidden": "true",
-				},
-				h("path", {
-					d: "M2 4l3 3 3-3",
-					stroke: "currentColor",
-					strokeWidth: 1.5,
-					strokeLinecap: "round",
-					strokeLinejoin: "round",
-				}),
-			);
-		}
+		/* ------------------------------------------------------------------ */
+		/* Menú desplegable propio (estado, tipo, orden). Nada de <select>.     */
+		/* ------------------------------------------------------------------ */
 
-		function StateMenu(props) {
-			const value = props.value;
-			const onChange = props.onChange;
+		/**
+		 * props: value, options [{value,label,tone?,hint?,disabled?}], onChange,
+		 * title, label? (encabezado del menú), plain? (sin tono), align? ("end").
+		 */
+		function Dropdown(props) {
+			const { value, options, onChange } = props;
 			const [open, setOpen] = React.useState(false);
 			const [pos, setPos] = React.useState(null);
 			const [focus, setFocus] = React.useState(0);
 			const triggerRef = React.useRef(null);
 			const menuRef = React.useRef(null);
+			const current = options.find((o) => o.value === value) || { value, label: String(value) };
 
-			const openAt = React.useCallback(() => {
+			const step = React.useCallback(
+				(from, dir) => {
+					for (let i = 1; i <= options.length; i += 1) {
+						const next = (from + dir * i + options.length) % options.length;
+						if (!options[next].disabled) return next;
+					}
+					return from;
+				},
+				[options],
+			);
+
+			const openMenu = React.useCallback(() => {
 				const el = triggerRef.current;
 				if (!el) return;
 				const rect = el.getBoundingClientRect();
-				const height = STATES.length * 31 + 10;
-				const below = rect.bottom + 6;
-				const top = below + height > window.innerHeight - 8 ? rect.top - height - 6 : below;
+				const rowH = window.matchMedia && window.matchMedia("(max-width:820px)").matches ? 40 : 30;
+				const height = options.length * rowH + 8 + (props.label ? 24 : 0);
+				const width = Math.max(176, rect.width);
+				const below = rect.bottom + 4;
+				const top = below + height > window.innerHeight - 8 ? rect.top - height - 4 : below;
+				const left = props.align === "end" ? rect.right - width : rect.left;
 				setPos({
 					top: Math.max(8, top),
-					left: Math.min(rect.left, window.innerWidth - 198),
-					width: 186,
+					left: Math.max(8, Math.min(left, window.innerWidth - width - 8)),
+					width,
 				});
-				setFocus(Math.max(0, STATES.indexOf(value)));
+				const at = options.findIndex((o) => o.value === value);
+				setFocus(at >= 0 ? at : step(-1, 1));
 				setOpen(true);
-			}, [value]);
+			}, [options, value, props.align, props.label, step]);
+
+			const pick = React.useCallback(
+				(option) => {
+					setOpen(false);
+					if (option.disabled || option.value === value) return;
+					onChange(option.value);
+				},
+				[onChange, value],
+			);
 
 			React.useEffect(() => {
 				if (!open) return;
@@ -366,27 +545,28 @@ window.__ModuleLoader__.load({
 				};
 				const onKey = (event) => {
 					if (event.key === "Escape") {
+						event.preventDefault();
 						event.stopPropagation();
 						setOpen(false);
-						return;
-					}
-					if (event.key === "ArrowDown") {
+						triggerRef.current && triggerRef.current.focus();
+					} else if (event.key === "ArrowDown") {
 						event.preventDefault();
-						setFocus((f) => (f + 1) % STATES.length);
-						return;
-					}
-					if (event.key === "ArrowUp") {
+						setFocus((f) => step(f, 1));
+					} else if (event.key === "ArrowUp") {
 						event.preventDefault();
-						setFocus((f) => (f - 1 + STATES.length) % STATES.length);
-						return;
-					}
-					if (event.key === "Enter") {
+						setFocus((f) => step(f, -1));
+					} else if (event.key === "Enter" || event.key === " ") {
 						event.preventDefault();
-						onChange(STATES[focus]);
+						event.stopPropagation();
+						pick(options[focus]);
+					} else if (event.key === "Tab") {
 						setOpen(false);
 					}
 				};
-				const onScroll = () => setOpen(false);
+				const onScroll = (event) => {
+					if (menuRef.current && menuRef.current.contains(event.target)) return;
+					setOpen(false);
+				};
 				document.addEventListener("mousedown", onDown);
 				document.addEventListener("keydown", onKey, true);
 				window.addEventListener("scroll", onScroll, true);
@@ -397,23 +577,32 @@ window.__ModuleLoader__.load({
 					window.removeEventListener("scroll", onScroll, true);
 					window.removeEventListener("resize", onScroll);
 				};
-			}, [open, focus, onChange]);
+			}, [open, focus, options, pick, step]);
 
 			const trigger = h(
 				"button",
 				{
 					ref: triggerRef,
 					type: "button",
-					className: "mr-pill",
-					"data-open": open ? 1 : 0,
-					title: "Cambiar estado",
+					className: "mr-tag",
+					"data-tone": props.plain ? undefined : current.tone,
+					"data-plain": props.plain ? 1 : 0,
+					"aria-haspopup": "listbox",
+					"aria-expanded": open ? "true" : "false",
+					title: props.title,
 					onClick: (event) => {
 						event.stopPropagation();
 						if (open) setOpen(false);
-						else openAt();
+						else openMenu();
+					},
+					onKeyDown: (event) => {
+						if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+							event.preventDefault();
+							openMenu();
+						}
 					},
 				},
-				h("span", { style: { color: DOT[value] } }, LABEL[value] || value),
+				h("span", null, props.prefix ? `${props.prefix} ${current.label}` : current.label),
 				h(IconChevron),
 			);
 
@@ -430,31 +619,203 @@ window.__ModuleLoader__.load({
 						className: "mr-menu",
 						role: "listbox",
 						style: { top: pos.top, left: pos.left, width: pos.width },
+						onClick: (event) => event.stopPropagation(),
 					},
-					STATES.map((state, index) =>
+					props.label ? h("div", { className: "mr-menu-label" }, props.label) : null,
+					options.map((option, index) =>
 						h(
 							"button",
 							{
-								key: state,
+								key: option.value,
 								type: "button",
 								role: "option",
-								"aria-selected": state === value ? "true" : "false",
-								"data-cur": state === value ? 1 : 0,
+								disabled: option.disabled,
+								"aria-selected": option.value === value ? "true" : "false",
+								"data-tone": option.tone,
 								"data-focus": index === focus ? 1 : 0,
+								title: option.disabled ? option.hint : undefined,
 								onMouseEnter: () => setFocus(index),
-								onClick: (event) => {
-									event.stopPropagation();
-									setOpen(false);
-									onChange(state);
-								},
+								onClick: () => pick(option),
 							},
-							h("span", { style: { color: DOT[state] } }, LABEL[state]),
-							h("span", { className: "check" }, "✓"),
+							h("span", { className: "t" }, option.label),
+							option.hint ? h("span", { className: "hint" }, option.hint) : null,
+							h("span", { className: "check" }, h(IconCheck)),
 						),
 					),
 				),
 			);
 		}
+
+		function stateOptions(kind) {
+			return STATES.map((s) => {
+				const blocked = s === "done" && kind !== "project" && kind !== "experiment";
+				return {
+					value: s,
+					label: LABEL[s],
+					tone: TONE[s],
+					disabled: blocked,
+					hint: blocked ? (kind === "product" ? "un producto se pausa o archiva" : "solo proyecto o experimento") : undefined,
+				};
+			});
+		}
+
+		function StateControl(props) {
+			return h(Dropdown, {
+				value: props.value,
+				options: stateOptions(props.kind),
+				onChange: props.onChange,
+				title: "Cambiar estado",
+				label: "Estado",
+			});
+		}
+
+		const KIND_OPTIONS = KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] }));
+
+		/* ------------------------------------------------------------------ */
+		/* Diálogo de borrado                                                  */
+		/* ------------------------------------------------------------------ */
+
+		function TrashDialog(props) {
+			const { project, onCancel, onDone } = props;
+			const [typed, setTyped] = React.useState("");
+			const [busy, setBusy] = React.useState(false);
+			const [reason, setReason] = React.useState("");
+			const inputRef = React.useRef(null);
+			const { blockers, losses } = trashRisks(project);
+			const f = project.facts || {};
+			const matches = typed.trim() === project.slug;
+			const blocked = blockers.length > 0;
+
+			React.useEffect(() => {
+				const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 30);
+				const onKey = (event) => {
+					if (event.key !== "Escape") return;
+					event.preventDefault();
+					event.stopPropagation();
+					if (!busy) onCancel();
+				};
+				document.addEventListener("keydown", onKey, true);
+				return () => {
+					clearTimeout(t);
+					document.removeEventListener("keydown", onKey, true);
+				};
+			}, [busy, onCancel]);
+
+			const submit = async () => {
+				if (!matches || blocked || busy) return;
+				setBusy(true);
+				setReason("");
+				try {
+					await api("/machine/trash", { slug: project.slug });
+					onDone(project.slug);
+				} catch (err) {
+					setBusy(false);
+					setReason(
+						err.status === 404 || err.status === 405
+							? "El servidor del harness todavía no tiene la ruta de borrado. Reinicialo (dsh-web --restart) y probá de nuevo."
+							: String(err.message || err).replace(/^machine:\s*/, ""),
+					);
+				}
+			};
+
+			const riskList = (tone, items, Icon) =>
+				h(
+					"ul",
+					{ className: "mr-risks", "data-tone": tone },
+					items.map(([title, why]) =>
+						h("li", { key: title }, h(Icon), h("span", null, title, why ? h("small", null, why) : null)),
+					),
+				);
+
+			return h(
+				"div",
+				{ className: "mr-layer", role: "presentation" },
+				h("div", { className: "mr-mask", onClick: () => !busy && onCancel() }),
+				h(
+					"div",
+					{
+						className: "mr-dialog",
+						role: "alertdialog",
+						"aria-modal": "true",
+						"aria-labelledby": "mr-trash-title",
+					},
+					h(
+						"header",
+						null,
+						h("h2", { id: "mr-trash-title" }, `Mandar ${project.slug} a la papelera`),
+						h(
+							"button",
+							{ type: "button", className: "mr-icon", onClick: onCancel, disabled: busy, title: "Cancelar (Esc)" },
+							h(IconClose),
+						),
+					),
+					h(
+						"div",
+						{ className: "mr-dialog-body" },
+						h(
+							"p",
+							null,
+							"La carpeta no se destruye: se mueve a ",
+							h("code", null, `${TRASH_DIR}<fecha>/`),
+							" y el proyecto sale de esta lista. Para recuperarlo, movela de vuelta a ",
+							h("code", null, "~/Proyectos"),
+							" y tocá Actualizar.",
+						),
+						f.path ? h("p", null, h("code", null, f.path.replace(/^\/home\/[^/]+/, "~"))) : null,
+						blocked
+							? riskList("bad", blockers, IconBlock)
+							: losses.length
+								? riskList("warn", losses, IconAlert)
+								: riskList("ok", [["Todo está subido al remoto", "No se pierde trabajo."]], IconCheck),
+						blocked
+							? null
+							: h(
+									"label",
+									{ className: "mr-confirm" },
+									h("span", null, "Para confirmar, escribí ", h("b", null, project.slug)),
+									h("input", {
+										ref: inputRef,
+										className: "mr-field",
+										value: typed,
+										spellCheck: false,
+										autoComplete: "off",
+										autoCapitalize: "off",
+										disabled: busy,
+										"aria-invalid": typed && !project.slug.startsWith(typed.trim()) ? "true" : "false",
+										onChange: (event) => setTyped(event.target.value),
+										onKeyDown: (event) => {
+											if (event.key === "Enter") {
+												event.preventDefault();
+												submit();
+											}
+										},
+									}),
+								),
+						reason ? h("p", { className: "mr-reason" }, reason) : null,
+					),
+					h(
+						"footer",
+						null,
+						h("button", { type: "button", className: "mr-btn", "data-variant": "ghost", onClick: onCancel, disabled: busy }, "Cancelar"),
+						h(
+							"button",
+							{
+								type: "button",
+								className: "mr-btn",
+								"data-variant": "solid-danger",
+								disabled: !matches || blocked || busy,
+								onClick: submit,
+							},
+							busy ? "Moviendo…" : "Mandar a la papelera",
+						),
+					),
+				),
+			);
+		}
+
+		/* ------------------------------------------------------------------ */
+		/* Panel                                                               */
+		/* ------------------------------------------------------------------ */
 
 		function MachinePanel() {
 			useStyles();
@@ -465,15 +826,19 @@ window.__ModuleLoader__.load({
 			const [selected, setSelected] = React.useState(null);
 			const [detail, setDetail] = React.useState(null);
 			const [error, setError] = React.useState("");
+			const [flash, setFlash] = React.useState("");
 			const [loading, setLoading] = React.useState(true);
-			const [updated, setUpdated] = React.useState(null);
+			const [scanning, setScanning] = React.useState(false);
+			const [trashing, setTrashing] = React.useState(null);
+			const [noteState, setNoteState] = React.useState("");
+			const searchRef = React.useRef(null);
+			const scrollRef = React.useRef(null);
+			const listScroll = React.useRef(0);
 
 			const load = React.useCallback(async () => {
-				setLoading(true);
 				try {
 					const data = await api("/machine/projects");
-					setProjects(data.projects || []);
-					setUpdated(new Date());
+					setProjects((data.projects || []).filter((p) => p.kind !== "task"));
 					setError("");
 				} catch (err) {
 					setError(err.message);
@@ -486,9 +851,29 @@ window.__ModuleLoader__.load({
 				load();
 			}, [load]);
 
+			React.useEffect(() => {
+				if (!flash) return;
+				const t = setTimeout(() => setFlash(""), 6000);
+				return () => clearTimeout(t);
+			}, [flash]);
+
+			const rescan = React.useCallback(async () => {
+				setScanning(true);
+				try {
+					await api("/machine/scan", {});
+				} catch (err) {
+					setError(err.message);
+				}
+				await load();
+				setScanning(false);
+			}, [load]);
+
 			const open = React.useCallback(async (slug) => {
+				if (scrollRef.current) listScroll.current = scrollRef.current.scrollTop;
 				setSelected(slug);
 				setDetail(null);
+				setNoteState("");
+				if (scrollRef.current) scrollRef.current.scrollTop = 0;
 				try {
 					setDetail(await api(`/machine/project?slug=${encodeURIComponent(slug)}`));
 				} catch (err) {
@@ -496,34 +881,39 @@ window.__ModuleLoader__.load({
 				}
 			}, []);
 
-			const changeState = React.useCallback(
-				async (slug, state) => {
-					const before = projects.find((p) => p.slug === slug)?.state;
-					setProjects((prev) => prev.map((p) => (p.slug === slug ? { ...p, state } : p)));
-					try {
-						await api("/machine/entity", { slug, state });
-					} catch (err) {
-						setError(err.message);
-						setProjects((prev) => prev.map((p) => (p.slug === slug ? { ...p, state: before } : p)));
-					}
-				},
-				[projects],
-			);
+			const refreshDetail = React.useCallback(async (slug) => {
+				try {
+					setDetail(await api(`/machine/project?slug=${encodeURIComponent(slug)}`));
+				} catch (err) {
+					setError(err.message);
+				}
+			}, []);
 
-			const changeKind = React.useCallback(
-				async (slug, kind) => {
-					const before = projects.find((p) => p.slug === slug)?.kind;
-					setDetail((prev) => (prev ? { ...prev, kind } : prev));
-					setProjects((prev) => prev.map((p) => (p.slug === slug ? { ...p, kind } : p)));
+			const close = React.useCallback(() => {
+				setSelected(null);
+				setDetail(null);
+				requestAnimationFrame(() => {
+					if (scrollRef.current) scrollRef.current.scrollTop = listScroll.current;
+				});
+			}, []);
+
+			const patch = React.useCallback((slug, fields) => {
+				setProjects((prev) => prev.map((p) => (p.slug === slug ? Object.assign({}, p, fields) : p)));
+				setDetail((prev) => (prev && prev.slug === slug ? Object.assign({}, prev, fields) : prev));
+			}, []);
+
+			const changeField = React.useCallback(
+				async (slug, field, next) => {
+					const before = projects.find((p) => p.slug === slug)?.[field];
+					patch(slug, { [field]: next });
 					try {
-						await api("/machine/entity", { slug, kind });
+						await api("/machine/entity", { slug, [field]: next });
 					} catch (err) {
 						setError(err.message);
-						setDetail((prev) => (prev ? { ...prev, kind: before } : prev));
-						setProjects((prev) => prev.map((p) => (p.slug === slug ? { ...p, kind: before } : p)));
+						patch(slug, { [field]: before });
 					}
 				},
-				[projects],
+				[projects, patch],
 			);
 
 			const openFolder = React.useCallback(async (path) => {
@@ -534,16 +924,32 @@ window.__ModuleLoader__.load({
 				}
 			}, []);
 
+			const trashed = React.useCallback(
+				(slug) => {
+					setTrashing(null);
+					setProjects((prev) => prev.filter((p) => p.slug !== slug));
+					setFlash(`${slug} está en la papelera (${TRASH_DIR}).`);
+					if (selected === slug) close();
+				},
+				[selected, close],
+			);
+
+			// Esc vuelve a la lista; "/" enfoca el buscador. Menús y diálogo
+			// atrapan su propio Esc antes (captura), así no cierran la ficha.
 			React.useEffect(() => {
 				const onKey = (event) => {
-					if (event.key === "Escape" && selected) {
-						setSelected(null);
-						setDetail(null);
+					if (event.defaultPrevented || trashing) return;
+					const tag = (event.target && event.target.tagName) || "";
+					const typing = tag === "INPUT" || tag === "TEXTAREA";
+					if (event.key === "Escape" && selected && !typing) close();
+					if (event.key === "/" && !selected && !typing && searchRef.current) {
+						event.preventDefault();
+						searchRef.current.focus();
 					}
 				};
 				document.addEventListener("keydown", onKey);
 				return () => document.removeEventListener("keydown", onKey);
-			}, [selected]);
+			}, [selected, trashing, close]);
 
 			const counts = React.useMemo(() => {
 				const by = { unclassified: 0, active: 0, paused: 0, done: 0, archived: 0 };
@@ -551,279 +957,298 @@ window.__ModuleLoader__.load({
 				return {
 					by,
 					total: projects.length,
-					stale: projects.filter(
-						(p) => p.state !== "archived" && p.age_days != null && p.age_days >= 30,
-					).length,
+					stale: projects.filter((p) => p.state !== "archived" && p.age_days != null && p.age_days >= 30).length,
 					dirty: projects.filter((p) => Number(p.facts?.dirty || 0) > 0).length,
-					remotes: projects.filter((p) =>
-						["github", "gitlab"].includes(p.facts?.remote_host || ""),
-					).length,
 				};
 			}, [projects]);
 
-			const rows = React.useMemo(() => {
+			const visible = React.useMemo(() => {
 				const q = query.trim().toLowerCase();
-				let list = projects.filter((p) => (filter === "all" ? true : p.state === filter));
+				let list = projects.filter((p) => filter === "all" || p.state === filter);
 				if (q) {
-					list = list.filter(
-						(p) =>
-							p.slug.toLowerCase().includes(q) ||
-							(p.title || "").toLowerCase().includes(q) ||
-							(p.note || "").toLowerCase().includes(q),
+					list = list.filter((p) =>
+						[p.slug, p.title, p.note, p.facts?.remote_url].some((v) => (v || "").toLowerCase().includes(q)),
 					);
 				}
-				const rank = (p) => STATES.indexOf(p.state);
+				const age = (p, empty) => (p.age_days == null ? empty : p.age_days);
 				return list.slice().sort((a, b) => {
 					if (sort === "name") return a.slug.localeCompare(b.slug);
-					if (sort === "recent") return (a.age_days ?? 9999) - (b.age_days ?? 9999);
-					if (rank(a) !== rank(b)) return rank(a) - rank(b);
-					return (b.age_days ?? -1) - (a.age_days ?? -1);
+					if (sort === "stale") return age(b, -1) - age(a, -1);
+					return age(a, 1e9) - age(b, 1e9) || a.slug.localeCompare(b.slug);
 				});
 			}, [projects, filter, query, sort]);
 
-			const pct = (n, of) => (of > 0 ? Math.min(100, Math.round((n / of) * 100)) : 0);
-
-			const head = h(
-				"div",
-				{ className: "mr-head" },
-				h(
-					"div",
-					{ className: "mr-title" },
-					h("h1", null, "Proyectos"),
-					h(
-						"p",
-						null,
-						`${counts.total} proyectos · ${counts.remotes} con remoto · ` +
-							(updated
-								? `actualizado ${updated.toLocaleTimeString("es", {
-										hour: "2-digit",
-										minute: "2-digit",
-									})}`
-								: "cargando…"),
-					),
-				),
-				h(
-					"div",
-					{ className: "mr-tools" },
-					h(
-						"div",
-						{ className: "mr-search" },
-						h(IconSearch),
-						h("input", {
-							placeholder: "Buscar proyecto…",
-							value: query,
-							onChange: (event) => setQuery(event.target.value),
-							spellCheck: false,
-						}),
-					),
-					h(
-						"button",
-						{ className: "mr-btn", onClick: load, disabled: loading, title: "Volver a leer el disco" },
-						loading ? "…" : "Actualizar",
-					),
-				),
-			);
-
-			const kpi = (label, value, hint, color, fill) =>
-				h(
-					"div",
-					{ className: "mr-kpi", key: label },
-					h("div", { className: "k", style: { color } }, label),
-					h("div", { className: "v" }, String(value)),
-					h("div", { className: "h" }, hint),
-					h(
-						"div",
-						{ className: "bar" },
-						h("i", { style: { width: `${fill}%`, background: color } }),
-					),
+			const groups = React.useMemo(() => {
+				if (sort !== "attention" || filter !== "all") return [{ key: "flat", rows: visible }];
+				return STATES.map((s) => ({ key: s, rows: visible.filter((p) => p.state === s) })).filter(
+					(g) => g.rows.length > 0,
 				);
+			}, [visible, sort, filter]);
 
-			const kpis = h(
-				"div",
-				{ className: "mr-kpis" },
-				kpi(
-					"sin decidir",
-					counts.by.unclassified || 0,
-					"nadie eligió todavía",
-					DOT.unclassified,
-					pct(counts.by.unclassified || 0, counts.total),
-				),
-				kpi("activos", counts.by.active || 0, "tope recomendado: 3", DOT.active, pct(counts.by.active || 0, 3)),
-				kpi("sin tocar +30 d", counts.stale, "candidatos a archivar", DOT.paused, pct(counts.stale, counts.total)),
-				kpi("sin guardar", counts.dirty, "riesgo de perder trabajo", "#e5484d", pct(counts.dirty, counts.total)),
+			/* --- piezas ---------------------------------------------------- */
+
+			const notices = h(
+				React.Fragment,
+				null,
+				error
+					? h(
+							"div",
+							{ className: "mr-note", "data-tone": "bad", role: "alert" },
+							h("span", null, error),
+							h("button", { type: "button", className: "mr-icon", onClick: () => setError(""), title: "Cerrar" }, h(IconClose)),
+						)
+					: null,
+				flash
+					? h(
+							"div",
+							{ className: "mr-note", "data-tone": "ok", role: "status" },
+							h("span", null, flash),
+							h("button", { type: "button", className: "mr-icon", onClick: () => setFlash(""), title: "Cerrar" }, h(IconClose)),
+						)
+					: null,
 			);
 
-			const filters = h(
-				"div",
-				{ className: "mr-filters" },
-				["all", ...STATES].map((s) =>
+			function rowView(p) {
+				const f = p.facts || {};
+				const dirty = Number(f.dirty || 0);
+				const ahead = Number(f.ahead) || 0;
+				const host = f.remote_host || "";
+				const stale = p.age_days != null && p.age_days >= 30 && p.state !== "archived";
+				const tasks = Number(f.tickets_open || 0);
+				const sub = [
+					shortTitle(p),
+					p.kind && p.kind !== "project" ? KIND_LABEL[p.kind] || p.kind : "",
+					f.branch && f.branch !== "main" && f.branch !== "master" ? f.branch : "",
+					tasks ? plural(tasks, "tarea abierta", "tareas abiertas") : "",
+				].filter(Boolean);
+				const alerts = [dirty ? `${dirty} sin guardar` : "", ahead ? `${ahead} sin subir` : ""].filter(Boolean);
+				return h(
+					"li",
+					{
+						key: p.slug,
+						className: "mr-row",
+						tabIndex: 0,
+						role: "button",
+						"aria-label": `Abrir ${p.slug}`,
+						onClick: () => open(p.slug),
+						onKeyDown: (event) => {
+							if (event.target !== event.currentTarget) return;
+							if (event.key === "Enter" || event.key === " ") {
+								event.preventDefault();
+								open(p.slug);
+							}
+						},
+					},
+					h(
+						"div",
+						{ className: "mr-who" },
+						h("span", { className: "mr-name" }, p.slug),
+						h("span", { className: "mr-sub" }, sub.length ? sub.join(" · ") : f.path ? "sin descripción" : "sin carpeta"),
+					),
+					h("span", { className: "mr-cell", "data-tone": stale ? "warn" : undefined, title: f.last_commit ? `último commit ${f.last_commit}` : undefined }, ageLabel(p.age_days)),
+					h(
+						"span",
+						{ className: "mr-cell", "data-tone": host ? undefined : "quiet", title: f.remote_url || "sin remoto" },
+						host === "github" ? h(IconGithub) : null,
+						host || "sin remoto",
+					),
+					h(
+						"span",
+						{ className: "mr-cell", "data-tone": alerts.length ? "warn" : "quiet" },
+						alerts.length ? alerts.join(" · ") : "al día",
+					),
+					h(
+						"div",
+						{ onClick: (event) => event.stopPropagation() },
+						h(StateControl, { value: p.state, kind: p.kind, onChange: (next) => changeField(p.slug, "state", next) }),
+					),
 					h(
 						"button",
 						{
-							key: s,
-							className: "mr-chip",
-							"data-on": filter === s ? 1 : 0,
-							onClick: () => setFilter(s),
+							type: "button",
+							className: "mr-icon",
+							"data-danger": 1,
+							title: "Mandar a la papelera…",
+							"aria-label": `Mandar ${p.slug} a la papelera`,
+							onClick: (event) => {
+								event.stopPropagation();
+								setTrashing(p);
+							},
 						},
-						h(
-							"span",
-							{ style: s === "all" ? undefined : { color: DOT[s] } },
-							s === "all" ? "todos" : LABEL[s],
-						),
-						h("span", { className: "n" }, String(s === "all" ? counts.total : counts.by[s] || 0)),
+						h(IconTrash),
 					),
-				),
-				h(
-					"div",
-					{ className: "mr-sort" },
-					"orden",
-					h(
-						"select",
-						{ value: sort, onChange: (event) => setSort(event.target.value) },
-						h("option", { value: "attention" }, "atención"),
-						h("option", { value: "recent" }, "más reciente"),
-						h("option", { value: "name" }, "nombre"),
-					),
-				),
-			);
+				);
+			}
 
-			const table = h(
-				"div",
-				{ className: "mr-list" },
-				h(
-					"table",
-					null,
+			function listView() {
+				const intro = [
+					h("span", { key: "t" }, h("b", null, String(counts.total)), " proyectos"),
+					h("i", { key: "s1" }, "·"),
+					h("span", { key: "u" }, h("b", null, String(counts.by.unclassified || 0)), " sin decidir"),
+					h("i", { key: "s2" }, "·"),
+					h("span", { key: "a" }, h("b", null, `${counts.by.active || 0}/3`), " activos"),
+				];
+				if (counts.dirty)
+					intro.push(
+						h("i", { key: "s3" }, "·"),
+						h("span", { key: "d", "data-warn": 1 }, h("b", null, String(counts.dirty)), " con cambios sin guardar"),
+					);
+				if (counts.stale)
+					intro.push(
+						h("i", { key: "s4" }, "·"),
+						h("span", { key: "o" }, h("b", null, String(counts.stale)), " sin tocar hace +30 días"),
+					);
+
+				const head = h(
+					"header",
+					{ className: "mr-head" },
+					h("div", null, h("h1", { className: "mr-h1" }, "Proyectos"), h("p", { className: "mr-intro" }, intro)),
 					h(
-						"colgroup",
-						null,
-						h("col", { style: { width: "34%" } }),
-						h("col", { style: { width: "14%" } }),
-						h("col", { style: { width: "13%" } }),
-						h("col", { style: { width: "15%" } }),
-						h("col", { style: { width: "12%" } }),
-						h("col", { style: { width: "12%" } }),
-					),
-					h(
-						"thead",
-						null,
+						"div",
+						{ className: "mr-toolbar" },
 						h(
-							"tr",
-							null,
-							["proyecto", "estado", "últ. cambio", "remoto", "sin guardar", "tareas"].map((t) =>
-								h("th", { key: t }, t),
+							"label",
+							{ className: "mr-search" },
+							h(IconSearch),
+							h("input", {
+								ref: searchRef,
+								placeholder: "Buscar",
+								value: query,
+								spellCheck: false,
+								onChange: (event) => setQuery(event.target.value),
+								onKeyDown: (event) => {
+									if (event.key === "Escape" && query) {
+										event.preventDefault();
+										setQuery("");
+									}
+								},
+							}),
+							query ? null : h("kbd", null, "/"),
+						),
+						h(
+							"button",
+							{
+								type: "button",
+								className: "mr-btn",
+								onClick: rescan,
+								disabled: scanning,
+								title: "Volver a leer ~/Proyectos del disco",
+							},
+							scanning ? "Leyendo…" : "Actualizar",
+						),
+					),
+				);
+
+				const bar = h(
+					"div",
+					{ className: "mr-bar", role: "toolbar", "aria-label": "Filtrar por estado" },
+					["all", ...STATES].map((s) => {
+						const n = s === "all" ? counts.total : counts.by[s] || 0;
+						return h(
+							"button",
+							{
+								key: s,
+								type: "button",
+								className: "mr-pill",
+								"aria-pressed": filter === s ? "true" : "false",
+								"data-empty": n === 0 ? 1 : 0,
+								onClick: () => setFilter(s),
+							},
+							s === "all" ? "Todos" : GROUP[s],
+							h("span", { className: "n" }, String(n)),
+						);
+					}),
+					h("span", { className: "mr-spacer" }),
+					h(Dropdown, { value: sort, options: SORTS, onChange: setSort, plain: true, align: "end", title: "Orden", label: "Ordenar" }),
+				);
+
+				let body;
+				if (loading) {
+					body = h(
+						"ul",
+						{ className: "mr-rows", "aria-busy": "true" },
+						[0, 1, 2, 3, 4, 5].map((i) =>
+							h(
+								"li",
+								{ key: i, className: "mr-row", style: { cursor: "default" } },
+								h(
+									"div",
+									{ className: "mr-who", style: { gap: 6 } },
+									h("span", { className: "mr-sk", style: { width: `${30 + ((i * 17) % 25)}%` } }),
+									h("span", { className: "mr-sk", style: { width: `${45 + ((i * 11) % 30)}%`, height: 10 } }),
+								),
 							),
 						),
-					),
-					h(
-						"tbody",
-						null,
-						rows.length === 0
-							? h(
-									"tr",
-									null,
-									h("td", { colSpan: 6, className: "mr-empty" }, "Ningún proyecto con ese filtro."),
-								)
-							: rows.map((p) => {
-									const f = p.facts || {};
-									const dirty = Number(f.dirty || 0);
-									const remote = f.remote_host || "";
-									const isRemote = remote === "github" || remote === "gitlab";
-									const stale = p.age_days != null && p.age_days >= 30;
-									return h(
-										"tr",
-										{
-											key: p.slug,
-											"data-sel": selected === p.slug ? 1 : 0,
-											onClick: () => open(p.slug),
-										},
-										h(
-											"td",
-											null,
-											h(
-												"div",
-												{ className: "name" },
-												h("b", null, p.slug),
-												shortTitle(p) ? h("em", null, shortTitle(p)) : null,
-											),
-										),
-										h(
-											"td",
-											{ onClick: (event) => event.stopPropagation() },
-											h(StateMenu, {
-												value: p.state,
-												onChange: (next) => changeState(p.slug, next),
-											}),
-										),
-										h("td", { className: "mr-age", "data-stale": stale ? 1 : 0 }, ageLabel(p.age_days)),
-										h(
-											"td",
-											null,
-											h(
-												"span",
-												{ className: "mr-remote", "data-none": isRemote ? 0 : 1 },
-												isRemote ? h(IconGithub) : null,
-												isRemote ? remote : "sin remoto",
-											),
-										),
-										h(
-											"td",
-											null,
-											dirty > 0
-												? h("span", { className: "mr-warn" }, "●", `${dirty}`)
-												: h("span", { className: "mr-muted" }, "—"),
-										),
-										h("td", { className: "mr-num" }, String(f.tickets_open ?? 0)),
-									);
-								}),
-					),
-				),
-			);
-
-			function sheet() {
-				if (!selected) return null;
-				const close = () => {
-					setSelected(null);
-					setDetail(null);
-				};
-				if (!detail) {
-					return h(
+					);
+				} else if (visible.length === 0) {
+					body = h(
+						"p",
+						{ className: "mr-empty" },
+						query ? `Nada coincide con “${query}”.` : projects.length ? "Ningún proyecto en este estado." : "Todavía no hay proyectos. Tocá Actualizar para leer ~/Proyectos.",
+					);
+				} else {
+					body = h(
 						"div",
-						{ className: "mr-detail" },
-						h(
-							"div",
-							{ className: "mr-sheet-head" },
-							h("div", null, h("h2", null, selected)),
-							h("button", { className: "mr-x", onClick: close }, "×"),
+						{ className: "mr-groups" },
+						groups.map((g) =>
+							h(
+								"section",
+								{ key: g.key, className: "mr-group" },
+								g.key === "flat"
+									? null
+									: h(
+											"h2",
+											{ className: "mr-group-head" },
+											GROUP[g.key],
+											h("span", { className: "n" }, String(g.rows.length)),
+											g.key === "unclassified"
+												? h("span", { className: "hint" }, "decidí: activo, pausado o archivado")
+												: g.key === "active" && g.rows.length > 3
+													? h("span", { className: "hint" }, "más de 3 activos: pausá alguno")
+													: null,
+										),
+								h("ul", { className: "mr-rows" }, g.rows.map(rowView)),
+							),
 						),
-						h("div", { className: "mr-sheet-body" }, h("p", { className: "mr-muted" }, "cargando…")),
 					);
 				}
-				const f = detail.facts || {};
-				const tasks = detail.tasks || [];
-				const open_tasks = tasks.filter((t) => t.state !== "done").length;
+
+				return h(React.Fragment, null, head, notices, bar, body);
+			}
+
+			function detailView() {
+				const base = projects.find((p) => p.slug === selected) || { slug: selected, facts: {} };
+				const d = detail || base;
+				const f = d.facts || {};
+				const tasks = (detail && detail.tasks) || [];
+				const openTasks = tasks.filter((t) => t.state !== "done").length;
 				const dirty = Number(f.dirty || 0);
 				const ahead = String(f.ahead ?? "0");
-				const subtitle = shortTitle(detail) || KIND_LABEL[detail.kind] || detail.kind;
 				const remote = f.remote_url || "";
 				const webRemote = remote.replace(/^git@([^:]+):/, "https://$1/").replace(/\.git$/, "");
-				const commitAge = ageLabel(detail.age_days);
+				const desc = shortTitle(d);
+				const home = (f.path || "").replace(/^\/home\/[^/]+/, "~");
 
-				const row = (label, value, options) => {
-					const opts = options || {};
-					let content = value;
-					if (opts.link) {
-						content = h(
-							"a",
-							{ href: opts.link, target: "_blank", rel: "noreferrer noopener" },
-							value,
-						);
-					}
+				const kv = (label, value, opts) => {
+					const o = opts || {};
 					return h(
 						"div",
-						{ key: label },
+						{ className: "mr-kv", key: label },
 						h("dt", null, label),
-						h("dd", { "data-warn": opts.warn ? 1 : 0 }, content),
+						h("dd", { "data-tone": o.tone }, value, o.small ? h("small", null, o.small) : null),
 					);
+				};
+
+				const addTask = async (input) => {
+					const title = (input && input.value ? input.value : "").trim();
+					if (!title) return;
+					input.value = "";
+					try {
+						await api("/machine/task", { slug: d.slug, title });
+					} catch (err) {
+						setError(err.message);
+					}
+					refreshDetail(d.slug);
 				};
 
 				return h(
@@ -831,145 +1256,214 @@ window.__ModuleLoader__.load({
 					{ className: "mr-detail" },
 					h(
 						"button",
-						{ className: "mr-back", onClick: close, title: "Volver a la lista (Esc)" },
-						"← Proyectos",
+						{ type: "button", className: "mr-crumb", onClick: close, title: "Volver (Esc)" },
+						h(IconBack),
+						"Proyectos",
 					),
+					notices,
 					h(
 						"div",
-						{ className: "mr-sheet-head" },
+						{ className: "mr-dhead" },
 						h(
 							"div",
-							{ style: { minWidth: 0 } },
-							h("h2", null, detail.slug),
-							h("p", null, subtitle),
-						),
-						h("button", { className: "mr-x", onClick: close, title: "Cerrar (Esc)" }, "×"),
-					),
-					h(
-						"div",
-						{ className: "mr-sheet-body" },
-						h(
-							"div",
-							{ className: "mr-sheet-state" },
-							h(StateMenu, {
-								value: detail.state,
-								onChange: async (next) => {
-									setDetail({ ...detail, state: next });
-									await changeState(detail.slug, next);
-								},
-							}),
+							{ className: "mr-dmain" },
 							h(
-								"label",
-								{ className: "mr-kind", title: "Tipo de entidad" },
-								h("span", { className: "mr-muted", style: { fontSize: 11 } }, "tipo"),
-								h(
-									"select",
-									{
-										value: detail.kind || "project",
-										onChange: (event) => changeKind(detail.slug, event.target.value),
-									},
-									KINDS.map((k) => h("option", { key: k, value: k }, KIND_LABEL[k] || k)),
-								),
+								"div",
+								{ className: "mr-dtitle" },
+								h("h1", null, d.slug),
+								d.state
+									? h(StateControl, { value: d.state, kind: d.kind, onChange: (next) => changeField(d.slug, "state", next) })
+									: null,
 							),
-						),
-						h(
-							"dl",
-							{ className: "mr-rows" },
-							row("rama", f.branch || "—"),
-							row("último commit", commitAge === "—" ? f.last_commit || "—" : `${f.last_commit} · ${commitAge}`),
-							row("sin guardar", dirty > 0 ? `${dirty} archivo(s)` : "nada", { warn: dirty > 0 }),
-							row("sin subir", `${ahead} commit(s)`, { warn: ahead !== "0" && ahead !== "?" }),
-							remote
-								? row("remoto", webRemote.replace(/^https?:\/\//, ""), { link: webRemote })
-								: row("remoto", "sin remoto"),
-							row("tipo", KIND_LABEL[detail.kind] || detail.kind),
+							desc ? h("p", { className: "mr-ddesc" }, desc) : null,
+							home ? h("p", { className: "mr-dpath" }, home) : null,
 						),
 						h(
 							"div",
-							{ style: { display: "flex", alignItems: "center", gap: 8, marginTop: 10 } },
-							h("div", { className: "mr-path", style: { marginTop: 0, flex: 1, minWidth: 0 } }, f.path || ""),
+							{ className: "mr-dactions" },
 							f.path
 								? h(
 										"button",
-										{
-											className: "mr-btn",
-											onClick: () => openFolder(f.path),
-											title: "Abrir la carpeta en el gestor de archivos",
-										},
+										{ type: "button", className: "mr-btn", onClick: () => openFolder(f.path), title: "Abrir la carpeta en el gestor de archivos" },
+										h(IconFolder),
 										"Abrir carpeta",
 									)
 								: null,
+							h(
+								"button",
+								{
+									type: "button",
+									className: "mr-btn",
+									"data-variant": "danger",
+									onClick: () => setTrashing(d),
+									title: "Mandar a la papelera…",
+								},
+								h(IconTrash),
+								"Papelera",
+							),
 						),
-						h("div", { className: "mr-label" }, "nota"),
+					),
+					h(
+						"div",
+						{ className: "mr-grid" },
+						h(
+							"section",
+							{ className: "mr-section" },
+							h("h2", { className: "mr-section-head" }, "Clasificación"),
+							h(
+								"dl",
+								{ className: "mr-card", style: { margin: 0 } },
+								kv(
+									"Tipo",
+									h(Dropdown, {
+										value: d.kind || "project",
+										options: KIND_OPTIONS,
+										onChange: (next) => changeField(d.slug, "kind", next),
+										plain: true,
+										align: "end",
+										title: "Cambiar tipo",
+										label: "Tipo",
+									}),
+								),
+								kv("Último cambio", ageLabel(d.age_days), {
+									tone: d.age_days != null && d.age_days >= 30 ? "warn" : undefined,
+								}),
+								kv("Tareas abiertas", detail ? String(openTasks) : "…"),
+							),
+						),
+						h(
+							"section",
+							{ className: "mr-section" },
+							h("h2", { className: "mr-section-head" }, "Repositorio"),
+							h(
+								"dl",
+								{ className: "mr-card", style: { margin: 0 } },
+								kv("Rama", f.branch || "—", { tone: f.branch ? undefined : "quiet" }),
+								kv("Último commit", f.last_commit || "—", { tone: f.last_commit ? undefined : "quiet" }),
+								kv("Sin guardar", dirty > 0 ? plural(dirty, "archivo", "archivos") : "nada", {
+									tone: dirty > 0 ? "warn" : "quiet",
+								}),
+								kv(
+									"Sin subir",
+									ahead === "?" ? "rama sin remoto" : ahead === "0" ? "nada" : plural(Number(ahead), "commit", "commits"),
+									{ tone: ahead === "0" ? "quiet" : "warn" },
+								),
+								kv(
+									"Remoto",
+									remote
+										? h(
+												"a",
+												{ href: webRemote, target: "_blank", rel: "noreferrer noopener" },
+												webRemote.replace(/^https?:\/\//, ""),
+											)
+										: "sin remoto",
+									{ tone: remote ? undefined : "warn" },
+								),
+								f.systemd === "true" ? kv("Servicio", "tiene unit systemd") : null,
+							),
+						),
+					),
+					h(
+						"section",
+						{ className: "mr-section" },
+						h(
+							"h2",
+							{ className: "mr-section-head" },
+							"Nota",
+							h("span", { className: "aside" }, noteState === "saving" ? "guardando…" : noteState === "saved" ? "guardada" : "se guarda al salir del campo"),
+						),
 						h("textarea", {
-							key: `${detail.slug}-${detail.updated_at}`,
-							defaultValue: detail.note || "",
+							key: `${d.slug}-${detail ? "1" : "0"}`,
+							className: "mr-field",
+							defaultValue: d.note || "",
 							placeholder: "Para qué es, en qué quedó, qué falta…",
 							onBlur: async (event) => {
 								const note = event.target.value;
-								await api("/machine/entity", { slug: detail.slug, note }).catch((err) =>
-									setError(err.message),
-								);
-								setProjects((prev) => prev.map((p) => (p.slug === detail.slug ? { ...p, note } : p)));
+								if (note === (d.note || "")) return;
+								setNoteState("saving");
+								try {
+									await api("/machine/entity", { slug: d.slug, note });
+									patch(d.slug, { note });
+									setNoteState("saved");
+								} catch (err) {
+									setNoteState("");
+									setError(err.message);
+								}
 							},
 						}),
-						h("div", { className: "mr-label" }, `tareas · ${open_tasks}`),
+					),
+					h(
+						"section",
+						{ className: "mr-section" },
+						h("h2", { className: "mr-section-head" }, "Tareas", h("span", { className: "n" }, detail ? `${openTasks} abiertas` : "")),
 						h(
 							"ul",
-							{ className: "mr-tasks" },
-							tasks.length === 0
-								? h("li", null, h("span", { className: "mr-muted" }, "todavía no hay tareas"))
-								: tasks.map((t) =>
-										h(
-											"li",
-											{ key: t.slug, "data-done": t.state === "done" ? 1 : 0 },
-											h("input", {
-												type: "checkbox",
-												checked: t.state === "done",
-												onChange: async (event) => {
-													if (!event.target.checked) return;
-													await api("/machine/task-done", { task: t.slug }).catch((err) =>
-														setError(err.message),
-													);
-													open(detail.slug);
-												},
-											}),
-											h("span", null, t.title),
+							{ className: "mr-card mr-tasks" },
+							!detail
+								? h("li", null, h("span", { className: "mr-sk", style: { width: "40%", marginTop: 4 } }))
+								: tasks.length === 0
+									? h("li", { className: "mr-empty" }, "Todavía no hay tareas.")
+									: tasks.map((t) =>
+											h(
+												"li",
+												{ key: t.slug, "data-done": t.state === "done" ? 1 : 0 },
+												h("input", {
+													type: "checkbox",
+													checked: t.state === "done",
+													disabled: t.state === "done",
+													title: t.state === "done" ? "Hecha" : "Marcar como hecha",
+													onChange: async (event) => {
+														if (!event.target.checked) return;
+														try {
+															await api("/machine/task-done", { task: t.slug });
+														} catch (err) {
+															setError(err.message);
+														}
+														refreshDetail(d.slug);
+													},
+												}),
+												h("span", null, t.title),
+											),
 										),
-									),
 						),
 						h(
 							"div",
 							{ className: "mr-add" },
 							h("input", {
-								placeholder: "Nueva tarea…",
-								onKeyDown: async (event) => {
-									if (event.key !== "Enter") return;
-									const title = event.target.value.trim();
-									if (!title) return;
-									event.target.value = "";
-									await api("/machine/task", { slug: detail.slug, title }).catch((err) =>
-										setError(err.message),
-									);
-									open(detail.slug);
+								className: "mr-field",
+								placeholder: "Nueva tarea",
+								onKeyDown: (event) => {
+									if (event.key === "Enter") addTask(event.currentTarget);
 								},
 							}),
 							h(
 								"button",
 								{
+									type: "button",
 									className: "mr-btn",
-									onClick: async (event) => {
-										const input = event.currentTarget.previousSibling;
-										const title = input?.value?.trim();
-										if (!title) return;
-										input.value = "";
-										await api("/machine/task", { slug: detail.slug, title }).catch((err) =>
-											setError(err.message),
-										);
-										open(detail.slug);
-									},
+									onClick: (event) => addTask(event.currentTarget.previousSibling),
 								},
 								"Agregar",
+							),
+						),
+					),
+					h(
+						"section",
+						{ className: "mr-section" },
+						h("h2", { className: "mr-section-head" }, "Papelera"),
+						h(
+							"div",
+							{ className: "mr-card mr-danger" },
+							h(
+								"p",
+								null,
+								h("b", null, "Sacar este proyecto de la máquina"),
+								`La carpeta se mueve a ${TRASH_DIR} (no se borra) y sale de la lista.`,
+							),
+							h(
+								"button",
+								{ type: "button", className: "mr-btn", "data-variant": "danger", onClick: () => setTrashing(d) },
+								"Mandar a la papelera…",
 							),
 						),
 					),
@@ -978,14 +1472,15 @@ window.__ModuleLoader__.load({
 
 			return h(
 				"div",
-				{ className: "mr" },
-				head,
-				error
-					? h("div", { style: { padding: "0 26px 12px", fontSize: 11.5, color: "#e5484d" } }, error)
+				{ className: "mr", ref: scrollRef },
+				selected ? detailView() : listView(),
+				trashing
+					? h(TrashDialog, {
+							project: trashing,
+							onCancel: () => setTrashing(null),
+							onDone: trashed,
+						})
 					: null,
-				kpis,
-				filters,
-				selected ? sheet() : h("div", { className: "mr-main" }, table),
 			);
 		}
 
