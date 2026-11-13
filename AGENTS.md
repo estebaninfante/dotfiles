@@ -474,6 +474,29 @@ cliente declarando en `package.json` `exports["./client"]` + `dsh.client`
 necesita reinicio del servidor, porque el grafo de clientes se compone al
 arrancar.
 
+### `skills`: panel de skills en la barra lateral
+
+`linux/dsh/plugins/skills/` (host + cliente) pone un **panel `Skills` justo debajo
+de `Plugins`** en la barra lateral: lista todas las skills con su descripción, el
+origen (`~/.agents/skills`, `~/.dsh/skills`, proyecto) y la ruta del `SKILL.md`,
+marca cuáles ve el modelo y cuáles son solo por comando, filtra con un buscador y
+abre el `SKILL.md` completo en la misma página (Esc vuelve).
+
+- **No lee `ctx.skills` como fuente**: el bundle web **desactiva** el
+  `skill-filesystem` de host (`dsh-web-app/cordis.patch.yml: - id: skill-filesystem
+  disabled: true`) y lo monta dentro de cada preset, así que un plugin de perfil ve
+  ese registro global **vacío**. El host descubre los mismos roots con las mismas
+  reglas y solo suma lo que el registro global sí tenga (runtime / bundled).
+- Frontmatter que interpreta: `name`, `description`, `whenToUse`, y los booleanos
+  `disable-model-invocation` / `user-invocable` (ausente = permitido; ortografía
+  rara = se descarta, igual que el harness). Lo descartado se lista aparte como
+  "entrada que el harness no carga".
+- Rutas: `GET /skills/list[?cwd=]` y `GET /skills/read?name=<kebab-case>`. El nombre
+  se valida contra `^[a-z0-9]+(?:-[a-z0-9]+)*$`, así que no hay traversal por query.
+- Verificación sin reiniciar: un `ctx` falso que capture las rutas registradas
+  (probar `apply` con `node` y un `req/res` de mentira). Requiere reiniciar
+  (`dsh-web --restart`) para que el proceso cargue las rutas y el grafo de clientes.
+
 ### UI de plugins: se diseña primero para el celular
 
 El celular entra por Tailscale y es una superficie de uso real: un plugin que se ve

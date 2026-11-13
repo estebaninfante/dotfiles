@@ -186,6 +186,11 @@ window.__ModuleLoader__.load({
 .mr-dtitle h1{cursor:text}
 .mr-rename{height:32px;font-size:15px;font-weight:600;max-width:420px}
 .mr-idea-text{height:auto;min-height:130px;padding:10px 12px;line-height:20px;resize:vertical;font-family:inherit}
+.mr-promo{margin-top:18px;padding:14px 16px;border:1px solid var(--mr-card-line);border-radius:var(--mr-r-lg,12px);
+  background:var(--mr-l1);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.mr-promo p{margin:0;font-size:12.5px;line-height:19px;color:var(--mr-fg2)}
+.mr-dod{margin:0;padding:12px 14px;border:1px solid var(--mr-card-line);border-radius:var(--mr-r-md,10px);
+  background:var(--mr-l1);font:12px/18px var(--mr-mono);white-space:pre-wrap;color:var(--mr-fg2);overflow:auto;max-height:320px}
 .mr-sub{font-size:12px;line-height:18px;color:var(--mr-fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mr-cell{font-size:12.5px;line-height:18px;color:var(--mr-fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-variant-numeric:tabular-nums}
@@ -1134,6 +1139,7 @@ input.mr-field{height:36px;padding:0 12px}
 			const [noteState, setNoteState] = React.useState("");
 			const [renaming, setRenaming] = React.useState(false);
 			const [ideaOpen, setIdeaOpen] = React.useState(false);
+			const [promoting, setPromoting] = React.useState(false);
 			const searchRef = React.useRef(null);
 			const scrollRef = React.useRef(null);
 			const listScroll = React.useRef(0);
@@ -1534,7 +1540,7 @@ input.mr-field{height:36px;padding:0 12px}
 				const head = h(
 					"header",
 					{ className: "mr-head" },
-					h("div", null, h("h1", { className: "mr-h1" }, "Espacio"), h("p", { className: "mr-intro" }, intro)),
+					h("div", null, h("h1", { className: "mr-h1" }, "Taller"), h("p", { className: "mr-intro" }, intro)),
 					h(
 						"div",
 						{ className: "mr-toolbar" },
@@ -2115,7 +2121,7 @@ input.mr-field{height:36px;padding:0 12px}
 		function apply(ctx) {
 			ctx.slots.inject("sidebar.panellist", () =>
 				ctx.slots.register(
-					{ name: "sidebar.panellist", id: PANEL_ID, order: 10, label: () => "Espacio" },
+					{ name: "sidebar.panellist", id: PANEL_ID, order: 10, label: () => "Taller" },
 					MachineIcon,
 				),
 			);

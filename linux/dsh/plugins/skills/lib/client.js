@@ -92,7 +92,7 @@ window.__ModuleLoader__.load({
 .sk-desc{font-size:12.5px;line-height:18px;color:var(--sk-fg2);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .sk-path{margin-top:2px;font-size:11.5px;line-height:16px;color:var(--sk-cap);font-family:var(--sk-mono);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .sk-side{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px;padding-top:1px}
 .sk-tags{display:flex;gap:5px;align-items:center}
 .sk-tag{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;
@@ -193,6 +193,13 @@ window.__ModuleLoader__.load({
 			return terms.every((term) => haystack.includes(term));
 		}
 
+		/** La ruta completa no entra en una fila: se muestran las dos últimas partes. */
+		function shortPath(path) {
+			if (typeof path !== "string" || path.length === 0) return "";
+			const parts = path.split("/").filter(Boolean);
+			return parts.length <= 2 ? path : `…/${parts.slice(-2).join("/")}`;
+		}
+
 		function tagsFor(skill) {
 			const tags = [];
 			if (skill.model) tags.push(h("span", { key: "m", className: "sk-tag model" }, "modelo"));
@@ -221,7 +228,7 @@ window.__ModuleLoader__.load({
 						{ className: "sk-main" },
 						h("span", { className: "sk-name" }, skill.name),
 						skill.description ? h("span", { className: "sk-desc" }, skill.description) : null,
-						skill.path ? h("span", { className: "sk-path" }, skill.path) : null,
+						skill.path ? h("span", { className: "sk-path", title: skill.path }, shortPath(skill.path)) : null,
 					),
 					h(
 						"div",
@@ -284,7 +291,7 @@ window.__ModuleLoader__.load({
 									className: "sk-ghost",
 									style: { height: 24, padding: "0 8px", fontSize: 12 },
 									onClick: () => {
-										navigator.clipboard?.writeText(skill.path).then(
+										Promise.resolve(navigator.clipboard?.writeText(skill.path)).then(
 											() => setCopied(true),
 											() => setCopied(false),
 										);

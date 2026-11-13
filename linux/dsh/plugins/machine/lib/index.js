@@ -164,6 +164,39 @@ export function apply(ctx) {
 			},
 		},
 		{
+			path: "/machine/promote",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+				const to = typeof body?.to === "string" ? body.to.trim() : "";
+				const dod = typeof body?.dod === "string" ? body.dod : "";
+				if (!slug) {
+					sendJson(res, 400, { error: "missing-slug" });
+					return;
+				}
+				const args = ["promote", slug];
+				if (to) args.push("--to", to);
+				let dodFile = "";
+				if (dod.trim()) {
+					const { writeFile, unlink } = await import("node:fs/promises");
+					const { tmpdir } = await import("node:os");
+					const { join } = await import("node:path");
+					dodFile = join(tmpdir(), `machine-dod-${Date.now()}.md`);
+					await writeFile(dodFile, dod, "utf8");
+					args.push("--dod", dodFile);
+				}
+				try {
+					const out = await machine(args);
+					const after = await machineJson(["show", to || slug, "--json"]);
+					if (dodFile) await unlink(dodFile).catch(() => {});
+					sendJson(res, 200, { ok: true, out, project: after });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
 			path: "/machine/idea",
 			method: "POST",
 			handler: async (req, res) => {

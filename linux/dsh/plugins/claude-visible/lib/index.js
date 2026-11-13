@@ -287,11 +287,12 @@ function registerRoutes(ctx) {
     sendJson(res, 404, { error: 'not-found' })
   }
 
-  ctx.effect(
-    () =>
-      ctx.webServer.register({ kind: 'prefix', path: '/claude-visible/', handler }),
-    'claude-visible: routes'
-  )
+  for (const path of ['/claude-visible/list', '/claude-visible/log']) {
+    ctx.effect(
+      () => ctx.webServer.register({ kind: 'exact', path, handler }),
+      `claude-visible: route ${path}`
+    )
+  }
 }
 
 
