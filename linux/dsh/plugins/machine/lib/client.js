@@ -1341,9 +1341,12 @@ input.mr-field{height:36px;padding:0 12px}
 					);
 				}
 				const age = (p, empty) => (p.age_days == null ? empty : p.age_days);
+				const kindRank = (p) => (p.kind === "idea" ? 0 : p.kind === "task" ? 1 : 2);
 				return list.slice().sort((a, b) => {
 					if (sort === "name") return a.slug.localeCompare(b.slug);
 					if (sort === "stale") return age(b, -1) - age(a, -1);
+					const k = kindRank(a) - kindRank(b);
+					if (k !== 0) return k;
 					return age(a, 1e9) - age(b, 1e9) || a.slug.localeCompare(b.slug);
 				});
 			}, [scoped, filter, query, sort]);
@@ -1402,7 +1405,7 @@ input.mr-field{height:36px;padding:0 12px}
 					h(
 						"div",
 						{ className: "mr-who" },
-						h("span", { className: "mr-name" }, (p.title || "").trim() || p.slug),
+						h("span", { className: "mr-name" }, shortTitle(p) || p.slug),
 						body ? h("span", { className: "mr-sub" }, body.length > 150 ? body.slice(0, 147) + "…" : body) : null,
 					),
 					h("span", { className: "mr-cell" }, isIdea ? "idea" : "tarea"),
@@ -1467,8 +1470,8 @@ input.mr-field{height:36px;padding:0 12px}
 						h(
 							"span",
 							{ className: "mr-name" },
-							(p.title && p.title.trim()) || p.slug,
-							(p.title && p.title.trim() && p.title.trim() !== p.slug)
+							shortTitle(p) || p.slug,
+							(shortTitle(p) && shortTitle(p) !== p.slug)
 								? h("span", { className: "mr-slug" }, p.slug)
 								: null,
 						),
