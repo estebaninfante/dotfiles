@@ -255,7 +255,7 @@ el estándar con `@../../agents/estandar-ideas.md`. Editar solo la regla canóni
 ### Protocolo de proyectos (`linux/agents/`)
 
 Un proyecto es **objetivo + tareas + la prueba** (ver "Protocolo de proyectos (simple)"
-en `linux/agents/delegacion-claude.md`). El usuario rechazó explícitamente la ceremonia de
+en `linux/agents/reglas-harness.md`). El usuario rechazó explícitamente la ceremonia de
 "Definition of Done" y el "qué entra / qué no entra": no volver a proponerla. Las
 plantillas viejas en `linux/agents/protocolo-proyectos.md` quedan como referencia
 histórica; los comandos vigentes son `machine idea / promote / task`.
@@ -317,7 +317,7 @@ Cada script pone su glifo; el título es el hecho, no el nombre del script.
 Cuando un problema no se resuelve tras 2-3 intentos serios (o cada arreglo rompe otra
 cosa), **no seguir acumulando variantes**: delegar a Claude Code. Está cableado así:
 
-- Regla global del harness: `linux/agents/delegacion-claude.md` -> `~/.dsh/AGENTS.md`
+- Regla global del harness: `linux/agents/reglas-harness.md` -> `~/.dsh/AGENTS.md`
   (la lee DeepSeek Harness en toda sesión, en cualquier workspace).
 - Skill: `linux/agents/skills/delegate-a-claude/SKILL.md` -> `~/.agents/skills/`
   (tiene el procedimiento y la plantilla del brief que funciona).
@@ -340,7 +340,7 @@ Se enlaza a `~/.dsh/plugins/claude-visible` y `link-dotfiles.sh` asegura su entr
 `~/.dsh/profiles/web/cordis.patch.yml` (forma `- insert:`) y la dependencia
 `file:` en el perfil web. **El servidor del harness carga los plugins al arrancar**:
 después de instalarlo hay que reiniciar con `dsh-web --restart` (o el próximo inicio).
-**El reinicio lo hace el usuario, no el agente** (ver `linux/agents/delegacion-claude.md`,
+**El reinicio lo hace el usuario, no el agente** (ver `linux/agents/reglas-harness.md`,
 "Regla dura: no reinicies el harness"): parar el servidor mata el turno en curso y deja
 las sesiones en "reconectar". El agente termina, verifica y cierra con ese paso para el
 usuario; `dsh-web --restart` desde un shell del agente ahora se niega, y
@@ -349,10 +349,16 @@ usuario; `dsh-web --restart` desde un shell del agente ahora se niega, y
 ### `side-questions`: preguntas laterales sobre texto seleccionado
 
 `linux/dsh/plugins/side-questions/` (host + cliente) resuelve "subrayo algo y
-pregunto ahí mismo" sin ensuciar el chat: seleccionás texto en la conversación,
-aparece un botón **Preguntar** pegado a la selección y la respuesta llega a un
-globo flotante (`position: fixed`) que se cierra con Esc. Nada se escribe en la
-sesión: no suma mensajes ni crece el transcript.
+pregunto ahí mismo" sin ensuciar el chat: seleccionás texto en la conversación y
+aparece un globo pegado a la selección con dos acciones:
+
+- **Preguntar**: la respuesta llega a un globo flotante (`position: fixed`) que se
+  cierra con Esc. Nada se escribe en la sesión: no suma mensajes ni crece el
+  transcript.
+- **Añadir al chat**: la selección entra como cita Markdown (`> …`) en el cuadro de
+  mensaje, sin mandar nada; el cursor queda en un renglón en blanco debajo para
+  escribir la pregunta. Si no encuentra el cuadro de mensaje, copia la cita al
+  portapapeles y avisa con un toast.
 
 - `lib/index.js` registra `POST /side-questions/ask` en el `webServer` del
   perfil. El body lleva `{sessionId, quote, question, transcript}`; el handler
@@ -364,12 +370,28 @@ sesión: no suma mensajes ni crece el transcript.
   en captura, valida que la selección esté dentro de
   `[data-conversation-scroll]` y no en un campo de texto, y pinta globo + panel
   con los tokens `--dsw-*` de la app.
+- **Ojo con los tokens de hover**: `--dsw-alias-interactive-bg-hover` y
+  `--dsw-alias-interactive-bg-active` son **translúcidos** (blanco al 8 % en el
+  tema oscuro). Usados como `background` *reemplazan* el fondo y el texto del chat
+  se ve a través del globo (era el bug visual del grabado). Van siempre
+  **encima** de un fondo opaco, con `background-image: linear-gradient(token, token)`
+  sobre `background-color` sólido.
+- **Añadir al chat y Lexical**: el cuadro de mensaje es un `contenteditable`
+  controlado por Lexical (`[data-composer-input][data-lexical-editor]`). No sirve
+  escribir `textContent` ni un `execCommand('insertText')` con `\n`: se pierde el
+  estado del editor y los saltos de línea. La vía que funciona es
+  `execCommand('insertText')` por línea + un `beforeinput` sintético con
+  `inputType: "insertLineBreak"` entre líneas (Lexical guarda el borrador con
+  `\n` y el caret queda al final). Verificado contra la app viva leyendo el
+  borrador persistido (`localStorage["dsh.conversation.<session>"]`).
 - `harness.html` es la página de prueba aislada (loader simulado + `fetch` de
-  mentira): abrirla en el navegador y seleccionar texto para ver la UI sin
-  servidor.
+  mentira + cuadro de mensaje de mentira): abrirla en el navegador y seleccionar
+  texto para ver la UI y probar las dos acciones sin servidor.
 - Instalado como dependencia `file:` del perfil web y entrada `- insert:` en
   `cordis.patch.yml`; se activa al reiniciar (`dsh-web --restart`). Para apagarlo,
-  borrar la línea `id: local-side-questions` del patch y reiniciar.
+  borrar la línea `id: local-side-questions` del patch y reiniciar. Un cambio
+  **solo de cliente** no necesita reinicio: el boot le pone `?rev=<hash del
+  contenido>` al bundle, así que refrescar la página lo trae.
 
 ### `path-links`: rutas del chat clicables
 

@@ -270,6 +270,23 @@ window.__ModuleLoader__.load({
 			}),
 			h("path", { d: "M6.7 6.6v4.8M9.3 6.6v4.8", stroke: "currentColor", strokeWidth: 1.2, strokeLinecap: "round" }),
 		);
+		const ICON_SLIDERS = h(
+			"svg",
+			{ width: 15, height: 15, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+			h("path", { d: "M2.4 5h11.2M2.4 11h11.2", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" }),
+			h("circle", { cx: 6, cy: 5, r: 1.7, fill: "var(--dsw-alias-bg-layer-2,#1d2027)", stroke: "currentColor", strokeWidth: 1.3 }),
+			h("circle", { cx: 10.4, cy: 11, r: 1.7, fill: "var(--dsw-alias-bg-layer-2,#1d2027)", stroke: "currentColor", strokeWidth: 1.3 }),
+		);
+		const ICON_CHECK = h(
+			"svg",
+			{ width: 14, height: 14, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+			h("path", { d: "M3.2 8.6 6.4 11.6 12.8 4.8", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round" }),
+		);
+		const ICON_SPARK = h(
+			"svg",
+			{ width: 13, height: 13, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+			h("path", { d: "M7 1.8 8.35 5.1 11.7 6.45 8.35 7.8 7 11.1 5.65 7.8 2.3 6.45 5.65 5.1Z", fill: "currentColor" }),
+		);
 		const ICON_BACK = h(
 			"svg",
 			{ width: 14, height: 14, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
@@ -484,6 +501,83 @@ window.__ModuleLoader__.load({
 			return `${SOURCE_LABEL[skill.source] ?? skill.source} · ${statusText(skill)}`;
 		}
 
+		/** Menú del botón de filtros: agrupar, ordenar y filtrar la matriz. */
+		function ViewMenu(props) {
+			const { view, onChange, hasModified } = props;
+			const [open, setOpen] = React.useState(false);
+			const wrapRef = React.useRef(null);
+
+			React.useEffect(() => {
+				if (!open) return undefined;
+				function onDoc(event) {
+					if (wrapRef.current !== null && !wrapRef.current.contains(event.target)) setOpen(false);
+				}
+				function onKey(event) {
+					if (event.key === "Escape") setOpen(false);
+				}
+				document.addEventListener("mousedown", onDoc);
+				window.addEventListener("keydown", onKey);
+				return () => {
+					document.removeEventListener("mousedown", onDoc);
+					window.removeEventListener("keydown", onKey);
+				};
+			}, [open]);
+
+			function section(title, options, key, current, disabled) {
+				return h(
+					"div",
+					{ className: "sk-menu-sec" },
+					h("p", { className: "sk-menu-head" }, title),
+					options.map((option) =>
+						h(
+							"button",
+							{
+								key: option.value,
+								type: "button",
+								role: "menuitemradio",
+								"aria-checked": option.value === current ? "true" : "false",
+								className: "sk-menu-item",
+								disabled: (disabled ?? []).includes(option.value),
+								onClick: () => {
+									onChange(key, option.value);
+									setOpen(false);
+								},
+							},
+							h("span", null, option.label),
+							option.value === current ? ICON_CHECK : null,
+						),
+					),
+				);
+			}
+
+			return h(
+				"div",
+				{ className: "sk-menu-wrap", ref: wrapRef },
+				h(
+					"button",
+					{
+						type: "button",
+						className: "sk-btn sk-menu-btn",
+						title: "Agrupar, ordenar y filtrar",
+						"aria-haspopup": "true",
+						"aria-expanded": open ? "true" : "false",
+						"aria-label": "Agrupar, ordenar y filtrar",
+						onClick: () => setOpen((value) => !value),
+					},
+					ICON_SLIDERS,
+				),
+				open
+					? h(
+							"div",
+							{ className: "sk-menu", role: "menu" },
+							section("Agrupar por", GROUP_OPTIONS, "group", view.group),
+							section("Ordenar por", SORT_OPTIONS, "sort", view.sort, hasModified ? [] : ["modified"]),
+							section("Filtrar", FILTER_OPTIONS, "filter", view.filter),
+						)
+					: null,
+			);
+		}
+
 		function SkillCard(props) {
 			const skill = props.skill;
 			const busy = props.deleting === skill.name;
@@ -540,6 +634,11 @@ window.__ModuleLoader__.load({
 			const [saving, setSaving] = React.useState(false);
 			const [saveError, setSaveError] = React.useState("");
 			const [copied, setCopied] = React.useState(false);
+			const [aiOpen, setAiOpen] = React.useState(false);
+			const [aiPrompt, setAiPrompt] = React.useState("");
+			const [aiBusy, setAiBusy] = React.useState(false);
+			const [aiResult, setAiResult] = React.useState(null);
+			const [aiError, setAiError] = React.useState("");
 			const editorRef = React.useRef(null);
 
 			// El editor crece con el contenido: nada de un scroll dentro de otro.
@@ -701,11 +800,107 @@ window.__ModuleLoader__.load({
 								),
 								h("button", { type: "button", className: "sk-btn", onClick: cancelEdit, disabled: saving }, "Cancelar"),
 								h(
+									"button",
+									{
+										type: "button",
+										className: "sk-btn",
+										onClick: () => {
+											setAiOpen((value) => !value);
+											setAiError("");
+										},
+										title: "Pedile al modelo que reescriba la skill",
+									},
+									ICON_SPARK,
+									"Editar con IA",
+								),
+								h(
 									"span",
 									{ className: "sk-hint" },
 									"⌘/Ctrl+S guarda · Esc cancela · el frontmatter necesita name y description",
 								),
 							),
+							aiOpen
+								? h(
+										"div",
+										{ className: "sk-ai" },
+										h(
+											"div",
+											{ className: "sk-ai-row" },
+											h("input", {
+												className: "sk-ai-input",
+												type: "text",
+												value: aiPrompt,
+												placeholder: "¿Qué querés cambiar? ej: agregá un paso para verificar que funciona",
+												"aria-label": "Instrucción para la IA",
+												onChange: (event) => setAiPrompt(event.target.value),
+												onKeyDown: (event) => {
+													if (event.key === "Enter") {
+														event.preventDefault();
+														askAi();
+														return;
+													}
+													if (event.key === "Escape") {
+														event.preventDefault();
+														event.stopPropagation();
+														setAiOpen(false);
+													}
+												},
+											}),
+											h(
+												"button",
+												{ type: "button", className: "sk-btn primary", onClick: askAi, disabled: aiBusy },
+												aiBusy ? "Pensando…" : "Proponer",
+											),
+											h(
+												"button",
+												{ type: "button", className: "sk-btn", onClick: () => setAiOpen(false), disabled: aiBusy },
+												"Cerrar",
+											),
+										),
+										aiError ? h("p", { className: "sk-error" }, aiError) : null,
+										aiResult !== null
+											? h(
+													"div",
+													{ className: "sk-ai-result" },
+													h(
+														"div",
+														{ className: "sk-ai-head" },
+														h(
+															"span",
+															null,
+															aiResult.model.length > 0
+																? `Propuesta de ${aiResult.model}: revisala antes de guardar`
+																: "Propuesta: revisala antes de guardar",
+														),
+														h(
+															"div",
+															{ className: "sk-ai-actions" },
+															h(
+																"button",
+																{
+																	type: "button",
+																	className: "sk-btn primary",
+																	onClick: () => {
+																		setDraft(aiResult.content);
+																		setAiResult(null);
+																		setAiOpen(false);
+																	},
+																},
+																"Usar esta versión",
+															),
+															h(
+																"button",
+																{ type: "button", className: "sk-btn", onClick: () => setAiResult(null) },
+																"Descartar",
+															),
+														),
+													),
+													aiResult.warning.length > 0 ? h("p", { className: "sk-error" }, aiResult.warning) : null,
+													h("pre", { className: "sk-body sk-ai-pre" }, aiResult.content),
+												)
+											: null,
+									)
+								: null,
 						)
 					: h("div", { className: "sk-prose" }, renderMarkdown(body)),
 			);
@@ -719,7 +914,29 @@ window.__ModuleLoader__.load({
 			const [lastTrash, setLastTrash] = React.useState("");
 			const [deleting, setDeleting] = React.useState("");
 			const [actionError, setActionError] = React.useState("");
+			const [view, setView] = React.useState(() => {
+				try {
+					const raw = localStorage.getItem(VIEW_KEY);
+					if (raw !== null) {
+						const saved = JSON.parse(raw);
+						return { group: saved.group ?? "none", sort: saved.sort ?? "name", filter: saved.filter ?? "all" };
+					}
+				} catch {
+					// localStorage puede estar bloqueado: se usa el default.
+				}
+				return { group: "none", sort: "name", filter: "all" };
+			});
 			const searchRef = React.useRef(null);
+
+			React.useEffect(() => {
+				try {
+					localStorage.setItem(VIEW_KEY, JSON.stringify(view));
+				} catch {
+					// sin persistencia, pero la vista funciona igual.
+				}
+			}, [view]);
+
+			const updateView = React.useCallback((key, value) => setView((prev) => ({ ...prev, [key]: value })), []);
 
 			const load = React.useCallback(async () => {
 				setState((prev) => (prev.status === "ready" ? { ...prev, refreshing: true } : { status: "loading" }));
@@ -830,7 +1047,49 @@ window.__ModuleLoader__.load({
 			const ready = state.status === "ready";
 			const skills = ready ? state.data.skills : [];
 			const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-			const visible = skills.filter((skill) => matches(skill, terms));
+			const hasModified = skills.some((skill) => (skill.modified ?? 0) > 0);
+
+			const filtered = skills
+				.filter((skill) => {
+					if (view.filter === "model") return skill.model === true;
+					if (view.filter === "command") return skill.model !== true && skill.user === true;
+					if (view.filter === "file") return Boolean(skill.path);
+					return true;
+				})
+				.filter((skill) => matches(skill, terms));
+
+			const ordered = [...filtered].sort((a, b) => {
+				if (view.sort === "modified") return (b.modified ?? 0) - (a.modified ?? 0) || a.name.localeCompare(b.name);
+				if (view.sort === "source") return (SOURCE_RANK[a.source] ?? 9) - (SOURCE_RANK[b.source] ?? 9) || a.name.localeCompare(b.name);
+				return a.name.localeCompare(b.name);
+			});
+
+			const sections = [];
+			if (view.group === "source") {
+				const buckets = new Map();
+				for (const skill of ordered) {
+					const key = SOURCE_LABEL[skill.source] ?? "otras";
+					if (!buckets.has(key)) buckets.set(key, []);
+					buckets.get(key).push(skill);
+				}
+				for (const key of ["usuario", "proyecto", "plugin", "propia", "otras"]) {
+					if (!buckets.has(key)) continue;
+					sections.push({ key, title: key.charAt(0).toUpperCase() + key.slice(1), items: buckets.get(key) });
+				}
+			} else if (view.group === "state") {
+				const buckets = [
+					["model", "Las ve el modelo", (skill) => skill.model],
+					["command", "Solo por comando", (skill) => !skill.model && skill.user],
+					["hidden", "Ocultas", (skill) => !skill.model && !skill.user],
+				];
+				for (const [key, title, test] of buckets) {
+					const items = ordered.filter(test);
+					if (items.length > 0) sections.push({ key, title, items });
+				}
+			} else if (ordered.length > 0) {
+				sections.push({ key: "all", title: null, items: ordered });
+			}
+			const shown = sections.reduce((total, section) => total + section.items.length, 0);
 
 			return h(
 				"div",
@@ -874,6 +1133,7 @@ window.__ModuleLoader__.load({
 								},
 							}),
 						),
+						h(ViewMenu, { view, onChange: updateView, hasModified }),
 						h(
 							"button",
 							{ type: "button", className: "sk-btn", onClick: load, disabled: ready && state.refreshing === true },
@@ -899,17 +1159,38 @@ window.__ModuleLoader__.load({
 				actionError.length > 0
 					? h("p", { className: "sk-error" }, `No se eliminó: ${actionError}`)
 					: null,
-				ready
+				ready && shown > 0
 					? h(
 							"div",
-							{ className: "sk-grid" },
-							visible.map((skill) =>
-								h(SkillCard, { key: skill.name, skill, onOpen: openSkill, onDelete: deleteSkill, deleting }),
+							{ className: "sk-sections" },
+							sections.map((section) =>
+								h(
+									"section",
+									{ key: section.key },
+									section.title === null
+										? null
+										: h("h2", { className: "sk-group" }, section.title, h("span", { className: "n" }, String(section.items.length))),
+									h(
+										"div",
+										{ className: "sk-grid" },
+										section.items.map((skill) =>
+											h(SkillCard, { key: skill.name, skill, onOpen: openSkill, onDelete: deleteSkill, deleting }),
+										),
+									),
+								),
 							),
 						)
 					: null,
-				ready && visible.length === 0
-					? h("p", { className: "sk-empty" }, query ? `Nada coincide con “${query}”.` : "No hay skills cargadas.")
+				ready && shown === 0
+					? h(
+							"p",
+							{ className: "sk-empty" },
+							query
+								? `Nada coincide con “${query}”.`
+								: view.filter !== "all"
+									? "Ninguna skill cae en ese filtro."
+									: "No hay skills cargadas.",
+						)
 					: null,
 				ready && lastTrash.length > 0
 					? h(

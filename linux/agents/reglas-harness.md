@@ -1,7 +1,7 @@
 # Delegación a Claude Code
 
 Este archivo es la regla global del DeepSeek Harness para esta máquina
-(`~/.dsh/AGENTS.md`, symlink a `~/dotfiles/linux/agents/delegacion-claude.md`).
+(`~/.dsh/AGENTS.md`, symlink a `~/dotfiles/linux/agents/reglas-harness.md`).
 
 ## Regla dura: no reinicies el harness
 

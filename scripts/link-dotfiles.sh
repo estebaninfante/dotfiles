@@ -147,7 +147,7 @@ header "DeepSeek Harness (instrucciones globales + skills propias)"
 # en cualquier workspace): traen la regla de delegar a Claude cuando un problema se
 # estanca. Las skills propias del repo se enlazan a ~/.agents/skills, igual que las
 # que instala Omarchy.
-link_path "${REPO}/linux/agents/delegacion-claude.md" "${HOME}/.dsh/AGENTS.md" true
+link_path "${REPO}/linux/agents/reglas-harness.md" "${HOME}/.dsh/AGENTS.md" true
 # Plugins propios del harness (comandos /claude y /skills): el repo es la fuente y
 # ~/.dsh/plugins es symlink; después se asegura que el perfil web lo tenga instalado
 # y con su entrada en el patch (si no, el harness no lo carga al arrancar).
