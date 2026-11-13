@@ -68,8 +68,8 @@ window.__ModuleLoader__.load({
 .sk-intro{margin:0;font-size:12.5px;line-height:18px;color:var(--sk-fg2);display:flex;flex-wrap:wrap;gap:0 6px;align-items:center}
 .sk-intro b{font-weight:500;color:var(--sk-fg);font-variant-numeric:tabular-nums}
 .sk-intro i{font-style:normal;color:var(--sk-cap)}
-.sk-tools{display:flex;align-items:center;gap:8px;flex:none}
-.sk-search{display:inline-flex;align-items:center;gap:6px;height:32px;width:230px;padding:0 10px;
+.sk-tools{display:flex;align-items:center;gap:8px;flex:none;min-width:0}
+.sk-search{display:inline-flex;align-items:center;gap:6px;height:32px;width:230px;min-width:0;padding:0 10px;
   border:.5px solid var(--sk-l4);border-radius:var(--sk-r-md);background:var(--sk-field)}
 .sk-search:focus-within{border-color:var(--sk-info)}
 .sk-search svg{flex:none;color:var(--sk-fg3)}
@@ -181,9 +181,9 @@ window.__ModuleLoader__.load({
   .sk-detail{padding-top:14px}
   .sk-dtitle{font-size:17px;line-height:24px}
   .sk-prose{font-size:14px;line-height:22px}
-  .sk-editor{font-size:16px;line-height:22px;min-height:50vh}
+  .sk-editor{font-size:16px;line-height:22px}
   .sk-dactions{width:100%}
-  .sk-dactions .sk-btn{flex:1}
+  .sk-dactions .sk-btn{flex:none}
 }
 `;
 

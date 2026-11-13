@@ -109,7 +109,7 @@ window.__ModuleLoader__.load({
 
 #${SUMMARY_ID}{display:flex;flex-direction:column;gap:2px;padding:0 6px 8px;box-sizing:border-box;width:100%;
   font:400 14px/1.6 var(--dsw-font-family,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary,#adb2b8)}
-#${SUMMARY_ID} .line{display:grid;grid-template-columns:1.4rem minmax(0,1fr);align-items:baseline;gap:0 6px}
+#${SUMMARY_ID} .line{display:grid;grid-template-columns:1.4rem minmax(0,1fr) auto;align-items:baseline;gap:0 6px}
 #${SUMMARY_ID} .emo{text-align:center}
 #${SUMMARY_ID} .phrase{all:unset;cursor:pointer;border-radius:3px;color:var(--dsw-alias-label-secondary,#cfd3d6);
   text-decoration:underline dotted 1.5px;text-underline-offset:4px;text-decoration-color:var(--dsw-alias-label-caption,#81858c)}
@@ -117,7 +117,8 @@ window.__ModuleLoader__.load({
 #${SUMMARY_ID} .phrase:focus-visible{outline:2px solid var(--dsw-alias-border-l4,#fff6);outline-offset:1px}
 #${SUMMARY_ID} .phrase[data-edited="1"]{color:var(--dsw-alias-label-primary,#f9fafb);text-decoration-style:solid;
   text-decoration-color:var(--dsw-alias-state-business-primary,#6ea8fe)}
-#${SUMMARY_ID} .acts{display:flex;justify-content:flex-end;gap:4px;margin-top:2px}
+#${SUMMARY_ID} .acts{display:flex;justify-content:flex-end;gap:4px;align-self:center}
+#${SUMMARY_ID} button.btn{height:26px;padding:0 10px}
 
 #${CARD_ID}{position:absolute;z-index:1000;box-sizing:border-box;display:flex;flex-direction:column;
   border-radius:18px;background:var(--dsw-alias-bg-layer-2,#2c2c2e);color:var(--dsw-alias-label-primary,#f9fafb);
@@ -129,7 +130,8 @@ window.__ModuleLoader__.load({
 #${CARD_ID} *{box-sizing:border-box}
 #${CARD_ID} section{display:flex;flex-direction:column;gap:8px;padding:12px 14px 4px}
 #${CARD_ID} .q{display:flex;align-items:baseline;gap:8px;color:var(--dsw-alias-label-tertiary,#adb2b8);font-size:13px}
-#${CARD_ID} .q .hint{color:var(--dsw-alias-label-caption,#81858c)}
+#${CARD_ID} .q > span:first-child{flex:none;max-width:100%}
+#${CARD_ID} .q .hint{color:var(--dsw-alias-label-caption,#81858c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 #${CARD_ID} .q .now{margin-left:auto;color:var(--dsw-alias-label-primary,#f9fafb);font-weight:500;text-align:right;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
 #${CARD_ID} .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -204,10 +206,15 @@ window.__ModuleLoader__.load({
 			items = next;
 			const keys = new Set(items.map(keyOf));
 			for (const key of [...answers.keys()]) if (!keys.has(key)) answers.delete(key);
+			// "muy caro" adentro de "no sea muy caro": un solo subrayado, una sola tarjeta.
+			const quotes = [...new Set(items.map((item) => item.quote))].sort((a, b) => b.length - a.length);
+			const home = new Map();
+			for (const quote of quotes) home.set(quote, quotes.find((outer) => outer.toLowerCase().includes(quote.toLowerCase())) ?? quote);
 			const byQuote = new Map();
 			for (const item of items) {
-				if (!byQuote.has(item.quote)) byQuote.set(item.quote, { quote: item.quote, items: [], range: null });
-				byQuote.get(item.quote).items.push(item);
+				const quote = home.get(item.quote);
+				if (!byQuote.has(quote)) byQuote.set(quote, { quote, items: [], range: null });
+				byQuote.get(quote).items.push(item);
 			}
 			groups = [...byQuote.values()];
 		}
@@ -331,21 +338,25 @@ window.__ModuleLoader__.load({
 				summary.addEventListener("focusin", onSummaryFocus);
 			}
 			if (summary.parentElement !== host.parentElement || summary.nextElementSibling !== host) host.parentElement.insertBefore(summary, host);
+			// Las acciones van en la última línea, no en una fila propia: aparecer no
+			// corre el compositor (ni la tarjeta anclada a una palabra).
+			const acts =
+				pending > 0
+					? `<span class="acts"><button type="button" class="btn" data-act="discard-all">Descartar</button><button type="button" class="btn primary" data-act="apply">Aplicar ${pending === 1 ? "1 corrección" : `${pending} correcciones`}</button></span>`
+					: "<span></span>";
 			const html =
 				lines
 					.map(
-						(item) =>
-							`<div class="line" role="listitem"><span class="emo" aria-hidden="true">${esc(item.emoji || "•")}</span><span>${esc(item.label)}: ${summaryPhrase(item)}</span></div>`,
+						(item, index) =>
+							`<div class="line" role="listitem"><span class="emo" aria-hidden="true">${esc(item.emoji || "•")}</span><span>${esc(item.label)}: ${summaryPhrase(item)}</span>${index === lines.length - 1 ? acts : "<span></span>"}</div>`,
 					)
-					.join("") +
-				(pending > 0
-					? `<div class="acts"><button type="button" class="btn" data-act="discard-all">Descartar</button><button type="button" class="btn primary" data-act="apply">Aplicar ${pending === 1 ? "1 corrección" : `${pending} correcciones`}</button></div>`
-					: "");
+					.join("") || `<div class="line"><span></span><span></span>${acts}</div>`;
 			// Se llama en cada tecla: repintar sin cambios le quitaría el foco a una frase.
 			if (summary.__html === html) return;
 			summary.__html = html;
 			summary.innerHTML = html;
 			markExpanded();
+			if (card) placeCard();
 		}
 
 		function markExpanded() {
@@ -429,7 +440,7 @@ window.__ModuleLoader__.load({
 			const label = item.kind === "assumption" ? `${item.emoji ? `${esc(item.emoji)} ` : ""}${esc(item.label)}` : esc(item.label);
 			return `
 <section data-item="${index}">
-  <div class="q"><span>${label}</span>${multi ? '<span class="hint">elegí las que quieras</span>' : ""}<span class="now" data-now="${index}">${esc(chosenText(item))}</span></div>
+  <div class="q"><span>${label}</span>${multi ? '<span class="hint">elegí las que quieras</span>' : ""}${multi ? "" : `<span class="now" data-now="${index}">${esc(chosenText(item))}</span>`}</div>
   <div class="chips">${chips}<button type="button" class="chip" data-item="${index}" data-other="1" aria-expanded="${other ? "true" : "false"}">＋ Otra cosa</button></div>
   <input class="other" data-item="${index}" placeholder="${multi ? "Escribila…" : "Otra cosa…"}" value="${esc(other)}"${other ? "" : " hidden"} aria-label="${esc(item.label)}: otra respuesta">
 </section>`;

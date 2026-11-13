@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+"""vicio — registra vicios de UI del modelo en el vault ~/alicia.
+
+    vicio "botón sin estado de carga"      agrega un vicio
+    vicio -c "texto"                       agrega y captura la pantalla ahora
+    vicio -c -a forms "texto"              con área (para agrupar después)
+    vicio ls                               lista lo registrado
+    vicio ver                              muestra el índice completo
+    vicio abrir                            abre el índice en Obsidian/editor
+
+Cada vicio es un nodo de ~/alicia (tipo problema, estado abierto, tag
+`vicios-ui`) colgado del nodo raíz `vicios-de-ui`. El cuerpo del nodo raíz se
+regenera solo: es una tabla con fecha, vicio, área y estado.
+
+Esto es solo recolección. El arreglo de cada vicio se decide después, con el
+catálogo a la vista, no en el momento de anotarlo.
+
+Si `alicia nuevo` detecta un vicio parecido, no lo duplica: muestra los
+candidatos y pide `--forzar` (es otro vicio) o `--repite` (es el mismo y suma
+una repetición, que es la señal de que el patrón se repite).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import unicodedata
+from datetime import datetime
+from pathlib import Path
+
+VAULT = Path(os.environ.get("ALICIA_VAULT", Path.home() / "alicia"))
+RAIZ_ID = "vicios-de-ui"
+RAIZ_TITULO = "Vicios de UI"
+CARPETA = "Areas/vicios-ui"
+CARPETA_RAIZ = "Areas"
+CAPTURAS = CARPETA + "/capturas"
+TAG = "vicios-ui"
+
+
+# ------------------------------------------------------------------ helpers
+
+def alicia_bin() -> str:
+    ruta = shutil.which("alicia") or str(Path.home() / ".local/bin/alicia")
+    return ruta
+
+
+def _cmd(base: list[str]) -> list[str]:
+    """`alicia` respetando el vault de prueba cuando ALICIA_VAULT está puesto."""
+    return [alicia_bin(), "--vault", str(VAULT), *base] if "ALICIA_VAULT" in os.environ else [alicia_bin(), *base]
+
+
+def grafo() -> dict:
+    salida = subprocess.run(_cmd(["export"]), capture_output=True, text=True)
+    if salida.returncode != 0:
+        die(f"no pude leer el vault: {salida.stderr.strip()}")
+    return json.loads(salida.stdout)
+
+
+def die(msg: str, code: int = 1) -> "None":
+    print(f"vicio: {msg}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def slug(texto: str) -> str:
+    # ASCII puro: los nombres viajan por Syncthing y se abren desde Obsidian,
+    # Logseq y la terminal. "botón" -> "boton".
+    base = unicodedata.normalize("NFKD", texto.lower())
+    base = "".join(c for c in base if not unicodedata.combining(c))
+    limpio = "".join(c if c.isalnum() or c in " -_" else " " for c in base)
+    return "-".join(limpio.split())[:60].strip("-") or "vicio"
+
+
+def buscar_raiz(notas: list[dict]) -> dict | None:
+    return next((n for n in notas if n["id"] == RAIZ_ID), None)
+
+
+def asegurar_raiz(notas: list[dict]) -> dict:
+    raiz = buscar_raiz(notas)
+    if raiz:
+        return raiz
+    r = subprocess.run(
+        _cmd(["nuevo", "--tipo", "proyecto", "--titulo", RAIZ_TITULO,
+              "--nombre", RAIZ_ID, "--carpeta", CARPETA_RAIZ, "--estado", "en-curso",
+              "--tags", f"{TAG},modelo,harness", "--claves", "vicios de ui,patrones de ui",
+              "--cuerpo", "Catálogo que llena el usuario, no el modelo.\n"]),
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        die(f"no pude crear el nodo raíz: {r.stderr.strip() or r.stdout.strip()}")
+    raiz = buscar_raiz(grafo()["nodos"])
+    if not raiz:
+        die("el nodo raíz se creó pero no aparece en el grafo")
+    return raiz
+
+
+# ------------------------------------------------------------------ índice
+
+def regenerar_indice(notas: list[dict], raiz: dict) -> None:
+    """Reescribe el cuerpo del nodo raíz; el frontmatter se respeta tal cual."""
+    carpeta = VAULT / CAPTURAS
+    carpeta.mkdir(parents=True, exist_ok=True)
+
+    vices = [n for n in notas if TAG in (n.get("tags") or []) and n["id"] != RAIZ_ID]
+    vices.sort(key=lambda n: (n.get("fecha") or ""), reverse=True)
+    abiertos = sum(1 for n in vices if (n.get("estado") or "") not in ("resuelto", "descartado"))
+
+    filas = []
+    base = os.path.dirname(raiz["ruta"])
+    for n in vices:
+        area = next((t for t in (n.get("tags") or []) if t not in (TAG,)), "—")
+        titulo = (n.get("titulo") or n["id"]).replace("|", "\\|")
+        fecha = (n.get("fecha") or "")[:10] or "—"
+        # Link markdown relativo (no wikilink): el pipe de los wikilinks dentro
+        # de una tabla se escapa con `\|` y eso ensucia el grafo de alicia.
+        destino = os.path.relpath(n["ruta"], base).replace(os.sep, "/")
+        filas.append(f"| {fecha} | [{titulo}]({destino}) | {area} | {n.get('estado') or '—'} |")
+
+    if filas:
+        tabla = "| Fecha | Vicio | Área | Estado |\n|---|---|---|---|\n" + "\n".join(filas)
+    else:
+        tabla = "_Todavía no hay vicios anotados._"
+
+    cuerpo = f"""# {RAIZ_TITULO}
+
+Vicios que comete el modelo al construir UI, anotados por el usuario. El modelo
+no los detecta solo: los detecta quien los ve y los anota acá.
+
+**{len(vices)} anotados · {abiertos} abiertos · actualizado {datetime.now():%Y-%m-%d %H:%M}**
+
+## Catálogo
+
+{tabla}
+
+## Cómo se anota
+
+```bash
+vicio "botón sin estado de carga"    # agrega
+vicio -c "texto"                     # agrega y captura la pantalla
+vicio ls                             # lista
+```
+
+Primero se recopila; los arreglos se deciden después, con el catálogo a la vista.
+"""
+
+    archivo = VAULT / raiz["ruta"]
+    texto = archivo.read_text(encoding="utf-8")
+    if texto.startswith("---"):
+        partes = texto.split("---", 2)
+        frontmatter = f"---{partes[1]}---\n\n"
+    else:
+        frontmatter = ""
+    tmp = archivo.with_name(archivo.name + ".tmp")
+    tmp.write_text(frontmatter + cuerpo, encoding="utf-8")
+    os.replace(tmp, archivo)
+
+
+# ------------------------------------------------------------------ captura
+
+def capturar(texto: str) -> str | None:
+    if not shutil.which("grim"):
+        print("vicio: no hay grim; sigo sin captura", file=sys.stderr)
+        return None
+    destino_dir = VAULT / CAPTURAS
+    destino_dir.mkdir(parents=True, exist_ok=True)
+    nombre = f"{datetime.now():%Y%m%d-%H%M%S}-{slug(texto)}.png"
+    destino = destino_dir / nombre
+    r = subprocess.run(["grim", str(destino)], capture_output=True, text=True)
+    if r.returncode != 0 or not destino.exists():
+        print(f"vicio: la captura falló: {r.stderr.strip()}", file=sys.stderr)
+        return None
+    return nombre
+
+
+# ------------------------------------------------------------------ comandos
+
+def agregar(texto: str, area: str | None, donde: str | None, con_captura: bool,
+            forzar: bool, repite: bool) -> int:
+    texto = texto.strip()
+    if not texto:
+        die("falta el texto del vicio")
+
+    notas = grafo()["nodos"]
+    raiz = asegurar_raiz(notas)
+
+    captura = capturar(texto) if con_captura else None
+
+    cuerpo = [f"## Qué vi\n{texto}", ""]
+    cuerpo += [f"## Dónde\n{donde or '(sin ubicar)'}", ""]
+    cuerpo += [f"## Captura\n{('![captura](capturas/' + captura + ')') if captura else '(sin captura)'}", ""]
+    cuerpo += ["## Arreglo\n(pendiente — se decide con el catálogo a la vista)", ""]
+
+    args = ["nuevo", "--tipo", "problema", "--titulo", texto, "--padres", RAIZ_ID,
+            "--carpeta", CARPETA, "--estado", "abierto",
+            "--tags", f"{TAG},{area}" if area else TAG,
+            "--cuerpo", "\n".join(cuerpo)]
+    if forzar:
+        args.append("--forzar")
+
+    r = subprocess.run(_cmd(args), capture_output=True, text=True)
+
+    if r.returncode == 2:  # parecido: alicia no duplica
+        print(r.stdout.strip())
+        if not repite:
+            print("\nSi es el mismo vicio:  vicio --repite \"texto\"   (suma una repetición)")
+            print("Si es otro distinto:   vicio --forzar \"texto\"")
+            return 2
+        return _sumar_repeticion(texto, notas)
+    if r.returncode != 0:
+        die(f"no pude crear el vicio: {r.stderr.strip()}")
+
+    rel = (r.stdout.strip().splitlines() or [""])[-1]
+    print(f"anotado: {rel}")
+    if captura:
+        print(f"captura: {CAPTURAS}/{captura}")
+    regenerar_indice(grafo()["nodos"], raiz)
+    print(f"catálogo: {len([n for n in grafo()['nodos'] if TAG in (n.get('tags') or []) and n['id'] != RAIZ_ID])} vicios")
+    return 0
+
+
+def _sumar_repeticion(texto: str, notas: list[dict]) -> int:
+    """El vicio ya estaba: suma una repetición al nodo existente."""
+    from difflib import SequenceMatcher
+
+    def norm(s: str) -> str:
+        return "".join(c for c in s.lower() if c.isalnum() or c == " ").strip()
+
+    candidatos = [n for n in notas if TAG in (n.get("tags") or []) and n["id"] != RAIZ_ID]
+    if not candidatos:
+        die("no encontré el vicio para sumarle la repetición")
+    mejor = max(candidatos, key=lambda n: SequenceMatcher(None, norm(texto), norm(n.get("titulo") or "")).ratio())
+
+    archivo = VAULT / mejor["ruta"]
+    texto_archivo = archivo.read_text(encoding="utf-8")
+    linea = f"- {datetime.now():%Y-%m-%d %H:%M} — {texto}"
+    if "## Repeticiones" in texto_archivo:
+        texto_archivo = texto_archivo.rstrip() + "\n" + linea + "\n"
+    else:
+        texto_archivo = texto_archivo.rstrip() + "\n\n## Repeticiones\n" + linea + "\n"
+    archivo.write_text(texto_archivo, encoding="utf-8")
+
+    print(f"repetición sumada a: {mejor['id']}")
+    raiz = buscar_raiz(grafo()["nodos"])
+    if raiz:
+        regenerar_indice(grafo()["nodos"], raiz)
+    return 0
+
+
+def listar() -> int:
+    nodos = grafo()["nodos"]
+    raiz = buscar_raiz(nodos)
+    if not raiz:
+        # El catálogo vacío también es un lugar: se crea para poder mirarlo.
+        raiz = asegurar_raiz(nodos)
+        regenerar_indice(grafo()["nodos"], raiz)
+    print((VAULT / raiz["ruta"]).read_text(encoding="utf-8").split("## Catálogo", 1)[-1].split("## Cómo se anota")[0].strip())
+    return 0
+
+
+def ver() -> int:
+    nodos = grafo()["nodos"]
+    raiz = buscar_raiz(nodos)
+    if not raiz:
+        print("Todavía no hay nodo raíz. Anotá el primero:  vicio \"texto\"")
+        return 0
+    print((VAULT / raiz["ruta"]).read_text(encoding="utf-8"))
+    return 0
+
+
+def abrir() -> int:
+    nodos = grafo()["nodos"]
+    raiz = buscar_raiz(nodos)
+    if not raiz:
+        die("todavía no hay catálogo; anotá el primero con  vicio \"texto\"")
+    subprocess.run(["xdg-open", str(VAULT / raiz["ruta"])])
+    return 0
+
+
+def ayuda() -> int:
+    print(__doc__.strip())
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    area = donde = None
+    con_captura = forzar = repite = False
+    texto: list[str] = []
+
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-h", "--help"):
+            return ayuda()
+        elif a in ("-c", "--captura"):
+            con_captura = True
+        elif a in ("-a", "--area"):
+            i += 1
+            area = argv[i] if i < len(argv) else None
+        elif a in ("-d", "--donde"):
+            i += 1
+            donde = argv[i] if i < len(argv) else None
+        elif a in ("--forzar", "-f"):
+            forzar = True
+        elif a in ("--repite", "-r"):
+            repite = True
+        elif a in ("ls", "listar") and not texto:
+            return listar()
+        elif a in ("ver", "show") and not texto:
+            return ver()
+        elif a in ("abrir", "open") and not texto:
+            return abrir()
+        else:
+            texto.append(a)
+        i += 1
+
+    return agregar(" ".join(texto), area, donde, con_captura, forzar, repite)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
