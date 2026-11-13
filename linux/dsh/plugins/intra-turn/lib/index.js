@@ -22,6 +22,13 @@ const CALL_TIMEOUT_MS = 45_000;
  * conversación y las llamadas comparten el prefijo del system prompt.
  */
 const ROUTING_SESSION_ID = "intra-turn-feedforward";
+/**
+ * Modelo de decisión: la llamada es chica y estructurada (JSON de 2 a 6 ítems),
+ * así que un modelo rápido la resuelve y evita los 13-22 s del modelo de la
+ * sesión. Se puede cambiar sin tocar código con `INTRA_TURN_MODEL`.
+ */
+const DECISION_PROVIDER = process.env.INTRA_TURN_PROVIDER || "opencode-go";
+const DECISION_MODEL = process.env.INTRA_TURN_MODEL || "glm-5.3-flash";
 
 const SYSTEM = [
 	"Sos el copiloto de alguien que está escribiendo un pedido a un agente de IA.",
