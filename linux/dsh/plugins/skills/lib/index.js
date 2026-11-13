@@ -56,75 +56,6 @@ function userRoots() {
 	return [
 		{ path: join(DSH_HOME, "skills"), source: "user-dsh", rank: 400, skipSystem: true },
 		{ path: join(AGENTS_HOME, "skills"), source: "user-agents", rank: 500 },
-		{
-			path: "/skills/ai-edit",
-			method: "POST",
-			handler: async (req, res) => {
-				if (req.headers["x-dsh-skills"] !== "1") {
-					sendJson(res, 403, { ok: false, error: "falta el header x-dsh-skills" });
-					return;
-				}
-				const body = await readJsonBody(req).catch(() => null);
-				const name = typeof body?.name === "string" ? body.name.trim() : "";
-				const instruction = typeof body?.instruction === "string" ? body.instruction.trim() : "";
-				const given = typeof body?.content === "string" ? body.content : "";
-				if (name.length === 0 || name.length > MAX_NAME_CHARS || !NAME_RE.test(name)) {
-					sendJson(res, 400, { ok: false, error: "nombre inválido" });
-					return;
-				}
-				if (instruction.length < 3) {
-					sendJson(res, 400, { ok: false, error: "escribí qué querés cambiar" });
-					return;
-				}
-				const llm = ctx.get?.("llm");
-				const selection = ctx.get?.("agentDefaultModel")?.currentSelection?.();
-				if (llm === undefined || selection === undefined) {
-					sendJson(res, 409, { ok: false, error: "no hay modelo por defecto configurado" });
-					return;
-				}
-				try {
-					let current = given;
-					if (current.trim().length === 0) {
-						const { skills } = await collect(ctx, "");
-						const match = skills.find((skill) => skill.name === name);
-						if (match === undefined || typeof match.realPath !== "string") {
-							sendJson(res, 404, { ok: false, error: "esa skill no está en el catálogo" });
-							return;
-						}
-						current = readFileSync(match.realPath, "utf8");
-					}
-					const prompt = [`INSTRUCCIÓN DEL USUARIO:`, instruction, "", "SKILL.md ACTUAL:", unwrapFence(current)].join("\n");
-					const answer = await collectAnswer(llm, {
-						provider: selection.provider,
-						model: selection.model,
-						...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
-						system: AI_SYSTEM,
-						messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-						maxTokens: 6000,
-						signal: AbortSignal.timeout(150000),
-					});
-					const content = unwrapFence(answer);
-					if (content.trim().length === 0) {
-						sendJson(res, 502, { ok: false, error: "el modelo no devolvió texto" });
-						return;
-					}
-					const meta = parseFrontmatter(content);
-					const valid =
-						typeof meta.name === "string" &&
-						NAME_RE.test(meta.name.trim()) &&
-						typeof meta.description === "string" &&
-						meta.description.trim().length > 0;
-					sendJson(res, 200, {
-						ok: true,
-						model: selection.model,
-						content,
-						warning: valid ? "" : "el modelo devolvió algo sin name/description válidos: revisalo antes de guardar",
-					});
-				} catch (error) {
-					fail(res, error);
-				}
-			},
-		},
 	];
 }
 
@@ -603,6 +534,75 @@ export function apply(ctx) {
 						trash: displayPath(moved.target),
 						symlink: moved.isLink,
 						count: after.skills.length,
+					});
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
+			path: "/skills/ai-edit",
+			method: "POST",
+			handler: async (req, res) => {
+				if (req.headers["x-dsh-skills"] !== "1") {
+					sendJson(res, 403, { ok: false, error: "falta el header x-dsh-skills" });
+					return;
+				}
+				const body = await readJsonBody(req).catch(() => null);
+				const name = typeof body?.name === "string" ? body.name.trim() : "";
+				const instruction = typeof body?.instruction === "string" ? body.instruction.trim() : "";
+				const given = typeof body?.content === "string" ? body.content : "";
+				if (name.length === 0 || name.length > MAX_NAME_CHARS || !NAME_RE.test(name)) {
+					sendJson(res, 400, { ok: false, error: "nombre inválido" });
+					return;
+				}
+				if (instruction.length < 3) {
+					sendJson(res, 400, { ok: false, error: "escribí qué querés cambiar" });
+					return;
+				}
+				const llm = ctx.get?.("llm");
+				const selection = ctx.get?.("agentDefaultModel")?.currentSelection?.();
+				if (llm === undefined || selection === undefined) {
+					sendJson(res, 409, { ok: false, error: "no hay modelo por defecto configurado" });
+					return;
+				}
+				try {
+					let current = given;
+					if (current.trim().length === 0) {
+						const { skills } = await collect(ctx, "");
+						const match = skills.find((skill) => skill.name === name);
+						if (match === undefined || typeof match.realPath !== "string") {
+							sendJson(res, 404, { ok: false, error: "esa skill no está en el catálogo" });
+							return;
+						}
+						current = readFileSync(match.realPath, "utf8");
+					}
+					const prompt = [`INSTRUCCIÓN DEL USUARIO:`, instruction, "", "SKILL.md ACTUAL:", unwrapFence(current)].join("\n");
+					const answer = await collectAnswer(llm, {
+						provider: selection.provider,
+						model: selection.model,
+						...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+						system: AI_SYSTEM,
+						messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+						maxTokens: 6000,
+						signal: AbortSignal.timeout(150000),
+					});
+					const content = unwrapFence(answer);
+					if (content.trim().length === 0) {
+						sendJson(res, 502, { ok: false, error: "el modelo no devolvió texto" });
+						return;
+					}
+					const meta = parseFrontmatter(content);
+					const valid =
+						typeof meta.name === "string" &&
+						NAME_RE.test(meta.name.trim()) &&
+						typeof meta.description === "string" &&
+						meta.description.trim().length > 0;
+					sendJson(res, 200, {
+						ok: true,
+						model: selection.model,
+						content,
+						warning: valid ? "" : "el modelo devolvió algo sin name/description válidos: revisalo antes de guardar",
 					});
 				} catch (error) {
 					fail(res, error);

@@ -35,9 +35,12 @@ machine idea --title "Two or three words" "<what it is + link + why it matters>"
 Use the **questions modal** (`ask_user_question`), not chat text. Two or three
 questions, only the ones that change the work:
 
-- **Tareas**: "what tasks do you want this to have?" — the user names them. Never
-  propose the obvious ones (a screen with a field, saving to a database, an export
-  button): that is what any app has by default, not a task.
+- **Tareas**: "what tasks do you want this to have?" — the user names them.
+  - A task is a **big step of the project**: "build the app", "use it for a week",
+    "fix what breaks".
+  - It is **not a feature** or a technical detail: "a screen with a field", "save to
+    a database", "an export button" are **subtasks** — the builder decides those.
+  - Turning features into tasks is the mistake to avoid.
 - **La prueba**: "how do you know it worked?".
 - **Scope**, only if it changes the build (for you alone, or for other people).
 

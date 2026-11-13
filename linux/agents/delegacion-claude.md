@@ -113,9 +113,13 @@ Un proyecto tiene **tres cosas** y nada más:
    (`ask_user_question`), nunca como texto suelto en el chat. Dos o tres, solo las
    que cambian el trabajo.
 3. **Las tareas las dice el usuario.** Se pregunta "¿qué tareas querés que tenga?" y
-   se anotan las que él nombra. No se proponen "una pantalla con un campo", "guardar
-   en la base", "un botón para exportar": eso es lo obvio de cualquier app, no es una
-   tarea.
+   se anotan las que él nombra.
+   - Una tarea es un **paso grande del proyecto**: "construir la app", "probarla una
+     semana", "ajustar lo que falle".
+   - **No es una funcionalidad** ni un detalle técnico: "una pantalla con un campo",
+     "guardar en la base", "un botón para exportar" son **subtareas**, y eso lo
+     resuelve quien construye, no la lista del proyecto.
+   - Confundir tareas con funcionalidades es el error a evitar.
 4. **La prueba también se pregunta**: "¿cómo sabés que funcionó?".
 
 ### Prohibido al recibir una idea o proyecto
@@ -125,6 +129,8 @@ Un proyecto tiene **tres cosas** y nada más:
 - **El resumen de cuatro puntos**: qué propone / cuánto cuesta / a qué se parece de lo
   que ya hay / si encaja / recomendación. Al usuario le pareció "basura": no sirve.
 - **Inventar tareas obvias** o deducirlas de lo que "debería tener" una app.
+- **Convertir funcionalidades en tareas**: la lista del proyecto son pasos grandes, no
+  features.
 - Preguntar en texto plano cuando existe el modal de preguntas.
 
 ### Cómo se trabaja
