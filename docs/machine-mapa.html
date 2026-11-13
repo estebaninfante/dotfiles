@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Problemas — maqueta</title>
 <style>
-:root{--fg:#eceef2;--fg2:#a3a8b3;--fg3:#737985;--dim:#4a4f59;--l1:#ffffff0f;--l2:#ffffff1f;--l3:#ffffff29;--l4:#ffffff33;--hover:#ffffff14;--bg:#17191e;--card:#1d2027;--warn:#e5a00d}
+:root{--fg:#eceef2;--fg2:#a3a8b3;--fg3:#737985;--dim:#7f848e;--l1:#ffffff0f;--l2:#ffffff1f;--l3:#ffffff29;--l4:#ffffff33;--hover:#ffffff14;--bg:#17191e;--card:#1d2027;--warn:#e5a00d}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font:13px/20px -apple-system,"Segoe UI",Inter,system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
@@ -40,22 +40,23 @@ h1{margin:0;font-size:20px;font-weight:500;line-height:28px}
 .node[data-kind=idea] .name,.node[data-kind=recurso] .name{font-weight:400}
 .node .meta{display:block;margin-top:1px;font-size:11px;line-height:15px;color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node .state{color:var(--fg2)}
-.node[data-state=paused]{opacity:.62}
-.node[data-state=done]{opacity:.52}
-.node[data-state=archived]{opacity:.36}
+.node[data-state=paused]{opacity:.7}
+.node[data-state=done]{opacity:.62}
+.node[data-state=archived]{opacity:.55}
 .node[data-state=archived] .state{color:var(--fg3)}
-.node .tasks{display:none;margin-top:5px;padding-left:7px;border-left:.5px solid var(--l3)}
-#world[data-zoom=near] .node .tasks{display:block}
-.task{display:block;font-size:11px;line-height:15px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .next{display:none;margin-top:1px;font-size:11px;line-height:15px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#world[data-zoom=near] .node[data-next] .meta{display:none}
+#world[data-zoom=near] .node[data-next] .next{display:block}
 .path{stroke:#ffffff;stroke-opacity:.16;stroke-width:1;fill:none;vector-effect:non-scaling-stroke;transition:stroke-opacity .15s}
 .path.lit{stroke-opacity:.6}
 .path.faded{stroke-opacity:.05}
-.elabel{font-size:10.5px;fill:var(--fg2);paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
-#world[data-zoom=far] .elabel{display:none}
+.node.dim{opacity:.42}
+.node.ann .meta{color:var(--fg)}
+.node.ann .meta .state{color:var(--fg3)}
 .zoom{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px}
 .zoom .btn{width:32px;padding:0;display:grid;place-items:center}
 .hint{position:absolute;left:16px;bottom:16px;font-size:11px;color:var(--dim)}
-#overlay{position:fixed;inset:0;background:#00000066;display:grid;place-items:center;padding:24px}
+#overlay{position:fixed;inset:0;background:#000000a8;display:grid;place-items:center;padding:24px}
 #overlay[hidden]{display:none}
 .dialog{width:min(480px,100%);max-height:78vh;overflow:auto;background:var(--card);border:.5px solid var(--l4);border-radius:16px;backdrop-filter:blur(12px);box-shadow:0 8px 40px #0009}
 .dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 20px 0}
@@ -73,7 +74,21 @@ h1{margin:0;font-size:20px;font-weight:500;line-height:28px}
 .foot{display:flex;justify-content:flex-end;gap:8px;padding:0 20px 20px}
 .foot .go{border-color:var(--l4);background:var(--l1)}
 .foot .go:hover{background:var(--hover)}
-@media (max-width:820px){header{flex-direction:column;padding:14px 16px 10px}.toolbar{flex-wrap:wrap}.hint{display:none}}
+#list{display:none;overflow:auto;padding:4px 24px 48px}
+body[data-view=lista] #list{display:block}
+body[data-view=lista] #stage,body[data-view=lista] .zoom,body[data-view=lista] .hint{display:none}
+.list{max-width:960px;margin:0 auto}
+.lgroup{margin-top:24px}
+.lgroup h3{margin:0;font-size:14px;font-weight:500;line-height:20px}
+.lwhy{margin:2px 0 8px;font-size:12px;line-height:17px;color:var(--fg3)}
+.lrow{display:grid;grid-template-columns:minmax(0,1fr) 110px 150px;gap:12px;align-items:baseline;width:100%;padding:8px;border:0;border-top:.5px solid var(--l1);background:transparent;text-align:left;cursor:pointer}
+.lrow:hover{background:var(--hover)}
+.lname{font-size:13px;line-height:18px}
+.lstate{font-size:12px;color:var(--fg2)}
+.lmeta{font-size:11.5px;color:var(--fg3);text-align:right}
+.lrow[data-state=archived]{opacity:.6}
+.lrow[data-state=paused]{opacity:.78}
+@media (max-width:820px){header{flex-direction:column;padding:14px 16px 10px}.toolbar{flex-wrap:wrap}.hint{display:none}#list{padding:0 16px 32px}.lrow{grid-template-columns:minmax(0,1fr) auto}.lmeta{display:none}}
 </style>
 </head>
 <body>
@@ -83,8 +98,6 @@ h1{margin:0;font-size:20px;font-weight:500;line-height:28px}
     <p class="intro"><b>6 problemas</b> · <b>24 cosas</b> · 9 sin decidir · <span data-warn>2 con cambios sin guardar</span></p>
   </div>
   <div class="toolbar">
-    <button class="btn" data-quiet>Buscar</button>
-    <button class="btn">Nueva idea</button>
     <div class="seg" role="group" aria-label="Vista"><button aria-pressed="true">Mapa</button><button aria-pressed="false">Lista</button></div>
   </div>
 </header>
@@ -101,10 +114,11 @@ h1{margin:0;font-size:20px;font-weight:500;line-height:28px}
     <button class="btn" id="zfit" aria-label="Encuadrar">⤢</button>
   </div>
 </div>
+<div id="list"><div class="list" id="listbody"></div></div>
 <div id="overlay" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dt"><header><div><div class="kick" id="dk"></div><h2 id="dt"></h2></div><button class="x" aria-label="Cerrar">✕</button></header><div class="body" id="db"></div><div class="foot"><button class="btn" id="dclose">Cerrar</button><button class="btn go" id="dgo">Trabajar</button></div></div></div>
 
 <script>
-const KIND={proyecto:"proyecto",idea:"idea",servicio:"servicio",producto:"producto"};
+const KIND={proyecto:"proyecto",idea:"idea",servicio:"servicio",producto:"producto",recurso:"recurso"};
 const P=[
  {id:"p1",cols:3,title:"Que la IA haga interfaces que nos gusten",why:"Los modelos no entienden cómo nos gustan las interfaces. Generan UI plana o rota."},
  {id:"p3",cols:1,title:"Vibecodear seguro en empresas",why:"Que la gente vibecodee sin exponer vulnerabilidades, con estándar y sin prohibir."},
@@ -120,7 +134,7 @@ const N=[
  {id:"uisdk",p:"p1",kind:"idea",state:"sin decidir",name:"UI SDK de Vercel"},
  {id:"gauge",p:"p1",kind:"idea",state:"sin decidir",name:"Gauge vs gusto"},
  {id:"refactor-lienzo",p:"p1",kind:"idea",state:"sin decidir",name:"Refactor Lienzo"},
- {id:"intra-turno",p:"p1",kind:"idea",state:"sin decidir",name:"Interacción intra-turno"},
+ {id:"intra-turno",p:"p1",kind:"recurso",state:"sin decidir",name:"Interacción intra-turno",detail:"post de Adobe Research"},
  {id:"zentr0",p:"p3",kind:"proyecto",state:"activo",name:"zentr0",detail:"2 tareas",tasks:["arreglar el estilo del researcher"]},
  {id:"learnharness",p:"p2",kind:"proyecto",state:"sin decidir",name:"learnharness-dev",detail:"10 nov"},
  {id:"future-learning",p:"p2",kind:"proyecto",state:"activo",name:"future-learning",detail:"12 nov"},
@@ -151,13 +165,11 @@ const world=document.getElementById("world"),stage=document.getElementById("stag
 world.style.width=W+"px";world.style.height=H+"px";edges.setAttribute("width",W);edges.setAttribute("height",H);
 const plural=n=>n===1?"cosa":"cosas";
 P.forEach(p=>{const count=N.filter(n=>n.p===p.id).length;const d=document.createElement("div");d.className="region";d.style.left=p.x+"px";d.style.top=p.y+"px";d.style.width=(p.cols*CW-16)+"px";d.innerHTML=`<h2>${p.title}</h2><p class="why">${p.why}</p><div class="rule"></div><div class="count">${count} ${plural(count)}</div>`;d.querySelector("h2").onclick=()=>openProblem(p);regions.appendChild(d)});
-N.forEach(n=>{const b=document.createElement("button");b.className="node";b.dataset.state=n.state;b.dataset.kind=n.kind;b.style.left=n.x+"px";b.style.top=n.y+"px";b.innerHTML=`<span class="name">${n.name}</span><span class="meta"><span class="state">${n.state}</span> · ${KIND[n.kind]}${n.detail?" · "+n.detail:""}</span><span class="tasks">${(n.tasks||[]).map(t=>`<span class="task">${t}</span>`).join("")}</span>`;b.onclick=()=>openNode(n);b.onmouseenter=()=>lit(n,true);b.onmouseleave=()=>lit(n,false);b.onfocus=()=>lit(n,true);b.onblur=()=>lit(n,false);nodesEl.appendChild(b)});
+N.forEach(n=>{const b=document.createElement("button");b.className="node";b.dataset.state=n.state;b.dataset.kind=n.kind;if(n.tasks&&n.tasks.length)b.dataset.next="1";b.style.left=n.x+"px";b.style.top=n.y+"px";b.innerHTML=`<span class="name">${n.name}</span><span class="meta"><span class="state">${n.state}</span> · ${KIND[n.kind]}${n.detail?" · "+n.detail:""}</span><span class="next">→ ${(n.tasks&&n.tasks[0])||""}</span>`;b.onclick=()=>openNode(n);b.onmouseenter=()=>lit(n,true);b.onmouseleave=()=>lit(n,false);b.onfocus=()=>lit(n,true);b.onblur=()=>lit(n,false);nodesEl.appendChild(b)});
 const NS="http://www.w3.org/2000/svg";
-const boxes=[...N.map(n=>({x:n.x-8,y:n.y-6,w:224,h:58})),...P.map(p=>({x:p.x,y:p.y,w:p.cols*CW-16,h:74}))];
-const freeAt=(x,y,w,h)=>!boxes.some(b=>x<b.x+b.w&&x+w>b.x&&y<b.y+b.h&&y+h>b.y);
 function clip(cx,cy,tx,ty){const dx=tx-cx,dy=ty-cy,w=104,h=26;const t=Math.min(dx?w/Math.abs(dx):1e9,dy?h/Math.abs(dy):1e9,1);return[cx+dx*t,cy+dy*t]}
-L.forEach(([a,b,label])=>{const A=byId[a],B=byId[b];if(!A||!B)return;const ax=A.x+104,ay=A.y+17,bx=B.x+104,by=B.y+17;const[a1,b1]=clip(ax,ay,bx,by),[a2,b2]=clip(bx,by,ax,ay);const path=document.createElementNS(NS,"path");path.setAttribute("d",`M${a1},${b1} L${a2},${b2}`);path.setAttribute("class","path");path.dataset.a=a;path.dataset.b=b;edges.appendChild(path);const dist=Math.hypot(a2-a1,b2-b1);if(regionOf[a]===regionOf[b]||dist<260)return;const w=label.length*5.6+8;for(const t of[.5,.32,.68,.2,.8]){const px=a1+(a2-a1)*t,py=b1+(b2-b1)*t;if(!freeAt(px-w/2,py-17,w,15))continue;const tx=document.createElementNS(NS,"text");tx.setAttribute("x",px);tx.setAttribute("y",py-6);tx.setAttribute("text-anchor","middle");tx.setAttribute("class","elabel");tx.textContent=label;edges.appendChild(tx);break}});
-function lit(n,on){document.querySelectorAll(".path").forEach(p=>{const hit=on&&(p.dataset.a===n.id||p.dataset.b===n.id);p.classList.toggle("lit",hit);p.classList.toggle("faded",on&&!hit)})}
+L.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;const ax=A.x+104,ay=A.y+17,bx=B.x+104,by=B.y+17;const[a1,b1]=clip(ax,ay,bx,by),[a2,b2]=clip(bx,by,ax,ay);const path=document.createElementNS(NS,"path");path.setAttribute("d",`M${a1},${b1} L${a2},${b2}`);path.setAttribute("class","path");path.dataset.a=a;path.dataset.b=b;edges.appendChild(path)});
+function lit(n,on){document.querySelectorAll(".path").forEach(p=>{const hit=on&&(p.dataset.a===n.id||p.dataset.b===n.id);p.classList.toggle("lit",hit);p.classList.toggle("faded",on&&!hit)});if(!on){document.querySelectorAll(".node").forEach(el=>el.classList.remove("ann","dim"));document.querySelectorAll(".node .meta").forEach(m=>{if(m.dataset.orig!=null)m.innerHTML=m.dataset.orig;delete m.dataset.orig});return}const partner=new Map();L.forEach(([a,b,l])=>{if(a===n.id)partner.set(b,l);if(b===n.id)partner.set(a,l)});document.querySelectorAll(".node").forEach(el=>{const meta=el.querySelector(".meta");meta.dataset.orig=meta.innerHTML;const id=(N.find(x=>x.name===el.querySelector(".name").textContent)||{}).id;if(partner.has(id)){el.classList.add("ann");el.classList.remove("dim");meta.innerHTML=`<span class="state">↔</span> ${partner.get(id)}`}else{el.classList.add("dim");el.classList.remove("ann")}})}
 let view={x:0,y:0,s:1};
 function apply(){world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.s})`;world.dataset.zoom=view.s<.7?"far":view.s>1.14?"near":"mid"}
 let locked=false;
@@ -173,15 +185,23 @@ document.getElementById("zout").onclick=()=>zoomAt(stage.clientWidth/2,stage.cli
 document.getElementById("zfit").onclick=fit;
 const dk=document.getElementById("dk"),dt=document.getElementById("dt"),db=document.getElementById("db"),dgo=document.getElementById("dgo");
 function show(kind,title,state,rows){dk.textContent=kind+(state?" · "+state:"");dt.textContent=title;db.innerHTML=rows;dgo.style.display=kind==="problema"?"none":"";overlay.hidden=false}
-function openNode(n){const p=P.find(x=>x.id===n.p);const rel=L.filter(([a,b])=>a===n.id||b===n.id).map(([a,b,l])=>`<div class="linkline"><b>${l}</b> <span>·</span> <span>${byId[a===n.id?b:a].name}</span></div>`).join("");let rows=`<div class="sect"><p class="k">Problema</p><p><b>${p.title}</b></p><p>${p.why}</p></div>`;rows+=n.tasks&&n.tasks.length?`<div class="sect"><p class="k">Tareas</p>${n.tasks.map((t,i)=>`<div class="taskline"><span>${i+1}</span><span>${t}</span></div>`).join("")}</div>`:`<div class="sect"><p class="k">Tareas</p><p>Sin tareas todavía.</p></div>`;if(rel)rows+=`<div class="sect"><p class="k">Vínculos</p>${rel}</div>`;rows+=`<div class="sect"><p class="k">Actividad</p><p>${n.state} · ${KIND[n.kind]}${n.detail?" · "+n.detail:""}</p></div>`;show(KIND[n.kind],n.name,n.state,rows)}
+function openNode(n){const p=P.find(x=>x.id===n.p);const rel=L.filter(([a,b])=>a===n.id||b===n.id).map(([a,b,l])=>`<div class="linkline"><b>${l}</b> <span>·</span> <span>${byId[a===n.id?b:a].name}</span></div>`).join("");let rows=`<div class="sect"><p class="k">Problema</p><p><b>${p.title}</b></p><p>${p.why}</p></div>`;rows+=n.tasks&&n.tasks.length?`<div class="sect"><p class="k">Tareas</p>${n.tasks.map((t,i)=>`<div class="taskline"><span>${i+1}</span><span>${t}</span></div>`).join("")}</div>`:`<div class="sect"><p class="k">Tareas</p><p>Sin tareas todavía.</p></div>`;if(rel)rows+=`<div class="sect"><p class="k">Vínculos</p>${rel}</div>`;if(n.note)rows+=`<div class="sect"><p class="k">Nota</p><p>${n.note}</p></div>`;show(KIND[n.kind],n.name,n.state,rows)}
 function openProblem(p){const ap=N.filter(n=>n.p===p.id).map(n=>`<div class="taskline"><span>·</span><span>${n.name} — ${n.state}</span></div>`).join("");show("problema",p.title,"",`<div class="sect"><p class="k">Por qué existe</p><p>${p.why}</p></div><div class="sect"><p class="k">Apuestas</p>${ap}</div>`)}
 function close(){overlay.hidden=true;document.querySelectorAll(".node.sel").forEach(el=>el.classList.remove("sel"))}
 document.querySelector(".x").onclick=close;document.getElementById("dclose").onclick=close;overlay.addEventListener("click",e=>{if(e.target===overlay)close()});
 dgo.onclick=()=>{db.insertAdjacentHTML("afterbegin",`<div class="sect"><p class="k">Copiloto</p><p>Acá se abriría una sesión en DSH con el problema, la necesidad y las tareas ya escritas.</p></div>`);dgo.disabled=true};
 document.addEventListener("keydown",e=>{if(e.key==="Escape")close();if(e.key==="0")fit();if(e.key==="+"||e.key==="=")zoomAt(stage.clientWidth/2,stage.clientHeight/2,1.25);if(e.key==="-")zoomAt(stage.clientWidth/2,stage.clientHeight/2,.8)});
 addEventListener("resize",fit);fit();
+const listBody=document.getElementById("listbody");
+listBody.innerHTML=P.map(p=>{const items=N.filter(n=>n.p===p.id);return `<section class="lgroup"><h3>${p.title}</h3><p class="lwhy">${p.why}</p>${items.map(n=>`<button class="lrow" data-state="${n.state}"><span class="lname">${n.name}</span><span class="lstate">${n.state}</span><span class="lmeta">${KIND[n.kind]}${n.detail?" · "+n.detail:""}</span></button>`).join("")}</section>`}).join("");
+listBody.querySelectorAll(".lrow").forEach(b=>{const name=b.querySelector(".lname").textContent;b.onclick=()=>openNode(N.find(n=>n.name===name))});
+const [vMap,vList]=document.querySelectorAll(".seg button");
+function setView(v){document.body.dataset.view=v;vMap.setAttribute("aria-pressed",String(v==="mapa"));vList.setAttribute("aria-pressed",String(v==="lista"));if(v==="mapa")fit()}
+vMap.onclick=()=>setView("mapa");vList.onclick=()=>setView("lista");
 const q=new URLSearchParams(location.search);
-if(q.get("zoom")==="near"){locked=true;const n=byId[q.get("centro")]||byId["mejorar-ui"];view.s=1.35;view.x=stage.clientWidth/2-(n.x+104)*view.s;view.y=stage.clientHeight/2-(n.y+60)*view.s;apply()}
+setView(q.get("vista")||(innerWidth<820?"lista":"mapa"));
+if(q.get("zoom")==="near"){setView("mapa");locked=true;const n=byId[q.get("centro")]||byId["mejorar-ui"];view.s=1.35;view.x=stage.clientWidth/2-(n.x+104)*view.s;view.y=stage.clientHeight/2-(n.y+60)*view.s;apply()}
+if(q.get("foco")){const n=byId[q.get("foco")];if(n)lit(n,true)}
 if(q.get("abierto")){const n=byId[q.get("abierto")];if(n){document.querySelectorAll(".node").forEach(el=>{if(el.querySelector(".name").textContent===n.name)el.classList.add("sel")});openNode(n)}}
 </script>
 </body>
