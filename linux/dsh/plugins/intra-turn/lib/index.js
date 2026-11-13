@@ -14,7 +14,7 @@
 const ROUTE = "/intra-turn/feedforward";
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_DRAFT_CHARS = 4000;
-const MAX_TOKENS = 1500;
+const MAX_TOKENS = 2000;
 const CALL_TIMEOUT_MS = 45_000;
 /**
  * Proveedores como opencode Go rechazan llamadas sin id de sesión (lo usan
@@ -201,17 +201,27 @@ export function apply(ctx) {
 			return;
 		}
 		try {
-			const text = await collectText(ctx.llm, {
-				provider: target.provider,
-				model: target.model,
-				...target.reasoningEffort === void 0 ? {} : { reasoningEffort: target.reasoningEffort },
-				system: SYSTEM,
-				messages: [{ role: "user", content: [{ type: "text", text: draft }] }],
-				maxTokens: MAX_TOKENS,
-				temperature: 0.2,
-				sessionId: ROUTING_SESSION_ID,
-				signal: AbortSignal.timeout(CALL_TIMEOUT_MS)
-			});
+			const call = (reasoningEffort) =>
+				collectText(ctx.llm, {
+					provider: target.provider,
+					model: target.model,
+					...reasoningEffort === void 0 ? {} : { reasoningEffort },
+					system: SYSTEM,
+					messages: [{ role: "user", content: [{ type: "text", text: draft }] }],
+					maxTokens: MAX_TOKENS,
+					temperature: 0.2,
+					sessionId: ROUTING_SESSION_ID,
+					signal: AbortSignal.timeout(CALL_TIMEOUT_MS)
+				});
+			// Sin razonamiento: con el esfuerzo de la sesión el modelo se gastaba los
+			// tokens pensando y el JSON llegaba cortado (la mitad de las veces, vacío).
+			// Si el proveedor no admite "off", se reintenta como la sesión.
+			let text;
+			try {
+				text = await call("off");
+			} catch {
+				text = await call(target.reasoningEffort);
+			}
 			sendJson(res, 200, parsePayload(text, draft));
 		} catch (error) {
 			sendJson(res, 500, {

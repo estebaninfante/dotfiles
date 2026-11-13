@@ -59,7 +59,7 @@ pid en `~/.local/state/webapp/<nombre>/`), espera a que responda y abre
 barra de navegador — y enfoca la que ya está abierta en vez de duplicarla.
 
 Puertos ya tomados: 8777 foldertinder · 3980 dsh-web · 3031/3040 agentes-platform ·
-8791 videolab. Para un proyecto nuevo, elegí uno libre y dejalo en `.webapp.json`.
+8791 lienzo creativo. Para un proyecto nuevo, elegí uno libre y dejalo en `.webapp.json`.
 
 ## Protocolo de proyectos (obligatorio)
 

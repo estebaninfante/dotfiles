@@ -51,7 +51,7 @@
   // levanta su servidor si está apagado. El atajo vive en
   // ~/.local/share/applications/<nombre>.desktop (webapp-launch <dir> --install).
   "proyectos": {"icon":"󰲢","label":"Proyectos"},
-  "proyectos.videolab": {"icon":"󰎁","label":"videolab","aliases":["videolab","videos","descomponer","planos"],"description":"Descomponer un video en planos, ver el ritmo y anotar","action":"~/.local/bin/webapp-launch ~/Proyectos/videolab"},
+  "proyectos.lienzo": {"icon":"󰎁","label":"Lienzo creativo","aliases":["lienzo","lienzo creativo","videos","planos","storyboard"],"description":"Tu espacio creativo: planos de video, imágenes, notas","action":"~/.local/bin/webapp-launch ~/Proyectos/lienzo-creativo"},
   "proyectos.cobalt": {"icon":"󰕄","label":"cobalt","aliases":["cobalt","descargar","bajar video","youtube","musica"],"description":"Descargar video y audio de la web (YouTube, Vimeo, Twitter, Reddit y +15 más)","action":"~/.local/bin/webapp-launch ~/Proyectos/cobalt"},
 
   // Notas y aprendizaje (vault de Logseq en ~/alicia)

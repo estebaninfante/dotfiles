@@ -2,15 +2,21 @@
 """vicio — registra vicios de UI del modelo en el vault ~/alicia.
 
     vicio "botón sin estado de carga"      agrega un vicio
+    vicio -p "texto"                       agrega con la imagen del portapapeles
+    vicio -i ~/foto.png "texto"            agrega con una imagen de un archivo
     vicio -c "texto"                       agrega y captura la pantalla ahora
-    vicio -c -a forms "texto"              con área (para agrupar después)
+    vicio -p -i otra.png "texto"           varias imágenes en el mismo vicio
+    vicio -p                               solo la imagen (el título se pone después)
+    vicio -a forms "texto"                 con área (para agrupar después)
     vicio ls                               lista lo registrado
     vicio ver                              muestra el índice completo
     vicio abrir                            abre el índice en Obsidian/editor
 
 Cada vicio es un nodo de ~/alicia (tipo problema, estado abierto, tag
-`vicios-ui`) colgado del nodo raíz `vicios-de-ui`. El cuerpo del nodo raíz se
-regenera solo: es una tabla con fecha, vicio, área y estado.
+`vicios-ui`) colgado del nodo raíz `vicios-de-ui`. Las imágenes se copian a
+`Areas/vicios-ui/capturas/` del vault, así viajan con Syncthing y se ven en
+Obsidian. El cuerpo del nodo raíz se regenera solo: tabla de vicios + galería de
+capturas.
 
 Esto es solo recolección. El arreglo de cada vicio se decide después, con el
 catálogo a la vista, no en el momento de anotarlo.
@@ -24,6 +30,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -98,6 +105,26 @@ def asegurar_raiz(notas: list[dict]) -> dict:
 
 # ------------------------------------------------------------------ índice
 
+PAT_IMG = re.compile(r"capturas/([^\s\)\]]+)")
+
+
+def _imagenes_de(nota: dict) -> list[str]:
+    """Rutas (relativas al vault) de las imágenes que referencia la ficha."""
+    try:
+        texto = (VAULT / nota["ruta"]).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    vistas, salida = set(), []
+    for nombre in PAT_IMG.findall(texto):
+        if nombre in vistas:
+            continue
+        vistas.add(nombre)
+        ruta = f"{CAPTURAS}/{nombre}"
+        if (VAULT / ruta).exists():
+            salida.append(ruta)
+    return salida
+
+
 def regenerar_indice(notas: list[dict], raiz: dict) -> None:
     """Reescribe el cuerpo del nodo raíz; el frontmatter se respeta tal cual."""
     carpeta = VAULT / CAPTURAS
@@ -109,6 +136,7 @@ def regenerar_indice(notas: list[dict], raiz: dict) -> None:
 
     filas = []
     base = os.path.dirname(raiz["ruta"])
+    galeria: list[tuple[str, str, list[str]]] = []
     for n in vices:
         area = next((t for t in (n.get("tags") or []) if t not in (TAG,)), "—")
         titulo = (n.get("titulo") or n["id"]).replace("|", "\\|")
@@ -117,29 +145,55 @@ def regenerar_indice(notas: list[dict], raiz: dict) -> None:
         # de una tabla se escapa con `\|` y eso ensucia el grafo de alicia.
         destino = os.path.relpath(n["ruta"], base).replace(os.sep, "/")
         filas.append(f"| {fecha} | [{titulo}]({destino}) | {area} | {n.get('estado') or '—'} |")
+        imagenes = _imagenes_de(n)
+        if imagenes:
+            galeria.append((titulo, destino, imagenes))
 
     if filas:
         tabla = "| Fecha | Vicio | Área | Estado |\n|---|---|---|---|\n" + "\n".join(filas)
     else:
         tabla = "_Todavía no hay vicios anotados._"
 
+    # Las imágenes son la evidencia: se ven acá, no hay que abrir cada ficha.
+    tope = 12
+    visibles = galeria[:tope]
+    if visibles:
+        partes = []
+        for titulo, destino, imagenes in visibles:
+            srcs = "\n".join(
+                f'<img src="{os.path.relpath(n, base).replace(os.sep, "/")}" width="420">'
+                for n in imagenes
+            )
+            partes.append(f"**[{titulo}]({destino})**\n\n{srcs}")
+        resto = len(galeria) - len(visibles)
+        cola = f"\n\n_Y {resto} más en sus fichas._" if resto > 0 else ""
+        seccion_img = "## Capturas\n\n" + "\n\n".join(partes) + cola
+    else:
+        seccion_img = "## Capturas\n\n_(todavía no hay imágenes)_"
+
     cuerpo = f"""# {RAIZ_TITULO}
 
 Vicios que comete el modelo al construir UI, anotados por el usuario. El modelo
 no los detecta solo: los detecta quien los ve y los anota acá.
 
-**{len(vices)} anotados · {abiertos} abiertos · actualizado {datetime.now():%Y-%m-%d %H:%M}**
+**{len(vices)} anotados · {abiertos} abiertos · {sum(len(g[2]) for g in galeria)} imágenes ·
+actualizado {datetime.now():%Y-%m-%d %H:%M}**
 
 ## Catálogo
 
 {tabla}
 
+{seccion_img}
+
 ## Cómo se anota
 
 ```bash
-vicio "botón sin estado de carga"    # agrega
-vicio -c "texto"                     # agrega y captura la pantalla
-vicio ls                             # lista
+vicio "botón sin estado de carga"          # agrega con texto
+vicio -p "no se lee el botón"              # + la imagen del portapapeles
+vicio -i ~/foto.png "texto"                # + una imagen de un archivo
+vicio -c "texto"                           # + captura la pantalla ahora
+vicio -p                                   # solo la imagen (título después)
+vicio ls                                   # lista
 ```
 
 Primero se recopila; los arreglos se deciden después, con el catálogo a la vista.
@@ -157,42 +211,122 @@ Primero se recopila; los arreglos se deciden después, con el catálogo a la vis
     os.replace(tmp, archivo)
 
 
-# ------------------------------------------------------------------ captura
+# ------------------------------------------------------------------ imágenes
 
-def capturar(texto: str) -> str | None:
+EXT_IMG = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"}
+
+
+def _nombre_imagen(etiqueta: str, ext: str) -> Path:
+    destino_dir = VAULT / CAPTURAS
+    destino_dir.mkdir(parents=True, exist_ok=True)
+    base = f"{datetime.now():%Y%m%d-%H%M%S}-{slug(etiqueta)}"
+    destino = destino_dir / f"{base}{ext}"
+    n = 2
+    while destino.exists():  # varias imágenes en el mismo segundo
+        destino = destino_dir / f"{base}-{n}{ext}"
+        n += 1
+    return destino
+
+
+def guardar_imagen(origen: Path, etiqueta: str) -> str | None:
+    """Copia una imagen al vault y devuelve su nombre de archivo."""
+    origen = origen.expanduser().resolve()
+    if not origen.exists():
+        print(f"vicio: no existe la imagen {origen}", file=sys.stderr)
+        return None
+    if not origen.is_file():
+        print(f"vicio: {origen} no es un archivo", file=sys.stderr)
+        return None
+    ext = origen.suffix.lower()
+    if ext not in EXT_IMG:
+        print(f"vicio: {origen.name} no parece imagen ({', '.join(sorted(EXT_IMG))})", file=sys.stderr)
+        return None
+    destino = _nombre_imagen(etiqueta, ext)
+    shutil.copy2(origen, destino)
+    return destino.name
+
+
+def capturar(etiqueta: str) -> str | None:
+    """Pantalla completa ahora mismo."""
     if not shutil.which("grim"):
         print("vicio: no hay grim; sigo sin captura", file=sys.stderr)
         return None
-    destino_dir = VAULT / CAPTURAS
-    destino_dir.mkdir(parents=True, exist_ok=True)
-    nombre = f"{datetime.now():%Y%m%d-%H%M%S}-{slug(texto)}.png"
-    destino = destino_dir / nombre
+    destino = _nombre_imagen(etiqueta, ".png")
     r = subprocess.run(["grim", str(destino)], capture_output=True, text=True)
     if r.returncode != 0 or not destino.exists():
         print(f"vicio: la captura falló: {r.stderr.strip()}", file=sys.stderr)
         return None
-    return nombre
+    return destino.name
+
+
+def pegar(etiqueta: str) -> str | None:
+    """La imagen que está en el portapapeles (shot, captura del celular, copiar imagen)."""
+    if not shutil.which("wl-paste"):
+        print("vicio: no hay wl-paste; no puedo leer el portapapeles", file=sys.stderr)
+        return None
+    tipos = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True)
+    opciones = [t.strip() for t in tipos.stdout.splitlines() if t.strip().startswith("image/")]
+    if not opciones:
+        print("vicio: el portapapeles no tiene una imagen (copiá una captura y reintentá)",
+              file=sys.stderr)
+        return None
+    mime = opciones[0]
+    datos = subprocess.run(["wl-paste", "--type", mime], capture_output=True)
+    if datos.returncode != 0 or not datos.stdout:
+        print("vicio: no pude leer la imagen del portapapeles", file=sys.stderr)
+        return None
+    ext = "." + mime.split("/", 1)[1].split("+")[0]
+    ext = ext if ext in EXT_IMG else ".png"
+    destino = _nombre_imagen(etiqueta, ext)
+    destino.write_bytes(datos.stdout)
+    return destino.name
+
 
 
 # ------------------------------------------------------------------ comandos
 
-def agregar(texto: str, area: str | None, donde: str | None, con_captura: bool,
-            forzar: bool, repite: bool) -> int:
+def agregar(texto: str, area: str | None, donde: str | None, archivos: list[str],
+            captura_ahora: bool, pegar_ahora: bool, forzar: bool, repite: bool) -> int:
     texto = texto.strip()
-    if not texto:
-        die("falta el texto del vicio")
+    if not texto and not (archivos or captura_ahora or pegar_ahora):
+        die("falta el texto del vicio (o al menos una imagen: -c, -p o -i <archivo>)")
+
+    etiqueta = texto or "captura"
+    if texto:
+        titulo = texto
+    else:
+        # Se puede anotar solo la imagen: el título se pone después en Obsidian.
+        titulo = f"captura {datetime.now():%Y-%m-%d %H:%M}"
+        texto = "(solo la imagen)"
 
     notas = grafo()["nodos"]
     raiz = asegurar_raiz(notas)
 
-    captura = capturar(texto) if con_captura else None
+    imagenes: list[str] = []
+    if captura_ahora:
+        nombre = capturar(etiqueta)
+        if nombre:
+            imagenes.append(nombre)
+    if pegar_ahora:
+        nombre = pegar(etiqueta)
+        if nombre:
+            imagenes.append(nombre)
+    for archivo in archivos:
+        nombre = guardar_imagen(Path(archivo), etiqueta)
+        if nombre:
+            imagenes.append(nombre)
 
     cuerpo = [f"## Qué vi\n{texto}", ""]
     cuerpo += [f"## Dónde\n{donde or '(sin ubicar)'}", ""]
-    cuerpo += [f"## Captura\n{('![captura](capturas/' + captura + ')') if captura else '(sin captura)'}", ""]
+    if imagenes:
+        cuerpo += ["## Capturas"]
+        cuerpo += [f"![captura](capturas/{n})" for n in imagenes]
+        cuerpo += [""]
+    else:
+        cuerpo += ["## Capturas\n(sin captura)", ""]
     cuerpo += ["## Arreglo\n(pendiente — se decide con el catálogo a la vista)", ""]
 
-    args = ["nuevo", "--tipo", "problema", "--titulo", texto, "--padres", RAIZ_ID,
+    args = ["nuevo", "--tipo", "problema", "--titulo", titulo, "--padres", RAIZ_ID,
             "--carpeta", CARPETA, "--estado", "abierto",
             "--tags", f"{TAG},{area}" if area else TAG,
             "--cuerpo", "\n".join(cuerpo)]
@@ -213,10 +347,11 @@ def agregar(texto: str, area: str | None, donde: str | None, con_captura: bool,
 
     rel = (r.stdout.strip().splitlines() or [""])[-1]
     print(f"anotado: {rel}")
-    if captura:
-        print(f"captura: {CAPTURAS}/{captura}")
+    for nombre in imagenes:
+        print(f"imagen: {CAPTURAS}/{nombre}")
     regenerar_indice(grafo()["nodos"], raiz)
-    print(f"catálogo: {len([n for n in grafo()['nodos'] if TAG in (n.get('tags') or []) and n['id'] != RAIZ_ID])} vicios")
+    total = [n for n in grafo()["nodos"] if TAG in (n.get("tags") or []) and n["id"] != RAIZ_ID]
+    print(f"catálogo: {len(total)} vicios")
     return 0
 
 
@@ -285,7 +420,8 @@ def ayuda() -> int:
 
 def main(argv: list[str]) -> int:
     area = donde = None
-    con_captura = forzar = repite = False
+    con_captura = pegar_ahora = forzar = repite = False
+    archivos: list[str] = []
     texto: list[str] = []
 
     i = 0
@@ -295,6 +431,12 @@ def main(argv: list[str]) -> int:
             return ayuda()
         elif a in ("-c", "--captura"):
             con_captura = True
+        elif a in ("-p", "--pegar"):
+            pegar_ahora = True
+        elif a in ("-i", "--imagen"):
+            i += 1
+            if i < len(argv):
+                archivos.append(argv[i])
         elif a in ("-a", "--area"):
             i += 1
             area = argv[i] if i < len(argv) else None
@@ -315,7 +457,8 @@ def main(argv: list[str]) -> int:
             texto.append(a)
         i += 1
 
-    return agregar(" ".join(texto), area, donde, con_captura, forzar, repite)
+    return agregar(" ".join(texto), area, donde, archivos, con_captura, pegar_ahora,
+                   forzar, repite)
 
 
 if __name__ == "__main__":
