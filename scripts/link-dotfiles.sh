@@ -220,6 +220,23 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
             && ok "perfil web: dsh-local-bash-guard instalado" \
             || warn "no pude instalar bash-guard (correr: dsh plugin --profile web add link:~/.dsh/plugins/bash-guard)"
     fi
+
+    # Búsqueda web con RustXNG: el tool web_search deja de usar la API paga de
+    # DeepSeek; el provider levanta el servicio local solo cuando se necesita.
+    if [ -f "$PATCH" ] && ! grep -q "local-web-search-rustxng" "$PATCH"; then
+        printf '\n# Búsqueda web con RustXNG: el provider levanta el servicio solo cuando se usa.\n- insert:\n    - id: local-web-search-rustxng\n      name: dsh-local-web-search-rustxng\n' >> "$PATCH"
+        ok "patch del perfil web: + local-web-search-rustxng"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-web-search-rustxng" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "link:${HOME}/.dsh/plugins/web-search-rustxng" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-web-search-rustxng instalado" \
+            || warn "no pude instalar web-search-rustxng (correr: dsh plugin --profile web add link:~/.dsh/plugins/web-search-rustxng)"
+    fi
+    # El seam web apunta al provider: deepseek-official (pago) → rustxng (local).
+    if [ -f "$PATCH" ] && ! grep -q "searchProvider: rustxng" "$PATCH"; then
+        printf '\n# El tool web_search sale por RustXNG, no por la API paga de DeepSeek.\n- id: web\n  config:\n    searchProvider: rustxng\n' >> "$PATCH"
+        ok "patch del perfil web: web.searchProvider=rustxng"
+    fi
 fi
 if [ -d "${REPO}/linux/agents/skills" ]; then
     mkdir -p "${HOME}/.agents/skills"
