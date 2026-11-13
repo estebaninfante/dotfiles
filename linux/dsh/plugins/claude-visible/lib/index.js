@@ -234,12 +234,23 @@ function tailLines(dir, wanted) {
  * No hay id de sesión guardado: se usa la transcripción más reciente, que es la
  * de la delegación que está corriendo. Es una heurística y se dice como tal.
  */
-function liveSteps(limit = 14) {
+function liveSteps(dir, limit = 14) {
   const root = join(homedir(), '.claude', 'projects')
   if (!existsSync(root)) return { steps: [], file: '' }
-  let newest = null
-  for (const dir of readdirSync(root)) {
-    const full = join(root, dir)
+
+  // Un pedazo del brief que tiene que estar en la transcripción de esa corrida.
+  let needle = ''
+  try {
+    needle = readFileSync(join(dir, 'brief.md'), 'utf8')
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 30 && !line.startsWith('#') && !line.startsWith('---')) ?? ''
+    needle = needle.slice(0, 90)
+  } catch {}
+
+  const candidates = []
+  for (const sub of readdirSync(root)) {
+    const full = join(root, sub)
     let entries = []
     try {
       entries = readdirSync(full).filter((f) => f.endsWith('.jsonl'))
@@ -247,37 +258,55 @@ function liveSteps(limit = 14) {
       continue
     }
     for (const file of entries) {
-      const path = join(full, file)
       try {
-        const info = statSync(path)
-        if (!newest || info.mtimeMs > newest.mtimeMs) newest = { path, mtimeMs: info.mtimeMs }
+        const info = statSync(join(full, file))
+        if (Date.now() - info.mtimeMs < 6 * 60 * 60 * 1000) candidates.push({ path: join(full, file), mtimeMs: info.mtimeMs })
       } catch {}
     }
   }
-  if (!newest) return { steps: [], file: '' }
-  // Si la transcripción es vieja, no es de esta corrida.
-  if (Date.now() - newest.mtimeMs > 30 * 60 * 1000) return { steps: [], file: newest.path }
-  const steps = []
-  try {
-    for (const line of readFileSync(newest.path, 'utf8').split('\n')) {
-      if (!line.trim()) continue
-      let entry
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+  let chosen = ''
+  let raw = ''
+  if (needle) {
+    for (const candidate of candidates.slice(0, 12)) {
       try {
-        entry = JSON.parse(line)
-      } catch {
-        continue
-      }
-      if (entry?.type !== 'assistant') continue
-      for (const part of entry.message?.content ?? []) {
-        if (part?.type !== 'tool_use') continue
-        const arg = part.input?.command ?? part.input?.file_path ?? part.input?.description ?? part.input?.pattern ?? ''
-        steps.push(`${part.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 150)}`)
-      }
+        const text = readFileSync(candidate.path, 'utf8')
+        if (text.includes(needle)) {
+          chosen = candidate.path
+          raw = text
+          break
+        }
+      } catch {}
     }
-  } catch {
-    return { steps: [], file: newest.path }
   }
-  return { steps: steps.slice(-limit), file: newest.path }
+  if (!chosen && candidates.length > 0 && Date.now() - candidates[0].mtimeMs < 30 * 60 * 1000) {
+    chosen = candidates[0].path
+    try {
+      raw = readFileSync(chosen, 'utf8')
+    } catch {
+      raw = ''
+    }
+  }
+  if (!chosen) return { steps: [], file: '' }
+
+  const steps = []
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue
+    let entry
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (entry?.type !== 'assistant') continue
+    for (const part of entry.message?.content ?? []) {
+      if (part?.type !== 'tool_use') continue
+      const arg = part.input?.command ?? part.input?.file_path ?? part.input?.description ?? part.input?.pattern ?? ''
+      steps.push(`${part.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 150)}`)
+    }
+  }
+  return { steps: steps.slice(-limit), file: chosen }
 }
 
 /** Ficha de cada delegación: nombre, estado, última línea y tamaño del log. */
@@ -333,7 +362,7 @@ function registerRoutes(ctx) {
       const running = isRunning(dir)
       const { text, total } = tailLines(dir, lines)
       if (!text && running) {
-        const { steps, file } = liveSteps()
+        const { steps, file } = liveSteps(dir)
         sendJson(res, 200, {
           name: dir.split('/').pop(),
           running,
