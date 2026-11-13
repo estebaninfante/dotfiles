@@ -162,38 +162,52 @@ saved_transform = function(output, fallback)
     return transform
 end
 
--- En vertical (pantalla alta y angosta) el layout es `scrolling` con las columnas
--- hacia abajo: cada ventana ocupa una franja horizontal de ancho completo.
+-- En vertical (pantalla alta y angosta) el layout de la VERTICAL es `scrolling`
+-- con las columnas hacia abajo: cada ventana ocupa una franja horizontal de ancho
+-- completo.
 --
 --   column_width = 1/3  -> tres ventanas quedan como tres franjas IGUALES de arriba
 --                          abajo (673 / 666 / 673 en el panel de 1440x2560).
 --   fullscreen_on_one_column = true -> con UNA sola ventana ocupa la pantalla
 --                          entera (con false quedaba en un tercio).
 --
--- Antes estaba `master` con mfact 1/3: daba tres alturas iguales pero las dos de
--- abajo iban LADO A LADO en vez de una debajo de otra.
+-- OJO: `general.layout` es UNA sola cosa para todo el compositor. Con `scrolling`
+-- global, el panel interno (horizontal) también se llenaba de franjas. Por eso el
+-- layout va por regla de workspace: la laptop siempre dwindle, la vertical
+-- scrolling (o master si el .so todavía no conoce scrolling_overview).
 --
 -- Con `scrolling` hyprexpo abria su vista nativa por columnas (se veia como un
 -- bloque gris y negro) en vez de la grilla de workspaces. El fork agrega
 -- plugin:hyprexpo:scrolling_overview (en 0 desde plugins/hyprexpo.lua) para usar
 -- siempre la grilla. Si el .so cargado todavia no conoce esa opcion (build viejo,
 -- falta reiniciar Hyprland), se queda en `master` para no romper la grilla.
--- En horizontal vuelve dwindle, que es lo de siempre.
+-- En horizontal la vertical también vuelve dwindle, que es lo de siempre.
 apply_orientation_layout = function(transform)
-    if transform % 2 == 1 then
+    local vertical = transform % 2 == 1
+    local external_layout, external_opts
+
+    -- El panel interno (eDP) siempre dwindle: es horizontal.
+    hl.config({ general = { layout = "dwindle" } })
+
+    if vertical then
         if hl.get_config("plugin:hyprexpo:scrolling_overview") ~= nil then
-            hl.config({
-                general = { layout = "scrolling" },
-                scrolling = { direction = "down", column_width = 0.3333, fullscreen_on_one_column = true }
-            })
+            external_layout = "scrolling"
+            external_opts = { direction = "down", column_width = 0.3333, fullscreen_on_one_column = true }
+            hl.config({ scrolling = { direction = "down", column_width = 0.3333, fullscreen_on_one_column = true } })
         else
-            hl.config({
-                general = { layout = "master" },
-                master = { orientation = "top", new_status = "slave", mfact = 0.3333 }
-            })
+            external_layout = "master"
+            external_opts = { orientation = "top", new_status = "slave", mfact = 0.3333 }
+            hl.config({ master = { orientation = "top", new_status = "slave", mfact = 0.3333 } })
         end
     else
-        hl.config({ general = { layout = "dwindle" } })
+        external_layout = "dwindle"
+    end
+
+    for index = 1, spaces.SET_SIZE do
+        hl.workspace_rule({ workspace = tostring(spaces.PRIMARY_BASE + index - 1), layout = "dwindle" })
+        local spec = { workspace = tostring(spaces.EXTERNAL_BASE + index - 1), layout = external_layout }
+        if external_opts ~= nil then spec.layout_opts = external_opts end
+        hl.workspace_rule(spec)
     end
 end
 
