@@ -41,11 +41,12 @@ Señales de que ya te estancaste:
 2. Escribí el brief completo (plantilla en la skill): síntoma exacto con evidencia,
    entorno y sus trampas, **las variantes ya probadas y qué pasó con cada una**, qué no
    se puede romper y cómo verificar.
-3. `delegar-claude start <brief.md> --name <tema>` y avisale al usuario que Claude
-   está corriendo.
-4. Al terminar, leé su resumen (`delegar-claude read`), **verificá vos** lo que dice y
-   pasale al usuario: qué cambió, con qué evidencia, qué reinicios hubo y qué queda de
-   su lado (sudo, relogin, prueba manual).
+3. Lanzalo con la herramienta `subagent`: el brief va **en el prompt** y el subagente lo
+   pasa a Claude por **stdin** (`claude -p --permission-mode bypassPermissions <<'BRIEF' …`).
+   **No hay `brief.md`, ni `out.log`, ni `delegar-claude`** (el helper se eliminó).
+4. Al terminar, leé su reporte, **verificá vos** lo que dice y pasale al usuario: qué
+   cambió, con qué evidencia, qué reinicios hubo y qué queda de su lado (sudo, relogin,
+   prueba manual).
 
 ## Regla de honestidad
 
@@ -62,7 +63,10 @@ Al terminarlo:
 
 1. Dejá `<dir>/.webapp.json` con `name`, `title`, `comment`, `port`, `cmd`, `url`,
    `icon`, `pattern`. Para servidores propios, `cmd` es el comando que los levanta
-   en primer plano (`python3 videolab.py serve --no-browser`, `npm run dev`, …).
+   en primer plano (`npm run dev`, `$HOME/.local/share/mise/shims/pnpm start`, …).
+   **Si el comando lo instala mise/pnpm, escribí la ruta absoluta del shim**
+   (`$HOME/.local/share/mise/shims/...`): el lanzador corre con
+   `PATH=/usr/local/bin:/usr/bin:/bin` y `pnpm` a secas no existe ahí.
 2. `webapp-launch <dir> --install` crea el `.desktop`; versioná ese archivo en
    `linux/config/applications/` y enlazalo (link-dotfiles lo hace solo).
    **El `Exec` va con ruta absoluta** (`/home/<user>/.local/bin/webapp-launch`): el
