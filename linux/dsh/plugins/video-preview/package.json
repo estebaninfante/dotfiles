@@ -1,0 +1,18 @@
+{
+  "name": "dsh-local-video-preview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Previsualización de video en el panel lateral, con streaming y Range (sin cargar el archivo entero)",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  }
+}
