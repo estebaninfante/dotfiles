@@ -289,11 +289,21 @@ esac
 # ── abrir ─────────────────────────────────────────────────────────────────
 if [[ -n $SERVICE ]] && ! http_ok; then
   say "arrancando $SERVICE…"
-  systemctl --user start "$SERVICE" >/dev/null 2>&1 || true
+  if ! systemctl --user start "$SERVICE" 2>/dev/null; then
+    say "no pude arrancar $SERVICE (¿sesión sin bus?). Probá: systemctl --user start $SERVICE" >&2
+    notify critical "$TITLE" "No pude arrancar $SERVICE"
+    exit 1
+  fi
   for ((i = 0; i < WAIT_SECS * 4; i++)); do
     http_ok && break
     sleep 0.25
   done
+  if ! http_ok; then
+    say "── $SERVICE no responde ──" >&2
+    systemctl --user status "$SERVICE" --no-pager -n 8 2>&1 | tail -8 >&2
+    notify critical "$TITLE" "$SERVICE no respondió"
+    exit 1
+  fi
 fi
 
 if http_ok; then
