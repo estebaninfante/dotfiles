@@ -42,11 +42,17 @@ const allowed = [
 	["sed sin -i", "sed -n '1,10p' archivo.md"],
 	["flecha en un mensaje", "git commit -m 'antes -> despues'"],
 	["comparación", "test 3 -ge 2 && [ 5 >= 3 ]"],
+	["lectura en sustitución", "ps -o pid,cmd -p $(cat /run/user/1000/dictado/x.pid 2>/dev/null) 2>/dev/null"],
+	["redirección citada a /dev/null", 'cmd 2>"/dev/null"'],
+	["flecha dentro de comillas", 'echo "a > b"'],
 ];
 
 const denied = [
 	["redirect con echo", "echo hola > notas.md"],
 	["redirect append", "printf 'x\\n' >> notas.md"],
+	["redirect sin espacios", "echo hola>notas.md"],
+	["redirect citado a archivo", 'cmd 2>"/tmp/errores.log"'],
+	["ambos fds a archivo", "cmd &> salida.log"],
 	["redirect con heredoc", "cat <<'EOF' > notas.md\nhola\nEOF"],
 	["redirect de stderr a archivo", "cmd 2> errores.log"],
 	["sed -i", "sed -i 's/a/b/' notas.md"],

@@ -14,7 +14,7 @@
 const ROUTE = "/intra-turn/feedforward";
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_DRAFT_CHARS = 4000;
-const MAX_TOKENS = 2000;
+const MAX_TOKENS = 600;
 const CALL_TIMEOUT_MS = 45_000;
 /**
  * Proveedores como opencode Go rechazan llamadas sin id de sesión (lo usan
@@ -37,9 +37,9 @@ const SYSTEM = [
 	'{"assumptions":[{"quote":"...","emoji":"🗺️","question":"...","label":"...","value":"...","options":["...","..."]}],"missing":[{"quote":"...","question":"...","options":["...","..."]}]}',
 	"quote: copiá LITERAL de 1 a 4 palabras del borrador (mismas letras, mayúsculas y tildes) que disparan esa interpretación o pregunta. Nunca inventes ni parafrasees el quote.",
 	"QUESTION es lo más importante: una pregunta real, en segunda persona, terminada en '?', que se entienda sola y diga qué hay que decidir (ej. '¿Cómo querés que se diferencien?', '¿Qué edad tienen los chicos?', '¿Qué parte de Japón?'). Nunca una etiqueta de una o dos palabras.",
-	"assumptions: 1 a 3 cosas que el agente va a decidir solo y que podrían estar mal (alcance, formato, profundidad, destino, a quién va dirigido). Cada una con un quote distinto.",
+	"assumptions: 1 a 2 cosas que el agente va a decidir solo y que podrían estar mal (alcance, formato, profundidad, destino, a quién va dirigido). Cada una con un quote distinto.",
 	"label: el aspecto, máximo 4 palabras (ej. 'Formato', 'Destino', 'Nivel de detalle'). value: lo que va a asumir, máximo 6 palabras. options: 2 o 3 alternativas reales, distintas de value, máximo 5 palabras cada una. emoji: uno solo que represente el aspecto.",
-	"missing: 0 a 3 datos que faltan y que cambiarían la respuesta. question es la pregunta (ej. '¿Qué edad tienen?'), options 2 a 5 respuestas cortas. Varias preguntas pueden compartir el mismo quote.",
+	"missing: 0 a 2 datos que faltan y que cambiarían la respuesta. question es la pregunta (ej. '¿Qué edad tienen?'), options 2 a 4 respuestas cortas. Varias preguntas pueden compartir el mismo quote.",
 	"Escribí label, value y options en el idioma del borrador. Prohibido explicar, saludar o agregar claves. Si el pedido ya es preciso, devolvé listas vacías."
 ].join(" ");
 

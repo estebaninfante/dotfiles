@@ -29,7 +29,10 @@ const DENIED =
 	"Para datos de prueba generados, creá el archivo con `write`.";
 
 /** Destinos de redirección que no escriben un archivo real. */
-const HARMLESS_TARGET = /^\/(?:dev\/(?:null|stdout|stderr|zero|full)|proc\/self\/fd\/[0-9]+)$/;
+const HARMLESS_TARGET = /^\/(?:dev\/(?:null|stdout|stderr|zero|full|fd\/[0-9]+)|proc\/self\/fd\/[0-9]+)$/;
+
+/** Caracteres que cortan un destino de redirección (`2>/dev/null)` corta en `)`). */
+const TARGET_END = /[\s|;&<>()]/;
 
 /** Intérpretes y comandos que escriben archivos en el mismo comando. */
 const WRITE_PATTERNS = [
@@ -61,14 +64,76 @@ const PY_WRITE_CALLS = [
 ];
 
 /**
- * Redirección que escribe un archivo (`>`, `>>`, `2>`, `&>`), salvo `/dev/*`.
+ * Lee el destino de una redirección, respetando comillas y escapes.
+ * `2>"/dev/null"` da `/dev/null`; `2>/dev/null)` corta en `)`.
+ * @param {string} command
+ * @param {number} start
+ * @returns {{ target: string, next: number }}
+ */
+function readTarget(command, start) {
+	let target = "";
+	let quote = null;
+	let i = start;
+	for (; i < command.length; i++) {
+		const ch = command[i];
+		if (ch === "\\" && quote !== "'") {
+			i++;
+			if (i < command.length) target += command[i];
+			continue;
+		}
+		if (quote) {
+			if (ch === quote) quote = null;
+			else target += ch;
+			continue;
+		}
+		if (ch === "'" || ch === '"') {
+			quote = ch;
+			continue;
+		}
+		if (TARGET_END.test(ch)) break;
+		target += ch;
+	}
+	return { target, next: i };
+}
+
+/**
+ * Redirección que escribe un archivo (`>`, `>>`, `&>`, `2>`), salvo `/dev/*`.
+ *
+ * Mira el comando fuera de comillas: `echo "a > b"` no redirige y
+ * `ps -p $(cat x.pid 2>/dev/null)` no escribe. No confunde flechas (`->`) ni
+ * comparaciones (`>=`).
  * @param {string} command
  * @returns {boolean}
  */
 function redirectsToFile(command) {
-	for (const match of command.matchAll(/(?:^|[^&<\-=])>{1,2}(?!&|=)\s*([^\s|;&<>]+)/g)) {
-		if (HARMLESS_TARGET.test(match[1])) continue;
-		return true;
+	let quote = null;
+	for (let i = 0; i < command.length; i++) {
+		const ch = command[i];
+		if (ch === "\\" && quote !== "'") {
+			i++;
+			continue;
+		}
+		if (quote) {
+			if (ch === quote) quote = null;
+			continue;
+		}
+		if (ch === "'" || ch === '"') {
+			quote = ch;
+			continue;
+		}
+		if (ch !== ">") continue;
+		if (command[i + 1] === "&" || command[i + 1] === "=") {
+			i++;
+			continue;
+		}
+		const prev = command[i - 1] ?? "";
+		if (prev === "-" || prev === "<" || prev === "=") continue;
+		let j = i + 1;
+		if (command[j] === ">") j++;
+		while (command[j] === " " || command[j] === "\t") j++;
+		const { target, next } = readTarget(command, j);
+		if (!HARMLESS_TARGET.test(target)) return true;
+		i = Math.max(i, next - 1);
 	}
 	return false;
 }
