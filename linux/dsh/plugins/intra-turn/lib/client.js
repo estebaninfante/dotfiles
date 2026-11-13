@@ -47,6 +47,7 @@ window.__ModuleLoader__.load({
 		 * comparten fragmento: una tarjeta por fragmento, como "kids" en la demo.
 		 */
 		let items = [];
+		let observedSession = "";
 		let groups = [];
 		/** Respuestas del usuario, por clave "quote|label": sobreviven a un análisis nuevo. */
 		const answers = new Map();
@@ -754,10 +755,16 @@ window.__ModuleLoader__.load({
 			paintMarks();
 			renderSummary();
 			if (card) placeCard();
-			if (text.length < MIN_CHARS) {
+			if (text.trim().length === 0) {
 				seq++;
 				inflight?.abort();
 				if (items.length > 0) clearAll();
+				lastAnalyzed = "";
+				return;
+			}
+			if (text.length < MIN_CHARS) {
+				seq++;
+				inflight?.abort();
 				lastAnalyzed = "";
 				return;
 			}
@@ -770,7 +777,12 @@ window.__ModuleLoader__.load({
 			}, DEBOUNCE_MS);
 		}
 
-		/** Engancha el observer al editor actual (cambia al cambiar de sesión). */
+		/**
+		 * Engancha el observer al editor actual. Lexical **reemplaza el nodo** al
+		 * re-renderizar (al elegir una opción, al cambiar de foco), y eso NO es una
+		 * sesión nueva: si se limpiara todo, se perderían los subrayados de golpe.
+		 * Solo se limpia cuando cambia de verdad la sesión.
+		 */
 		function observe() {
 			const editor = composer();
 			if (!editor || editor === observed) return;
@@ -778,8 +790,17 @@ window.__ModuleLoader__.load({
 			observed = editor;
 			observer = new MutationObserver(schedule);
 			observer.observe(editor, { childList: true, subtree: true, characterData: true });
-			clearAll();
-			lastAnalyzed = "";
+			const session = sessionIdOf();
+			if (session && session !== observedSession) {
+				observedSession = session;
+				clearAll();
+				lastAnalyzed = "";
+				return;
+			}
+			// Mismo nodo lógico, DOM nuevo: se reubican los fragmentos y se sigue.
+			locateRanges();
+			paintMarks();
+			renderSummary();
 		}
 
 		/* ------------------------------------------------------- eventos globales */
