@@ -228,6 +228,21 @@ def _nombre_imagen(etiqueta: str, ext: str) -> Path:
     return destino
 
 
+def _ext_por_contenido(cabeza: bytes) -> str | None:
+    """Las imágenes que llegan de un chat o de un portapapeles no traen extensión."""
+    if cabeza.startswith(b"\x89PNG"):
+        return ".png"
+    if cabeza.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if cabeza.startswith(b"GIF8"):
+        return ".gif"
+    if cabeza.startswith(b"RIFF") and cabeza[8:12] == b"WEBP":
+        return ".webp"
+    if cabeza[4:12] in (b"ftypavif", b"ftypavis"):
+        return ".avif"
+    return None
+
+
 def guardar_imagen(origen: Path, etiqueta: str) -> str | None:
     """Copia una imagen al vault y devuelve su nombre de archivo."""
     origen = origen.expanduser().resolve()
@@ -239,10 +254,16 @@ def guardar_imagen(origen: Path, etiqueta: str) -> str | None:
         return None
     ext = origen.suffix.lower()
     if ext not in EXT_IMG:
-        print(f"vicio: {origen.name} no parece imagen ({', '.join(sorted(EXT_IMG))})", file=sys.stderr)
-        return None
+        # Sin extensión (adjunto de un chat): manda el contenido, no el nombre.
+        with origen.open("rb") as f:
+            ext = _ext_por_contenido(f.read(16)) or ""
+        if not ext:
+            print(f"vicio: {origen.name} no parece imagen ({', '.join(sorted(EXT_IMG))})",
+                  file=sys.stderr)
+            return None
     destino = _nombre_imagen(etiqueta, ext)
     shutil.copy2(origen, destino)
+    os.chmod(destino, 0o644)  # los adjuntos de un chat vienen en 0400
     return destino.name
 
 
@@ -286,17 +307,18 @@ def pegar(etiqueta: str) -> str | None:
 # ------------------------------------------------------------------ comandos
 
 def agregar(texto: str, area: str | None, donde: str | None, archivos: list[str],
-            captura_ahora: bool, pegar_ahora: bool, forzar: bool, repite: bool) -> int:
+            captura_ahora: bool, pegar_ahora: bool, forzar: bool, repite: bool,
+            titulo_override: str | None = None) -> int:
     texto = texto.strip()
     if not texto and not (archivos or captura_ahora or pegar_ahora):
         die("falta el texto del vicio (o al menos una imagen: -c, -p o -i <archivo>)")
 
-    etiqueta = texto or "captura"
+    etiqueta = titulo_override or texto or "captura"  # las imágenes se nombran por el título
     if texto:
-        titulo = texto
+        titulo = titulo_override or texto
     else:
         # Se puede anotar solo la imagen: el título se pone después en Obsidian.
-        titulo = f"captura {datetime.now():%Y-%m-%d %H:%M}"
+        titulo = titulo_override or f"captura {datetime.now():%Y-%m-%d %H:%M}"
         texto = "(solo la imagen)"
 
     notas = grafo()["nodos"]
@@ -419,7 +441,7 @@ def ayuda() -> int:
 
 
 def main(argv: list[str]) -> int:
-    area = donde = None
+    area = donde = titulo = None
     con_captura = pegar_ahora = forzar = repite = False
     archivos: list[str] = []
     texto: list[str] = []
@@ -437,6 +459,9 @@ def main(argv: list[str]) -> int:
             i += 1
             if i < len(argv):
                 archivos.append(argv[i])
+        elif a in ("-t", "--titulo"):
+            i += 1
+            titulo = argv[i] if i < len(argv) else None
         elif a in ("-a", "--area"):
             i += 1
             area = argv[i] if i < len(argv) else None
@@ -458,7 +483,7 @@ def main(argv: list[str]) -> int:
         i += 1
 
     return agregar(" ".join(texto), area, donde, archivos, con_captura, pegar_ahora,
-                   forzar, repite)
+                   forzar, repite, titulo)
 
 
 if __name__ == "__main__":

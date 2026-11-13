@@ -222,7 +222,7 @@ export function apply(ctx) {
 			} catch {
 				text = await call(target.reasoningEffort);
 			}
-			sendJson(res, 200, parsePayload(text, draft));
+			sendJson(res, 200, payload?.debug === true ? { ...parsePayload(text, draft), raw: text } : parsePayload(text, draft)); // DEBUG-TEMP
 		} catch (error) {
 			sendJson(res, 500, {
 				error: "llm-failed",
