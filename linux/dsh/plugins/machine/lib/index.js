@@ -289,29 +289,41 @@ export function apply(ctx) {
 		},
 	];
 
+	// El webServer registra **un handler por path**: GET y POST del mismo path
+	// tienen que entrar por la misma puerta y despacharse adentro.
+	const byPath = new Map();
 	for (const route of routes) {
+		if (!byPath.has(route.path)) byPath.set(route.path, {});
+		const methods = byPath.get(route.path);
+		if (methods[route.method]) throw new Error(`machine: ruta duplicada ${route.method} ${route.path}`);
+		methods[route.method] = route.handler;
+	}
+
+	for (const [path, methods] of byPath) {
 		ctx.effect(
 			() =>
 				ctx.webServer.register({
 					kind: "exact",
-					path: route.path,
+					path,
 					handler: async (req, res) => {
-						if ((req.method ?? "GET") !== route.method) {
-							sendJson(res, 405, { error: "method-not-allowed" });
+						const method = req.method ?? "GET";
+						const handler = methods[method];
+						if (!handler) {
+							sendJson(res, 405, { error: "method-not-allowed", allow: Object.keys(methods) });
 							return;
 						}
-						if (route.method === "POST" && req.headers["x-dsh-machine"] !== "1") {
+						if (method === "POST" && req.headers["x-dsh-machine"] !== "1") {
 							sendJson(res, 403, { error: "forbidden" });
 							return;
 						}
 						try {
-							await route.handler(req, res);
+							await handler(req, res);
 						} catch (error) {
 							fail(res, error);
 						}
 					},
 				}),
-			`machine: route ${route.path}`,
+			`machine: route ${path}`,
 		);
 	}
 

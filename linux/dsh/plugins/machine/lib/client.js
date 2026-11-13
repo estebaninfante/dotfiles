@@ -22,6 +22,8 @@ window.__ModuleLoader__.load({
 		const PANEL_ID = "machine";
 		const STYLE_ID = "dsh-machine-style";
 		const TRASH_DIR = "~/.local/share/machine/trash/";
+		const RETENTION_DAYS = 30;
+		const WIPE_WORD = "VACIAR";
 		const STATES = ["unclassified", "active", "paused", "done", "archived"];
 		const LABEL = {
 			unclassified: "sin decidir",
@@ -164,6 +166,10 @@ window.__ModuleLoader__.load({
 .mr-group-head .n{font-size:14px;font-weight:400;color:var(--mr-cap);font-variant-numeric:tabular-nums}
 .mr-group-head .hint{margin-left:auto;font-size:12px;font-weight:400;color:var(--mr-fg3)}
 .mr-rows{display:flex;flex-direction:column;margin:0 -10px;padding:0;list-style:none}
+.mr-row[data-trash]{grid-template-columns:minmax(0,1fr) 96px auto;cursor:default}
+.mr-trash-actions{display:flex;gap:6px;justify-content:flex-end}
+.mr-count{display:inline-block;margin-left:7px;padding:0 6px;border-radius:99px;background:var(--mr-l3);
+  font-size:11px;line-height:17px;color:var(--mr-fg2);font-variant-numeric:tabular-nums}
 .mr-row{position:relative;display:grid;align-items:center;gap:12px;min-height:52px;padding:7px 10px;
   grid-template-columns:minmax(0,1fr) 84px 112px 132px 116px 28px;
   border-radius:var(--mr-r-md);cursor:pointer}
@@ -688,6 +694,96 @@ input.mr-field{height:36px;padding:0 12px}
 		/* ------------------------------------------------------------------ */
 		/* Diálogo de borrado                                                  */
 		/* ------------------------------------------------------------------ */
+
+		function WipeDialog(props) {
+			const { count, onCancel, onConfirm } = props;
+			const [typed, setTyped] = React.useState("");
+			const [busy, setBusy] = React.useState(false);
+			const inputRef = React.useRef(null);
+			const ready = typed.trim().toUpperCase() === WIPE_WORD;
+
+			React.useEffect(() => {
+				const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 30);
+				const onKey = (event) => {
+					if (event.key !== "Escape") return;
+					event.preventDefault();
+					event.stopPropagation();
+					if (!busy) onCancel();
+				};
+				document.addEventListener("keydown", onKey, true);
+				return () => {
+					clearTimeout(t);
+					document.removeEventListener("keydown", onKey, true);
+				};
+			}, [busy, onCancel]);
+
+			return h(
+				"div",
+				{ className: "mr-layer", role: "presentation" },
+				h("div", { className: "mr-mask", onClick: () => !busy && onCancel() }),
+				h(
+					"div",
+					{ className: "mr-dialog", role: "alertdialog", "aria-modal": "true", "aria-labelledby": "mr-wipe-title" },
+					h(
+						"header",
+						null,
+						h("h2", { id: "mr-wipe-title" }, "Vaciar la papelera"),
+						h("button", { type: "button", className: "mr-icon", onClick: onCancel, disabled: busy, title: "Cancelar (Esc)" }, h(IconClose)),
+					),
+					h(
+						"div",
+						{ className: "mr-dialog-body" },
+						h(
+							"p",
+							null,
+							`Se van a borrar ${count} proyecto(s) para siempre. No hay vuelta atrás: no queda copia en `,
+							h("code", null, TRASH_DIR),
+							".",
+						),
+						h(
+							"label",
+							{ className: "mr-confirm" },
+							h("span", null, "Para confirmar, escribí ", h("b", null, WIPE_WORD)),
+							h("input", {
+								ref: inputRef,
+								className: "mr-field",
+								value: typed,
+								spellCheck: false,
+								autoComplete: "off",
+								disabled: busy,
+								onChange: (event) => setTyped(event.target.value),
+								onKeyDown: (event) => {
+									if (event.key === "Enter" && ready) {
+										event.preventDefault();
+										setBusy(true);
+										onConfirm();
+									}
+								},
+							}),
+						),
+					),
+					h(
+						"footer",
+						null,
+						h("button", { type: "button", className: "mr-btn", "data-variant": "ghost", onClick: onCancel, disabled: busy }, "Cancelar"),
+						h(
+							"button",
+							{
+								type: "button",
+								className: "mr-btn",
+								"data-variant": "solid-danger",
+								disabled: !ready || busy,
+								onClick: () => {
+									setBusy(true);
+									onConfirm();
+								},
+							},
+							busy ? "Vaciando…" : "Vaciar para siempre",
+						),
+					),
+				),
+			);
+		}
 
 		function TrashDialog(props) {
 			const { project, onCancel, onDone } = props;
@@ -1363,7 +1459,6 @@ input.mr-field{height:36px;padding:0 12px}
 
 			function trashView() {
 				const totalMb = trash.reduce((acc, t) => acc + Number(t.size_mb || 0), 0);
-				const rows = trash;
 				return h(
 					"div",
 					{ className: "mr-detail" },
@@ -1384,12 +1479,12 @@ input.mr-field{height:36px;padding:0 12px}
 							h(
 								"p",
 								{ className: "mr-ddesc" },
-								rows.length
-									? `${rows.length} proyecto(s) · ${totalMb.toFixed(1)} MB · se borran solos a los ${RETENTION_DAYS} días`
-									: "Vacía. Lo que borres queda acá antes de desaparecer.",
+								trash.length
+									? `${trash.length} proyecto(s) · ${totalMb.toFixed(1)} MB · el borrado automático llega a los ${RETENTION_DAYS} días`
+									: "Vacía. Lo que borres pasa por acá antes de desaparecer.",
 							),
 						),
-						rows.length
+						trash.length
 							? h(
 									"div",
 									{ className: "mr-actions" },
@@ -1406,32 +1501,28 @@ input.mr-field{height:36px;padding:0 12px}
 								)
 							: null,
 					),
-					rows.length
+					trash.length
 						? h(
 								"ul",
 								{ className: "mr-rows" },
-								rows.map((t) =>
+								trash.map((t) =>
 									h(
 										"li",
-										{ className: "mr-row", key: `${t.batch}-${t.slug}` },
+										{ className: "mr-row", key: `${t.batch}-${t.slug}`, "data-trash": 1 },
 										h(
 											"div",
-											{ className: "mr-row-main" },
+											{ className: "mr-who" },
+											h("span", { className: "mr-name" }, t.slug),
 											h(
-												"div",
-												{ className: "mr-row-title" },
-												h("strong", null, t.slug),
-												h(
-													"span",
-													{ className: "mr-row-sub" },
-													`entró ${ageLabel(t.days) === "hoy" ? "hoy" : ageLabel(t.days)} · ` +
-														`${t.size_mb} MB · queda ${t.expires_in} día(s)`,
-												),
+												"span",
+												{ className: "mr-sub" },
+												`entró ${ageLabel(t.days)} · queda ${t.expires_in} día(s) antes del borrado automático`,
 											),
 										),
+										h("span", { className: "mr-cell" }, `${t.size_mb} MB`),
 										h(
-											"div",
-											{ className: "mr-row-side" },
+											"span",
+											{ className: "mr-trash-actions" },
 											h(
 												"button",
 												{
