@@ -684,7 +684,9 @@ def cerrar_dictado(pedido: str, enviar: bool = False) -> int:
         # Esperar a que la app procese lo tecleado: si el Enter llega pegado,
         # algunas apps lo toman como salto de línea en vez de "enviar".
         time.sleep(min(1.5, 0.25 + len(texto) * 0.003))
-        if not pulsar_enter():
+        if pulsar_enter():
+            log_entrega("Enter enviado")
+        else:
             log_entrega("no pude presionar Enter (ni ydotool, ni hyprctl, ni wtype)")
     return 0
 
