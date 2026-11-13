@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 
 DB = Path(os.environ.get("MACHINE_DB", Path.home() / ".local/share/machine/machine.db"))
+VICIOS_DIR = DB.parent / "vicios"
 ROOT = Path(os.environ.get("MACHINE_ROOT", Path.home() / "Proyectos"))
 SKIP = {"_archivo", ".rig-worktrees"}
 TICKETS = Path.home() / ".config/opencode/tickets.json"
@@ -40,8 +41,8 @@ RETENTION_DAYS = int(os.environ.get("MACHINE_TRASH_DAYS", "30"))
 TRASH = Path(os.environ.get("MACHINE_TRASH", Path.home() / ".local/share/machine/trash"))
 SYSTEMD = Path.home() / ".config/systemd/user"
 
-KINDS = ("project", "product", "experiment", "service", "app", "idea", "task")
-STATES = ("unclassified", "active", "paused", "done", "archived")
+KINDS = ("project", "product", "experiment", "service", "app", "idea", "task", "vicio")
+STATES = ("unclassified", "active", "paused", "done", "archived", "abierto", "corregido")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -548,6 +549,75 @@ def cmd_idea(args) -> None:
     print("para que sea proyecto: machine promote <idea> --to <slug> --goal \"…\" --check \"…\"")
 
 
+def cmd_vicio(args) -> None:
+    """Vicios de UI del modelo: qué está mal, con evidencia. Sin texto: lista.
+
+    Un vicio es `kind='vicio'`, `state='abierto'` hasta que se corrige. La nota
+    lleva qué está mal, dónde se vio y las capturas; las imágenes se copian a
+    la carpeta de la base para que cualquier IA las lea desde un solo lugar.
+    """
+    con = connect()
+    if not args.text:
+        rows = con.execute(
+            "SELECT slug, title, state, note FROM entities WHERE kind='vicio'"
+            " ORDER BY id"
+        ).fetchall()
+        if not rows:
+            print("sin vicios anotados")
+            return
+        abiertos = sum(1 for r in rows if r["state"] == "abierto")
+        print(f"{len(rows)} vicios · {abiertos} abiertos")
+        print()
+        for r in rows:
+            capturas = (r["note"] or "").count("- " + str(VICIOS_DIR))
+            print(f"{r['slug']:9} [{r['state']}] {r['title']}"
+                  + (f"  ({capturas} capturas)" if capturas else ""))
+        return
+
+    text = " ".join(args.text).strip()
+    if not text:
+        sys.exit("machine: el vicio está vacío")
+    title = (args.title or "").strip()
+    if not title:
+        first = text.split(".")[0]
+        title = first if len(first) <= 48 else first[:48].rsplit(" ", 1)[0] + "…"
+    n = 1
+    while con.execute("SELECT 1 FROM entities WHERE kind='vicio' AND slug=?",
+                      (f"vicio-{n}",)).fetchone():
+        n += 1
+    slug = f"vicio-{n}"
+
+    capturas = []
+    for fuente in args.captura or []:
+        origen = Path(fuente).expanduser()
+        if not origen.is_file():
+            sys.exit(f"machine: no existe la captura {origen}")
+        VICIOS_DIR.mkdir(parents=True, exist_ok=True)
+        destino = VICIOS_DIR / f"{slug}-{len(capturas) + 1}{origen.suffix.lower() or '.png'}"
+        shutil.copy2(origen, destino)
+        capturas.append(str(destino))
+
+    partes = [text]
+    if args.donde:
+        partes += ["", f"Dónde: {args.donde}"]
+    if capturas:
+        partes += ["", "Capturas:"] + [f"- {c}" for c in capturas]
+    if args.arreglo:
+        partes += ["", f"Arreglo: {args.arreglo}"]
+    note = "\n".join(partes)
+
+    stamp = now()
+    con.execute(
+        "INSERT INTO entities (kind, slug, title, state, note, source, created_at, updated_at)"
+        " VALUES ('vicio', ?, ?, ?, ?, 'human', ?, ?)",
+        (slug, title, args.estado, note, stamp, stamp),
+    )
+    con.commit()
+    print(f"{slug}: {title}")
+    for c in capturas:
+        print(f"  captura: {c}")
+
+
 def cmd_promote(args) -> None:
     """Convierte una idea en proyecto: cambia kind, state y slug."""
     con = connect()
@@ -958,6 +1028,16 @@ def main() -> None:
     idea.add_argument("text", nargs="*")
     idea.add_argument("--title", help="nombre corto (2-4 palabras)")
     idea.set_defaults(func=cmd_idea)
+
+    vic = sub.add_parser("vicio", help="vicios de UI del modelo (sin texto: lista)")
+    vic.add_argument("text", nargs="*")
+    vic.add_argument("--title", help="nombre corto del vicio")
+    vic.add_argument("--captura", action="append", help="imagen de evidencia (repetible)")
+    vic.add_argument("--donde", help="dónde se vio")
+    vic.add_argument("--arreglo", help="cómo se corrige")
+    vic.add_argument("--estado", default="abierto",
+                     choices=[s for s in STATES if s in ("abierto", "corregido", "descartado")])
+    vic.set_defaults(func=cmd_vicio)
 
     ren = sub.add_parser("rename", help="cambia el nombre visible de un proyecto")
     ren.add_argument("slug")

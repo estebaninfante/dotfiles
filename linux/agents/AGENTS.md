@@ -20,5 +20,12 @@
 - Dejá `.webapp.json` y corré `webapp-launch <dir> --install`; `Exec` con ruta absoluta.
 - No habilites servicios sin que el usuario lo pida.
 
+## UI
+- Antes de construir o refactorizar UI: `machine vicio`. Son los vicios reales del modelo, con evidencia. Leelos todos.
+- Prohibido: `prompt()`/`alert()`/`confirm()`, pastillas de color para estado, puntos con halo o pulso, bordes punteados, tipografía display de carácter, más de 400 líneas por archivo.
+- Estado: texto plano, no pastilla. Botones de una sola altura, con `:hover` y `:focus-visible`.
+- Antes de decir "listo": `npx impeccable detect <url-o-dir>` y captura a 390 y 1440 px.
+- Lienzo Creativo (`~/Proyectos/lienzo-creativo`): `webapp-launch ~/Proyectos/lienzo-creativo`.
+
 ## Voz
 - Español simple, acción primero, un solo paso al final.
