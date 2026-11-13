@@ -137,12 +137,18 @@ window.__ModuleLoader__.load({
 
 		/** Cuadro de mensaje del chat (Lexical, contenteditable). */
 		function composerInput() {
+			let first = null;
 			for (const node of document.querySelectorAll("[data-composer-input]")) {
 				if (!(node instanceof HTMLElement)) continue;
-				if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) return node;
-				if (node.isContentEditable && node.offsetParent !== null) return node;
+				const plain = node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement;
+				if (!plain && !node.isContentEditable) continue;
+				if (first === null) first = node;
+				// Con tamaño en pantalla: el visible (offsetParent no sirve si el
+				// contenedor es `position: fixed`).
+				const rect = node.getBoundingClientRect();
+				if (rect.width > 0 && rect.height > 0) return node;
 			}
-			return null;
+			return first;
 		}
 
 		function caretToEnd(input) {

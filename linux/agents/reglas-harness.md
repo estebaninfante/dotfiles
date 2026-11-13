@@ -1,7 +1,9 @@
-# Delegación a Claude Code
+# Reglas del harness
 
-Este archivo es la regla global del DeepSeek Harness para esta máquina
-(`~/.dsh/AGENTS.md`, symlink a `~/dotfiles/linux/agents/reglas-harness.md`).
+Este archivo es el `AGENTS.md` global del DeepSeek Harness: se lee en **toda** sesión
+y en cualquier workspace (`~/.dsh/AGENTS.md`, symlink a
+`~/dotfiles/linux/agents/reglas-harness.md`). Acá van las reglas de comportamiento;
+la delegación a Claude es solo una parte.
 
 ## Regla dura: no reinicies el harness
 
@@ -163,6 +165,8 @@ El usuario es disperso y trabaja con varios frentes: si la respuesta no se entie
 una leída, se perdió. Reglas de forma, siempre:
 
 - Español, técnico **simple**. Frases cortas, una idea por frase.
+- **Atómico.** Texto mínimo: sin adornos, sin repetir, sin elementos que no cambien una
+  decisión. Si una frase no aporta un dato o una acción, va afuera.
 - **La acción primero.** Qué hacer ahora en la primera línea; la explicación después.
 - Si hay más de un paso: lista numerada, un paso = una acción.
 - Palabra nueva o de gestión ("WIP", "DoD", "portfolio"): se explica en una línea con un

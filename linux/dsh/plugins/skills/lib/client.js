@@ -715,6 +715,36 @@ window.__ModuleLoader__.load({
 				}
 			}
 
+			async function askAi() {
+				if (aiBusy) return;
+				if (aiPrompt.trim().length < 3) {
+					setAiError("escribí qué querés cambiar");
+					return;
+				}
+				setAiBusy(true);
+				setAiError("");
+				setAiResult(null);
+				try {
+					const res = await fetch("/skills/ai-edit", {
+						method: "POST",
+						headers: { "content-type": "application/json", "x-dsh-skills": "1" },
+						body: JSON.stringify({ name: skill.name, instruction: aiPrompt, content: draft }),
+					});
+					const payload = await res.json().catch(() => null);
+					if (!res.ok || payload === null || payload.ok !== true) {
+						if (res.status === 404 || res.status === 405) {
+							throw new Error("el servidor todavía no tiene la edición con IA: reiniciá dsh-web");
+						}
+						throw new Error((payload && payload.error) || `HTTP ${res.status}`);
+					}
+					setAiResult({ content: payload.content, warning: payload.warning ?? "", model: payload.model ?? "" });
+				} catch (failure) {
+					setAiError(failure instanceof Error ? failure.message : String(failure));
+				} finally {
+					setAiBusy(false);
+				}
+			}
+
 			function leave() {
 				if (dirty && !window.confirm("Tenés cambios sin guardar. ¿Salir igual?")) return;
 				onBack();
