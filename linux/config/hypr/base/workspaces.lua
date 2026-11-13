@@ -113,11 +113,17 @@ local function to_local(id)
     return nil
 end
 
--- Índice local del workspace activo. Acepta el objeto de workspace o el id.
+-- Índice local del workspace activo. Acepta el id (número) o el objeto de
+-- workspace que devuelve la API (`HL.Workspace`) — que NO es una tabla de Lua
+-- sino userdata indexable: por eso se mira `.id` y no `type(...) == "table"` (con
+-- eso último local_of(hl.get_active_workspace()) daba siempre nil y el "mismo
+-- espacio vuelve al anterior" nunca funcionaba).
 local function local_of(workspace)
     if workspace == nil then return nil end
-    if type(workspace) == "table" then return to_local(workspace.id) end
-    return to_local(workspace)
+    if type(workspace) == "number" then return to_local(workspace) end
+    local id = workspace.id
+    if type(id) == "number" then return to_local(id) end
+    return nil
 end
 
 -- Pantalla "de trabajo": la externa si está, si no la interna. Sobre ella viven

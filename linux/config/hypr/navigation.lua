@@ -436,6 +436,20 @@ end
 -- hicieron los 3D). No lo usa ningún bind.
 _G.expo_focus = expo_focus
 
+-- Para comandos de voz/dictado (Orión): mismo viaje animado que SUPER+N.
+-- `_G.expo_paso(delta)` va al espacio relativo (+1 siguiente, -1 anterior) con
+-- vuelta 1..9. Se calcula sobre el espacio de la PANTALLA DEL PUNTERO, que es la
+-- misma que va a usar el viaje (con el monitor activo, si el foco estaba en la
+-- otra pantalla el paso quedaba corrido).
+_G.expo_paso = function(delta)
+    delta = tonumber(delta) or 0
+    local monitor = spaces.monitor_under_pointer()
+    local current = monitor and monitor.active_workspace or hl.get_active_workspace()
+    local here = spaces.local_of(current) or 1
+    local target = ((here - 1 + delta) % spaces.SET_SIZE) + 1
+    expo_focus(target)
+end
+
 local TRAVEL_SPEED = 4
 local TRAVEL_FADE_PCT = 100
 
@@ -570,7 +584,15 @@ end
 
 for i = 1, 10 do
     if i < 10 then
-        hl.bind(main_mod .. " + " .. ws_keys[i], function() expo_focus(i) end)
+        hl.bind(main_mod .. " + " .. ws_keys[i], function()
+            -- Espacio 5: al entrar, re-anclar el centro de la visión. El sesgo se
+            -- acumula con las horas y el puntero queda corrido; esto lo resetea a
+            -- la postura actual sin tocar la cámara (SIGUSR2 al motor).
+            if i == 5 then
+                hl.dispatch(hl.dsp.exec_cmd("~/.local/bin/vision-ctl recenter"))
+            end
+            expo_focus(i)
+        end)
     end
     hl.bind(main_mod .. " + SHIFT + " .. ws_keys[i], function()
         -- El 10 (leia/cartridges) es un espacio extra fuera de los dos sets; se

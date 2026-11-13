@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# vision-ctl — envoltorio del binario Rust (~/Proyectos/vision-ctl).
+#
+#   vision-ctl                 TUI
+#   vision-ctl on|off|toggle   arranca / para / alterna la visión
+#   vision-ctl recenter        re-ancla el centro (corrige el offset acumulado)
+#   vision-ctl calibrate --stations both
+#
+# Compilar: cd ~/Proyectos/vision-ctl && cargo build --release
+set -euo pipefail
+
+bin="${VISION_CTL_BIN:-$HOME/Proyectos/vision-ctl/target/release/vision-ctl}"
+if [[ ! -x "$bin" ]]; then
+    printf 'vision-ctl: falta el binario en %s\n  compilá con: cd ~/Proyectos/vision-ctl && cargo build --release\n' "$bin" >&2
+    exit 1
+fi
+exec "$bin" "$@"
