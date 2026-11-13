@@ -91,20 +91,27 @@ window.__ModuleLoader__.load({
 
 /* --- Matriz de tarjetas -------------------------------------------------- */
 .sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;margin-top:20px}
-.sk-card{display:flex;flex-direction:column;justify-content:space-between;gap:10px;min-height:120px;
+.sk-card{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:10px;min-height:120px;
   padding:13px 14px;text-align:left;color:inherit;cursor:pointer;
   border:.5px solid var(--sk-l2);border-radius:var(--sk-r-md);background:var(--sk-card)}
 .sk-card:hover{border-color:var(--sk-l3);background:var(--sk-hover)}
 .sk-card-title{font-family:var(--sk-mono);font-size:12.5px;line-height:18px;font-weight:500;color:var(--sk-fg);
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  padding-right:24px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  overflow-wrap:anywhere}
 .sk-card-desc{font-size:12px;line-height:17px;color:var(--sk-fg2);
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .sk-card-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
-.sk-tags{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
-.sk-tag{display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:999px;
-  border:.5px solid var(--sk-l4);font-size:10.5px;line-height:15px;color:var(--sk-fg2);white-space:nowrap}
-.sk-tag.model{color:var(--sk-info);border-color:color-mix(in srgb, var(--sk-info) 45%, transparent)}
-.sk-tag.cmd{color:var(--sk-ok);border-color:color-mix(in srgb, var(--sk-ok) 40%, transparent)}
+.sk-marks{display:flex;gap:6px;align-items:center;min-width:0;color:var(--sk-fg3)}
+.sk-mark{font-size:10.5px;line-height:15px;color:var(--sk-fg3);white-space:nowrap}
+.sk-mark.glyph{font-family:var(--sk-mono);font-weight:500}
+.sk-mark svg{display:block}
+.sk-del{position:absolute;top:7px;right:7px;width:26px;height:26px;display:grid;place-items:center;padding:0;
+  border:0;border-radius:var(--sk-r-sm);background:transparent;color:var(--sk-cap);opacity:.55;cursor:pointer}
+.sk-del:hover,.sk-del:focus-visible{opacity:1;background:var(--sk-hover);color:var(--sk-bad)}
+.sk-del[disabled]{opacity:.4;cursor:default}
+.sk-del-busy{width:10px;height:10px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;
+  animation:sk-spin .7s linear infinite}
+@keyframes sk-spin{to{transform:rotate(360deg)}}
 .sk-src{font-size:10.5px;line-height:15px;color:var(--sk-cap);white-space:nowrap}
 
 /* --- Estados ------------------------------------------------------------- */
@@ -176,6 +183,8 @@ window.__ModuleLoader__.load({
   .sk-btn{height:36px}
   .sk-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
   .sk-card{min-height:104px;padding:11px 12px}
+  .sk-del{width:32px;height:32px;top:4px;right:4px;opacity:.75}
+  .sk-card-title{padding-right:30px}
   .sk-card-title{font-size:12px;line-height:17px}
   .sk-card-desc{font-size:11.5px;line-height:16px;-webkit-line-clamp:2}
   .sk-src{display:none}
@@ -194,6 +203,20 @@ window.__ModuleLoader__.load({
 			{ width: 14, height: 14, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
 			h("circle", { cx: 7, cy: 7, r: 4.2, stroke: "currentColor", strokeWidth: 1.3 }),
 			h("path", { d: "M10.2 10.2 14 14", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" }),
+		);
+		const ICON_TRASH = h(
+			"svg",
+			{ width: 13, height: 13, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+			h("path", { d: "M2.8 4.2h10.4", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" }),
+			h("path", { d: "M6.2 4.2V2.9h3.6v1.3", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" }),
+			h("path", {
+				d: "M4.2 4.2 4.8 13a.9.9 0 0 0 .9.8h4.6a.9.9 0 0 0 .9-.8l.6-8.8",
+				stroke: "currentColor",
+				strokeWidth: 1.3,
+				strokeLinecap: "round",
+				strokeLinejoin: "round",
+			}),
+			h("path", { d: "M6.7 6.6v4.8M9.3 6.6v4.8", stroke: "currentColor", strokeWidth: 1.2, strokeLinecap: "round" }),
 		);
 		const ICON_BACK = h(
 			"svg",
@@ -398,26 +421,72 @@ window.__ModuleLoader__.load({
 			return blocks;
 		}
 
-		function tagsFor(skill) {
-			const tags = [];
-			if (skill.model) tags.push(h("span", { key: "m", className: "sk-tag model" }, "modelo"));
-			if (skill.user) {
-				tags.push(h("span", { key: "u", className: "sk-tag cmd" }, skill.model ? "comando" : "solo comando"));
+		/**
+		 * Una sola marca, sin color de fondo: destello si el modelo la ve, una
+		 * barra si solo se puede llamar por `/comando`. El `title` explica.
+		 */
+		function statusMark(skill, size) {
+			if (skill.model) {
+				return h(
+					"span",
+					{ className: "sk-mark", title: skill.user ? "La ve el modelo y se puede llamar por comando" : "La ve el modelo" },
+					h(
+						"svg",
+						{ width: size, height: size, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+						h("path", {
+							d: "M7 1.8 8.35 5.1 11.7 6.45 8.35 7.8 7 11.1 5.65 7.8 2.3 6.45 5.65 5.1Z",
+							fill: "currentColor",
+						}),
+					),
+				);
 			}
-			if (tags.length === 0) tags.push(h("span", { key: "n", className: "sk-tag" }, "oculta"));
-			return tags;
+			if (skill.user) {
+				return h("span", { className: "sk-mark glyph", title: `Solo por comando: /${skill.name}` }, "/");
+			}
+			return h("span", { className: "sk-mark", title: "Oculta para el modelo y para /comando" }, "·");
+		}
+
+		function statusText(skill) {
+			if (skill.model) return skill.user ? "modelo y comando" : "solo modelo";
+			if (skill.user) return "solo /comando";
+			return "oculta";
 		}
 
 		function SkillCard(props) {
 			const skill = props.skill;
+			const busy = props.deleting === skill.name;
 			return h(
-				"button",
+				"div",
 				{
-					type: "button",
 					className: "sk-card",
+					role: "button",
+					tabIndex: 0,
 					onClick: () => props.onOpen(skill.name),
+					onKeyDown: (event) => {
+						if (event.key === "Enter" || event.key === " ") {
+							event.preventDefault();
+							props.onOpen(skill.name);
+						}
+					},
 					title: skill.path ? `${skill.name} — ${skill.path}` : skill.name,
 				},
+				h(
+					"button",
+					{
+						type: "button",
+						className: "sk-del",
+						disabled: busy,
+						title: `Eliminar ${skill.name}`,
+						"aria-label": `Eliminar ${skill.name}`,
+						onClick: (event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							props.onDelete(skill.name);
+						},
+						onKeyDown: (event) => event.stopPropagation(),
+					},
+					busy ? h("span", { className: "sk-del-busy" }) : ICON_TRASH,
+				),
 				h(
 					"div",
 					{ className: "sk-titles" },
@@ -427,16 +496,15 @@ window.__ModuleLoader__.load({
 				h(
 					"div",
 					{ className: "sk-card-foot" },
-					h("div", { className: "sk-tags" }, tagsFor(skill)),
+					h("div", { className: "sk-marks" }, statusMark(skill, 11)),
 					h("span", { className: "sk-src" }, SOURCE_LABEL[skill.source] ?? skill.source),
 				),
 			);
 		}
 
 		function Detail(props) {
-			const { skill, status, error, onBack, onSaved, onDeleted, onRetry } = props;
+			const { skill, status, error, onBack, onSaved, onDelete, onRetry } = props;
 			const [editing, setEditing] = React.useState(false);
-			const [deleting, setDeleting] = React.useState(false);
 			const [draft, setDraft] = React.useState("");
 			const [saving, setSaving] = React.useState(false);
 			const [saveError, setSaveError] = React.useState("");
@@ -517,34 +585,6 @@ window.__ModuleLoader__.load({
 				}
 			}
 
-			async function remove() {
-				if (deleting) return;
-				const ok = window.confirm(
-					`¿Eliminar la skill "${skill.name}"?\n\nSe mueve a la papelera (~/.local/share/skills/trash), así que se puede recuperar.`,
-				);
-				if (!ok) return;
-				setDeleting(true);
-				setSaveError("");
-				try {
-					const res = await fetch("/skills/delete", {
-						method: "POST",
-						headers: { "content-type": "application/json", "x-dsh-skills": "1" },
-						body: JSON.stringify({ name: skill.name }),
-					});
-					const payload = await res.json().catch(() => null);
-					if (!res.ok || payload === null || payload.ok !== true) {
-						if (res.status === 404 || res.status === 405) {
-							throw new Error("el servidor todavía no tiene la ruta de borrado: reiniciá dsh-web");
-						}
-						throw new Error((payload && payload.error) || `HTTP ${res.status}`);
-					}
-					onDeleted(payload);
-				} catch (failure) {
-					setSaveError(failure instanceof Error ? failure.message : String(failure));
-					setDeleting(false);
-				}
-			}
-
 			function leave() {
 				if (dirty && !window.confirm("Tenés cambios sin guardar. ¿Salir igual?")) return;
 				onBack();
@@ -564,7 +604,7 @@ window.__ModuleLoader__.load({
 						h(
 							"div",
 							{ className: "sk-dmeta" },
-							h("div", { className: "sk-tags" }, tagsFor(skill)),
+							h("span", { className: "sk-marks" }, statusMark(skill, 12), h("span", { className: "sk-mark" }, statusText(skill))),
 							h("span", null, SOURCE_LABEL[skill.source] ?? skill.source),
 							skill.path ? h("span", { className: "p" }, skill.path) : null,
 						),
@@ -590,11 +630,7 @@ window.__ModuleLoader__.load({
 							: null,
 						editing
 							? null
-							: h(
-									"button",
-									{ type: "button", className: "sk-btn danger", onClick: remove, disabled: deleting },
-									deleting ? "Eliminando…" : "Eliminar",
-								),
+							: h("button", { type: "button", className: "sk-btn danger", onClick: () => onDelete(skill.name) }, "Eliminar"),
 						editing ? null : h("button", { type: "button", className: "sk-btn primary", onClick: startEdit }, "Editar"),
 					),
 				),
