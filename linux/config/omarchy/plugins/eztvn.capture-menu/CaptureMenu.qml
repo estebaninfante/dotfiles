@@ -252,12 +252,11 @@ Item {
       smooth: true
     }
 
-    // El velo queda siempre: en dibujo es suave, para que se note que se anota
-    // sobre la pantalla congelada y no sobre la pantalla en vivo.
+    // El mismo velo en los dos modos: al pasar a dibujar se sigue viendo la
+    // pantalla congelada, no la pantalla en vivo.
     CaptureSelection {
       anchors.fill: parent
       regionMode: !root.drawMode
-      scrimAlpha: root.drawMode ? 0.28 : 0.55
       dragging: root.dragging
       selX: root.selX
       selY: root.selY
@@ -331,14 +330,6 @@ Item {
         onCancelled: root.finish(null)
         onConfirmed: root.confirmCapture()
       }
-
-      // Con el selector de color abierto, el primer clic afuera lo cierra.
-      MouseArea {
-        anchors.fill: parent
-        visible: annotations.pickerOpen
-        onClicked: annotations.closePicker()
-      }
-
       CaptureAnnotations {
         id: annotations
         visible: root.intent === "image"

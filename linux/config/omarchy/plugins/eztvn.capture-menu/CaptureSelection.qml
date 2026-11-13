@@ -18,13 +18,11 @@ Item {
   property real pointerY: -1
   // Lógico → píxeles del archivo (el PNG/MP4 sale a resolución física).
   property real pixelScale: 1
-  // Fuerza del velo: en dibujo va más suave para no tapar lo que se anota.
-  property real scrimAlpha: 0.55
 
   readonly property bool hasSelection: regionMode && selW >= 1 && selH >= 1
   readonly property bool showCrosshair: regionMode && !dragging &&
       pointerX >= 0 && pointerY >= 0 && pointerX <= width && pointerY <= height
-  readonly property color scrimColor: Util.alpha(Color.background, root.scrimAlpha)
+  readonly property color scrimColor: Util.alpha(Color.background, 0.55)
   readonly property color accentColor: Color.accent
 
   function clampWidth(value) {

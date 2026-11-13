@@ -106,6 +106,17 @@ if ! grep -q "plugin:hyprexpo:scrolling_overview" "$SRC/IOverviewSession.cpp" ||
     exit 1
 fi
 
+# Fondo por monitor del overview: el plugin pinta en cada pantalla el MISMO archivo
+# que hyprpaper tiene para esa salida (sin eso, con dos wallpapers distintos el
+# overview de una pantalla muestra el fondo de la otra). Ver hyprexpo-changes.md.
+if ! grep -q "plugin:hyprexpo:background_image_monitors" "$SRC/PluginConfig.cpp" \
+    || ! grep -q "background_image_monitors" "$SRC/OverviewRender.cpp" \
+    || ! grep -q "background_image_monitors" "$SRC/OverviewCapture.cpp"; then
+    echo "error: el patch perdio background_image_monitors (fondo por monitor del overview)" >&2
+    echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2
+    exit 1
+fi
+
 if ! grep -q "makeEGLCurrent" "$SRC/Overview3D.cpp" || ! grep -q "HYPREXPO_DEV_TRANSFORM" "$SRC/scripts/run-nested.sh"; then
     echo "error: el patch perdio el EGL current del init 3D o la rotacion del harness nested" >&2
     echo "       ver linux/config/hypr/hyprexpo-changes.md" >&2

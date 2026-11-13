@@ -1222,7 +1222,7 @@ index 0000000..9882297
 +
 +} // namespace Hyprexpo3D
 diff --git c/OverviewCapture.cpp i/OverviewCapture.cpp
-index cb18d2f..935258e 100644
+index cb18d2f..1825f07 100644
 --- c/OverviewCapture.cpp
 +++ i/OverviewCapture.cpp
 @@ -4,9 +4,14 @@
@@ -1262,7 +1262,7 @@ index cb18d2f..935258e 100644
      PHLWORKSPACE activeWorkspace() const {
          return m_activeWorkspace;
      }
-@@ -123,6 +136,103 @@ class CMonitorStateGuard {
+@@ -123,6 +136,105 @@ class CMonitorStateGuard {
      bool                m_restored         = false;
  };
  
@@ -1279,7 +1279,9 @@ index cb18d2f..935258e 100644
 +
 +        if (CompatHyprlandAPI::intValue("plugin:hyprexpo:tile_transparent") == 0)
 +            return;
-+        if (CompatHyprlandAPI::stringValue("plugin:hyprexpo:background_image").empty() && CompatHyprlandAPI::intValue("plugin:hyprexpo:background_transparent") == 0)
++        if (CompatHyprlandAPI::stringValue("plugin:hyprexpo:background_image").empty() &&
++            CompatHyprlandAPI::stringValue("plugin:hyprexpo:background_image_monitors").empty() &&
++            CompatHyprlandAPI::intValue("plugin:hyprexpo:background_transparent") == 0)
 +            return;
 +
 +        try {
@@ -1366,7 +1368,7 @@ index cb18d2f..935258e 100644
  bool ensureFramebuffer(SP<Render::IFramebuffer>& framebuffer, const CBox& box, uint32_t drmFormat) {
      if (!framebuffer)
          framebuffer = g_pHyprRenderer->createFB("hyprexpo workspace preview");
-@@ -169,11 +279,23 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -169,11 +281,23 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
          CRendererStateGuard rendererState{g_pHyprRenderer.get()};
          CBox captureBox = request.box;
  
@@ -1392,7 +1394,7 @@ index cb18d2f..935258e 100644
          }
  
          if (!ensureFramebuffer(framebuffer, captureBox, framebufferFormatWithAlpha(request.monitor->m_output->state->state().drmFormat)))
-@@ -188,12 +310,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -188,12 +312,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
          rendererState.begun();
          g_pHyprRenderer->m_bBlockSurfaceFeedback = g_pHyprRenderer->m_bBlockSurfaceFeedback || request.blockSurfaceFeedback;
@@ -1408,7 +1410,7 @@ index cb18d2f..935258e 100644
              bool activeChanged   = false;
              bool previewApplied  = false;
              bool windowApplied   = false;
-@@ -202,6 +326,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -202,6 +328,10 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  if (temporaryRestored)
                      return;
                  try {
@@ -1419,7 +1421,7 @@ index cb18d2f..935258e 100644
                      if (windowApplied)
                          restoreWorkspaceWindowGoalState(windowState);
                      if (previewApplied)
-@@ -220,6 +348,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -220,6 +350,19 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
                  windowApplied = true;
              }
  
@@ -1439,7 +1441,7 @@ index cb18d2f..935258e 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace = monitorState.activeSpecialWorkspace();
  
-@@ -233,6 +374,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -233,6 +376,14 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              restoreActiveWorkspaceAfterPreview(request.monitor, previousWS);
              temporaryRestored = true;
  
@@ -1454,7 +1456,7 @@ index cb18d2f..935258e 100644
              if (request.workspace == request.startedOn)
                  request.monitor->m_activeSpecialWorkspace.reset();
          } else {
-@@ -240,6 +389,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -240,6 +391,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              g_pHyprRenderer->renderWorkspace(request.monitor, request.workspace, Time::steadyNow(), captureBox);
          }
  
@@ -1463,7 +1465,7 @@ index cb18d2f..935258e 100644
          g_pHyprRenderer->m_renderData.blockScreenShader = true;
          rendererState.finish();
          rendererState.restore();
-@@ -247,7 +398,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
+@@ -247,7 +400,8 @@ bool captureWorkspacePreview(const SWorkspaceCaptureRequest& request, SP<Render:
              return false;
  
          if (const auto texture = framebuffer->getTexture(); texture)
@@ -1750,7 +1752,7 @@ index 6984d59..a59e32b 100644
  
  ePassElementType COverviewPassElement::type() {
 diff --git c/OverviewRender.cpp i/OverviewRender.cpp
-index e73c8f6..3943e23 100644
+index e73c8f6..552eaac 100644
 --- c/OverviewRender.cpp
 +++ i/OverviewRender.cpp
 @@ -2,6 +2,7 @@
@@ -1896,7 +1898,7 @@ index e73c8f6..3943e23 100644
  
      static auto* const* PTILEROUND  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding")->getDataStaticPtr();
      static auto* const* PTOUNDPWR   = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:tile_rounding_power")->getDataStaticPtr();
-@@ -289,18 +319,189 @@ void COverview::fullRender() {
+@@ -289,18 +319,214 @@ void COverview::fullRender() {
      const int   HOVER_ROUND_SCALED   = **PTILEROUNDH >= 0 ? std::max(0, (int)std::lround((double)**PTILEROUNDH * MON->m_scale)) : BASE_ROUND_SCALED;
      const float ROUND_PWR            = **PTOUNDPWR;
  
@@ -2014,8 +2016,33 @@ index e73c8f6..3943e23 100644
 +
 +    if (!backgroundTransparent) {
 +        static auto const* PBGIMAGE = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:background_image")->getDataStaticPtr();
++        static auto const* PBGIMAGEMON = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:background_image_monitors")->getDataStaticPtr();
 +        static auto* const* PBGDIM  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:background_dim")->getDataStaticPtr();
-+        const std::string  bgImagePath{*PBGIMAGE};
++        std::string        bgImagePath{*PBGIMAGE};
++        // Fondo por monitor: "SALIDA=/ruta;SALIDA2=/ruta2". El overview pinta el
++        // MISMO archivo que hyprpaper usa en esa pantalla, asi el escritorio y la
++        // grilla no se desfasan cuando cada pantalla tiene su propio wallpaper. Si
++        // la salida no esta listada, queda el background_image global (canonico).
++        const std::string perMonitorImages{*PBGIMAGEMON};
++        if (!perMonitorImages.empty()) {
++            size_t pos = 0;
++            while (pos <= perMonitorImages.size()) {
++                const auto SEP   = perMonitorImages.find(';', pos);
++                const auto ENTRY = perMonitorImages.substr(pos, SEP == std::string::npos ? std::string::npos : SEP - pos);
++                const auto EQ    = ENTRY.find('=');
++                if (EQ != std::string::npos) {
++                    const auto NAME = Hyprexpo::trimString(ENTRY.substr(0, EQ));
++                    const auto PATH = Hyprexpo::trimString(ENTRY.substr(EQ + 1));
++                    if (!NAME.empty() && !PATH.empty() && NAME == MON->m_name) {
++                        bgImagePath = PATH;
++                        break;
++                    }
++                }
++                if (SEP == std::string::npos)
++                    break;
++                pos = SEP + 1;
++            }
++        }
 +        const Vector2D     mon       = MON->m_transformedSize;
 +        bool               drewImage = false;
 +        // Draw the backdrop FLAT (no fisheye). The barrel lens pulls every quad
@@ -2089,7 +2116,7 @@ index e73c8f6..3943e23 100644
              texbox.round();
              tileBoxes[id] = texbox;
  
-@@ -325,7 +526,23 @@ void COverview::fullRender() {
+@@ -325,7 +551,23 @@ void COverview::fullRender() {
              }
  
              CRegion damage{0, 0, INT16_MAX, INT16_MAX};
@@ -2114,7 +2141,7 @@ index e73c8f6..3943e23 100644
          }
      }
  
-@@ -359,6 +576,7 @@ void COverview::fullRender() {
+@@ -359,6 +601,7 @@ void COverview::fullRender() {
      static auto const*  PBCOLCUR    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_current")->getDataStaticPtr();
      static auto const*  PBCOLFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_focus")->getDataStaticPtr();
      static auto const*  PBCOLHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_color_hover")->getDataStaticPtr();
@@ -2122,7 +2149,7 @@ index e73c8f6..3943e23 100644
      static auto const*  PBGRCUR     = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_current")->getDataStaticPtr();
      static auto const*  PBGREFOC    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_focus")->getDataStaticPtr();
      static auto const*  PBGREHOV    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:border_grad_hover")->getDataStaticPtr();
-@@ -458,15 +676,29 @@ void COverview::fullRender() {
+@@ -458,15 +701,29 @@ void COverview::fullRender() {
                  bg.round();
                  lb.round();
              }
@@ -2155,7 +2182,7 @@ index e73c8f6..3943e23 100644
          };
  
          if (**PLBGEN)
-@@ -491,9 +723,23 @@ void COverview::fullRender() {
+@@ -491,9 +748,23 @@ void COverview::fullRender() {
  
          const std::string effectiveSpec = Hyprexpo::resolveBorderSpec(borderSpec, deprecatedGradSpec);
  
@@ -2179,7 +2206,7 @@ index e73c8f6..3943e23 100644
                  Config::CGradientValueData grad;
                  grad.m_colors.clear();
                  grad.m_colors.push_back(spec.c1);
-@@ -505,6 +751,9 @@ void COverview::fullRender() {
+@@ -505,6 +776,9 @@ void COverview::fullRender() {
          } else if (!effectiveSpec.empty()) {
              Hyprexpo::SColorRGBA parsedColor;
              if (Hyprexpo::parseSolidColorSpec(effectiveSpec, parsedColor)) {
@@ -2189,7 +2216,7 @@ index e73c8f6..3943e23 100644
                  CHyprColor color{parsedColor.r, parsedColor.g, parsedColor.b, parsedColor.a};
                  Render::GL::g_pHyprOpenGL->renderBorder(box, color, {.round = roundScaled, .roundingPower = ROUND_PWR, .borderSize = BWIDTH});
              } else {
-@@ -644,6 +893,18 @@ void COverview::fullRender() {
+@@ -644,6 +918,18 @@ void COverview::fullRender() {
      const std::string currentFallback   = Hyprexpo::resolveBorderSpec(std::string{*PBGRCUR}, currentLegacySpec);
      const std::string hoverFallback     = Hyprexpo::resolveBorderSpec(std::string{*PBGREHOV}, hoverLegacySpec);
  
@@ -2209,10 +2236,10 @@ index e73c8f6..3943e23 100644
          drawBorderForID(hoveredID, std::string{*PBCOLHOV}, hoverFallback, RND_HOV);
      drawBorderForID(openedID, std::string{*PBCOLCUR}, currentFallback, RND_CUR);
 diff --git c/PluginConfig.cpp i/PluginConfig.cpp
-index af2b27a..6cfc739 100644
+index af2b27a..182c8f8 100644
 --- c/PluginConfig.cpp
 +++ i/PluginConfig.cpp
-@@ -42,6 +42,14 @@ void registerHyprexpoConfigValues() {
+@@ -42,6 +42,15 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:enable_drag_move", "legacy drag-move toggle", HyprexpoConfig::LEGACY_ENABLE_DRAG_MOVE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:animate_entry", "legacy entry animation toggle", HyprexpoConfig::LEGACY_ANIMATE_ENTRY_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:wallpaper_bg", "draw the monitor wallpaper behind overview tiles", HyprexpoConfig::WALLPAPER_BG_DEFAULT));
@@ -2222,12 +2249,13 @@ index af2b27a..6cfc739 100644
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:keep_layers", "keep TOP and OVERLAY layer surfaces (bar, voice overlays, TTS) visible above the overview", HyprexpoConfig::KEEP_LAYERS_DEFAULT,
 +                                                         Config::Values::SIntValueOptions{.min = 0, .max = 1}));
 +    addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:background_image", "path to an image drawn behind the overview grid (empty = bg_col)", ""));
++    addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:background_image_monitors", "per-monitor background images: \"OUTPUT=/path;OUTPUT2=/path2\" (outputs not listed fall back to background_image)", ""));
 +    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:background_dim", "darken the background image by this percent (0-100)", 0,
 +                                                         Config::Values::SIntValueOptions{.min = 0, .max = 100}));
  
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:columns", "columns", HyprexpoConfig::COLUMNS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:rows", "fixed grid rows (0 follows columns)", HyprexpoConfig::ROWS_DEFAULT));
-@@ -52,6 +60,43 @@ void registerHyprexpoConfigValues() {
+@@ -52,6 +61,43 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
  
@@ -2271,7 +2299,7 @@ index af2b27a..6cfc739 100644
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
      addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_fingers", "fingers for the swipe gesture (0 disables)", HyprexpoConfig::GESTURE_FINGERS_DEFAULT,
                                                           Config::Values::SIntValueOptions{.min = 0, .max = 9}));
-@@ -80,6 +125,10 @@ void registerHyprexpoConfigValues() {
+@@ -80,6 +126,10 @@ void registerHyprexpoConfigValues() {
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_current", "current border color", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_focus", "focus border color", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT));
      addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:border_color_hover", "hover border color", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT));
@@ -2452,7 +2480,7 @@ index 302ed07..abe9e34 100644
      if (!success) {
          failNotif("Failed initializing hooks");
 diff --git c/scripts/run-nested.sh i/scripts/run-nested.sh
-index 98a8340..5794f79 100755
+index 98a8340..bcc5c37 100755
 --- c/scripts/run-nested.sh
 +++ i/scripts/run-nested.sh
 @@ -100,15 +100,30 @@ mkdir -p "$(dirname "$CONF")" "$(dirname "$SO")"
@@ -2497,7 +2525,7 @@ index 98a8340..5794f79 100755
      border_color_current = rgb(66ccff)
      border_color_focus   = rgb(ffcc66)
  
-@@ -168,6 +184,36 @@ plugin {
+@@ -168,6 +184,38 @@ plugin {
      # demo hyprland style gradient borders
      border_grad_current = rgba(33ccffee) rgba(00ff99ee) 45deg
      border_grad_focus   = rgba(ffdd44ee) rgba(22aaffee) 30deg
@@ -2523,6 +2551,8 @@ index 98a8340..5794f79 100755
 +
 +    # custom background image behind the floating grid (env-driven)
 +    background_image = ${HYPREXPO_DEV_BG:-}
++    # backyard per monitor: "WAYLAND-1=/a.png;WAYLAND-2=/b.png" (empty = background_image)
++    background_image_monitors = ${HYPREXPO_DEV_BG_MONITORS:-}
 +    background_dim   = ${HYPREXPO_DEV_BG_DIM:-0}
 +
 +    # directional slide morph on close (env-driven)

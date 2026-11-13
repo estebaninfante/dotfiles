@@ -6,6 +6,11 @@
 # la shell sigue el symlink, pero hyprpaper.conf y hyprexpo/background_image
 # quedan con el wallpaper anterior hasta edicion manual.
 #
+# Fondo distinto por monitor: ~/.config/hypr/wallpaper-monitors.conf
+# (`<salida> = <ruta>`). Los monitores sin linea siguen el canonico. Se aplica a
+# hyprpaper Y al backdrop del overview por monitor, asi el escritorio y la grilla
+# coinciden en cada pantalla aunque cada una tenga su propio wallpaper.
+#
 # Uso: sync-wallpaper.sh            (lee el symlink)
 #      sync-wallpaper.sh <imagen>   (hace `omarchy theme bg set` + propaga)
 # Instalado como hook theme-set: `omarchy hook install theme-set sync-wallpaper.sh`
@@ -13,9 +18,23 @@ set -euo pipefail
 
 BG_LINK="$HOME/.local/state/omarchy/current/background"
 HYPR_CONF="$HOME/.config/hypr/hyprpaper.conf"
+MONITORS_CONF="$HOME/.config/hypr/wallpaper-monitors.conf"
 if [ -f "$HOME/.config/machine-type" ] && [ "$(cat "$HOME/.config/machine-type")" = "laptop" ]; then
     HYPR_CONF="$HOME/.config/hypr/hyprpaper-laptop.conf"
 fi
+
+# Fondo de una salida: el propio si esta definido y existe, si no el canonico.
+monitor_wallpaper() {
+    local monitor="$1" fallback="$2" image=""
+    if [ -f "$MONITORS_CONF" ]; then
+        image="$(sed -n "s|^[[:space:]]*${monitor}[[:space:]]*=[[:space:]]*||p" "$MONITORS_CONF" | head -1 | sed 's|[[:space:]]*$||')"
+    fi
+    if [ -n "$image" ] && [ -f "$image" ]; then
+        printf '%s' "$image"
+    else
+        printf '%s' "$fallback"
+    fi
+}
 
 if [ $# -ge 1 ]; then
     omarchy theme bg set "$1"
@@ -52,13 +71,33 @@ fi
 # 2. hyprpaper vivo: aplica sin reiniciar el daemon (v0.8+: solo `wallpaper mon,path`).
 #    A TODOS los monitors: aplicar solo a `.[0]` dejaba el segundo con el fondo viejo
 #    (con un monitor virtual de Sunshine el escritorio y el stream no coincidian) y
-#    hyprpaper solo re-lee la config al reiniciar.
+#    hyprpaper solo re-lee la config al reiniciar. Cada monitor recibe el suyo de
+#    wallpaper-monitors.conf (o el canonico si no tiene linea propia).
 if pgrep -x hyprpaper >/dev/null 2>&1; then
     monitors="$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name // empty' 2>/dev/null || true)"
     [ -z "$monitors" ] && monitors="DP-2"
     for mon in $monitors; do
-        hyprctl hyprpaper wallpaper "$mon,$BG" >/dev/null 2>&1 || true
+        hyprctl hyprpaper wallpaper "$mon,$(monitor_wallpaper "$mon" "$BG")" >/dev/null 2>&1 || true
     done
+fi
+
+# 2b. Backdrop del overview (hyprexpo) por monitor: el MISMO archivo que hyprpaper
+#     usa en esa salida. Sin esto la grilla pinta el fondo canonico en todas las
+#     pantallas y con dos wallpapers distintos se ve "otro" fondo al abrirla. Con
+#     un .so viejo (sin la opcion) el getoption falla y se omite.
+if [ -f "$MONITORS_CONF" ] && hyprctl getoption plugin:hyprexpo:background_image_monitors >/dev/null 2>&1; then
+    mapping=""
+    while IFS='=' read -r mon path; do
+        mon="$(printf '%s' "$mon" | sed 's|^[[:space:]]*||; s|[[:space:]]*$||')"
+        path="$(printf '%s' "$path" | sed 's|^[[:space:]]*||; s|[[:space:]]*$||')"
+        case "$mon" in ""|\#*) continue ;; esac
+        [ -f "$path" ] || continue
+        # El string viaja dentro de un eval de Lua: si tiene comillas, barra o el
+        # separador, se descarta en vez de romper el parser.
+        case "$path" in *'"'*|*\\*|*';'*) continue ;; esac
+        mapping="$mapping$mon=$path;"
+    done < "$MONITORS_CONF"
+    hyprctl eval "hl.config({ plugin = { hyprexpo = { background_image_monitors = \"$mapping\" } } })" >/dev/null 2>&1 || true
 fi
 
 # 3. Reload SOLO si el fondo cambió de verdad. `wallpaper-sync.timer` corre
