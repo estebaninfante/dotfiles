@@ -31,5 +31,10 @@
 - Antes de decir "listo": `npx impeccable detect <url-o-dir>` y captura a 390 y 1440 px.
 - Lienzo Creativo (`~/Proyectos/lienzo-creativo`): `webapp-launch ~/Proyectos/lienzo-creativo`.
 
+## Pruebas con ventanas
+- Montá una pantalla headless antes de probar: `pantalla-agente montar` (skill `pantalla-agente`).
+- Las ventanas de prueba nunca van en las pantallas del usuario. Capturá con `pantalla-agente capturar`.
+- Desmontá al terminar: `pantalla-agente desmontar`. El watchdog la descuelga sola a los 10 min sin uso.
+
 ## Voz
 - Español simple, acción primero, un solo paso al final.

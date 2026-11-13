@@ -143,6 +143,10 @@ if hl.plugin.hyprexpo ~= nil then
     -- El .so resuelve el symlink y cachea por mtime+tamano, asi que un cambio de
     -- wallpaper se ve en la proxima apertura sin reload (antes quedaba cacheada la
     -- imagen vieja y se veian dos wallpapers distintos).
+    -- Fondo por pantalla: lo empuja sync-wallpaper.sh desde
+    -- ~/.config/hypr/wallpaper-monitors.conf a la opción
+    -- background_image_monitors (mismo archivo que hyprpaper en esa salida). Acá
+    -- solo va el canónico, que es el fallback de las pantallas sin línea propia.
     config.background_image = style.background_image
     config.background_dim = style.background_dim
     if hl.get_config("plugin:hyprexpo:background_transparent") ~= nil then

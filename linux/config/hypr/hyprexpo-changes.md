@@ -1,5 +1,43 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-13 — fondo por monitor en el overview y plugin al día en la laptop
+
+**Motivo**: (1) el usuario quiere un wallpaper distinto por pantalla (la vertical con
+la megacordillera, el panel interno con el porsche) y el overview pinta UN fondo
+global (`background_image`): en la vertical mostraba el fondo de la otra pantalla, así
+que escritorio y grilla quedaban desfasados; (2) esta laptop seguía con el `.so` del
+15/10 — los arreglos de rotación y grilla plana del 10/11 solo estaban aplicados en el
+desktop, y en la vertical la grilla no se dibujaba (las ventanas quedaban ocultas
+detrás del overview: "se desapareció la ventana").
+
+**Implementación**:
+
+- Fork: opción nueva `plugin:hyprexpo:background_image_monitors` con formato
+  `SALIDA=/ruta;SALIDA2=/ruta2`. `OverviewRender.cpp` elige la ruta por `MON->m_name`;
+  si la salida no está listada cae a `background_image` (canónico). `OverviewCapture.cpp`
+  la tiene en cuenta para el `CTransparentTileGuard` (tiles sin fondo).
+- `~/.config/hypr/wallpaper-monitors.conf`: `<salida> = <ruta>` por pantalla. Los
+  monitores sin línea siguen el fondo canónico de Omarchy.
+- `sync-wallpaper.sh`: aplica a hyprpaper el fondo de cada monitor y empuja el mismo
+  mapa al overview. Con un `.so` viejo la opción no existe y el push se omite sin
+  romper nada.
+- `autostart.lua`: corre `sync-wallpaper.sh` 3 s después de hyprpaper, para que en el
+  login la grilla no abra con el fondo canónico en la vertical.
+- `hyprexpo-rebuild.sh`: guard de la opción nueva (no se pierde en un rebase del patch).
+
+**Verificado**:
+
+- `hyprexpo-rebuild.sh`: patch aplica, guards pasan, compila e instala el `.so`.
+- En vivo: segunda pantalla con su fondo propio y panel interno intacto
+  (`hyprctl hyprpaper listactive`), `sync-wallpaper.sh` repetible sin drift.
+- Overview por pantalla: pendiente de ver. El `.so` se aplica recién al reiniciar
+  Hyprland (no se puede recargar en caliente).
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` (ya hecho) + logout/login.
+
+**Revertir**: volver al `.so` anterior; el overview vuelve a un solo fondo global y
+`wallpaper-monitors.conf` a aplicar solo a hyprpaper.
+
 ## Cambio 2026-11-10e — previews 1:1 en el monitor girado, grilla con `scrolling` y hold de Súper con lan-mouse
 
 **Motivo**: (1) en el desktop vertical (DP-2, `transform 3`, escala 1.25) el contenido
