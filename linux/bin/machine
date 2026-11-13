@@ -518,12 +518,16 @@ def cmd_idea(args) -> None:
     text = " ".join(args.text).strip()
     if not text:
         sys.exit("machine: la idea está vacía")
+    title = (args.title or "").strip()
+    if not title:
+        # Sin nombre explícito: primera frase corta, cortada en palabra.
+        first = text.split(".")[0]
+        title = first if len(first) <= 42 else first[:42].rsplit(" ", 1)[0] + "…"
     n = 1
     while con.execute("SELECT 1 FROM entities WHERE kind='idea' AND slug=?",
                       (f"idea-{n}",)).fetchone():
         n += 1
     slug = f"idea-{n}"
-    title = text if len(text) <= 70 else text[:67].rstrip() + "…"
     stamp = now()
     con.execute(
         "INSERT INTO entities (kind, slug, title, state, note, source, created_at, updated_at)"
@@ -905,6 +909,7 @@ def main() -> None:
 
     idea = sub.add_parser("idea", help="captura una idea en texto libre (sin texto: lista)")
     idea.add_argument("text", nargs="*")
+    idea.add_argument("--title", help="nombre corto (2-4 palabras)")
     idea.set_defaults(func=cmd_idea)
 
     ren = sub.add_parser("rename", help="cambia el nombre visible de un proyecto")

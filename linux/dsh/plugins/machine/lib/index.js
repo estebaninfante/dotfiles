@@ -158,12 +158,15 @@ export function apply(ctx) {
 			handler: async (req, res) => {
 				const body = await readJsonBody(req).catch(() => null);
 				const text = typeof body?.text === "string" ? body.text.trim() : "";
+				const title = typeof body?.title === "string" ? body.title.trim() : "";
 				if (!text) {
 					sendJson(res, 400, { error: "missing-text" });
 					return;
 				}
+				const args = ["idea", text];
+				if (title) args.push("--title", title);
 				try {
-					sendJson(res, 200, { ok: true, out: await machine(["idea", text]) });
+					sendJson(res, 200, { ok: true, out: await machine(args) });
 				} catch (error) {
 					fail(res, error);
 				}

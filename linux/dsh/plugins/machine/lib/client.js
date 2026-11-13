@@ -703,12 +703,14 @@ input.mr-field{height:36px;padding:0 12px}
 		function IdeaDialog(props) {
 			const { onCancel, onDone } = props;
 			const [text, setText] = React.useState("");
+			const [name, setName] = React.useState("");
 			const [busy, setBusy] = React.useState(false);
 			const [err, setErr] = React.useState("");
 			const ref = React.useRef(null);
+			const nameRef = React.useRef(null);
 
 			React.useEffect(() => {
-				const t = setTimeout(() => ref.current && ref.current.focus(), 30);
+				const t = setTimeout(() => (nameRef.current || ref.current) && nameRef.current.focus(), 30);
 				const onKey = (event) => {
 					if (event.key !== "Escape") return;
 					event.preventDefault();
@@ -727,7 +729,7 @@ input.mr-field{height:36px;padding:0 12px}
 				if (!value || busy) return;
 				setBusy(true);
 				try {
-					await api("/machine/idea", { text: value });
+					await api("/machine/idea", { text: value, title: name.trim() });
 					await onDone(value);
 				} catch (error) {
 					setErr(error.message);
@@ -754,8 +756,23 @@ input.mr-field{height:36px;padding:0 12px}
 						h(
 							"p",
 							null,
-							"Escribila como te salga. Queda guardada como «sin decidir»; cuando quieras la convertimos en proyecto con su DoD.",
+							"Primero un nombre corto para poder nombrarla después; abajo, la idea como te salga.",
 						),
+						h("input", {
+							ref: nameRef,
+							className: "mr-field",
+							value: name,
+							placeholder: "Nombre: 2 a 4 palabras",
+							maxLength: 60,
+							disabled: busy,
+							onChange: (event) => setName(event.target.value),
+							onKeyDown: (event) => {
+								if (event.key === "Enter") {
+									event.preventDefault();
+									ref.current && ref.current.focus();
+								}
+							},
+						}),
 						h("textarea", {
 							ref,
 							className: "mr-field mr-idea-text",
