@@ -3,6 +3,24 @@
 Este archivo es la regla global del DeepSeek Harness para esta máquina
 (`~/.dsh/AGENTS.md`, symlink a `~/dotfiles/linux/agents/delegacion-claude.md`).
 
+## Regla dura: no reinicies el harness
+
+El servidor que te está ejecutando es `dsh-web.service`. Reiniciarlo **mata tu turno y
+las otras sesiones abiertas**; el usuario queda en "reconectar", tiene que cerrar y abrir
+la app, y darle *continue* a cada conversación. No lo hagas nunca por tu cuenta.
+
+- **Prohibido** desde un shell del agente: `dsh-web --restart`, `dsh-web --stop`,
+  `systemctl --user restart|stop dsh-web`, `kill` del proceso en `:3980`, y el atajo
+  `setsid nohup bash -c 'sleep N; dsh-web --restart'` (muere igual: DSH para el scope del
+  comando y se lleva el reinicio, así que el servidor **no vuelve**).
+- El wrapper ya se niega (`DSH_SESSION_ID` presente) y el guard `dsh-web-guard.timer` lo
+  levanta en ≤30 s si algo lo tiró. Igual: no lo intentes.
+- Si un cambio **necesita** reinicio (plugin de host, ruta nueva, `cordis.patch.yml`):
+  terminá el trabajo, verificá lo que puedas sin reiniciar, y cerrá con **un** paso para
+  el usuario: `dsh-web --restart` en su terminal (lo reabre solo).
+- Solo si el usuario pide expresamente "reiniciá en N segundos" en ese turno:
+  `dsh-web --restart-later 60` (timer de systemd, fuera de tu cgroup: ese sí se ejecuta).
+
 ## Cuándo delegar
 
 Cuando un problema **no se resuelve** después de 2 o 3 intentos serios, o cuando cada

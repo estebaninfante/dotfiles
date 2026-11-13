@@ -338,8 +338,11 @@ Se enlaza a `~/.dsh/plugins/claude-visible` y `link-dotfiles.sh` asegura su entr
 `~/.dsh/profiles/web/cordis.patch.yml` (forma `- insert:`) y la dependencia
 `file:` en el perfil web. **El servidor del harness carga los plugins al arrancar**:
 después de instalarlo hay que reiniciar con `dsh-web --restart` (o el próximo inicio).
-Ojo: reiniciar el servidor corta la sesión en curso, así que no lo hagas a mitad de un
-turno largo.
+**El reinicio lo hace el usuario, no el agente** (ver `linux/agents/delegacion-claude.md`,
+"Regla dura: no reinicies el harness"): parar el servidor mata el turno en curso y deja
+las sesiones en "reconectar". El agente termina, verifica y cierra con ese paso para el
+usuario; `dsh-web --restart` desde un shell del agente ahora se niega, y
+`dsh-web-guard.timer` levanta el servidor en ≤30 s si algo lo tiró.
 
 ### `side-questions`: preguntas laterales sobre texto seleccionado
 

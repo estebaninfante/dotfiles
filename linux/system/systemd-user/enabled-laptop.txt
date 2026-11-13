@@ -4,6 +4,12 @@
 
 dsh-web.service
 
+# Vigila el servidor del harness: si se cae (o un agente lo para sin querer), lo
+# levanta solo en <=30 s y la ventana reconecta sin cerrar la app. `dsh-web
+# --stop` deja la bandera que este guard respeta.
+dsh-web-guard.service
+dsh-web-guard.timer
+
 # Lee en voz alta las respuestas del tutor de LearnHarness (audífonos, manos
 # libres). Se apaga con `leer off`. Unit: lh-leer.service
 

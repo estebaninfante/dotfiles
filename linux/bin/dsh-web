@@ -17,18 +17,31 @@
 # Uso:
 #   dsh-web            levanta el servidor si hace falta y abre/focaliza la UI
 #   dsh-web --restart  reinicia el servidor y reabre la UI (toma este script)
+#   dsh-web --restart-later [segundos]  programa el reinicio (default 60)
 #   dsh-web --phone    imprime el enlace del celular (+ QR si hay terminal)
 #   dsh-web --url      imprime la URL local con token (no abre nada)
 #   dsh-web --status   estado del unit + URLs local y del celular
 #   dsh-web --stop     apaga el servidor
 #   dsh-web --serve    corre el servidor en primer plano (lo usa el unit)
+#
+# --restart y --stop se niegan a correr dentro de una sesión del harness (los
+# shells del agente traen DSH_SESSION_ID): parar el servidor corta la sesión en
+# curso y la deja en "reconectar" hasta que se reabre la app. El humano lo corre
+# desde su terminal; un agente usa --restart-later (programa el reinicio en un
+# timer de systemd, fuera del cgroup del comando, así que sí se ejecuta).
+# Escape explícito del dueño: --force.
 set -uo pipefail
+
+SCRIPT=$(readlink -f "$0")
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dsh-web"
 LOG="$STATE/server.log"
 PHONE_FILE="$STATE/phone.url"
 TS_HOST_FILE="$STATE/tshost"
 TRUST_FILE="$STATE/trusted-host"
+# Bandera de apagado a propósito: la respeta dsh-web-guard (el watchdog) para no
+# resucitar el servidor cuando el dueño lo apagó con --stop.
+STOPPED_FILE="$STATE/stopped"
 UNIT=dsh-web.service
 # Puerto del enlace tailnet-only. 443 lo ocupa otra app y 8443-8445 también.
 TS_PORT="${DSH_WEB_TS_PORT:-8446}"
@@ -205,6 +218,7 @@ ensure_unit() {
 ensure_server() {
   alive_url && return 0
   ensure_unit
+  rm -f "$STOPPED_FILE"
   # El arranque en frío tarda ~20 s: sin aviso, el click en el launcher parece
   # no hacer nada.
   command -v notify-send >/dev/null \
@@ -219,13 +233,26 @@ ensure_server() {
   wait_url
 }
 
+# Los shells que abre el servidor del harness traen DSH_SESSION_ID; una terminal
+# común no. Eso separa "lo pidió el dueño" de "lo pidió un agente".
+inside_harness() { [[ -n ${DSH_SESSION_ID:-} ]]; }
+
+refuse_inside_harness() {
+  local what=$1
+  printf 'dsh-web: %s desde dentro del harness corta la sesión en curso y la deja en "reconectar".\n' "$what" >&2
+  echo 'dsh-web: terminá el trabajo y pedile al usuario que lo haga él, o programalo con:' >&2
+  echo 'dsh-web:   dsh-web --restart-later 60' >&2
+  echo "dsh-web: si el usuario lo pidió explícitamente en este turno: dsh-web $what --force" >&2
+  exit 3
+}
+
 case "${1:-}" in
   --serve)
     # Bajo systemd (dsh-web.service): publica la URL en el log y el resto al
     # journal. pipefail propaga el fallo de dsh para que Restart actúe.
     mkdir -p "$STATE"
     : >"$LOG"
-    rm -f "$PHONE_FILE" "$TRUST_FILE"
+    rm -f "$PHONE_FILE" "$TRUST_FILE" "$STOPPED_FILE"
     set -o pipefail
     # Puerto fijo (o efímero si está ocupado): el servidor administrado no
     # pelea por el 3080 con un `dsh web` lanzado a mano en una terminal; el
@@ -271,10 +298,44 @@ case "${1:-}" in
     # El token y el enlace del celular son por proceso: reiniciar es la forma
     # de tomar un script nuevo. Después sigue el camino normal (esperar,
     # publicar el enlace y abrir la ventana).
+    inside_harness && [[ ${2:-} != --force ]] && refuse_inside_harness --restart
+    rm -f "$STOPPED_FILE"
     systemctl --user stop "$UNIT" >/dev/null 2>&1
     systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
     ;;
+  --restart-now)
+    # Lo corre el timer de --restart-later. Es lo único que puede reiniciar sin
+    # matarse a sí mismo: el timer vive en el user manager, fuera del cgroup del
+    # comando, así que el stop no se lleva puesto al que tiene que arrancar.
+    rm -f "$STOPPED_FILE"
+    systemctl --user stop "$UNIT" >/dev/null 2>&1
+    systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
+    ensure_server || exit 1
+    exit 0
+    ;;
+  --restart-later)
+    # systemd-run arma un timer transitorio: cuando vence corre este mismo
+    # script en --restart-now. Un `setsid nohup … sleep; dsh-web --restart`
+    # desde un shell del harness NO sirve: al volver el comando, DSH para el
+    # scope del subproceso (KillMode=control-group) y se lleva el reinicio.
+    delay=${2:-60}
+    if ! [[ $delay =~ ^[0-9]+$ ]]; then
+      echo "dsh-web: --restart-later espera segundos (ej. --restart-later 60), no '$delay'" >&2
+      exit 2
+    fi
+    later_unit="dsh-web-restart-$(date +%s)"
+    if ! systemd-run --user --quiet --collect --unit="$later_unit" \
+      --on-active="${delay}s" -- "$SCRIPT" --restart-now >/dev/null 2>&1; then
+      echo 'dsh-web: no pude programar el reinicio (falló systemd-run)' >&2
+      exit 1
+    fi
+    printf 'dsh-web: reinicio programado en %ss (%s)\n' "$delay" "$later_unit"
+    exit 0
+    ;;
   --stop)
+    inside_harness && [[ ${2:-} != --force ]] && refuse_inside_harness --stop
+    mkdir -p "$STATE"
+    : >"$STOPPED_FILE"
     exec systemctl --user stop "$UNIT"
     ;;
   --status)

@@ -1,0 +1,6 @@
+[Unit]
+Description=DeepSeek Harness: levanta dsh-web si se cayó y nadie lo apagó
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/dsh-web-guard

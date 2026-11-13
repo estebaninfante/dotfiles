@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# dsh-web-guard — red de seguridad del servidor del harness.
+#
+# Si dsh-web.service no está corriendo y nadie lo apagó a propósito (--stop deja
+# la bandera $STATE/stopped), lo levanta. Corre por dsh-web-guard.timer cada 30 s:
+# si un agente se lleva puesto el servidor, la UI reconecta sola y no hay que
+# cerrar y abrir la app.
+#
+# Un harness que no está instalado no es un problema: sin el unit, sale 0.
+set -uo pipefail
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dsh-web"
+UNIT=dsh-web.service
+
+systemctl --user cat "$UNIT" >/dev/null 2>&1 || exit 0
+[[ -f $STATE/stopped ]] && exit 0
+systemctl --user is-active --quiet "$UNIT" && exit 0
+
+systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
+if systemctl --user start "$UNIT" >/dev/null 2>&1; then
+  command -v notify-send >/dev/null 2>&1 \
+    && notify-send -a "DeepSeek Harness" "El harness se había caído" "Lo levanté solo; la ventana reconecta en unos segundos"
+fi
+
+exit 0
