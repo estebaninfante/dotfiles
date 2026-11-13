@@ -1079,8 +1079,17 @@ input.mr-field{height:36px;padding:0 12px}
 				const host = f.remote_host || "";
 				const stale = p.age_days != null && p.age_days >= 30 && p.state !== "archived";
 				const tasks = Number(f.tickets_open || 0);
+				const summary = (() => {
+					const readme = String(f.readme_excerpt || "").trim();
+					if (readme) return readme.length > 110 ? readme.slice(0, 107) + "…" : readme;
+					const title = shortTitle(p);
+					if (title) return title;
+					const commit = String(f.last_commit_subject || "").trim();
+					if (commit) return `último: ${commit.length > 96 ? commit.slice(0, 93) + "…" : commit}`;
+					return "";
+				})();
 				const sub = [
-					shortTitle(p),
+					summary,
 					p.kind && p.kind !== "project" ? KIND_LABEL[p.kind] || p.kind : "",
 					f.branch && f.branch !== "main" && f.branch !== "master" ? f.branch : "",
 					tasks ? plural(tasks, "tarea abierta", "tareas abiertas") : "",
@@ -1290,7 +1299,7 @@ input.mr-field{height:36px;padding:0 12px}
 				const ahead = String(f.ahead ?? "0");
 				const remote = f.remote_url || "";
 				const webRemote = remote.replace(/^git@([^:]+):/, "https://$1/").replace(/\.git$/, "");
-				const desc = shortTitle(d);
+				const desc = String(f.readme_excerpt || "").trim() || shortTitle(d);
 				const home = (f.path || "").replace(/^\/home\/[^/]+/, "~");
 
 				const kv = (label, value, opts) => {
@@ -1403,7 +1412,15 @@ input.mr-field{height:36px;padding:0 12px}
 								"dl",
 								{ className: "mr-card", style: { margin: 0 } },
 								kv("Rama", f.branch || "—", { tone: f.branch ? undefined : "quiet" }),
-								kv("Último commit", f.last_commit || "—", { tone: f.last_commit ? undefined : "quiet" }),
+								kv("Último commit", f.last_commit || "—", {
+									tone: f.last_commit ? undefined : "quiet",
+									small: f.last_commit_subject || "",
+								}),
+								kv(
+									"Peso",
+									f.size_mb ? `${f.size_mb} MB` : "—",
+									{ tone: f.size_mb ? undefined : "quiet", small: f.files ? `${f.files} archivos` : "" },
+								),
 								kv("Sin guardar", dirty > 0 ? plural(dirty, "archivo", "archivos") : "nada", {
 									tone: dirty > 0 ? "warn" : "quiet",
 								}),

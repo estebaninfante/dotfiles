@@ -180,6 +180,48 @@ def systemd_units() -> str:
         return ""
 
 
+def readme_excerpt(path: Path, limit: int = 160) -> str:
+    """Primer párrafo útil del README (sin título, badges ni HTML)."""
+    for name in ("README.md", "readme.md", "README"):
+        f = path / name
+        if not f.is_file():
+            continue
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return ""
+        buf: list[str] = []
+        for raw in lines[:60]:
+            line = raw.strip()
+            if not line or line.startswith(("#", "!", "[!", "<", "|", "```", "---", "===")):
+                if buf:
+                    break
+                continue
+            buf.append(line)
+            if sum(len(x) for x in buf) > limit:
+                break
+        text = " ".join(buf)
+        text = " ".join(text.replace("**", "").replace("`", "").split())
+        return text[:limit]
+    return ""
+
+
+def dir_stats(path: Path) -> tuple[int, float]:
+    """(archivos, MB) sin entrar en .git ni node_modules."""
+    files = 0
+    size = 0
+    for root, dirs, names in os.walk(path):
+        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", ".venv", "__pycache__", ".next")]
+        for name in names:
+            fp = Path(root) / name
+            try:
+                size += fp.stat().st_size
+            except OSError:
+                continue
+            files += 1
+    return files, round(size / (1024 * 1024), 1)
+
+
 def collect(path: Path, units: str, tickets: dict[str, tuple[int, int]]) -> dict[str, str]:
     slug = path.name
     is_git = bool(git(path, "rev-parse", "--git-dir"))
@@ -194,6 +236,7 @@ def collect(path: Path, units: str, tickets: dict[str, tuple[int, int]]) -> dict
         facts["dirty"] = str(len(status.splitlines())) if status else "0"
         ahead = git(path, "rev-list", "--count", "@{u}..HEAD")
         facts["ahead"] = ahead if ahead else "?"
+        facts["last_commit_subject"] = git(path, "log", "-1", "--format=%s")[:200]
         remote = git(path, "remote", "get-url", "origin")
         facts["remote_url"] = remote
         host = ""
@@ -208,6 +251,10 @@ def collect(path: Path, units: str, tickets: dict[str, tuple[int, int]]) -> dict
         facts["git"] = "false"
         facts["last_commit"] = dt.date.fromtimestamp(path.stat().st_mtime).isoformat()
 
+    files, size_mb = dir_stats(path)
+    facts["files"] = str(files)
+    facts["size_mb"] = str(size_mb)
+    facts["readme_excerpt"] = readme_excerpt(path)
     facts["has_readme"] = "true" if (path / "README.md").is_file() else "false"
     facts["has_agents"] = "true" if (path / "AGENTS.md").is_file() else "false"
     facts["has_webapp"] = "true" if (path / ".webapp.json").is_file() else "false"
@@ -282,8 +329,8 @@ def cmd_ls(args) -> None:
     if args.state:
         where.append("e.state = ?")
         params.append(args.state)
-    if args.archived is False:
-        where.append("e.state != 'archived'")
+    if not args.kind and not getattr(args, "all", False):
+        where.append("e.kind != 'task'")
     sql = (
         "SELECT e.slug, e.kind, e.state, e.title,"
         "       MAX(CASE WHEN f.key='last_commit' THEN f.value END) AS last_commit,"
@@ -641,8 +688,7 @@ def main() -> None:
     ls.add_argument("--json", action="store_true")
     ls.add_argument("--kind")
     ls.add_argument("--state")
-    ls.add_argument("--all", dest="archived", action="store_true", default=True,
-                    help="incluye archivados (default)")
+    ls.add_argument("--all", action="store_true", help="incluye tareas y todo")
     ls.set_defaults(func=cmd_ls)
 
     show = sub.add_parser("show", help="ficha de una entidad")
