@@ -477,10 +477,12 @@ arrancar.
 ### `skills`: panel de skills en la barra lateral
 
 `linux/dsh/plugins/skills/` (host + cliente) pone un **panel `Skills` justo debajo
-de `Plugins`** en la barra lateral: lista todas las skills con su descripción, el
-origen (`~/.agents/skills`, `~/.dsh/skills`, proyecto) y la ruta del `SKILL.md`,
-marca cuáles ve el modelo y cuáles son solo por comando, filtra con un buscador y
-abre el `SKILL.md` completo en la misma página (Esc vuelve).
+de `Plugins`** en la barra lateral: una **matriz de tarjetas** (título +
+descripción) con todas las skills, su origen (`~/.agents/skills`,
+`~/.dsh/skills`, proyecto) y la ruta del `SKILL.md`; marca cuáles ve el modelo y
+cuáles son solo por comando, filtra con un buscador y, al abrir una, **renderiza
+el Markdown** y deja **editarlo** (⌘/Ctrl+S guarda, Esc cancela). Los cambios de
+cliente se ven al refrescar la página; una ruta nueva necesita reinicio.
 
 - **No lee `ctx.skills` como fuente**: el bundle web **desactiva** el
   `skill-filesystem` de host (`dsh-web-app/cordis.patch.yml: - id: skill-filesystem
@@ -491,11 +493,21 @@ abre el `SKILL.md` completo en la misma página (Esc vuelve).
   `disable-model-invocation` / `user-invocable` (ausente = permitido; ortografía
   rara = se descarta, igual que el harness). Lo descartado se lista aparte como
   "entrada que el harness no carga".
-- Rutas: `GET /skills/list[?cwd=]` y `GET /skills/read?name=<kebab-case>`. El nombre
-  se valida contra `^[a-z0-9]+(?:-[a-z0-9]+)*$`, así que no hay traversal por query.
+- Rutas: `GET /skills/list[?cwd=]`, `GET /skills/read?name=<kebab-case>` y
+  `POST /skills/save` con `{name, content}`. El nombre se valida contra
+  `^[a-z0-9]+(?:-[a-z0-9]+)*$`, así que no hay traversal por query.
+- **Guardar no puede romper el catálogo**: solo escribe archivos que el
+  descubrimiento ya encontró (nunca una ruta que venga del navegador), exige el
+  header `x-dsh-skills: 1` (un sitio externo no lo puede mandar sin preflight),
+  valida que el frontmatter nuevo siga teniendo `name` kebab-case y `description`,
+  y rechaza renombrar a un nombre ya ocupado. Escribe un temporal al lado y lo
+  renombra (resuelve el symlink a dotfiles y conserva los permisos).
+- El Markdown (`##`, `**`, listas, código, tablas, citas) se renderiza con un
+  parser propio, sin dependencias ni HTML crudo; los links solo se aceptan
+  `http(s)://`.
 - Verificación sin reiniciar: un `ctx` falso que capture las rutas registradas
-  (probar `apply` con `node` y un `req/res` de mentira). Requiere reiniciar
-  (`dsh-web --restart`) para que el proceso cargue las rutas y el grafo de clientes.
+  (probar `apply` con `node` y un `req/res` de mentira) y el cliente con loader
+  falso. Reiniciar (`dsh-web --restart`) solo hace falta cuando cambian las rutas.
 
 ### UI de plugins: se diseña primero para el celular
 
