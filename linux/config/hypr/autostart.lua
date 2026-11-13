@@ -39,7 +39,32 @@ hl.on("hyprland.start", function()
         hl.exec_cmd("sleep 5 && libinput-gestures-setup start")
     end
 
-    hl.dsp.focus({ workspace = 5 })
+    -- Cada pantalla arranca en su propio juego de espacios: laptop 1..9, vertical
+    -- 28..36 (ver base/workspaces.lua). Antes había un `focus workspace 5` sin
+    -- mirar la pantalla: si al arrancar el foco estaba en la vertical, el 5 se
+    -- creaba ahí y la vertical quedaba mostrando un espacio de la laptop.
+    hl.timer(function()
+        local spaces = require("base.workspaces")
+        local internal = nil
+        for _, monitor in ipairs(hl.get_monitors()) do
+            local name = monitor.name
+            if name:match("^eDP") then internal = internal or monitor end
+            if not name:match("^HEADLESS") and not name:match("^AGENTE") then
+                local base = spaces.base_for(monitor)
+                local active = monitor.active_workspace
+                local id = active and active.id or nil
+                local in_set = type(id) == "number" and id >= base and id < base + spaces.SET_SIZE
+                if not in_set then
+                    hl.dispatch(hl.dsp.focus({ monitor = name }))
+                    hl.dispatch(hl.dsp.focus({ workspace = tostring(base) }))
+                end
+            end
+        end
+        if internal ~= nil then
+            hl.dispatch(hl.dsp.focus({ monitor = internal.name }))
+        end
+        hl.dispatch(hl.dsp.focus({ workspace = "5" }))
+    end, { timeout = 2500, type = "oneshot" })
 
     hl.exec_cmd("sleep 3 && hyprctl reload")
 end)

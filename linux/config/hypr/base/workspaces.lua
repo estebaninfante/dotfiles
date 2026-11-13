@@ -59,31 +59,37 @@ end
 
 -- Monitor bajo un punto global (coordenadas lógicas del layout).
 local function monitor_at(x, y)
-    for _, monitor in ipairs(hl.get_monitors()) do
-        local width = monitor.width / monitor.scale
-        local height = monitor.height / monitor.scale
-        if monitor.transform % 2 == 1 then width, height = height, width end
-        if x >= monitor.x and x < monitor.x + width and y >= monitor.y and y < monitor.y + height then
-            return monitor
+    local ok, monitor = pcall(hl.get_monitor_at, x, y)
+    if ok and monitor then return monitor end
+    for _, candidate in ipairs(hl.get_monitors()) do
+        local width = candidate.width / candidate.scale
+        local height = candidate.height / candidate.scale
+        if candidate.transform % 2 == 1 then width, height = height, width end
+        if x >= candidate.x and x < candidate.x + width and y >= candidate.y and y < candidate.y + height then
+            return candidate
         end
     end
     return nil
 end
 
--- Base del monitor DONDE ESTÁ EL PUNTERO: es la pantalla en la que el usuario
--- siente que está trabajando. Con `hl.get_active_monitor()` el set salía del
--- monitor de la ventana enfocada: mover el mouse a la laptop y tocar SUPER+3
--- cambiaba el espacio en la otra pantalla. Si el puntero no se puede leer (lock),
--- cae al monitor activo.
-local function active_base()
+-- Monitor donde está el puntero: es la pantalla en la que el usuario siente que
+-- está trabajando. Si no se puede leer (lock, cursor oculto), cae al activo.
+local function monitor_under_pointer()
     local ok, position = pcall(hl.get_cursor_pos)
     if ok and position then
         local monitor = monitor_at(position.x, position.y)
-        if monitor then return base_for(monitor) end
+        if monitor then return monitor end
     end
     local ok_active, monitor = pcall(hl.get_active_monitor)
-    if not ok_active or not monitor then return PRIMARY_BASE end
-    return base_for(monitor)
+    if ok_active then return monitor end
+    return nil
+end
+
+-- Base del monitor donde está el puntero. Con `hl.get_active_monitor()` el set
+-- salía del monitor de la ventana enfocada: mover el mouse a la laptop y tocar
+-- SUPER+3 cambiaba el espacio en la otra pantalla.
+local function active_base()
+    return base_for(monitor_under_pointer())
 end
 
 local function to_global(index, monitor)
@@ -145,12 +151,26 @@ local function workspace_method()
     return table.concat(parts, ", ")
 end
 
--- Reglas que mandan una app a un espacio de la pantalla de trabajo. Se
--- re-registran cuando cambian los monitores (la última regla que matchea gana),
--- así Spotify cae en el último espacio de la vertical cuando está enchufada y
--- en el último de la laptop cuando no.
+-- Spotify va al ÚLTIMO espacio del set de la pantalla donde está el puntero.
+-- Antes era una regla fija al último espacio de la pantalla "de trabajo": con la
+-- vertical enchufada se abría siempre en la vertical, aunque lo abrieras desde la
+-- laptop. El espacio destino tiene su regla de monitor (ver monitors.lua), así
+-- que se crea en la pantalla correcta aunque no exista todavía.
+local function move_spotify(window)
+    if window == nil or window.class ~= "Spotify" then return end
+    local target = active_base() + SET_SIZE - 1
+    hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. window.address,
+        workspace = tostring(target),
+    }))
+end
+
+hl.on("window.open", move_spotify)
+hl.on("window.class", move_spotify)
+
+-- Reglas que mandan una app a un espacio fijo. Hoy no hay ninguna: Spotify se
+-- resuelve por evento (arriba) para que dependa de la pantalla del puntero.
 local function apply_window_rules()
-    hl.window_rule({ match = { class = "Spotify" }, workspace = tostring(main_last()) })
 end
 
 return {
@@ -159,6 +179,7 @@ return {
     SET_SIZE = SET_SIZE,
     base_for = base_for,
     active_base = active_base,
+    monitor_under_pointer = monitor_under_pointer,
     to_global = to_global,
     to_local = to_local,
     local_of = local_of,

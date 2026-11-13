@@ -385,6 +385,13 @@ expo_focus = function(i)
     local here     = spaces.local_of(hl.get_active_workspace())
 
     if not EXPO_3D then
+        -- Ir al espacio i EN LA PANTALLA DEL PUNTERO. El foco se le da primero a
+        -- esa pantalla porque Hyprland crea los espacios nuevos en el monitor
+        -- enfocado: sin esto, tocar SUPER+1 con el puntero en la laptop podía
+        -- crear/mostrar el espacio en la vertical.
+        local monitor = spaces.monitor_under_pointer()
+        if monitor ~= nil then hl.dispatch(hl.dsp.focus({ monitor = monitor.name })) end
+        here = spaces.local_of(hl.get_active_workspace())
         local same = here ~= nil and here == i
         hl.dispatch(hl.dsp.focus({ workspace = same and "previous" or tostring(spaces.to_global(i)) }))
         return
