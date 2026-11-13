@@ -3,7 +3,7 @@
 `~/dotfiles` es la fuente de verdad. Todo lo gestionado vive acá; `~/.config`,
 `~/.local/bin`, etc. son symlinks a este repo. Se edita acá, nunca en el destino.
 
-Omarchy (Arch), sin NixOS. Paquetes con `pacman`/`yay`.
+Omarchy (Arch). Paquetes con `pacman`/`yay`.
 
 ## Dónde va cada cosa
 
@@ -48,15 +48,10 @@ Omarchy (Arch), sin NixOS. Paquetes con `pacman`/`yay`.
 ## Trampas
 
 - No tocar bloques `if machine == "X"`: son machine-specific. Tipo: `scripts/detect-machine.sh`.
-- Puertos tomados: 3980 dsh-web · 8777 foldertinder · 3031/3040 agentes-platform · 8791 lienzo creativo.
 - `~/.dsh/plugins` es symlink; un plugin de host nuevo necesita `dsh-web --restart` (lo corre el usuario).
 - Servicios solo por loopback + Tailscale. No habilitar units sin que el usuario lo pida.
 - Sunshine: `autoStart=false` obligatorio.
 - Las máquinas se apagan solas a las 21:00 (`bedtime.timer`).
-
-## No se gestiona
-
-Caches, navegadores, IDEs, credenciales, tokens, claves privadas, datos de usuario.
 
 ## Autonomía
 

@@ -24,7 +24,7 @@ Item {
   Rectangle {
     id: card
     width: layout.implicitWidth + Style.space(16)
-    height: layout.implicitHeight
+    height: layout.implicitHeight + Style.space(12)
     radius: Math.max(Style.space(8), Style.cornerRadius)
     color: Color.menu.background
     border.width: Math.max(1, Style.space(1))
@@ -44,7 +44,12 @@ Item {
         id: mode
         readonly property bool recording: root.intent === "video"
 
-        width: modeRow.implicitWidth + Style.space(18)
+        // Ancho fijo: el del modo más ancho, así el botón no cambia de tamaño
+        // (ni mueve el resto de la barra) al alternar Capturar/Grabar.
+        readonly property real widest: Math.max(modeProbeCapture.implicitWidth,
+                                                modeProbeRecord.implicitWidth)
+
+        width: widest + Style.space(18)
         height: Style.space(34)
         radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
         color: modeArea.containsMouse
@@ -55,6 +60,45 @@ Item {
 
         Behavior on color {
           ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
+
+        // Medidores invisibles: fijan el ancho al del modo que más ocupa.
+        Row {
+          id: modeProbeCapture
+          visible: false
+          spacing: Style.space(6)
+
+          Text {
+            text: "󰹑"
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.icon
+          }
+
+          Text {
+            text: "Capturar"
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+        }
+
+        Row {
+          id: modeProbeRecord
+          visible: false
+          spacing: Style.space(6)
+
+          Text {
+            text: "󰻂"
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.icon
+          }
+
+          Text {
+            text: "Grabar"
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
         }
 
         RowLayout {
