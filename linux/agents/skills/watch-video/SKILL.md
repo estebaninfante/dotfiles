@@ -1,6 +1,6 @@
 ---
 name: watch-video
-description: Ver un video que el usuario comparte: descargarlo, sacar frames y describir qué pasa en pantalla.
+description: "Ver un video que el usuario comparte: descargarlo, sacar frames y describir qué pasa en pantalla."
 ---
 
 # Watch a video
