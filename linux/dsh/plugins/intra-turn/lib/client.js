@@ -829,6 +829,7 @@ window.__ModuleLoader__.load({
 			if (text.trim().length === 0) {
 				seq++;
 				inflight?.abort();
+				hideWait();
 				if (items.length > 0) clearAll();
 				lastAnalyzed = "";
 				return;
@@ -836,6 +837,7 @@ window.__ModuleLoader__.load({
 			if (text.length < MIN_CHARS) {
 				seq++;
 				inflight?.abort();
+				hideWait();
 				lastAnalyzed = "";
 				return;
 			}

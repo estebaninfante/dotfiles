@@ -83,14 +83,16 @@
           "id": "io.github.dragosol.better-displays-pro"
         },
         {
+          "brandIcons": false,
           "colorCodeUsage": true,
           "hiddenBarEntries": [
             "copilot"
           ],
           "id": "akitaonrails.ai-usagebar",
-          "lastSelectedEntryId": "opencode-go",
+          "lastSelectedEntryId": "custom:opencode-go-local",
           "showAll": true,
-          "showProvider": true,
+          "showProvider": false,
+          "showValue": false,
           "tabNames": true
         }
       ]

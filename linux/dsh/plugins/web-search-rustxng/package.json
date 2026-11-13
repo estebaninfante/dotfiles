@@ -1,0 +1,8 @@
+{
+  "name": "dsh-local-web-search-rustxng",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Búsqueda web del harness con RustXNG local: levanta el servicio solo cuando se usa",
+  "main": "lib/index.js"
+}
