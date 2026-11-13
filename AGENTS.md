@@ -438,6 +438,17 @@ editable, botón para abrir la carpeta en el gestor, contenido centrado a 1200px
 del disco, nota y tareas. Se abre con la pestaña vertical `proyectos` del borde
 izquierdo; se cierra con Esc o el botón.
 
+- **Botones de conversación en la ficha**: `Trabajar` (arranca por la primera tarea
+  pendiente) y `Ajustar` (cambiar objetivo/tareas/prueba); en una idea es `Abrir
+  conversación`. Crean una sesión nueva del harness (`ctx.get("sessions").create`,
+  con la carpeta del proyecto como `cwd` si existe), le mandan un primer mensaje con
+  el contexto ya escrito (título, objetivo, tareas pendientes, la prueba, carpeta,
+  nota) más la misión, y navegan al chat (`ctx.get("layout").selectPanel(null)` +
+  `uiWorkspace.openSession`). Se usa `ctx.get` en vez de `inject` para que el panel
+  siga funcionando si esos servicios no están.
+  Verificador sin navegador: `scripts/verify/machine-panel.sh` (React falso con
+  hooks, `fetch` de mentira: renderiza la ficha y comprueba los tres clics).
+
 - **La base es la fuente de verdad**: `~/.local/share/machine/machine.db`
   (SQLite, WAL). Tablas `entities` (kind, slug, title, state, note, parent_id),
   `facts` (hechos observados), `sources`, `schema_version` (migraciones

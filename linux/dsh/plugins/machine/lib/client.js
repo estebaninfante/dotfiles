@@ -369,6 +369,90 @@ input.mr-field{height:36px;padding:0 12px}
 			return data;
 		}
 
+		/* ------------------------------------------------------------------ */
+		/* Abrir una conversación para un proyecto o una idea.                 */
+		/*                                                                     */
+		/* Crea una sesión nueva (en la carpeta del proyecto, si tiene una),   */
+		/* le manda el contexto ya escrito y navega al chat. Así el usuario    */
+		/* no tiene que copiar y pegar nada: el agente arranca sabiendo qué    */
+		/* es, cuál es el objetivo y qué tareas quedan.                        */
+		/* ------------------------------------------------------------------ */
+
+		function contextLines(entity) {
+			const f = (entity && entity.facts) || {};
+			const lines = [];
+			if (entity.kind === "idea") {
+				lines.push(`Idea: ${entity.title || entity.slug}`);
+				if (entity.note) lines.push(String(entity.note).trim());
+			} else {
+				lines.push(`Proyecto: ${entity.title || entity.slug} (slug: ${entity.slug})`);
+				if (f.goal) lines.push(`Objetivo: ${f.goal}`);
+				const tasks = entity.tasks || [];
+				const pending = tasks.filter((t) => !t.state || t.state === "active" || t.state === "open");
+				if (pending.length) {
+					lines.push("Tareas:");
+					pending.forEach((t, i) => lines.push(`${i + 1}. ${t.title}`));
+				}
+				if (f.check) lines.push(`La prueba: ${f.check}`);
+				if (f.path) lines.push(`Carpeta: ${f.path}`);
+				if (entity.note) lines.push(`Nota: ${String(entity.note).trim()}`);
+			}
+			return lines;
+		}
+
+		const MISSION = {
+			work: [
+				"Empezá por la primera tarea pendiente. Antes de tocar nada, decime en dos líneas qué vas a hacer; después hacelo y mostrame el resultado.",
+				"Una tarea por vez. Cuando termines una, marcála con `machine task done <id>` y decime cuál sigue.",
+			],
+			adjust: [
+				"Quiero ajustar esto: el objetivo, las tareas o la prueba. Revisá lo que hay y proponeme los cambios en una lista corta.",
+				"No toques código todavía. Si acordamos cambios, dejálos en la base con `machine set` / `machine task add`.",
+			],
+			idea: [
+				"Ayudame a decidir qué hacer con esta idea: si vale la pena, cómo la arrancamos (objetivo, primeras tareas, cómo comprobamos que funcionó). Si no vale la pena, decímelo en una línea.",
+				"Si seguimos, convertila en proyecto con `machine promote` y dejá el objetivo y las tareas en la base.",
+			],
+		};
+
+		function conversationText(entity, mode) {
+			const body = contextLines(entity).join("\n");
+			const mission = MISSION[mode] || MISSION.idea;
+			return `${body}\n\n${mission.join("\n")}`;
+		}
+
+		/**
+		 * Crea la sesión, manda el contexto y navega al chat.
+		 * Devuelve el id de la sesión. Tira si el harness no la puede crear.
+		 */
+		async function startConversation(ctx, entity, mode) {
+			const get = typeof ctx.get === "function" ? (name) => ctx.get(name) : (name) => ctx[name];
+			const sessions = get("sessions");
+			if (!sessions || typeof sessions.create !== "function") {
+				throw new Error("el harness no expone `sessions`: no puedo abrir la conversación");
+			}
+			const facts = (entity && entity.facts) || {};
+			const cwd = facts.path;
+			const created = await sessions.create(cwd ? { cwd } : {});
+			if (!created || created.ok !== true) {
+				throw new Error((created && created.error && created.error.message) || "no se pudo crear la sesión");
+			}
+			const sessionId = created.value.sessionId;
+			const text = conversationText(entity, mode);
+			await sessions.using(sessionId, { source: "gateway" }, async (reference) => {
+				await reference.ready;
+				const sent = await reference.binding.session.prompt([{ type: "text", text }], "queue");
+				if (!sent || sent.ok !== true) {
+					throw new Error((sent && sent.error && sent.error.message) || "el chat rechazó el mensaje");
+				}
+			});
+			const layout = get("layout");
+			if (layout && typeof layout.selectPanel === "function") layout.selectPanel(null);
+			const navigation = get("uiWorkspace");
+			if (navigation && typeof navigation.openSession === "function") navigation.openSession(sessionId);
+			return sessionId;
+		}
+
 		function useStyles() {
 			React.useEffect(() => {
 				let style = document.getElementById(STYLE_ID);
@@ -484,6 +568,11 @@ input.mr-field{height:36px;padding:0 12px}
 		function IconFolder() {
 			return svg(14, [
 				h("path", Object.assign({ key: 1, d: "M2 4.5c0-.8.7-1.5 1.5-1.5h2.6l1.5 1.5h4.9c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9c-.8 0-1.5-.7-1.5-1.5v-7Z" }, stroke)),
+			]);
+		}
+		function IconChat() {
+			return svg(14, [
+				h("path", Object.assign({ key: 1, d: "M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2v-7Z" }, stroke)),
 			]);
 		}
 		function IconAlert() {
@@ -1204,8 +1293,10 @@ input.mr-field{height:36px;padding:0 12px}
 		/* Panel                                                               */
 		/* ------------------------------------------------------------------ */
 
-		function MachinePanel() {
+		function MachinePanel(props) {
 			useStyles();
+			const openConversation = props && props.openConversation;
+			const [starting, setStarting] = React.useState("");
 			const [projects, setProjects] = React.useState([]);
 			const [filter, setFilter] = React.useState("all");
 			const [kindFilter, setKindFilter] = React.useState("all");
@@ -1258,6 +1349,24 @@ input.mr-field{height:36px;padding:0 12px}
 			React.useEffect(() => {
 				loadTrash();
 			}, [loadTrash]);
+
+			// Abrir una conversación nueva con el contexto ya escrito. El trabajo
+			// pesado (crear sesión y mandar el mensaje) lo hace el plugin; acá
+			// solo se marca "abriendo…" y se muestra el error si vuelve.
+			const startChat = React.useCallback(
+				async (entity, mode) => {
+					if (!openConversation || starting) return;
+					setStarting(mode);
+					setError("");
+					try {
+						await openConversation(entity, mode);
+					} catch (err) {
+						setError(err.message || String(err));
+					}
+					setStarting("");
+				},
+				[openConversation, starting],
+			);
 
 			const recover = React.useCallback(
 				async (slug) => {
@@ -1987,6 +2096,46 @@ input.mr-field{height:36px;padding:0 12px}
 						h(
 							"div",
 							{ className: "mr-dactions" },
+							d.kind === "idea"
+								? h(
+										"button",
+										{
+											type: "button",
+											className: "mr-btn",
+											"data-variant": "solid",
+											disabled: !!starting,
+											onClick: () => startChat(d, "idea"),
+											title: "Abrir una conversación sobre esta idea",
+										},
+										h(IconChat),
+										starting === "idea" ? "Abriendo…" : "Abrir conversación",
+									)
+								: h(
+										"button",
+										{
+											type: "button",
+											className: "mr-btn",
+											"data-variant": "solid",
+											disabled: !!starting,
+											onClick: () => startChat(d, "work"),
+											title: "Abrir una conversación y arrancar por la primera tarea pendiente",
+										},
+										h(IconChat),
+										starting === "work" ? "Abriendo…" : "Trabajar",
+									),
+							d.kind === "idea"
+								? null
+								: h(
+										"button",
+										{
+											type: "button",
+											className: "mr-btn",
+											disabled: !!starting,
+											onClick: () => startChat(d, "adjust"),
+											title: "Abrir una conversación para ajustar el objetivo, las tareas o la prueba",
+										},
+										starting === "adjust" ? "Abriendo…" : "Ajustar",
+									),
 							f.path
 								? h(
 										"button",
@@ -2278,7 +2427,19 @@ input.mr-field{height:36px;padding:0 12px}
 				),
 			);
 			ctx.slots.inject("main", () =>
-				ctx.slots.register({ name: "main", key: PANEL_ID, inject: () => ({}) }, MachinePanel),
+				ctx.slots.register(
+					{
+						name: "main",
+						key: PANEL_ID,
+						inject: () => ({
+							// Crea la sesión con el contexto del proyecto/idea ya escrito
+							// y navega al chat. Usa `ctx.get` para no atarse a los servicios
+							// de sesiones: si faltan, el panel sigue funcionando igual.
+							openConversation: (entity, mode) => startConversation(ctx, entity, mode),
+						}),
+					},
+					MachinePanel,
+				),
 			);
 		}
 
