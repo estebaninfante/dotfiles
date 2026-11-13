@@ -1,17 +1,20 @@
 /**
  * dsh-local-bash-guard — candado del tool `bash`.
  *
- * Prohibe editar archivos con `python3` desde bash. El cambio tiene que ir por
- * las herramientas `edit`/`write`: así el usuario ve el diff al final del turno
- * y el archivo se escribe con el guard de versión del harness.
+ * Los archivos se editan con las herramientas `edit`/`write` del harness, no
+ * desde bash. Así el usuario ve el diff al final del turno y la escritura pasa
+ * por el guard de versión del archivo.
  *
- * Es determinista: no consulta al modelo ni al usuario. `ctx.tools.guard`
- * devuelve un motivo y el harness convierte la llamada en error antes de
- * ejecutarla.
+ * Bloquea las ediciones "ad-hoc" escritas dentro del comando: redirecciones a
+ * archivo, `sed -i`, `tee`, `awk` en sitio, `truncate`, `dd of=`, y los
+ * intérpretes con escritura inline (python, node, ruby, perl).
  *
- * Límite conocido: solo mira el comando que se manda. Un `python3 script.py`
- * que por dentro escribe no se puede detectar sin ejecutarlo; para eso está la
- * regla escrita en `reglas-harness.md`.
+ * No bloquea operaciones ni automatización: `cp`, `mv`, `rm`, `ln`, `git`,
+ * `npm`, `curl -o`, ni correr scripts existentes (`scripts/publish.sh`,
+ * `machine scan`) — lo que un script hace por dentro no lo ve este guard.
+ *
+ * Es determinista: mira el texto del comando y devuelve un motivo; el harness
+ * convierte la llamada en error antes de ejecutarla.
  *
  * @module dsh-local-bash-guard
  */
@@ -19,11 +22,32 @@
 export const name = "dsh-local-bash-guard";
 export const inject = ["tools"];
 
-/** `python`, `python3`, `python3.12`, con o sin ruta (`/usr/bin/python3`, `.venv/bin/python`). */
+const DENIED =
+	"Editar archivos desde bash está prohibido. " +
+	"Usá la herramienta `edit` (cambios puntuales) o `write` (archivo completo): " +
+	"el cambio queda visible (diff al final del turno) y protegido contra escrituras viejas. " +
+	"Para datos de prueba generados, creá el archivo con `write`.";
+
+/** Destinos de redirección que no escriben un archivo real. */
+const HARMLESS_TARGET = /^\/(?:dev\/(?:null|stdout|stderr|zero|full)|proc\/self\/fd\/[0-9]+)$/;
+
+/** Intérpretes y comandos que escriben archivos en el mismo comando. */
+const WRITE_PATTERNS = [
+	[/\bsed\b[^\n|;&]*\s-i/, "sed -i"],
+	[/\bperl\b[^\n|;&]*\s-[a-zA-Z]*i/, "perl -i"],
+	[/\bawk\b[^\n|;&]*\binplace\b/, "awk -i inplace"],
+	[/\btee\b(?:\s+-[a-zA-Z]+)*\s+\S/, "tee"],
+	[/\btruncate\b[^\n|;&]*\s-s\b/, "truncate -s"],
+	[/\bdd\b[^\n|;&]*\bof=/, "dd of="],
+	[/\bmkfifo\b/, "mkfifo"],
+	[/\bnode\b[^\n]*\b(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|copyFileSync|renameSync|rmSync|unlinkSync)\b/, "node fs"],
+	[/\bruby\b[^\n]*\b(?:File\.write|File\.open|IO\.write|FileUtils)\b/, "ruby File"],
+];
+
+/** `python`/`python3`, con o sin ruta (`/usr/bin/python3`, `.venv/bin/python`). */
 const PYTHON = /(?:^|[\s;|&(`/])python3?(?:\.[0-9]+)?(?=$|[\s;|&)`])/;
 
-/** Escrituras por método directo o por módulo. */
-const WRITE_CALLS = [
+const PY_WRITE_CALLS = [
 	/\.write_text\s*\(/,
 	/\.write_bytes\s*\(/,
 	/\.writelines\s*\(/,
@@ -35,10 +59,18 @@ const WRITE_CALLS = [
 	/\bPath\s*\([^()]*\)\.(?:write_text|write_bytes|touch|mkdir|unlink|rename|replace)\s*\(/,
 ];
 
-const DENIED =
-	"Prohibido editar archivos con python3 dentro de bash. " +
-	"Usá la herramienta `edit` o `write`: el cambio queda visible (diff al final del turno) y protegido contra escrituras viejas. " +
-	"Si necesitás generar datos, escribí el archivo con `write` o dejá un script y corrélo sin tocar archivos del repo.";
+/**
+ * Redirección que escribe un archivo (`>`, `>>`, `2>`, `&>`), salvo `/dev/*`.
+ * @param {string} command
+ * @returns {boolean}
+ */
+function redirectsToFile(command) {
+	for (const match of command.matchAll(/(?:^|[^&<])>{1,2}(?!&)\s*([^\s|;&<>]+)/g)) {
+		if (HARMLESS_TARGET.test(match[1])) continue;
+		return true;
+	}
+	return false;
+}
 
 /**
  * ¿El comando abre un archivo en modo escritura? Se mira el segundo argumento
@@ -60,9 +92,9 @@ function opensForWriting(command) {
  * @returns {boolean}
  */
 export function pythonWritesFiles(command) {
-	if (typeof command !== "string" || !PYTHON.test(command)) return false;
+	if (!PYTHON.test(command)) return false;
 	if (opensForWriting(command)) return true;
-	return WRITE_CALLS.some((pattern) => pattern.test(command));
+	return PY_WRITE_CALLS.some((pattern) => pattern.test(command));
 }
 
 /**
@@ -77,7 +109,11 @@ export function denialReason(execution) {
 		? execution.arguments
 		: {};
 	const command = typeof args.command === "string" ? args.command : "";
-	return pythonWritesFiles(command) ? DENIED : undefined;
+	if (command.trim() === "") return undefined;
+	if (redirectsToFile(command)) return DENIED;
+	if (pythonWritesFiles(command)) return DENIED;
+	if (WRITE_PATTERNS.some(([pattern]) => pattern.test(command))) return DENIED;
+	return undefined;
 }
 
 /**
@@ -85,5 +121,5 @@ export function denialReason(execution) {
  * @param {import("@deepseek-ai/cordis").Context} ctx
  */
 export function apply(ctx) {
-	ctx.effect(() => ctx.tools.guard((execution) => denialReason(execution)), "bash-guard: python3 no edita archivos");
+	ctx.effect(() => ctx.tools.guard((execution) => denialReason(execution)), "bash-guard: bash no edita archivos");
 }
