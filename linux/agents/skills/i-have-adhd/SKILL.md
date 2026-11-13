@@ -1,6 +1,6 @@
 ---
 name: i-have-adhd
-description: Formatear las respuestas para alguien con ADHD (disperso): la acción primero, pasos numerados, repetir el estado en cada turno, sin tangentes, tiempos en números, logros visibles. Invocar con /i-have-adhd; queda activa hasta "stop adhd mode". Origen: github.com/ayghri/i-have-adhd (MIT).
+description: 'Formatear las respuestas para alguien con ADHD (disperso). La acción primero, pasos numerados, repetir el estado en cada turno, sin tangentes, tiempos en números, logros visibles. Invocar con /i-have-adhd; queda activa hasta "stop adhd mode". Origen: github.com/ayghri/i-have-adhd (MIT).'
 disable-model-invocation: true
 license: MIT
 metadata:
