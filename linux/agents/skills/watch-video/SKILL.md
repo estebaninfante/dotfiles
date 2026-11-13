@@ -1,6 +1,6 @@
 ---
 name: watch-video
-description: Watch a video the user shares (X/Twitter, YouTube, Instagram, TikTok, local file) by downloading it and reading extracted frames as images, then describing what happens on screen and quoting its text. Use when the user pastes a video link, says "mirá este video", "qué muestra esto", "por qué no podés verlo", "sacale los frames", or asks to inspect or compare something that only exists in video. Also use to check a screen recording of a bug.
+description: Ver un video que el usuario comparte: descargarlo, sacar frames y describir qué pasa en pantalla.
 ---
 
 # Watch a video

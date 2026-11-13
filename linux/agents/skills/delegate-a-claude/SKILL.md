@@ -1,6 +1,6 @@
 ---
 name: delegate-a-claude
-description: Delegar a Claude Code (CLI `claude`) un problema en el que DeepSeek Harness se quedó estancado, lanzándolo como subagente dentro del hilo (sin archivos .md). Usar cuando tras 2-3 intentos serios el mismo síntoma sigue igual, cuando cada arreglo rompe otra cosa, cuando hay que tocar un plugin/binario y no se converge, o cuando el usuario diga "delegá esto a Claude", "que lo resuelva Claude", "probá con otro modelo".
+description: Delegar a Claude Code un problema trabado tras 2-3 intentos, o cuando el usuario dice 'probá con otro modelo'.
 ---
 # Delegar a Claude Code (como subagente del hilo)
 
@@ -20,16 +20,11 @@ No delegues tareas de un paso ni cosas que ya sabés hacer.
 
 ## Cómo (un solo camino)
 
-1. Escribí el brief **en el prompt del subagente**, no en un archivo. El subagente lo
-   pasa a Claude por **stdin**:
-
-   ```bash
-   claude -p --permission-mode bypassPermissions <<'BRIEF'
-   <brief completo>
-   BRIEF
-   ```
-
-   Eso es todo: no hay `brief.md`, no hay `out.log`, no hay estado en disco.
+1. Llamá a la herramienta **`delegate_claude`** con el brief completo en `task`:
+   corre `claude -p --permission-mode bypassPermissions` con el brief por **stdin** y
+   devuelve su reporte. La llamada **se ve en la conversación** como cualquier otra
+   herramienta (`running` mientras corre, `Completed in Ns` con la salida al terminar).
+   No hay `brief.md`, ni `out.log`, ni estado en disco.
 
 2. El brief tiene la misma forma de siempre:
    - el problema en una línea y el contexto de la máquina;

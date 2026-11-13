@@ -1,6 +1,6 @@
 ---
 name: capture-idea
-description: Turn an outside inspiration (an X/Twitter link, a video, a screenshot, "vi esto y quiero hacerlo acá") into a named idea in `machine`, with a one-line verdict and, if it goes ahead, an objective and a way to check it. Use when the user pastes a link or an image with the intent to implement it, or says "quiero hacer X", "me gusta esto", "vi esto", "quisiera que el harness haga Y".
+description: Convierte un link, video o captura que el usuario quiere implementar en una idea con nombre en machine.
 ---
 # Capture idea → project
 

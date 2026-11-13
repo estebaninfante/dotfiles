@@ -1,6 +1,6 @@
 ---
 name: dotfiles-publish
-description: Publica y sincroniza el repo ~/dotfiles para que el cambio quede en el remoto y en la otra máquina, incluso si está incompleto. Usar SIEMPRE después de tocar cualquier archivo versionado (config symlinkeada como hypr/kitty/nvim/swaync, o la config viva de Omarchy en ~/.config/omarchy, o scripts en linux/bin). También cuando el usuario diga "subí esto", "sincronizá", "guardá los cambios", "que quede en el otro equipo".
+description: Publicar y sincronizar ~/dotfiles tras tocar cualquier archivo versionado, aunque esté a medias.
 ---
 
 # dotfiles-publish
