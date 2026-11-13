@@ -5,6 +5,9 @@
 # pantalla completa; la ventana es un clic dentro de la zona, no una opción
 # aparte.
 #
+# Ctrl+C en el overlay copia la zona al portapapeles sin guardar archivo (para
+# capturas de un solo uso); sin zona elegida copia la pantalla entera.
+#
 # La imagen congelada es un PNG que saca este script ANTES de mostrar el
 # overlay, así que ni la barra ni el resaltado entran en la captura: las
 # imágenes se recortan del PNG original. Para grabar se oculta el overlay y
@@ -132,9 +135,17 @@ copy_png() {
     nofd wl-copy --type image/png <"$dest"
 }
 
-# Coordenadas del PNG congelado → recorte a clipboard.
+# Sólo al portapapeles: no deja archivo en Imágenes (capturas de un solo uso).
+copy_only() {
+    local file="$1"
+    [[ -s $file ]] || return 1
+    nofd wl-copy --type image/png <"$file"
+}
+
+# Coordenadas del PNG congelado → recorte. $5 = "save" (default: archivo +
+# portapapeles) o "copy" (sólo portapapeles).
 copy_region() {
-    local x=$1 y=$2 w=$3 h=$4
+    local x=$1 y=$2 w=$3 h=$4 mode="${5:-save}"
     local dims iw ih
     dims=$(magick identify -format '%w %h' "$frame" 2>/dev/null) || return 1
     read -r iw ih <<<"$dims"
@@ -147,7 +158,11 @@ copy_region() {
     (( w > 0 && h > 0 )) || return 1
 
     magick "$frame" -crop "${w}x${h}+${x}+${y}" +repage "png:$STATE_DIR/crop.png" || return 1
-    copy_png "$STATE_DIR/crop.png"
+    if [[ $mode == copy ]]; then
+        copy_only "$STATE_DIR/crop.png"
+    else
+        copy_png "$STATE_DIR/crop.png"
+    fi
 }
 
 # Ventana visible bajo un punto lógico global. Devuelve "WxH+X+Y|monitor" con
@@ -216,7 +231,7 @@ apply_annotations() {
 
 # Sólo las capturas llevan dibujo (en video la capa no se filma).
 case "$key" in
-    region:*|windowat:*|full) apply_annotations ;;
+    region:*|windowat:*|full|clipboardregion:*|clipboardfull) apply_annotations ;;
 esac
 
 case "$key" in
@@ -230,6 +245,11 @@ case "$key" in
     region:*)
         IFS=, read -r rx ry rw rh <<<"${key#region:}"
         copy_region "$rx" "$ry" "$rw" "$rh"
+        ;;
+    clipboardregion:*)
+        # Ctrl+C: copiar sin guardar (captura de un solo uso).
+        IFS=, read -r rx ry rw rh <<<"${key#clipboardregion:}"
+        copy_region "$rx" "$ry" "$rw" "$rh" copy
         ;;
     videoregion:*)
         # Coordenadas lógicas (las mismas que slurp): gpu-screen-recorder graba
@@ -269,5 +289,10 @@ case "$key" in
     full)
         magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || cp "$frame" "$STATE_DIR/full.png"
         copy_png "$STATE_DIR/full.png"
+        ;;
+    clipboardfull)
+        # Ctrl+C sin zona elegida: copiar la pantalla entera, sin archivo.
+        magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || cp "$frame" "$STATE_DIR/full.png"
+        copy_only "$STATE_DIR/full.png"
         ;;
 esac

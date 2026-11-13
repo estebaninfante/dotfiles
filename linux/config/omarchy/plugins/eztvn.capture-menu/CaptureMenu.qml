@@ -11,6 +11,8 @@ import "Annotations.js" as Annotations
 // la zona, un clic toma la ventana bajo el puntero. En captura se puede dibujar
 // con el botón derecho (lápiz, línea, recuadro, flecha) antes de confirmar.
 // La barra superior cambia el modo; la inferior elige la anotación.
+// Ctrl+C copia la zona al portapapeles sin guardar archivo (capturas de un
+// solo uso); sin zona elegida copia la pantalla entera, también sin guardar.
 //
 // Los trazos se mandan al script y se componen sobre el PNG congelado, así que
 // entran en la imagen guardada y en el portapapeles.
@@ -219,6 +221,20 @@ Item {
                 root.imageCoord(root.selH, false))
   }
 
+  // Ctrl+C: sólo portapapeles, sin archivo en Imágenes. Si no hay zona
+  // elegida copia la pantalla entera (también sin guardar).
+  function copyToClipboard() {
+    if (root.intent !== "image") return
+    if (root.selectionValid) {
+      root.finish("clipboardregion:" + root.imageCoord(root.selX, true) + "," +
+                  root.imageCoord(root.selY, false) + "," +
+                  root.imageCoord(root.selW, true) + "," +
+                  root.imageCoord(root.selH, false))
+    } else {
+      root.finish("clipboardfull")
+    }
+  }
+
   Process {
     id: resultProc
     onExited: root.opened = false
@@ -279,6 +295,9 @@ Item {
       Keys.onPressed: function(event) {
         if (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_Z) {
           drawing.undo()
+          event.accepted = true
+        } else if (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_C) {
+          root.copyToClipboard()
           event.accepted = true
         } else if (event.key === Qt.Key_Tab) {
           root.toggleMode()
