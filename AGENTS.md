@@ -410,6 +410,13 @@ izquierdo; se cierra con Esc o el botón.
   desde el disco (git, remoto, rama, archivos sin guardar, commits sin subir,
   systemd, `.webapp.json`); las *decisiones* (`kind`, `state`, `note`) las
   escribe el humano y `scan` **nunca** las pisa.
+- **Papelera**: `machine trash` mueve la carpeta a
+  `~/.local/share/machine/trash/<fecha>/<slug>/` (no `rm -rf`) y borra la fila.
+  `machine trash` sin argumentos la lista; `machine restore <slug>` la devuelve a
+  `~/Proyectos`; `machine purge [--days N]` borra lo viejo (dry-run sin `--yes`).
+  **Retención: 30 días**, sostenida por `machine-trash.timer` (diario). Con
+  `--github` borra primero el repo en GitHub (necesita el permiso `delete_repo`;
+  si falla, no toca nada local). `machine gh-status` dice si el permiso está.
 - **Estados**: `unclassified` · `active` · `paused` · `done` · `archived`.
   `done` solo tiene sentido en `project` y `experiment`; un `product` se pausa o
   se archiva, nunca se "termina".

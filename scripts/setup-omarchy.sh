@@ -457,13 +457,6 @@ for svc in lan-mouse hyprpolkitagent voice-daemon; do
     systemctl --user enable "$svc" 2>/dev/null && ok "$svc habilitado" || warn "$svc no pudo habilitarse"
 done
 
-# talk-command (wake-word "dime"): DESHABILITADO a propósito.
-# Se enmascara para que NADA lo reactive solo (ni enable, ni preset-all, ni
-# este script). Para volver atrás a mano: scripts/setup-wake.sh
-systemctl --user mask talk-command.service 2>/dev/null \
-    && ok "talk-command enmascarado (nunca se habilita solo)" \
-    || warn "talk-command no pudo enmascararse"
-
 # Los units declarados en linux/system/systemd-user/enabled-*.txt se aplican con
 # UN solo mecanismo: install-user-units.sh (symlink al repo + enable). Sin esta
 # llamada, una maquina nueva quedaba sin esos units y sin dotfiles-sync.timer

@@ -26,6 +26,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import shutil
 import subprocess
 import sqlite3
 import sys
@@ -35,6 +36,7 @@ DB = Path(os.environ.get("MACHINE_DB", Path.home() / ".local/share/machine/machi
 ROOT = Path(os.environ.get("MACHINE_ROOT", Path.home() / "Proyectos"))
 SKIP = {"_archivo", ".rig-worktrees"}
 TICKETS = Path.home() / ".config/opencode/tickets.json"
+RETENTION_DAYS = int(os.environ.get("MACHINE_TRASH_DAYS", "30"))
 TRASH = Path(os.environ.get("MACHINE_TRASH", Path.home() / ".local/share/machine/trash"))
 SYSTEMD = Path.home() / ".config/systemd/user"
 
@@ -552,6 +554,82 @@ def cmd_trash(args) -> None:
     print("restaurar: moverla de vuelta a ~/Proyectos y correr machine scan")
 
 
+def trash_entries() -> list[tuple[dt.datetime, Path, list[str]]]:
+    """(fecha, ruta, proyectos) por cada lote de la papelera."""
+    out = []
+    if not TRASH.is_dir():
+        return out
+    for entry in sorted(TRASH.iterdir()):
+        if not entry.is_dir():
+            continue
+        try:
+            when = dt.datetime.strptime(entry.name, "%Y-%m-%dT%H-%M-%S")
+        except ValueError:
+            when = dt.datetime.fromtimestamp(entry.stat().st_mtime)
+        projects = sorted(p.name for p in entry.iterdir() if p.is_dir())
+        out.append((when, entry, projects))
+    return out
+
+
+def cmd_trash_list(args) -> None:
+    entries = trash_entries()
+    if not entries:
+        print("papelera vacía")
+        return
+    now = dt.datetime.now()
+    total = 0.0
+    print(f"papelera: {TRASH} (retención {RETENTION_DAYS} días)")
+    print(f"{'entró':17} {'días':>5} {'tamaño':>8}  proyecto")
+    for when, entry, projects in entries:
+        days = (now - when).days
+        size = sum(
+            f.stat().st_size for f in entry.rglob("*") if f.is_file()
+        ) / (1024 * 1024)
+        total += size
+        for name in projects:
+            print(f"{when:%Y-%m-%d %H:%M} {days:5} {size:7.1f}M  {name}")
+    print(f"total: {total:.1f} MB en {len(entries)} lote(s)")
+
+
+def cmd_restore(args) -> None:
+    for when, entry, projects in reversed(trash_entries()):
+        if args.slug not in projects:
+            continue
+        src = entry / args.slug
+        dest = ROOT / args.slug
+        if dest.exists():
+            sys.exit(f"machine: ya existe {dest}; movelo o renombralo primero")
+        src.rename(dest)
+        try:
+            entry.rmdir()
+        except OSError:
+            pass
+        print(f"restaurado: {args.slug} → {dest}")
+        print("corré machine scan para que vuelva a la lista")
+        return
+    sys.exit(f"machine: '{args.slug}' no está en la papelera")
+
+
+def cmd_purge(args) -> None:
+    if args.days < 1:
+        sys.exit("machine: --days tiene que ser >= 1")
+    now = dt.datetime.now()
+    doomed = [(w, e, p) for w, e, p in trash_entries() if (now - w).days >= args.days]
+    if not doomed:
+        print(f"nada con más de {args.days} días")
+        return
+    total = 0.0
+    for when, entry, projects in doomed:
+        size = sum(f.stat().st_size for f in entry.rglob("*") if f.is_file()) / (1024 * 1024)
+        total += size
+        print(f"{'borraría' if not args.yes else 'borrando'} {entry.name}  {', '.join(projects)}  {size:.1f}M")
+        if args.yes:
+            shutil.rmtree(entry, ignore_errors=True)
+    print(f"{'borrado' if args.yes else 'pendiente'}: {total:.1f} MB")
+    if not args.yes:
+        print("repetí con --yes para borrar de verdad")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="machine", description="el computador como base de datos")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -581,11 +659,20 @@ def main() -> None:
 
     sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
 
-    trash = sub.add_parser("trash", help="manda la carpeta a la papelera y borra la fila")
-    trash.add_argument("slug")
+    trash = sub.add_parser("trash", help="manda la carpeta a la papelera (sin slug: lista la papelera)")
+    trash.add_argument("slug", nargs="?")
     trash.add_argument("--yes", action="store_true")
     trash.add_argument("--github", action="store_true", help="borrar también el repo en GitHub")
     trash.set_defaults(func=cmd_trash)
+
+    restore = sub.add_parser("restore", help="devuelve un proyecto de la papelera")
+    restore.add_argument("slug")
+    restore.set_defaults(func=cmd_restore)
+
+    purge = sub.add_parser("purge", help="borra de la papelera lo más viejo que N días")
+    purge.add_argument("--days", type=int, default=RETENTION_DAYS)
+    purge.add_argument("--yes", action="store_true")
+    purge.set_defaults(func=cmd_purge)
 
     ghst = sub.add_parser("gh-status", help="si gh puede borrar repos")
     ghst.add_argument("--json", action="store_true")
@@ -607,6 +694,8 @@ def main() -> None:
     t_ls.set_defaults(func=cmd_task_ls)
 
     args = p.parse_args()
+    if args.cmd == "trash" and args.slug is None:
+        return cmd_trash_list(args)
     args.func(args)
 
 

@@ -64,7 +64,7 @@ STOP_USER_UNITS=(
   agentes-platform-developing.service zentro-developing.service
   openclaw-gateway.service speeedy.service vision-gui.service
   ohm.service foldertinder.service omarchy-crash-watch.service
-  airbnb-trip-compare.service talk-command.service
+  airbnb-trip-compare.service
   kanvas.service pi-desktop.service
   # audio de micrófono procesado, entrada e input automation
   mic-gain.service audio-jack-guard.service

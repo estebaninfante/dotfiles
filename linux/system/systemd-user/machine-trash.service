@@ -1,0 +1,10 @@
+[Unit]
+Description=Papelera de proyectos: borra lo que supera la retención
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/machine purge --days 30 --yes
+Nice=10
+
+[Install]
+WantedBy=default.target

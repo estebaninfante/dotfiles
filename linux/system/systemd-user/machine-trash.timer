@@ -1,0 +1,10 @@
+[Unit]
+Description=Purga diaria de la papelera de proyectos (30 días)
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=45min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
