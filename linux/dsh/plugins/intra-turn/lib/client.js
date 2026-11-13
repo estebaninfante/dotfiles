@@ -28,6 +28,9 @@ window.__ModuleLoader__.load({
 		const HL_DONE = "dsh-it-done";
 		const HL_ACTIVE = "dsh-it-active";
 		const DEBOUNCE_MS = 900;
+		// Tope de espera: si no dejás de escribir, igual se analiza para que las
+		// marcas aparezcan mientras tipeás y no solo cuando te detenés.
+		const MAX_WAIT_MS = 2600;
 		const MIN_CHARS = 12;
 		const HOVER_CLOSE_MS = 280;
 		const TYPING_QUIET_MS = 450;
@@ -35,6 +38,7 @@ window.__ModuleLoader__.load({
 		const HEADING = "Tené en cuenta:";
 
 		let timer = null;
+		let hardTimer = null;
 		let lastAnalyzed = "";
 		let seq = 0;
 		let inflight = null;
@@ -113,7 +117,16 @@ window.__ModuleLoader__.load({
 #${SUMMARY_ID}{display:flex;flex-direction:column;gap:2px;padding:0 6px 8px;box-sizing:border-box;width:100%;min-width:0;max-width:100%;
   font:400 14px/1.6 var(--dsw-font-family,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary,#adb2b8)}
 #dsh-intra-turn-wait{padding:0 6px 8px;font:400 14px/1.6 var(--dsw-font-family,system-ui,sans-serif);
-  color:var(--dsw-alias-label-caption,#81858c)}
+  color:var(--dsw-alias-label-caption,#81858c);display:flex;align-items:baseline;gap:1px}
+#dsh-intra-turn-wait .sweep{
+  background:linear-gradient(90deg,var(--dsw-alias-label-caption,#6f747c) 0%,var(--dsw-alias-label-primary,#e9e9ec) 45%,var(--dsw-alias-label-caption,#6f747c) 90%);
+  background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:dsh-it-sweep 1.8s linear infinite}
+#dsh-intra-turn-wait .dots{color:var(--dsw-alias-label-caption,#6f747c);min-width:14px}
+@keyframes dsh-it-sweep{from{background-position:120% 0}to{background-position:-60% 0}}
+@media (prefers-reduced-motion: reduce){
+  #dsh-intra-turn-wait .sweep{animation:none;color:var(--dsw-alias-label-secondary,#b9bdc6);background:none;background-clip:border-box;color:inherit}
+}
 #${SUMMARY_ID} .line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:0 8px}
 #${SUMMARY_ID} .phrase{all:unset;display:inline;cursor:pointer;border-radius:3px;white-space:pre-wrap;color:var(--dsw-alias-label-secondary,#cfd3d6);
   text-decoration:underline dotted 1.5px;text-underline-offset:4px;text-decoration-color:var(--dsw-alias-label-caption,#81858c)}
@@ -734,7 +747,8 @@ window.__ModuleLoader__.load({
 				node = document.createElement("div");
 				node.id = WAIT_ID;
 				node.setAttribute("role", "status");
-				node.textContent = "Leyendo el borrador…";
+				// Barrido de luz sobre el texto: se mueve, no parpadea.
+				node.innerHTML = `<span class="sweep">Leyendo tu borrador</span><span class="dots" aria-hidden="true">·</span>`;
 				host.parentElement.insertBefore(node, host);
 			}
 			const box = host.getBoundingClientRect();
@@ -744,14 +758,21 @@ window.__ModuleLoader__.load({
 				if (self.width > 0) node.style.marginLeft = `${Math.round(box.left - self.left)}px`;
 			}
 			clearTimeout(waitTimer);
-			waitTimer = setTimeout(() => {
-				const still = document.getElementById(WAIT_ID);
-				if (still) still.textContent = "El modelo todavía está leyendo…";
+			const dots = () => {
+				const live = document.querySelector(`#${WAIT_ID} .dots`);
+				if (!live) return;
+				live.textContent = "·".repeat((live.textContent.length % 3) + 1);
+			};
+			waitTimer = setInterval(dots, 420);
+			setTimeout(() => {
+				const label = document.querySelector(`#${WAIT_ID} .sweep`);
+				if (label) label.textContent = "El modelo todavía está leyendo";
 			}, 5000);
 		}
 
 		function hideWait() {
 			clearTimeout(waitTimer);
+			clearInterval(waitTimer);
 			document.getElementById(WAIT_ID)?.remove();
 		}
 
@@ -842,12 +863,17 @@ window.__ModuleLoader__.load({
 				return;
 			}
 			if (text === lastAnalyzed) return;
-			timer = setTimeout(() => {
+			clearTimeout(hardTimer);
+			const fire = () => {
+				clearTimeout(timer);
 				const now = draftText(composer());
 				if (now.length < MIN_CHARS || now === lastAnalyzed) return;
 				lastAnalyzed = now;
 				analyze(now);
-			}, DEBOUNCE_MS);
+			};
+			timer = setTimeout(fire, DEBOUNCE_MS);
+			// Si sigue escribiendo sin pausar, igual se dispara al tope.
+			hardTimer = setTimeout(fire, MAX_WAIT_MS);
 		}
 
 		/**
