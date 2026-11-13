@@ -20,13 +20,16 @@ local EXTERNAL_SCALE = 1.25
 local EXTERNAL_DEFAULT_TRANSFORM = 3
 local INTERNAL_MODE = "2880x1800"
 
--- ¿Qué monitor es la vertical? Cualquiera que no sea el panel interno ni un
--- headless (Sunshine crea HEADLESS-N para streamear). Se pregunta a Hyprland en
--- vez de asumir un puerto: da igual si entra por HDMI o por USB-C/DP, y al
--- arrancar no se cree "conectado" un monitor que todavía no está.
+-- ¿Qué monitor es la vertical? Cualquiera que no sea el panel interno ni una
+-- salida virtual (Sunshine crea HEADLESS-N para streamear; `pantalla-agente`
+-- monta AGENTE-N para pruebas). Se pregunta a Hyprland en vez de asumir un
+-- puerto: da igual si entra por HDMI o por USB-C/DP, y al arrancar no se cree
+-- "conectado" un monitor que todavía no está.
 local function external_monitor()
     for _, monitor in ipairs(hl.get_monitors()) do
-        if monitor.name ~= internal and not monitor.name:match("^HEADLESS") then
+        if monitor.name ~= internal
+            and not monitor.name:match("^HEADLESS")
+            and not monitor.name:match("^AGENTE") then
             return monitor
         end
     end
@@ -61,6 +64,33 @@ end
 local apply_orientation_layout
 local saved_transform
 
+-- Cada pantalla es dueña de su juego de espacios: 1..9 la interna, 28..36 la
+-- vertical (ver base/workspaces.lua). Sin estas reglas Hyprland reparte los
+-- espacios como quiere al arrancar o al reconectar la vertical: la vertical
+-- terminaba mostrando el espacio 1 de la laptop y los atajos cambiaban de set a
+-- mitad de camino. `default` fija además el espacio inicial de cada pantalla.
+local bound_external
+local function bind_workspace_sets(external_name)
+    if bound_external == (external_name or false) then return end
+    bound_external = external_name or false
+    for index = 1, spaces.SET_SIZE do
+        hl.workspace_rule({
+            workspace = tostring(spaces.PRIMARY_BASE + index - 1),
+            monitor = internal,
+            default = index == 1,
+        })
+    end
+    if external_name then
+        for index = 1, spaces.SET_SIZE do
+            hl.workspace_rule({
+                workspace = tostring(spaces.EXTERNAL_BASE + index - 1),
+                monitor = external_name,
+                default = index == 1,
+            })
+        end
+    end
+end
+
 local function apply_laptop_monitors()
     local refresh = power.low_power() and 60 or 120
     local external = external_monitor()
@@ -68,6 +98,7 @@ local function apply_laptop_monitors()
     if not external then
         -- Laptop sola: el panel interno a pantalla completa, como siempre.
         hl.monitor({ output = internal, mode = INTERNAL_MODE .. "@" .. refresh, position = "0x0", scale = 2 })
+        bind_workspace_sets(nil)
         apply_orientation_layout(0)
         return
     end
@@ -108,6 +139,7 @@ local function apply_laptop_monitors()
     })
 
     -- Mismo layout que en el desktop: en vertical, `scrolling` (franjas).
+    bind_workspace_sets(external.name)
     apply_orientation_layout(transform)
 end
 

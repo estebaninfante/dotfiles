@@ -31,13 +31,19 @@ local function is_headless(name)
     return type(name) == "string" and name:match("^HEADLESS") ~= nil
 end
 
+-- Salida virtual de pruebas (`pantalla-agente`): no es una pantalla de trabajo,
+-- no debe contar como monitor real ni quedar como "la externa" de las reglas.
+local function is_agent(name)
+    return type(name) == "string" and name:match("^AGENTE") ~= nil
+end
+
 -- Sólo cuentan los monitores de verdad: Sunshine crea un HEADLESS-N para
 -- streamear y, si contara, el desktop (una sola pantalla) pasaría a tener "dos"
 -- y se le moverían todos los espacios a 28..36 en mitad del stream.
 local function real_monitor_count()
     local n = 0
     for _, monitor in ipairs(hl.get_monitors()) do
-        if not is_headless(monitor.name) then n = n + 1 end
+        if not is_headless(monitor.name) and not is_agent(monitor.name) then n = n + 1 end
     end
     return n
 end
@@ -51,10 +57,32 @@ local function base_for(monitor)
     return EXTERNAL_BASE
 end
 
--- Base del monitor con foco (donde está el puntero / la ventana activa).
+-- Monitor bajo un punto global (coordenadas lógicas del layout).
+local function monitor_at(x, y)
+    for _, monitor in ipairs(hl.get_monitors()) do
+        local width = monitor.width / monitor.scale
+        local height = monitor.height / monitor.scale
+        if monitor.transform % 2 == 1 then width, height = height, width end
+        if x >= monitor.x and x < monitor.x + width and y >= monitor.y and y < monitor.y + height then
+            return monitor
+        end
+    end
+    return nil
+end
+
+-- Base del monitor DONDE ESTÁ EL PUNTERO: es la pantalla en la que el usuario
+-- siente que está trabajando. Con `hl.get_active_monitor()` el set salía del
+-- monitor de la ventana enfocada: mover el mouse a la laptop y tocar SUPER+3
+-- cambiaba el espacio en la otra pantalla. Si el puntero no se puede leer (lock),
+-- cae al monitor activo.
 local function active_base()
-    local ok, monitor = pcall(hl.get_active_monitor)
-    if not ok or not monitor then return PRIMARY_BASE end
+    local ok, position = pcall(hl.get_cursor_pos)
+    if ok and position then
+        local monitor = monitor_at(position.x, position.y)
+        if monitor then return base_for(monitor) end
+    end
+    local ok_active, monitor = pcall(hl.get_active_monitor)
+    if not ok_active or not monitor then return PRIMARY_BASE end
     return base_for(monitor)
 end
 
