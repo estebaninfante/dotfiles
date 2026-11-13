@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# pantalla-agente — monitor headless para pruebas de agentes.
+#
+# Monta una salida virtual en la sesión viva (invisible: no ocupa ninguna de las
+# pantallas del usuario), con su propio espacio de trabajo, para que un agente
+# pruebe apps y capture con `grim -o`. Se desmonta a mano o sola: un watchdog la
+# descuelga cuando pasan N minutos sin uso.
+#
+# Uso:
+#   pantalla-agente montar [--tamano 1440x900] [--escala 1] [--transform 0]
+#   pantalla-agente abrir --clase <clase> [--titulo <re>] -- <comando...>
+#   pantalla-agente capturar [archivo.png]
+#   pantalla-agente mover <clase|title:regex|address:0x…>
+#   pantalla-agente cerrar
+#   pantalla-agente estado
+#   pantalla-agente usar            (renueva el reloj de inactividad)
+#   pantalla-agente desmontar [--conservar]
+#
+# Variables: PANTALLA_AGENTE_TTL (segundos sin uso antes de desmontar, 600),
+#            PANTALLA_AGENTE_NOMBRE (salida, AGENTE-1).
+set -uo pipefail
+
+STATE="${XDG_RUNTIME_DIR:-/tmp}/pantalla-agente"
+OUT="${PANTALLA_AGENTE_NOMBRE:-AGENTE-1}"
+TTL="${PANTALLA_AGENTE_TTL:-600}"
+STAMP="$STATE/stamp"
+ENVF="$STATE/env"
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+
+lua() { hyprctl eval "$1" >/dev/null 2>&1; }
+
+stamped() { mkdir -p "$STATE"; touch "$STAMP"; }
+
+mounted() {
+    hyprctl monitors -j 2>/dev/null | jq -e --arg o "$OUT" 'any(.[]; .name == $o)' >/dev/null 2>&1
+}
+
+output_workspace() {
+    hyprctl monitors -j 2>/dev/null | jq -r --arg o "$OUT" '.[] | select(.name == $o) | .activeWorkspace.id // empty'
+}
+
+rightmost_x() {
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r '[.[] | select(.name != $o) | .x + ((if (.transform % 2) == 1 then .height else .width end) / .scale | floor)] | max // 0' --arg o "$OUT"
+}
+
+start_watchdog() {
+    local pidfile="$STATE/watchdog.pid"
+    [ -f "$pidfile" ] && kill "$(cat "$pidfile" 2>/dev/null)" >/dev/null 2>&1
+    setsid "$0" _vigilar >/dev/null 2>&1 </dev/null &
+    printf '%s\n' "$!" > "$pidfile"
+}
+
+limpiar_estado() {
+    [ -f "$STATE/watchdog.pid" ] && kill "$(cat "$STATE/watchdog.pid" 2>/dev/null)" >/dev/null 2>&1
+    rm -rf "$STATE"
+}
+
+# Windows del espacio propio (para moverlas o cerrarlas sin tocar las del usuario).
+ventanas_propias() {
+    local match="$1"
+    case "$match" in
+        title:*)   lua "for _,w in ipairs(hl.get_windows()) do if tostring(w.title):match([[${match#title:}]]) then hl.dispatch(hl.dsp.window.move({ workspace = \"$WS\", window = \"address:\"..w.address })) end end" ;;
+        address:*) lua "hl.dispatch(hl.dsp.window.move({ workspace = \"$WS\", window = \"address:${match#address:}\" }))" ;;
+        class:*)   lua "for _,w in ipairs(hl.get_windows()) do if w.class == \"${match#class:}\" then hl.dispatch(hl.dsp.window.move({ workspace = \"$WS\", window = \"address:\"..w.address })) end end" ;;
+        *)         lua "for _,w in ipairs(hl.get_windows()) do if w.class == \"$match\" then hl.dispatch(hl.dsp.window.move({ workspace = \"$WS\", window = \"address:\"..w.address })) end end" ;;
+    esac
+}
+
+cmd_montar() {
+    local tamano="1440x900" escala="1" transform="0"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --tamano)   tamano="$2"; shift 2 ;;
+            --escala)   escala="$2"; shift 2 ;;
+            --transform) transform="$2"; shift 2 ;;
+            *) die "montar: opción desconocida $1" ;;
+        esac
+    done
+    stamped
+    if ! mounted; then
+        hyprctl output create headless "$OUT" >/dev/null 2>&1 || die "no pude crear la salida $OUT"
+        local i
+        for i in $(seq 1 40); do mounted && break; sleep 0.1; done
+        mounted || die "la salida $OUT no apareció"
+        local x
+        x="$(rightmost_x)"
+        lua "hl.monitor({ output = \"$OUT\", mode = \"$tamano@60\", position = \"${x}x0\", scale = $escala, transform = $transform })"
+        sleep 0.3
+    fi
+    WS="$(output_workspace)"
+    [ -n "$WS" ] || die "la salida $OUT no tiene espacio de trabajo"
+    printf 'OUT=%s\nWS=%s\n' "$OUT" "$WS" > "$ENVF"
+    start_watchdog
+    printf 'pantalla-agente: montada %s\n' "$OUT"
+    printf '  espacio:  %s (invisible)\n' "$WS"
+    printf '  captura:  pantalla-agente capturar /tmp/prueba.png\n'
+    printf '  abrir:    pantalla-agente abrir --clase <clase> -- <comando>\n'
+    printf '  desmonta: a los %ss sin uso, o pantalla-agente desmontar\n' "$TTL"
+}
+
+cmd_desmontar() {
+    local conservar=0
+    [ "${1:-}" = "--conservar" ] && conservar=1
+    if [ -f "$ENVF" ]; then
+        # shellcheck disable=SC1090
+        . "$ENVF"
+        lua "if _G.pantalla_agente_rule then _G.pantalla_agente_rule:set_enabled(false); _G.pantalla_agente_rule = nil end"
+        if [ "$conservar" = 0 ] && [ -n "${WS:-}" ]; then
+            # Las ventanas de prueba no deben saltar a las pantallas del usuario
+            # cuando desaparece la salida: se cierran.
+            local addr
+            for addr in $(hyprctl clients -j 2>/dev/null | jq -r --arg ws "$WS" '.[] | select((.workspace.id|tostring) == $ws) | .address'); do
+                lua "hl.dispatch(hl.dsp.window.close({ window = \"address:$addr\" }))"
+            done
+            sleep 0.3
+        fi
+    fi
+    mounted && hyprctl output remove "$OUT" >/dev/null 2>&1
+    limpiar_estado
+    printf 'pantalla-agente: desmontada %s\n' "$OUT"
+}
+
+cmd_estado() {
+    if ! mounted; then
+        printf 'pantalla-agente: no montada\n'
+        return 0
+    fi
+    local idle="?"
+    [ -f "$STAMP" ] && idle="$(( $(date +%s) - $(stat -c %Y "$STAMP") ))"
+    printf 'pantalla-agente: montada %s (ttl %ss, inactiva %ss)\n' "$OUT" "$TTL" "$idle"
+    hyprctl monitors -j | jq -r --arg o "$OUT" '.[] | select(.name == $o) | "  salida: \(.width)x\(.height) espacio \(.activeWorkspace.id) pos=\(.x),\(.y)"'
+}
+
+cmd_capturar() {
+    local archivo="${1:-/tmp/pantalla-agente-$(date +%H%M%S).png}"
+    mounted || die "no hay pantalla montada: pantalla-agente montar"
+    stamped
+    grim -o "$OUT" "$archivo" || die "grim falló al capturar $OUT"
+    printf '%s\n' "$archivo"
+}
+
+cmd_abrir() {
+    local clase="" titulo=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --clase)  clase="$2"; shift 2 ;;
+            --titulo) titulo="$2"; shift 2 ;;
+            --)       shift; break ;;
+            *) die "abrir: opción desconocida $1" ;;
+        esac
+    done
+    [ $# -gt 0 ] || die "abrir: falta el comando"
+    mounted || die "no hay pantalla montada: pantalla-agente montar"
+    [ -f "$ENVF" ] || die "falta el estado de la pantalla"
+    # shellcheck disable=SC1090
+    . "$ENVF"
+    [ -n "$clase" ] || die "abrir: falta --clase (la clase X11/Wayland de la ventana)"
+
+    # Una regla manda la ventana nueva directo al espacio propio: no aparece ni un
+    # frame en las pantallas del usuario. Se desactiva cuando la ventana ya está.
+    local spec="match = { class = \"$clase\" }"
+    [ -n "$titulo" ] && spec="match = { class = \"$clase\", title = \"$titulo\" }"
+    lua "_G.pantalla_agente_rule = hl.window_rule({ $spec, workspace = \"$WS\" })"
+    setsid "$@" >/dev/null 2>&1 </dev/null &
+    local pid=$!
+    local i
+    for i in $(seq 1 100); do
+        if hyprctl clients -j 2>/dev/null | jq -e --arg ws "$WS" 'any(.[]; (.workspace.id|tostring) == $ws)' >/dev/null 2>&1; then break; fi
+        sleep 0.1
+    done
+    lua "if _G.pantalla_agente_rule then _G.pantalla_agente_rule:set_enabled(false); _G.pantalla_agente_rule = nil end"
+    stamped
+    printf 'pantalla-agente: lancé %s (pid %s) en el espacio %s\n' "$1" "$pid" "$WS"
+}
+
+main() {
+    cd "$HOME" || exit 1
+    [ $# -gt 0 ] || die "uso: pantalla-agente montar|desmontar|estado|capturar|abrir|mover|cerrar|usar"
+    local cmd="$1"; shift
+    case "$cmd" in
+        montar)    cmd_montar "$@" ;;
+        desmontar) cmd_desmontar "$@" ;;
+        estado)    cmd_estado ;;
+        capturar)  cmd_capturar "$@" ;;
+        usar)      stamped; printf 'ok\n' ;;
+        mover)
+            mounted || die "no hay pantalla montada"
+            [ -f "$ENVF" ] || die "falta el estado de la pantalla"
+            # shellcheck disable=SC1090
+            . "$ENVF"
+            ventanas_propias "${1:?mover: falta selector}"
+            stamped
+            printf 'pantalla-agente: ventanas movidas al espacio %s\n' "$WS" ;;
+        cerrar)
+            mounted || die "no hay pantalla montada"
+            [ -f "$ENVF" ] || die "falta el estado de la pantalla"
+            # shellcheck disable=SC1090
+            . "$ENVF"
+            local addr
+            for addr in $(hyprctl clients -j 2>/dev/null | jq -r --arg ws "$WS" '.[] | select((.workspace.id|tostring) == $ws) | .address'); do
+                lua "hl.dispatch(hl.dsp.window.close({ window = \"address:$addr\" }))"
+            done
+            stamped
+            printf 'pantalla-agente: ventanas cerradas en %s\n' "$WS" ;;
+        abrir)     cmd_abrir "$@" ;;
+        _vigilar)
+            # Watchdog: descuelga la pantalla cuando nadie la usa.
+            [ -f "$ENVF" ] || exit 0
+            # shellcheck disable=SC1090
+            . "$ENVF"
+            local ttl="${PANTALLA_AGENTE_TTL:-600}"
+            while [ -f "$ENVF" ]; do
+                sleep 30
+                [ -f "$ENVF" ] || exit 0
+                if ! hyprctl monitors -j 2>/dev/null | jq -e --arg o "$OUT" 'any(.[]; .name == $o)' >/dev/null 2>&1; then
+                    limpiar_estado; exit 0
+                fi
+                local idle=$(( $(date +%s) - $(stat -c %Y "$STAMP" 2>/dev/null || date +%s) ))
+                if [ "$idle" -ge "$ttl" ]; then
+                    "$0" desmontar >/dev/null 2>&1
+                    exit 0
+                fi
+            done ;;
+        *) die "uso: pantalla-agente montar|desmontar|estado|capturar|abrir|mover|cerrar|usar" ;;
+    esac
+}
+
+main "$@"
