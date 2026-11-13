@@ -414,10 +414,11 @@ input.mr-field{height:36px;padding:0 12px}
 			if (!path) blockers.push(["No tiene carpeta registrada", "No hay nada que mover; correr Actualizar."]);
 			else if (parent !== "Proyectos")
 				blockers.push(["La carpeta no está directamente en ~/Proyectos", "Por seguridad solo se mueven carpetas de ahí."]);
-			if (f.systemd === "true")
+			const liveUnits = String(f.systemd_active || "").split(",").filter(Boolean);
+			if (liveUnits.length)
 				blockers.push([
-					"Tiene un servicio systemd",
-					"Deshabilitá la unit primero; si no, queda reiniciándose en bucle.",
+					"Tiene un servicio corriendo",
+					`${liveUnits.join(", ")} · deshabilitalo acá abajo y seguí.`,
 				]);
 			if (dirty > 0) losses.push([plural(dirty, "archivo sin guardar", "archivos sin guardar"), "Cambios que nunca entraron en un commit."]);
 			if (ahead === "?" && f.remote_url) losses.push(["La rama no tiene copia remota", "Ningún commit de esta rama está subido."]);
@@ -786,7 +787,9 @@ input.mr-field{height:36px;padding:0 12px}
 		}
 
 		function TrashDialog(props) {
-			const { project, onCancel, onDone } = props;
+			const { onCancel, onDone } = props;
+			const [project, setProject] = React.useState(props.project);
+			const [disabling, setDisabling] = React.useState(false);
 			const [typed, setTyped] = React.useState("");
 			const [busy, setBusy] = React.useState(false);
 			const [reason, setReason] = React.useState("");
@@ -889,6 +892,30 @@ input.mr-field{height:36px;padding:0 12px}
 							" y tocá Actualizar.",
 						),
 						f.path ? h("p", null, h("code", null, f.path.replace(/^\/home\/[^/]+/, "~"))) : null,
+						String((project.facts || {}).systemd_active || "")
+							.split(",")
+							.filter(Boolean).length
+							? h(
+									"button",
+									{
+										type: "button",
+										className: "mr-btn",
+										"data-variant": "danger",
+										disabled: disabling,
+										onClick: async () => {
+											setDisabling(true);
+											try {
+												const out = await api("/machine/service-disable", { slug: project.slug });
+												if (out.project) setProject(out.project);
+											} catch (err) {
+												setReason(err.message);
+											}
+											setDisabling(false);
+										},
+									},
+									disabling ? "Parando…" : "Parar y deshabilitar el servicio",
+								)
+							: null,
 						blocked
 							? riskList("bad", blockers, IconBlock)
 							: losses.length

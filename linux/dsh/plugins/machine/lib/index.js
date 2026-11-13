@@ -184,6 +184,25 @@ export function apply(ctx) {
 			},
 		},
 		{
+			path: "/machine/service-disable",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+				if (!slug) {
+					sendJson(res, 400, { error: "missing-slug" });
+					return;
+				}
+				try {
+					const out = await machine(["service-disable", slug]);
+					await machine(["scan"]);
+					sendJson(res, 200, { ok: true, out, project: await machineJson(["show", slug, "--json"]) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
 			path: "/machine/trash-recover",
 			method: "POST",
 			handler: async (req, res) => {
