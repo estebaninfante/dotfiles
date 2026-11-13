@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+# Envuelve al emisor de notificaciones de Omarchy para que los avisos de crash
+# no queden fijos en pantalla.
+#
+# omarchy-crash-watch manda "Process crashed: <programa>" con urgencia
+# critical, y la shell de Omarchy deja las critical sin expiración a propósito
+# (Service.qml: durationFor(critical) = 0) para que un crash no se pierda.
+# Acá se baja a urgencia normal: dura como el resto de los avisos (8 s) y la
+# shell lo mueve al historial sola. Todo lo demás pasa sin tocar.
+#
+# Vive en ~/.local/bin, que va antes que /usr/bin en el PATH del usuario y de
+# sus servicios, así que también lo usa omarchy-crash-watch.
+
+set -uo pipefail
+
+readonly SENDER=/usr/bin/omarchy-notification-send
+
+is_crash=0
+for arg in "$@"; do
+    [[ $arg == "Process crashed:"* ]] && { is_crash=1; break; }
+done
+
+if (( ! is_crash )); then
+    exec "$SENDER" "$@"
+fi
+
+args=()
+while (($#)); do
+    case $1 in
+        -u | --urgency)
+            if (($# >= 2)); then
+                args+=("$1" "normal")
+                shift 2
+            else
+                args+=("$1")
+                shift
+            fi
+            ;;
+        --urgency=*)
+            args+=("--urgency=normal")
+            shift
+            ;;
+        *)
+            args+=("$1")
+            shift
+            ;;
+    esac
+done
+
+exec "$SENDER" "${args[@]}"
