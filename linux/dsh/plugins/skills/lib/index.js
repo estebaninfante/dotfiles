@@ -1,22 +1,52 @@
 /**
  * dsh-local-skills — host half.
  *
- * Puente entre el panel lateral y el registro de skills del harness
- * (`ctx.skills`). No escanea carpetas a mano: pregunta al mismo registro que
- * alimenta el catálogo del modelo, así el panel muestra exactamente lo que el
- * harness cargó, con su origen y la ruta real del SKILL.md.
+ * Catálogo de skills para el panel lateral. No le pide el catálogo al registro
+ * global del harness (`ctx.skills`) porque el bundle web DESACTIVA el
+ * `skill-filesystem` de host y lo monta dentro de cada preset: un plugin de
+ * perfil lee ese registro vacío. Así que acá se descubren los mismos roots que
+ * el harness escanea, con las mismas reglas (carpeta con SKILL.md o archivo
+ * `<nombre>.md`, frontmatter con `name` y `description`), y se suman las skills
+ * que el registro global sí tenga (runtime / bundled).
  *
  * Rutas (loopback, servidas por el webServer del perfil):
- *   GET /skills/list       catálogo completo, con invocación y origen
+ *   GET /skills/list       catálogo con origen, ruta y permisos de invocación
  *   GET /skills/read?name  el SKILL.md completo de una skill
  *
- * Solo lectura. Cualquier escritura futura va por rutas POST aparte.
+ * Solo lectura: acá no se escribe ni se borra nada.
  */
 
-export const inject = ["webServer", "skills"];
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 
+export const inject = ["webServer"];
+
+const DSH_HOME = process.env.DSH_HOME ?? join(homedir(), ".dsh");
+const AGENTS_HOME = process.env.DSH_AGENTS_HOME ?? join(homedir(), ".agents");
 const MAX_NAME_CHARS = 200;
+const MAX_BODY_BYTES = 256 * 1024;
 const CACHE = "no-store, max-age=0";
+/** Mismo gramático que el harness: kebab-case en minúsculas. */
+const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Roots de usuario, con el rank del harness (menor gana en duplicados). */
+function userRoots() {
+	return [
+		{ path: join(DSH_HOME, "skills"), source: "user-dsh", rank: 400, skipSystem: true },
+		{ path: join(AGENTS_HOME, "skills"), source: "user-agents", rank: 500 },
+	];
+}
+
+/** Roots de un proyecto concreto, solo si el panel pide `?cwd=`. */
+function projectRoots(cwd) {
+	if (typeof cwd !== "string" || cwd.length === 0) return [];
+	const base = resolve(cwd.replace(/^~(?=\/|$)/, homedir()));
+	return [
+		{ path: join(base, ".dsh/skills"), source: "project-dsh", rank: 100 },
+		{ path: join(base, ".agents/skills"), source: "project-agents", rank: 200 },
+	];
+}
 
 function sendJson(res, status, payload) {
 	res.writeHead(status, {
@@ -31,17 +61,208 @@ function fail(res, error) {
 	sendJson(res, 500, { ok: false, error: message });
 }
 
-/** Resumen plano: solo lo que la UI dibuja, sin locators ni handles internos. */
-function shape(skill) {
+/** Ruta para mostrar: la home se acorta a `~`. */
+function displayPath(path) {
+	const home = homedir();
+	return path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+}
+
+/** Booleanos como los acepta el harness; `undefined` = valor inválido. */
+function parseBool(raw) {
+	const value = raw.trim().toLowerCase();
+	if (["true", "yes", "on", "1"].includes(value)) return true;
+	if (["false", "no", "off", "0"].includes(value)) return false;
+	return undefined;
+}
+
+/**
+ * Frontmatter del SKILL.md: `name`, `description`, `whenToUse` (o
+ * `when-to-use`) y los dos booleanos de invocación, con valores entre comillas
+ * o bloques `>` / `|`.
+ */
+function parseFrontmatter(text) {
+	const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+	if (match === null) return {};
+	const lines = match[1].split(/\r?\n/);
+	const meta = {};
+	for (let i = 0; i < lines.length; i += 1) {
+		const kv = lines[i].match(/^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$/);
+		if (kv === null) continue;
+		const key = kv[1];
+		let value = kv[2].trim();
+		if (value === ">" || value === "|" || value === ">-" || value === "|-") {
+			const block = [];
+			while (i + 1 < lines.length && /^[ \t]+\S/.test(lines[i + 1])) {
+				i += 1;
+				block.push(lines[i].trim());
+			}
+			value = value.startsWith(">") ? block.join(" ") : block.join("\n");
+		} else if (value.length > 1 && /^["']/.test(value) && value.at(-1) === value[0]) {
+			value = value.slice(1, -1);
+		}
+		meta[key] = value;
+	}
+	return meta;
+}
+
+/** Un root: carpetas con SKILL.md (sin bajar más) o archivos sueltos `<nombre>.md`. */
+function discoverRoot(root) {
+	if (!existsSync(root.path)) return { skills: [], ignored: [], exists: false };
+	let entries;
+	try {
+		entries = readdirSync(root.path, { withFileTypes: true });
+	} catch {
+		return { skills: [], ignored: [], exists: true };
+	}
+	const skills = [];
+	const ignored = [];
+	for (const entry of entries) {
+		const name = entry.name;
+		if (name.startsWith(".")) continue;
+		if (root.skipSystem === true && name === ".system") continue;
+		const full = join(root.path, name);
+		let isDir = entry.isDirectory();
+		let isFile = entry.isFile();
+		if (entry.isSymbolicLink()) {
+			try {
+				const stat = statSync(full);
+				isDir = stat.isDirectory();
+				isFile = stat.isFile();
+			} catch {
+				continue;
+			}
+		}
+		const file = isDir ? join(full, "SKILL.md") : isFile && name.endsWith(".md") ? full : undefined;
+		if (file === undefined || !existsSync(file)) continue;
+		let text;
+		try {
+			if (statSync(file).size > MAX_BODY_BYTES) {
+				ignored.push({ name, path: displayPath(file), reason: "archivo demasiado grande" });
+				continue;
+			}
+			text = readFileSync(file, "utf8");
+		} catch {
+			continue;
+		}
+		const meta = parseFrontmatter(text);
+		const skillName =
+			typeof meta.name === "string" && meta.name.length > 0 ? meta.name : isDir ? name : name.slice(0, -3);
+		const description = typeof meta.description === "string" ? meta.description.trim() : "";
+		if (!NAME_RE.test(skillName)) {
+			ignored.push({ name: skillName, path: displayPath(file), reason: "nombre inválido (kebab-case)" });
+			continue;
+		}
+		if (description.length === 0) {
+			ignored.push({ name: skillName, path: displayPath(file), reason: "sin description" });
+			continue;
+		}
+		const whenToUse =
+			typeof meta.whenToUse === "string"
+				? meta.whenToUse
+				: typeof meta["when-to-use"] === "string"
+					? meta["when-to-use"]
+					: "";
+		const rawModel = (meta["disable-model-invocation"] ?? "").trim();
+		const rawUser = (meta["user-invocable"] ?? "").trim();
+		// Ausente = permitido: sin `disable-model-invocation` el modelo la ve, y
+		// sin `user-invocable` el humano la puede llamar. Presente con una
+		// ortografía rara = se descarta la skill entera (igual que el harness).
+		const modelHidden = rawModel.length === 0 ? false : parseBool(rawModel);
+		const userAllowed = rawUser.length === 0 ? true : parseBool(rawUser);
+		if (modelHidden === undefined || userAllowed === undefined) {
+			ignored.push({ name: skillName, path: displayPath(file), reason: "booleano de invocación inválido" });
+			continue;
+		}
+		skills.push({
+			name: skillName,
+			description,
+			whenToUse,
+			source: root.source,
+			path: displayPath(file),
+			realPath: file,
+			rank: root.rank,
+			model: modelHidden === false,
+			user: userAllowed === true,
+		});
+	}
+	return { skills, ignored, exists: true };
+}
+
+/** Descubrimiento completo: roots de usuario, roots de proyecto y registro global. */
+async function collect(ctx, cwd) {
+	const roots = [...projectRoots(cwd), ...userRoots()];
+	const byName = new Map();
+	const rootInfo = [];
+	const ignored = [];
+	for (const root of roots) {
+		const found = discoverRoot(root);
+		rootInfo.push({
+			path: displayPath(root.path),
+			source: root.source,
+			exists: found.exists,
+			count: found.skills.length,
+		});
+		ignored.push(...found.ignored);
+		for (const skill of found.skills) {
+			const previous = byName.get(skill.name);
+			if (previous === undefined) {
+				byName.set(skill.name, skill);
+				continue;
+			}
+			if (skill.rank < previous.rank) {
+				byName.set(skill.name, skill);
+				ignored.push({ name: skill.name, path: previous.path, reason: `duplicada de ${skill.source}` });
+			} else {
+				ignored.push({ name: skill.name, path: skill.path, reason: `duplicada de ${previous.source}` });
+			}
+		}
+	}
+
+	// Las skills que el registro global sí tenga (runtime / bundled) se suman
+	// sin pisar lo que vino del disco.
+	try {
+		const registry = ctx.get?.("skills");
+		const extra = registry === undefined || registry === null ? [] : await registry.list({});
+		for (const skill of extra) {
+			if (byName.has(skill.name)) continue;
+			byName.set(skill.name, {
+				name: skill.name,
+				description: skill.description ?? "",
+				whenToUse: skill.whenToUse ?? "",
+				source: skill.source ?? "runtime",
+				path: typeof skill.path === "string" ? displayPath(skill.path) : "",
+				realPath: skill.path,
+				rank: 600,
+				model: skill.invocation?.modelInvocable === true,
+				user: skill.invocation?.userInvocable === true,
+			});
+		}
+	} catch {
+		// Sin registro global se sigue igual: el disco es la mayor parte del catálogo.
+	}
+
+	const skills = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+	return { skills, roots: rootInfo, ignored };
+}
+
+function publicSkill(skill) {
 	return {
 		name: skill.name,
-		description: skill.description ?? "",
-		whenToUse: skill.whenToUse ?? "",
-		source: skill.source ?? "custom",
-		path: skill.path ?? "",
-		model: skill.invocation?.modelInvocable === true,
-		user: skill.invocation?.userInvocable === true,
+		description: skill.description,
+		whenToUse: skill.whenToUse,
+		source: skill.source,
+		path: skill.path,
+		model: skill.model,
+		user: skill.user,
 	};
+}
+
+function queryOf(req) {
+	try {
+		return new URL(req.url ?? "/", "http://localhost").searchParams;
+	} catch {
+		return new URLSearchParams();
+	}
 }
 
 export function apply(ctx) {
@@ -50,15 +271,17 @@ export function apply(ctx) {
 			path: "/skills/list",
 			method: "GET",
 			handler: async (req, res) => {
+				const params = queryOf(req);
 				try {
-					const skills = await ctx.skills.list({});
-					const rows = skills.map(shape).sort((a, b) => a.name.localeCompare(b.name));
+					const { skills, roots, ignored } = await collect(ctx, params.get("cwd") ?? "");
 					sendJson(res, 200, {
 						ok: true,
-						count: rows.length,
-						model: rows.filter((row) => row.model).length,
-						command: rows.filter((row) => !row.model && row.user).length,
-						skills: rows,
+						count: skills.length,
+						model: skills.filter((skill) => skill.model).length,
+						command: skills.filter((skill) => !skill.model && skill.user).length,
+						roots,
+						ignored,
+						skills: skills.map(publicSkill),
 					});
 				} catch (error) {
 					fail(res, error);
@@ -69,29 +292,30 @@ export function apply(ctx) {
 			path: "/skills/read",
 			method: "GET",
 			handler: async (req, res) => {
-				let name = "";
-				try {
-					const url = new URL(req.url ?? "/", "http://localhost");
-					name = (url.searchParams.get("name") ?? "").trim();
-				} catch {
-					name = "";
-				}
-				if (!name || name.length > MAX_NAME_CHARS) {
-					sendJson(res, 400, { ok: false, error: "missing-name" });
+				const params = queryOf(req);
+				const name = (params.get("name") ?? "").trim();
+				if (name.length === 0 || name.length > MAX_NAME_CHARS || !NAME_RE.test(name)) {
+					sendJson(res, 400, { ok: false, error: "nombre inválido" });
 					return;
 				}
 				try {
-					const skill = await ctx.skills.get(name, {});
-					if (skill === undefined || skill === null) {
-						sendJson(res, 404, { ok: false, error: "unknown-skill", name });
+					const { skills } = await collect(ctx, params.get("cwd") ?? "");
+					const match = skills.find((skill) => skill.name === name);
+					if (match === undefined) {
+						sendJson(res, 404, { ok: false, error: "esa skill no está en el catálogo" });
+						return;
+					}
+					if (typeof match.realPath !== "string" || !existsSync(match.realPath)) {
+						sendJson(res, 409, { ok: false, error: "la skill no tiene archivo (viene de un plugin)" });
+						return;
+					}
+					if (statSync(match.realPath).size > MAX_BODY_BYTES) {
+						sendJson(res, 413, { ok: false, error: "el SKILL.md es demasiado grande" });
 						return;
 					}
 					sendJson(res, 200, {
 						ok: true,
-						skill: {
-							...shape(skill),
-							content: skill.content ?? "",
-						},
+						skill: { ...publicSkill(match), content: readFileSync(match.realPath, "utf8") },
 					});
 				} catch (error) {
 					fail(res, error);

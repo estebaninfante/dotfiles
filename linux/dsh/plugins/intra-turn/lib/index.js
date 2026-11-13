@@ -16,6 +16,12 @@ const MAX_BODY_BYTES = 64 * 1024;
 const MAX_DRAFT_CHARS = 4000;
 const MAX_TOKENS = 500;
 const CALL_TIMEOUT_MS = 45_000;
+/**
+ * Proveedores como opencode Go rechazan llamadas sin id de sesión (lo usan
+ * para rutear la caché). Un id propio y fijo: no se mezcla con la caché de la
+ * conversación y las llamadas comparten el prefijo del system prompt.
+ */
+const ROUTING_SESSION_ID = "intra-turn-feedforward";
 
 const SYSTEM = [
 	"Sos el copiloto de alguien que está escribiendo un pedido a un agente de IA.",
@@ -62,18 +68,29 @@ function sendJson(res, status, value) {
 	res.end(body);
 }
 
-/** Provider/modelo de la sesión que está mirando el usuario. */
+function pickTarget(config) {
+	if (typeof config?.provider !== "string" || typeof config?.model !== "string") return void 0;
+	return {
+		provider: config.provider,
+		model: config.model,
+		...typeof config.reasoningEffort === "string" ? { reasoningEffort: config.reasoningEffort } : {}
+	};
+}
+
+/**
+ * Provider/modelo de la sesión que está mirando el usuario; si la sesión es
+ * nueva (todavía sin request header), el modelo por defecto del perfil, que es
+ * el que va a usar el primer mensaje.
+ */
 function resolveTarget(ctx, sessionId) {
 	const session = typeof sessionId === "string" && sessionId.length > 0 ? ctx.sessions?.get?.(sessionId) : void 0;
-	const config = session?.requestHeader?.()?.config;
-	if (typeof config?.provider === "string" && typeof config?.model === "string") {
-		return {
-			provider: config.provider,
-			model: config.model,
-			...typeof config.reasoningEffort === "string" ? { reasoningEffort: config.reasoningEffort } : {}
-		};
+	const fromSession = pickTarget(session?.requestHeader?.()?.config);
+	if (fromSession !== void 0) return fromSession;
+	try {
+		return pickTarget(ctx.agentDefaultModel?.currentSelection?.());
+	} catch {
+		return void 0;
 	}
-	return void 0;
 }
 
 async function collectText(llm, options) {
@@ -81,9 +98,9 @@ async function collectText(llm, options) {
 	let failure;
 	for await (const chunk of llm.stream(options)) {
 		if (chunk.type === "text-delta") text += chunk.text;
-		else if (chunk.type === "finish" && chunk.reason !== void 0 && chunk.reason.kind !== "stop" && chunk.reason.kind !== "length") failure = chunk.reason;
+		else if (chunk.type === "finish" && chunk.reason !== void 0 && chunk.reason.kind !== "stop" && chunk.reason.kind !== "max-tokens") failure = chunk.reason;
 	}
-	if (failure !== void 0) throw new Error(`model finished with ${failure.kind}`);
+	if (failure !== void 0) throw new Error(`model finished with ${failure.kind}${typeof failure.failure?.message === "string" ? `: ${failure.failure.message}` : ""}`);
 	return text.trim();
 }
 
@@ -119,7 +136,7 @@ function parsePayload(text) {
 	return { assumptions: clean(parsed.assumptions, false), missing: clean(parsed.missing, true) };
 }
 
-export const inject = ["webServer", "llm", "sessions"];
+export const inject = ["webServer", "llm", "sessions", "agentDefaultModel"];
 
 export function apply(ctx) {
 	const handler = async (req, res) => {
@@ -145,7 +162,7 @@ export function apply(ctx) {
 		}
 		const target = resolveTarget(ctx, payload?.sessionId);
 		if (target === void 0) {
-			sendJson(res, 409, { error: "no-model", message: "La sesión todavía no eligió modelo." });
+			sendJson(res, 409, { error: "no-model", message: "No hay modelo: ni la sesión ni el perfil eligieron uno." });
 			return;
 		}
 		try {
@@ -154,9 +171,10 @@ export function apply(ctx) {
 				model: target.model,
 				...target.reasoningEffort === void 0 ? {} : { reasoningEffort: target.reasoningEffort },
 				system: SYSTEM,
-				messages: [{ role: "user", content: draft }],
+				messages: [{ role: "user", content: [{ type: "text", text: draft }] }],
 				maxTokens: MAX_TOKENS,
 				temperature: 0.2,
+				sessionId: ROUTING_SESSION_ID,
 				signal: AbortSignal.timeout(CALL_TIMEOUT_MS)
 			});
 			sendJson(res, 200, parsePayload(text));

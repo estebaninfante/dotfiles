@@ -102,6 +102,12 @@ window.__ModuleLoader__.load({
 .sk-src{font-size:11px;line-height:16px;color:var(--sk-cap)}
 
 .sk-empty{margin:8px 0 0;font-size:13px;line-height:20px;color:var(--sk-fg2)}
+.sk-ignored{font-size:12px;line-height:18px;color:var(--sk-fg3)}
+.sk-ignored summary{cursor:pointer}
+.sk-ignored-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.sk-ignored-list li{display:flex;gap:8px;flex-wrap:wrap}
+.sk-ignored-list .n{font-family:var(--sk-mono);color:var(--sk-fg2)}
+.sk-ignored-list .r{color:var(--sk-cap)}
 .sk-note{margin:0;font-size:12px;line-height:18px;color:var(--sk-fg3)}
 .sk-error{margin:0;font-size:13px;line-height:20px;color:var(--dsw-alias-state-error-primary,#f25a5a)}
 .sk-skel{display:flex;flex-direction:column;gap:9px;padding:14px 10px 6px;border-top:.5px solid var(--sk-l2)}
@@ -120,6 +126,26 @@ window.__ModuleLoader__.load({
 .sk-body{margin:0;padding:14px 16px;border:.5px solid var(--sk-l2);border-radius:var(--dsw-radius-md,12px);
   background:var(--sk-field);font-family:var(--sk-mono);font-size:12.5px;line-height:19px;color:var(--sk-fg);
   white-space:pre-wrap;overflow-wrap:anywhere;max-height:none}
+
+/* Celular: una columna, sin ruta, campos de 16px (iOS no hace zoom) y
+   objetivos táctiles de 36px. Breakpoint único del producto: 820px. */
+@media (max-width:820px){
+  .sk{padding:0 14px 32px;gap:16px}
+  .sk-head{flex-direction:column;gap:10px;padding-top:18px}
+  .sk-tools{width:100%}
+  .sk-search{width:100%;height:36px}
+  .sk-search input{font-size:16px}
+  .sk-ghost{height:36px}
+  .sk-row{padding:12px 8px;margin:0 -8px;width:calc(100% + 16px);gap:8px}
+  .sk-name{font-size:14px;line-height:21px}
+  .sk-path{display:none}
+  .sk-side{flex-direction:row;align-items:center;gap:6px}
+  .sk-src{display:none}
+  .sk-crumb{height:36px}
+  .sk-dtitle{font-size:18px;line-height:26px}
+  .sk-body{font-size:12px;line-height:18px;padding:12px}
+  .sk-detail{padding-top:18px}
+}
 `;
 
 		const ICON_SEARCH = h(
@@ -168,9 +194,13 @@ window.__ModuleLoader__.load({
 		}
 
 		function tagsFor(skill) {
-			if (skill.model) return [h("span", { key: "m", className: "sk-tag model" }, "modelo")];
-			if (skill.user) return [h("span", { key: "c", className: "sk-tag cmd" }, "solo comando")];
-			return [h("span", { key: "n", className: "sk-tag" }, "oculta")];
+			const tags = [];
+			if (skill.model) tags.push(h("span", { key: "m", className: "sk-tag model" }, "modelo"));
+			if (skill.user) {
+				tags.push(h("span", { key: "u", className: "sk-tag cmd" }, skill.model ? "comando" : "solo comando"));
+			}
+			if (tags.length === 0) tags.push(h("span", { key: "n", className: "sk-tag" }, "oculta"));
+			return tags;
 		}
 
 		function SkillRow(props) {
@@ -441,11 +471,37 @@ window.__ModuleLoader__.load({
 							query ? `Nada coincide con “${query}”.` : "No hay skills cargadas en este perfil.",
 						)
 					: null,
+				ready && state.data.ignored.length > 0
+					? h(
+							"details",
+							{ className: "sk-ignored" },
+							h(
+								"summary",
+								null,
+								`${state.data.ignored.length} entrada(s) que el harness no carga`,
+							),
+							h(
+								"ul",
+								{ className: "sk-ignored-list" },
+								state.data.ignored.map((item, index) =>
+									h(
+										"li",
+										{ key: `${item.name}-${index}` },
+										h("span", { className: "n" }, item.name),
+										h("span", { className: "r" }, item.reason),
+									),
+								),
+							),
+						)
+					: null,
 				ready
 					? h(
 							"p",
 							{ className: "sk-note" },
-							"Solo lectura. Para editar un SKILL.md, abrí su ruta desde el chat.",
+							`Solo lectura. Buscando en ${state.data.roots
+								.filter((root) => root.exists)
+								.map((root) => root.path)
+								.join(" · ")}`,
 						)
 					: null,
 			);

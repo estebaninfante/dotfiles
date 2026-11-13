@@ -207,9 +207,96 @@ function safe(handler) {
 }
 
 export const name = 'local-claude-visible'
-export const inject = ['commands']
+
+/* ---------------------------------------------------------------------------
+ * Mitad visual: el panel lee el mismo estado que los comandos.
+ * El estado de una delegación es un directorio; nada nuevo que inventar.
+ * ------------------------------------------------------------------------- */
+
+const MAX_LOG_LINES = 200
+
+function tailLines(dir, wanted) {
+  try {
+    const raw = readFileSync(join(dir, 'out.log'), 'utf8')
+    const lines = raw.split('\n')
+    return { text: lines.slice(-wanted).join('\n'), total: lines.length }
+  } catch {
+    return { text: '', total: 0 }
+  }
+}
+
+/** Ficha de cada delegación: nombre, estado, última línea y tamaño del log. */
+function delegationFacts() {
+  return listSessions().map((dir) => {
+    const name = dir.split('/').pop()
+    let started = 0
+    let sizeBytes = 0
+    try {
+      started = statSync(join(dir, 'brief.md')).mtimeMs
+    } catch {}
+    try {
+      sizeBytes = statSync(join(dir, 'out.log')).size
+    } catch {}
+    return {
+      name,
+      dir,
+      running: isRunning(dir),
+      startedAt: started ? new Date(started).toISOString() : '',
+      sizeBytes,
+      last: lastLine(dir, 1).slice(0, 300)
+    }
+  })
+}
+
+function sendJson(res, status, value) {
+  const body = JSON.stringify(value)
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': String(Buffer.byteLength(body)),
+    'cache-control': 'no-store'
+  })
+  res.end(body)
+}
+
+export const inject = ['commands', 'webServer']
+
+function registerRoutes(ctx) {
+  const handler = async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    if (url.pathname === '/claude-visible/list') {
+      sendJson(res, 200, { delegations: delegationFacts() })
+      return
+    }
+    if (url.pathname === '/claude-visible/log') {
+      const name = (url.searchParams.get('name') ?? '').trim()
+      const dir = pickSession(name)
+      if (!dir) {
+        sendJson(res, 404, { error: 'no-such-delegation' })
+        return
+      }
+      const lines = Math.min(MAX_LOG_LINES, Math.max(20, Number.parseInt(url.searchParams.get('lines') ?? '120', 10) || 120))
+      const { text, total } = tailLines(dir, lines)
+      sendJson(res, 200, {
+        name: dir.split('/').pop(),
+        running: isRunning(dir),
+        total,
+        text
+      })
+      return
+    }
+    sendJson(res, 404, { error: 'not-found' })
+  }
+
+  ctx.effect(
+    () =>
+      ctx.webServer.register({ kind: 'prefix', path: '/claude-visible/', handler }),
+    'claude-visible: routes'
+  )
+}
+
 
 export function apply(ctx) {
+  registerRoutes(ctx)
   ctx.commands.register({
     definitionId: CommandDefinitionId('dsh-local-claude-visible/claude'),
     name: 'claude',
