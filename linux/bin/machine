@@ -306,6 +306,15 @@ def cmd_scan(args) -> None:
     )
     con.commit()
 
+    loose = [
+        f for f in ROOT.iterdir()
+        if f.is_file() and f.name != ".stignore"
+    ]
+    if loose:
+        mb = round(sum(f.stat().st_size for f in loose if f.exists()) / (1024 * 1024), 1)
+        print(f"AVISO: {len(loose)} archivo(s) suelto(s) en {ROOT} ({mb} MB). "
+              f"~/Proyectos es solo para carpetas de proyecto.")
+
     with_remote = con.execute(
         "SELECT COUNT(*) FROM facts WHERE key='remote_host' AND value IN ('github','gitlab')"
     ).fetchone()[0]
@@ -618,7 +627,30 @@ def trash_entries() -> list[tuple[dt.datetime, Path, list[str]]]:
     return out
 
 
+def trash_json() -> list[dict]:
+    now = dt.datetime.now()
+    out = []
+    for when, entry, projects in trash_entries():
+        for name in projects:
+            folder = entry / name
+            size = sum(
+                f.stat().st_size for f in folder.rglob("*") if f.is_file()
+            ) / (1024 * 1024)
+            days = (now - when).days
+            out.append({
+                "slug": name,
+                "batch": entry.name,
+                "at": when.replace(microsecond=0).isoformat(),
+                "days": days,
+                "expires_in": max(0, RETENTION_DAYS - days),
+                "size_mb": round(size, 1),
+            })
+    return out
+
+
 def cmd_trash_list(args) -> None:
+    if getattr(args, "json", False):
+        return to_json(trash_json())
     entries = trash_entries()
     if not entries:
         print("papelera vacía")
@@ -658,6 +690,28 @@ def cmd_restore(args) -> None:
 
 
 def cmd_purge(args) -> None:
+    if getattr(args, "slug", None) or getattr(args, "everything", False):
+        targets = []
+        for when, entry, projects in trash_entries():
+            for name in projects:
+                if getattr(args, "everything", False) or name == args.slug:
+                    targets.append((entry, name))
+        if not targets:
+            where = "la papelera está vacía" if args.everything else f"'{args.slug}' no está en la papelera"
+            sys.exit(f"machine: {where}")
+        for entry, name in targets:
+            if args.yes:
+                shutil.rmtree(entry / name, ignore_errors=True)
+                try:
+                    entry.rmdir()
+                except OSError:
+                    pass
+                print(f"borrado definitivo: {name}")
+            else:
+                print(f"borraría: {name} ({entry.name})")
+        if not args.yes:
+            print("repetí con --yes para borrar de verdad")
+        return
     if args.days < 1:
         sys.exit("machine: --days tiene que ser >= 1")
     now = dt.datetime.now()
@@ -709,6 +763,7 @@ def main() -> None:
     trash.add_argument("slug", nargs="?")
     trash.add_argument("--yes", action="store_true")
     trash.add_argument("--github", action="store_true", help="borrar también el repo en GitHub")
+    trash.add_argument("--json", action="store_true", help="lista la papelera en JSON")
     trash.set_defaults(func=cmd_trash)
 
     restore = sub.add_parser("restore", help="devuelve un proyecto de la papelera")
@@ -717,6 +772,8 @@ def main() -> None:
 
     purge = sub.add_parser("purge", help="borra de la papelera lo más viejo que N días")
     purge.add_argument("--days", type=int, default=RETENTION_DAYS)
+    purge.add_argument("--slug", help="borra un proyecto puntual de la papelera")
+    purge.add_argument("--all", dest="everything", action="store_true", help="vacía la papelera")
     purge.add_argument("--yes", action="store_true")
     purge.set_defaults(func=cmd_purge)
 

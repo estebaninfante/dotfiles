@@ -154,6 +154,56 @@ export function apply(ctx) {
 		},
 		{
 			path: "/machine/trash",
+			method: "GET",
+			handler: async (req, res) => {
+				try {
+					sendJson(res, 200, { entries: await machineJson(["trash", "--json"]) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
+			path: "/machine/trash-delete",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+				if (!slug && body?.all !== true) {
+					sendJson(res, 400, { error: "missing-slug" });
+					return;
+				}
+				const args = ["purge", "--yes"];
+				if (body?.all === true) args.push("--all");
+				else args.push("--slug", slug);
+				try {
+					sendJson(res, 200, { ok: true, out: await machine(args) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
+			path: "/machine/trash-recover",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+				if (!slug) {
+					sendJson(res, 400, { error: "missing-slug" });
+					return;
+				}
+				try {
+					const out = await machine(["restore", slug]);
+					await machine(["scan"]);
+					sendJson(res, 200, { ok: true, out });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
+			path: "/machine/trash",
 			method: "POST",
 			handler: async (req, res) => {
 				const body = await readJsonBody(req).catch(() => null);

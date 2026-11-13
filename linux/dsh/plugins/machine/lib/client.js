@@ -894,6 +894,10 @@ input.mr-field{height:36px;padding:0 12px}
 			const [loading, setLoading] = React.useState(true);
 			const [scanning, setScanning] = React.useState(false);
 			const [trashing, setTrashing] = React.useState(null);
+			const [view, setView] = React.useState("list");
+			const [trash, setTrash] = React.useState([]);
+			const [wiping, setWiping] = React.useState(false);
+			const [trashBusy, setTrashBusy] = React.useState("");
 			const [noteState, setNoteState] = React.useState("");
 			const searchRef = React.useRef(null);
 			const scrollRef = React.useRef(null);
@@ -914,6 +918,60 @@ input.mr-field{height:36px;padding:0 12px}
 			React.useEffect(() => {
 				load();
 			}, [load]);
+
+			const loadTrash = React.useCallback(async () => {
+				try {
+					const data = await api("/machine/trash");
+					setTrash(data.entries || []);
+				} catch (err) {
+					setError(err.message);
+				}
+			}, []);
+
+			React.useEffect(() => {
+				loadTrash();
+			}, [loadTrash]);
+
+			const recover = React.useCallback(
+				async (slug) => {
+					setTrashBusy(slug);
+					try {
+						await api("/machine/trash-recover", { slug });
+						setFlash(`${slug} volvió a ~/Proyectos.`);
+						await Promise.all([loadTrash(), load()]);
+					} catch (err) {
+						setError(err.message);
+					}
+					setTrashBusy("");
+				},
+				[load, loadTrash],
+			);
+
+			const wipeOne = React.useCallback(
+				async (slug) => {
+					setTrashBusy(slug);
+					try {
+						await api("/machine/trash-delete", { slug });
+						setFlash(`${slug} borrado definitivamente.`);
+						await loadTrash();
+					} catch (err) {
+						setError(err.message);
+					}
+					setTrashBusy("");
+				},
+				[loadTrash],
+			);
+
+			const wipeAll = React.useCallback(async () => {
+				setWiping(false);
+				try {
+					await api("/machine/trash-delete", { all: true });
+					setFlash("Papelera vaciada.");
+					await loadTrash();
+				} catch (err) {
+					setError(err.message);
+				}
+			}, [loadTrash]);
 
 			React.useEffect(() => {
 				if (!flash) return;
@@ -1209,6 +1267,20 @@ input.mr-field{height:36px;padding:0 12px}
 							},
 							scanning ? "Leyendo…" : "Actualizar",
 						),
+						h(
+							"button",
+							{
+								type: "button",
+								className: "mr-btn",
+								onClick: () => {
+									setView("trash");
+									loadTrash();
+								},
+								title: "Ver la papelera",
+							},
+							"Papelera",
+							trash.length ? h("span", { className: "mr-count" }, String(trash.length)) : null,
+						),
 					),
 				);
 
@@ -1287,6 +1359,108 @@ input.mr-field{height:36px;padding:0 12px}
 				}
 
 				return h(React.Fragment, null, head, notices, bar, body);
+			}
+
+			function trashView() {
+				const totalMb = trash.reduce((acc, t) => acc + Number(t.size_mb || 0), 0);
+				const rows = trash;
+				return h(
+					"div",
+					{ className: "mr-detail" },
+					h(
+						"button",
+						{ type: "button", className: "mr-crumb", onClick: () => setView("list"), title: "Volver (Esc)" },
+						h(IconBack),
+						"Proyectos",
+					),
+					notices,
+					h(
+						"div",
+						{ className: "mr-dhead" },
+						h(
+							"div",
+							{ className: "mr-dmain" },
+							h("div", { className: "mr-dtitle" }, h("h1", null, "Papelera")),
+							h(
+								"p",
+								{ className: "mr-ddesc" },
+								rows.length
+									? `${rows.length} proyecto(s) · ${totalMb.toFixed(1)} MB · se borran solos a los ${RETENTION_DAYS} días`
+									: "Vacía. Lo que borres queda acá antes de desaparecer.",
+							),
+						),
+						rows.length
+							? h(
+									"div",
+									{ className: "mr-actions" },
+									h(
+										"button",
+										{
+											type: "button",
+											className: "mr-btn",
+											"data-variant": "danger",
+											onClick: () => setWiping(true),
+										},
+										"Vaciar papelera",
+									),
+								)
+							: null,
+					),
+					rows.length
+						? h(
+								"ul",
+								{ className: "mr-rows" },
+								rows.map((t) =>
+									h(
+										"li",
+										{ className: "mr-row", key: `${t.batch}-${t.slug}` },
+										h(
+											"div",
+											{ className: "mr-row-main" },
+											h(
+												"div",
+												{ className: "mr-row-title" },
+												h("strong", null, t.slug),
+												h(
+													"span",
+													{ className: "mr-row-sub" },
+													`entró ${ageLabel(t.days) === "hoy" ? "hoy" : ageLabel(t.days)} · ` +
+														`${t.size_mb} MB · queda ${t.expires_in} día(s)`,
+												),
+											),
+										),
+										h(
+											"div",
+											{ className: "mr-row-side" },
+											h(
+												"button",
+												{
+													type: "button",
+													className: "mr-btn",
+													disabled: trashBusy === t.slug,
+													onClick: () => recover(t.slug),
+													title: "Devolver a ~/Proyectos",
+												},
+												trashBusy === t.slug ? "…" : "Restaurar",
+											),
+											h(
+												"button",
+												{
+													type: "button",
+													className: "mr-btn",
+													"data-variant": "danger",
+													disabled: trashBusy === t.slug,
+													onClick: () => wipeOne(t.slug),
+													title: "Borrar definitivamente",
+												},
+												"Borrar",
+											),
+										),
+									),
+								),
+							)
+						: null,
+				);
 			}
 
 			function detailView() {
@@ -1534,7 +1708,10 @@ input.mr-field{height:36px;padding:0 12px}
 			return h(
 				"div",
 				{ className: "mr", ref: scrollRef },
-				selected ? detailView() : listView(),
+				view === "trash" ? trashView() : selected ? detailView() : listView(),
+				wiping
+					? h(WipeDialog, { count: trash.length, onCancel: () => setWiping(false), onConfirm: wipeAll })
+					: null,
 				trashing
 					? h(TrashDialog, {
 							project: trashing,
