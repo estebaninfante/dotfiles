@@ -1540,7 +1540,7 @@ input.mr-field{height:36px;padding:0 12px}
 				const head = h(
 					"header",
 					{ className: "mr-head" },
-					h("div", null, h("h1", { className: "mr-h1" }, "Taller"), h("p", { className: "mr-intro" }, intro)),
+					h("div", null, h("h1", { className: "mr-h1" }, "Proyectos e ideas"), h("p", { className: "mr-intro" }, intro)),
 					h(
 						"div",
 						{ className: "mr-toolbar" },
@@ -2183,7 +2183,7 @@ input.mr-field{height:36px;padding:0 12px}
 		function apply(ctx) {
 			ctx.slots.inject("sidebar.panellist", () =>
 				ctx.slots.register(
-					{ name: "sidebar.panellist", id: PANEL_ID, order: 10, label: () => "Taller" },
+					{ name: "sidebar.panellist", id: PANEL_ID, order: 10, label: () => "Proyectos e ideas" },
 					MachineIcon,
 				),
 			);
