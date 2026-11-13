@@ -11,12 +11,14 @@
  *   POST /machine/entity        { slug, state?, kind?, note? }
  *   POST /machine/task          { slug, title }
  *   POST /machine/task-done     { task }
+ *   POST /machine/open          { path }   abre la carpeta en el gestor
  *
  * Los POST exigen el header `x-dsh-machine: 1`: un sitio externo no puede
  * mandarlo sin preflight, así que no puede tocar la base del navegador.
  */
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
 
@@ -152,6 +154,37 @@ export function apply(ctx) {
 				}
 				try {
 					sendJson(res, 200, { ok: true, out: await machine(["task", "add", slug, title]) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
+			// Abrir la carpeta del proyecto en el gestor de archivos del escritorio.
+			// Solo carpetas dentro del home: esto nunca abre URLs ni binarios.
+			path: "/machine/open",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const target = typeof body?.path === "string" ? body.path.trim() : "";
+				const home = homedir();
+				if (!target || !target.startsWith(`${home}/`)) {
+					sendJson(res, 400, { error: "path-outside-home" });
+					return;
+				}
+				try {
+					if (!statSync(target).isDirectory()) {
+						sendJson(res, 400, { error: "not-a-directory" });
+						return;
+					}
+				} catch {
+					sendJson(res, 404, { error: "missing" });
+					return;
+				}
+				try {
+					const child = spawn("xdg-open", [target], { detached: true, stdio: "ignore" });
+					child.unref();
+					sendJson(res, 200, { ok: true });
 				} catch (error) {
 					fail(res, error);
 				}

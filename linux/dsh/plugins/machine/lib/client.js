@@ -34,6 +34,7 @@ window.__ModuleLoader__.load({
 			done: "#4c8dff",
 			archived: "#4b5058",
 		};
+		const KINDS = ["project", "product", "experiment", "service", "app", "idea"];
 		const KIND_LABEL = {
 			project: "proyecto",
 			product: "producto",
@@ -105,6 +106,21 @@ window.__ModuleLoader__.load({
   color:var(--fg2);font:inherit;font-size:12px;padding:0 4px;cursor:pointer}
 .mr-sort select:hover{background:var(--hover);color:var(--fg)}
 .mr-main{flex:1;min-height:0;display:flex;border-top:1px solid var(--line)}
+.mr-head,.mr-kpis,.mr-filters,.mr-main{width:100%;max-width:1200px;margin-left:auto;margin-right:auto}
+.mr-detail{flex:1;min-height:0;width:100%;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;
+  padding:0 26px;animation:mr-in .14s ease-out}
+.mr-detail .mr-sheet-head{padding:18px 0 14px}
+.mr-detail .mr-sheet-body{padding:14px 0 40px}
+.mr-back{
+  display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 8px;margin-bottom:2px;
+  border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--fg2);
+  font:inherit;font-size:12px;cursor:pointer}
+.mr-back:hover{background:var(--hover);color:var(--fg)}
+.mr-kind{margin-left:auto;display:flex;align-items:center;gap:6px}
+.mr-kind select{
+  height:26px;border:1px solid var(--line2);border-radius:7px;background:transparent;
+  color:var(--fg);font:inherit;font-size:12px;padding:0 6px;cursor:pointer;outline:none}
+.mr-kind select:hover{background:var(--hover)}
 .mr-list{flex:1;min-width:0;overflow:auto}
 .mr table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;table-layout:fixed}
 .mr thead th{
@@ -471,6 +487,30 @@ window.__ModuleLoader__.load({
 				[projects],
 			);
 
+			const changeKind = React.useCallback(
+				async (slug, kind) => {
+					const before = projects.find((p) => p.slug === slug)?.kind;
+					setDetail((prev) => (prev ? { ...prev, kind } : prev));
+					setProjects((prev) => prev.map((p) => (p.slug === slug ? { ...p, kind } : p)));
+					try {
+						await api("/machine/entity", { slug, kind });
+					} catch (err) {
+						setError(err.message);
+						setDetail((prev) => (prev ? { ...prev, kind: before } : prev));
+						setProjects((prev) => prev.map((p) => (p.slug === slug ? { ...p, kind: before } : p)));
+					}
+				},
+				[projects],
+			);
+
+			const openFolder = React.useCallback(async (path) => {
+				try {
+					await api("/machine/open", { path });
+				} catch (err) {
+					setError(err.message);
+				}
+			}, []);
+
 			React.useEffect(() => {
 				const onKey = (event) => {
 					if (event.key === "Escape" && selected) {
@@ -725,7 +765,7 @@ window.__ModuleLoader__.load({
 				if (!detail) {
 					return h(
 						"div",
-						{ className: "mr-sheet" },
+						{ className: "mr-detail" },
 						h(
 							"div",
 							{ className: "mr-sheet-head" },
@@ -765,7 +805,12 @@ window.__ModuleLoader__.load({
 
 				return h(
 					"div",
-					{ className: "mr-sheet" },
+					{ className: "mr-detail" },
+					h(
+						"button",
+						{ className: "mr-back", onClick: close, title: "Volver a la lista (Esc)" },
+						"← Proyectos",
+					),
 					h(
 						"div",
 						{ className: "mr-sheet-head" },
@@ -790,7 +835,19 @@ window.__ModuleLoader__.load({
 									await changeState(detail.slug, next);
 								},
 							}),
-							h("span", { className: "mr-muted", style: { fontSize: 11.5 } }, KIND_LABEL[detail.kind] || detail.kind),
+							h(
+								"label",
+								{ className: "mr-kind", title: "Tipo de entidad" },
+								h("span", { className: "mr-muted", style: { fontSize: 11 } }, "tipo"),
+								h(
+									"select",
+									{
+										value: detail.kind || "project",
+										onChange: (event) => changeKind(detail.slug, event.target.value),
+									},
+									KINDS.map((k) => h("option", { key: k, value: k }, KIND_LABEL[k] || k)),
+								),
+							),
 						),
 						h(
 							"dl",
@@ -804,7 +861,22 @@ window.__ModuleLoader__.load({
 								: row("remoto", "sin remoto"),
 							row("tipo", KIND_LABEL[detail.kind] || detail.kind),
 						),
-						h("div", { className: "mr-path" }, f.path || ""),
+						h(
+							"div",
+							{ style: { display: "flex", alignItems: "center", gap: 8, marginTop: 10 } },
+							h("div", { className: "mr-path", style: { marginTop: 0, flex: 1, minWidth: 0 } }, f.path || ""),
+							f.path
+								? h(
+										"button",
+										{
+											className: "mr-btn",
+											onClick: () => openFolder(f.path),
+											title: "Abrir la carpeta en el gestor de archivos",
+										},
+										"Abrir carpeta",
+									)
+								: null,
+						),
 						h("div", { className: "mr-label" }, "nota"),
 						h("textarea", {
 							key: `${detail.slug}-${detail.updated_at}`,
@@ -890,7 +962,7 @@ window.__ModuleLoader__.load({
 					: null,
 				kpis,
 				filters,
-				h("div", { className: "mr-main" }, table, sheet()),
+				selected ? sheet() : h("div", { className: "mr-main" }, table),
 			);
 		}
 

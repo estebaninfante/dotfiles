@@ -397,7 +397,8 @@ de archivos (xdg-open); ruta inexistente → aviso abajo, sin abrir nada.
 `linux/dsh/plugins/machine/` (host + cliente) monta una **página completa**
 encima del chat con el inventario de `~/Proyectos`: resumen (cuántos sin
 decisión, cuántos activos, cuántos sin tocar +30 días, cuántos con cambios sin
-guardar), tabla con selector de estado por fila, y ficha al costado con hechos
+guardar), tabla con selector de estado por fila, y ficha en **página aparte** (tipo
+editable, botón para abrir la carpeta en el gestor, contenido centrado a 1200px) con hechos
 del disco, nota y tareas. Se abre con la pestaña vertical `proyectos` del borde
 izquierdo; se cierra con Esc o el botón.
 
