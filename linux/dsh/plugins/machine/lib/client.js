@@ -298,6 +298,14 @@ input.mr-field{height:36px;padding:0 12px}
 .mr-confirm{display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:20px;color:var(--mr-fg2)}
 .mr-confirm b{font-family:var(--mr-mono);font-weight:500;font-size:12.5px;color:var(--mr-fg)}
 .mr-confirm .mr-field{height:40px;padding:0 14px;font-family:var(--mr-mono);font-size:13px;background:var(--dsw-alias-bg-layer-3,var(--mr-field))}
+.mr-check{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--mr-card-line);
+  border-radius:var(--mr-r-md,10px);background:color-mix(in srgb,var(--mr-bad) 4%,transparent);cursor:pointer}
+.mr-check[data-disabled="1"]{cursor:default;background:var(--mr-l1);border-color:var(--mr-l3)}
+.mr-check input{margin:3px 0 0;accent-color:var(--mr-bad);flex:none}
+.mr-check .mr-check-text{display:flex;flex-direction:column;gap:3px;font-size:13px;line-height:19px;min-width:0}
+.mr-check code{font-family:var(--mr-mono);font-size:12.5px;word-break:break-all}
+.mr-check small{font-size:11.5px;line-height:16px;color:var(--mr-fg3)}
+.mr-check small[data-tone="bad"]{color:var(--mr-bad)}
 .mr-reason{margin:0;font-size:12px;line-height:18px;color:var(--mr-bad);white-space:pre-wrap;overflow-wrap:anywhere}
 .mr-dialog footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 24px}
 
@@ -377,6 +385,15 @@ input.mr-field{height:36px;padding:0 12px}
 
 		function plural(n, one, many) {
 			return `${n} ${n === 1 ? one : many}`;
+		}
+
+		/** `https://github.com/owner/name.git` -> `owner/name`. */
+		function ghRepoSlug(url) {
+			const value = String(url || "");
+			if (!value.includes("github.com")) return "";
+			let tail = value.split("github.com").pop().replace(/^[:/]+/, "");
+			tail = tail.replace(/\.git$/, "").replace(/\/+$/, "");
+			return tail.split("/").length === 2 ? tail : "";
 		}
 
 		/** Lo que se pierde (o impide) mandar un proyecto a la papelera. */
@@ -677,11 +694,28 @@ input.mr-field{height:36px;padding:0 12px}
 			const [typed, setTyped] = React.useState("");
 			const [busy, setBusy] = React.useState(false);
 			const [reason, setReason] = React.useState("");
+			const [alsoGithub, setAlsoGithub] = React.useState(false);
+			const [gh, setGh] = React.useState(null);
 			const inputRef = React.useRef(null);
 			const { blockers, losses } = trashRisks(project);
 			const f = project.facts || {};
 			const matches = typed.trim() === project.slug;
 			const blocked = blockers.length > 0;
+			const repo = f.remote_host === "github" ? ghRepoSlug(f.remote_url) : "";
+			const canDeleteRepo = repo.length > 0;
+			const ghReady = gh === null ? false : gh.can_delete === true;
+			const githubBlocked = alsoGithub && gh !== null && !ghReady;
+
+			React.useEffect(() => {
+				if (!canDeleteRepo) return;
+				let alive = true;
+				api("/machine/gh")
+					.then((data) => alive && setGh(data))
+					.catch(() => alive && setGh({ can_delete: false }));
+				return () => {
+					alive = false;
+				};
+			}, [canDeleteRepo]);
 
 			React.useEffect(() => {
 				const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 30);
@@ -699,11 +733,11 @@ input.mr-field{height:36px;padding:0 12px}
 			}, [busy, onCancel]);
 
 			const submit = async () => {
-				if (!matches || blocked || busy) return;
+				if (!matches || blocked || busy || githubBlocked) return;
 				setBusy(true);
 				setReason("");
 				try {
-					await api("/machine/trash", { slug: project.slug });
+					await api("/machine/trash", { slug: project.slug, github: alsoGithub });
 					onDone(project.slug);
 				} catch (err) {
 					setBusy(false);
@@ -764,6 +798,33 @@ input.mr-field{height:36px;padding:0 12px}
 							: losses.length
 								? riskList("warn", losses, IconAlert)
 								: riskList("ok", [["Todo está subido al remoto", "No se pierde trabajo."]], IconCheck),
+						canDeleteRepo
+							? h(
+									"label",
+									{ className: "mr-check", "data-disabled": !ghReady ? 1 : 0 },
+									h("input", {
+										type: "checkbox",
+										checked: alsoGithub,
+										disabled: busy || !ghReady,
+										onChange: (event) => setAlsoGithub(event.target.checked),
+									}),
+									h(
+										"span",
+										{ className: "mr-check-text" },
+										h("span", null, "Borrar también el repositorio en GitHub"),
+										h("small", null, h("code", null, repo), " · no se puede deshacer desde acá"),
+										ghReady
+											? h("small", { "data-tone": "bad" }, "El repo desaparece de GitHub junto con su historial, issues y estrellas.")
+											: h(
+													"small",
+													null,
+													gh === null
+														? "consultando permisos de gh…"
+														: "falta el permiso delete_repo: corré gh auth refresh -s delete_repo",
+												),
+									),
+								)
+							: null,
 						blocked
 							? null
 							: h(
@@ -800,10 +861,16 @@ input.mr-field{height:36px;padding:0 12px}
 								type: "button",
 								className: "mr-btn",
 								"data-variant": "solid-danger",
-								disabled: !matches || blocked || busy,
+								disabled: !matches || blocked || busy || githubBlocked,
 								onClick: submit,
 							},
-							busy ? "Moviendo…" : "Mandar a la papelera",
+							busy
+								? alsoGithub
+									? "Borrando en GitHub…"
+									: "Moviendo…"
+								: alsoGithub
+									? "Papelera y GitHub"
+									: "Mandar a la papelera",
 						),
 					),
 				),

@@ -106,6 +106,17 @@ export function apply(ctx) {
 			},
 		},
 		{
+			path: "/machine/gh",
+			method: "GET",
+			handler: async (req, res) => {
+				try {
+					sendJson(res, 200, await machineJson(["gh-status", "--json"]));
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
 			path: "/machine/scan",
 			method: "POST",
 			handler: async (req, res) => {
@@ -151,8 +162,10 @@ export function apply(ctx) {
 					sendJson(res, 400, { error: "missing-slug" });
 					return;
 				}
+				const args = ["trash", slug, "--yes"];
+				if (body?.github === true) args.push("--github");
 				try {
-					sendJson(res, 200, { ok: true, out: await machine(["trash", slug, "--yes"]) });
+					sendJson(res, 200, { ok: true, out: await machine(args) });
 				} catch (error) {
 					fail(res, error);
 				}

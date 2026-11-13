@@ -459,6 +459,54 @@ def cmd_task_ls(args) -> None:
         print(f"[{mark}] {t['slug']:24} {t['title']}")
 
 
+def gh_login() -> str:
+    try:
+        r = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    blob = (r.stdout or "") + (r.stderr or "")
+    for line in blob.splitlines():
+        if "account" in line and "Logged in" in line:
+            parts = line.split()
+            for token in parts:
+                if token and token[0].isalnum() and "." not in token and "/" not in token:
+                    continue
+            # "Logged in to github.com account estebaninfante (keyring)"
+            if "account" in parts:
+                idx = parts.index("account")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+    return ""
+
+
+def gh_can_delete() -> bool:
+    """True si el token de gh tiene el permiso delete_repo."""
+    try:
+        r = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    blob = (r.stdout or "") + (r.stderr or "")
+    return "delete_repo" in blob
+
+
+def gh_repo_slug(url: str) -> str:
+    """https://github.com/owner/name.git -> owner/name"""
+    if "github.com" not in url:
+        return ""
+    tail = url.split("github.com", 1)[1].lstrip(":/")
+    tail = tail[:-4] if tail.endswith(".git") else tail
+    tail = tail.strip("/")
+    return tail if tail.count("/") == 1 else ""
+
+
+def cmd_gh_status(args) -> None:
+    info = {"login": gh_login(), "can_delete": gh_can_delete()}
+    if args.json:
+        return to_json(info)
+    print(f"cuenta: {info['login'] or '(sin sesión)'}")
+    print(f"borrar repos: {'sí' if info['can_delete'] else 'NO (falta el permiso delete_repo)'}")
+
+
 def cmd_trash(args) -> None:
     """Manda la carpeta a la papelera y borra la fila.
 
@@ -478,6 +526,20 @@ def cmd_trash(args) -> None:
         sys.exit(f"machine: '{args.slug}' tiene un servicio systemd; deshabilitá la unit primero")
     if not args.yes:
         sys.exit("machine: falta --yes (el movimiento es reversible pero borra la fila)")
+
+    if args.github:
+        if facts.get("remote_host") != "github":
+            sys.exit(f"machine: '{args.slug}' no tiene remoto de GitHub")
+        repo = gh_repo_slug(facts.get("remote_url", ""))
+        if not repo:
+            sys.exit(f"machine: no pude leer owner/nombre del remoto ({facts.get('remote_url')})")
+        if not gh_can_delete():
+            sys.exit("machine: falta el permiso delete_repo en gh (corré: gh auth refresh -s delete_repo)")
+        # Primero GitHub: si falla, no se toca nada local.
+        r = subprocess.run(["gh", "repo", "delete", repo, "--yes"], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"machine: gh no pudo borrar {repo}: {(r.stderr or r.stdout).strip()[:300]}")
+        print(f"github: {repo} borrado")
 
     stamp = dt.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     dest_dir = TRASH / stamp
@@ -522,7 +584,12 @@ def main() -> None:
     trash = sub.add_parser("trash", help="manda la carpeta a la papelera y borra la fila")
     trash.add_argument("slug")
     trash.add_argument("--yes", action="store_true")
+    trash.add_argument("--github", action="store_true", help="borrar también el repo en GitHub")
     trash.set_defaults(func=cmd_trash)
+
+    ghst = sub.add_parser("gh-status", help="si gh puede borrar repos")
+    ghst.add_argument("--json", action="store_true")
+    ghst.set_defaults(func=cmd_gh_status)
 
     task = sub.add_parser("task", help="tareas de un proyecto")
     task_sub = task.add_subparsers(dest="task_cmd", required=True)
