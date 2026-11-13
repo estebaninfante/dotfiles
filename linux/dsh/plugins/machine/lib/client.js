@@ -39,7 +39,7 @@ window.__ModuleLoader__.load({
 		};
 		// Tono por estado: el color va en el texto del control, no en un punto.
 		const TONE = {
-			unclassified: "warn",
+			unclassified: "plain",
 			active: "ok",
 			paused: "plain",
 			done: "info",
@@ -113,7 +113,7 @@ window.__ModuleLoader__.load({
 .mr-search svg{flex:none;color:var(--mr-fg3)}
 .mr-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--mr-fg);
   font:inherit;font-size:13px;line-height:20px}
-.mr-search input::placeholder{color:var(--mr-dim)}
+.mr-search input::placeholder{color:var(--mr-fg3)}
 .mr-search kbd{font:inherit;font-size:11px;color:var(--mr-cap)}
 
 /* --- Botones (mismas medidas que Button sm/md del harness) --------------- */
@@ -259,7 +259,7 @@ window.__ModuleLoader__.load({
 .mr-field{width:100%;padding:10px 14px;border:.5px solid var(--mr-l4);border-radius:var(--mr-r-md);
   background:var(--mr-field);color:var(--mr-fg);font:inherit;font-size:13px;line-height:20px;outline:none}
 .mr-field:focus{border-color:var(--mr-info);box-shadow:inset 0 0 0 .5px var(--mr-info)}
-.mr-field::placeholder{color:var(--mr-dim)}
+.mr-field::placeholder{color:var(--mr-fg3)}
 textarea.mr-field{min-height:96px;resize:vertical;display:block}
 input.mr-field{height:36px;padding:0 12px}
 .mr-tasks{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}
@@ -270,9 +270,6 @@ input.mr-field{height:36px;padding:0 12px}
 .mr-tasks .mr-empty{padding:12px 16px}
 .mr-add{display:flex;gap:8px}
 .mr-add .mr-field{flex:1;min-width:0}
-.mr-danger{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px}
-.mr-danger p{margin:0;font-size:13px;line-height:20px;color:var(--mr-fg2)}
-.mr-danger p b{display:block;font-weight:500;color:var(--mr-fg)}
 
 /* --- Diálogo de borrado (Modal + RiskConfirmation del harness) ------------ */
 .mr-layer{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
@@ -308,7 +305,8 @@ input.mr-field{height:36px;padding:0 12px}
 @media (max-width:820px){
   .mr{padding:0 16px 32px;gap:22px}
   .mr-head{flex-direction:column;align-items:stretch;padding-top:18px}
-  .mr-search{flex:1;width:auto;height:40px}
+  .mr-search{flex:1;width:auto;min-width:0;height:40px}
+  .mr-search input{width:0}
   .mr-search input,.mr-field,.mr-confirm .mr-field{font-size:16px}
   .mr-search kbd{display:none}
   .mr-btn{height:40px}
@@ -319,7 +317,6 @@ input.mr-field{height:36px;padding:0 12px}
   .mr-detail{padding-top:18px}
   .mr-dhead{flex-direction:column;align-items:stretch}
   .mr-grid{grid-template-columns:minmax(0,1fr)}
-  .mr-danger{flex-direction:column;align-items:stretch}
   .mr-menu button{min-height:40px}
 }
 `;
@@ -400,7 +397,7 @@ input.mr-field{height:36px;padding:0 12px}
 					"Deshabilitá la unit primero; si no, queda reiniciándose en bucle.",
 				]);
 			if (dirty > 0) losses.push([plural(dirty, "archivo sin guardar", "archivos sin guardar"), "Cambios que nunca entraron en un commit."]);
-			if (ahead === "?") losses.push(["La rama no tiene copia remota", "Ningún commit de esta rama está subido."]);
+			if (ahead === "?" && f.remote_url) losses.push(["La rama no tiene copia remota", "Ningún commit de esta rama está subido."]);
 			else if (ahead !== "0" && Number(ahead) > 0)
 				losses.push([plural(Number(ahead), "commit sin subir", "commits sin subir"), "Solo existen en esta máquina."]);
 			if (!f.remote_url) losses.push(["Sin remoto", "No hay copia en GitHub ni en ningún otro lado."]);
@@ -1043,7 +1040,7 @@ input.mr-field{height:36px;padding:0 12px}
 						"div",
 						{ className: "mr-who" },
 						h("span", { className: "mr-name" }, p.slug),
-						h("span", { className: "mr-sub" }, sub.length ? sub.join(" · ") : f.path ? "sin descripción" : "sin carpeta"),
+						h("span", { className: "mr-sub" }, sub.length ? sub.join(" · ") : f.path ? KIND_LABEL[p.kind] || "proyecto" : "sin carpeta"),
 					),
 					h("span", { className: "mr-cell", "data-tone": stale ? "warn" : undefined, title: f.last_commit ? `último commit ${f.last_commit}` : undefined }, ageLabel(p.age_days)),
 					h(
@@ -1055,7 +1052,7 @@ input.mr-field{height:36px;padding:0 12px}
 					h(
 						"span",
 						{ className: "mr-cell", "data-tone": alerts.length ? "warn" : "quiet" },
-						alerts.length ? alerts.join(" · ") : "al día",
+						alerts.join(" · "),
 					),
 					h(
 						"div",
@@ -1444,26 +1441,6 @@ input.mr-field{height:36px;padding:0 12px}
 									onClick: (event) => addTask(event.currentTarget.previousSibling),
 								},
 								"Agregar",
-							),
-						),
-					),
-					h(
-						"section",
-						{ className: "mr-section" },
-						h("h2", { className: "mr-section-head" }, "Papelera"),
-						h(
-							"div",
-							{ className: "mr-card mr-danger" },
-							h(
-								"p",
-								null,
-								h("b", null, "Sacar este proyecto de la máquina"),
-								`La carpeta se mueve a ${TRASH_DIR} (no se borra) y sale de la lista.`,
-							),
-							h(
-								"button",
-								{ type: "button", className: "mr-btn", "data-variant": "danger", onClick: () => setTrashing(d) },
-								"Mandar a la papelera…",
 							),
 						),
 					),
