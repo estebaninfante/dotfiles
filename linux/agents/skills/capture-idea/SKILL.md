@@ -1,14 +1,14 @@
 ---
 name: capture-idea
-description: Turn an outside inspiration (an X/Twitter link, a video, a screenshot, "vi esto y quiero hacerlo acá") into a named idea, a short verdict, scope questions and a Definition of Done before any code is written. Use when the user pastes a link or an image with the intent to implement it, or says "quiero hacer X", "me gusta esto", "vi esto", "quisiera que el harness haga Y".
+description: Turn an outside inspiration (an X/Twitter link, a video, a screenshot, "vi esto y quiero hacerlo acá") into a named idea in `machine`, with a one-line verdict and, if it goes ahead, an objective and a way to check it. Use when the user pastes a link or an image with the intent to implement it, or says "quiero hacer X", "me gusta esto", "vi esto", "quisiera que el harness haga Y".
 ---
 # Capture idea → project
 
-The user is scattered by nature: dropping an idea is easy, sustaining it is not.
-This flow exists so **nothing gets lost** and no project starts without edges.
+The user is scattered: dropping an idea is easy, finishing it is not. This flow
+exists so **nothing gets lost** and the idea is named in one line.
 
-Base rule: **capture first, then give a verdict, then define, and only then write
-code.** Skip a step and the project dies.
+Base rule: **read the source, capture it, give a verdict.** No documents, no
+phases, no "definition of done".
 
 ## 1. Read the source (never guess)
 
@@ -25,51 +25,40 @@ machine idea --title "Two or three words" "<what it is + link + why it matters>"
 ```
 
 - The name is **short and sayable**: "Interacción intra-turno", "Estándar de apps".
-  The long text goes in the body, never in the name.
-- If something similar exists (`machine idea` lists them), extend it instead of
-  duplicating.
+  The rest goes in the body, never in the name.
+- If something similar exists (`machine idea` lists them), extend that one.
+- Never write the idea into `~/alicia` or into a Markdown file: the vault is
+  frozen, `machine` is the only place.
 
-## 3. Verdict in five lines
-
-Fixed shape, no rambling:
+## 3. Verdict in four lines, no rambling
 
 1. **What it proposes** (one sentence, plain words).
-2. **What it would cost here** (hours or sessions, at the minimum scope).
+2. **What it would cost here** (sessions, at the smallest version).
 3. **Which existing piece it resembles** (so nothing is built from zero).
-4. **Whether it fits the harness** or belongs elsewhere.
-5. **Recommendation**: do it, do it small, park it, or drop it.
+4. **Recommendation**: do it, do it small, park it, or drop it.
 
-## 4. Scope questions (three, maximum)
+## 4. If it goes ahead: objetivo + tareas + la prueba
 
-Only the ones that change the work:
+Only three things, nothing more:
 
-- Is this for *you* or for someone else to use?
-- What is the smallest version that already helps you?
-- How do we check that it works, in one sentence?
-
-## 5. Definition of Done, then approval
-
-- Write the DoD using the template in
-  [protocolo-proyectos.md](../../protocolo-proyectos.md): measurable goal, scope
-  **YES**, scope **NO**, definition of done.
-- **Wait for an explicit yes.** Silence is not approval.
-
-## 6. Promote and track
-
-Once approved:
+- **Objetivo**: one sentence, what should happen.
+- **Tareas**: the ordered list, added as you go. No scope freeze, no approval per
+  step.
+- **La prueba**: how we know it worked (a number, a screenshot). Optional at the
+  start.
 
 ```bash
-machine promote <idea> --to <folder-name> --dod /tmp/dod.md
+machine promote <idea> --to <slug> --goal "…" --check "…"
+machine task add <slug> "first task"
 ```
 
-It becomes an `active` project with the DoD stored. From then on the
-[project protocol](../../delegacion-claude.md) rules: one milestone per session,
-closing with **Cerrado / Pendiente / Siguiente paso**.
+No explicit approval ceremony: show the plan in those three lines and keep going.
+The full protocol is in `delegacion-claude.md`, "Protocolo de proyectos (simple)".
 
 ## Limits
 
-- **At most 3 ideas in definition at once.** With 4, stop and ask which one is
-  paused: that is the scatter pattern, not a detail.
+- One idea per message; if the user drops five, capture five and say so in one
+  line.
 - An idea without a short name does not go in: the name is what lets us talk
   about it.
-- No code in steps 1-5. Not even "just a quick test".
+- No code until step 4 exists.

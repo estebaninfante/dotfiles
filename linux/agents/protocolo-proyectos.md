@@ -68,13 +68,13 @@ print(dict(c), "total", len(d))'
 Un proyecto con tickets `pending` y ninguno `done` hace semanas se **archiva**
 (`~/Proyectos/_archivo/`), no se retoma: retomarlo compite con el que está abierto.
 
-## Ideas sueltas a mitad de proyecto (`alicia`)
+## Ideas sueltas a mitad de proyecto (`machine`)
 
-Se anotan y se sigue, no se persiguen:
+Se anotan y se sigue, no se persiguen. Viven en `machine`, nunca en el vault
+`~/alicia` (congelado: notas personales, ninguna IA escribe ahí):
 
 ```bash
-alicia nuevo --tipo pensamiento --titulo "<título corto>" --cuerpo "<lo que dije>"
-alicia dup|arbol         # antes de crear, para no duplicar
-alicia next              # lo accionable ahora
-alicia estado <id> resuelto|descartado
+machine idea --title "Dos o tres palabras" "<lo que dije>"
+machine idea             # lista las que hay, para no duplicar
+machine task add <proyecto> "<tarea>"
 ```

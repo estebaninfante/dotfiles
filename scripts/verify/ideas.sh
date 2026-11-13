@@ -2,15 +2,14 @@
 # verify/ideas.sh — el estándar de ideas está publicado y la captura funciona.
 #
 # Comprueba, sin criterio humano:
-#   1. Existe la regla canónica `linux/agents/estandar-ideas.md` y nombra los
-#      comandos de captura (`alicia nuevo`) y de consulta (`alicia next`).
+#   1. Existe la regla canónica `linux/agents/estandar-ideas.md`, manda capturar
+#      con `machine idea --title` y NO manda escribir en el vault `~/alicia`.
 #   2. Las tres entradas que leen las IAs resuelven a esa misma regla:
 #        ~/.omp/agent/AGENTS.md        (OMP)
 #        ~/.claude/CLAUDE.md           (Claude Code)
 #        ~/.config/opencode/AGENTS.md  (OpenCode; dentro del repo symlinkeado)
-#   3. En un vault temporal: `alicia nuevo` crea un pendiente y `alicia next` lo
-#      lista como accionable. No toca las ideas reales del usuario.
-#   4. `alicia check` valida el grafo temporal.
+#   3. En una base temporal: `machine idea --title` crea la idea con nombre y
+#      `machine ls --json` la lista como `kind=idea`. No toca la base real.
 #
 # Uso:
 #   scripts/verify/ideas.sh           # texto
@@ -35,10 +34,14 @@ fail() { fails=$((fails + 1)); printf '  FALLA %s\n' "$*"; }
 # --- 1. regla canónica -----------------------------------------------------
 if [ -f "$REGLA" ]; then
     ok "existe $REGLA"
-    grep -q 'alicia nuevo' "$REGLA" && ok "la regla manda capturar con 'alicia nuevo'" \
-        || fail "la regla no menciona 'alicia nuevo'"
-    grep -q 'alicia next' "$REGLA" && ok "la regla manda consultar con 'alicia next'" \
-        || fail "la regla no menciona 'alicia next'"
+    grep -q 'machine idea --title' "$REGLA" \
+        && ok "la regla manda capturar con 'machine idea --title'" \
+        || fail "la regla no menciona 'machine idea --title'"
+    if grep -q 'alicia nuevo' "$REGLA"; then
+        fail "la regla todavía manda escribir en el vault (~/alicia nuevo)"
+    else
+        ok "la regla no manda escribir en ~/alicia (vault congelado)"
+    fi
 else
     fail "falta $REGLA"
 fi
@@ -67,37 +70,31 @@ for dst in "${DESTINOS[@]}"; do
     fi
 done
 
-# --- 3. captura de punta a punta en vault temporal -------------------------
+# --- 3. captura de punta a punta en una base temporal ----------------------
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-if command -v alicia >/dev/null 2>&1; then
-    nota="$(alicia --vault "$TMP" nuevo --tipo pensamiento \
-        --titulo "prueba de captura del estándar" \
-        --cuerpo "texto de prueba" --tags verificacion 2>&1)"
-    if [ -f "$TMP/$nota" ]; then
-        ok "alicia nuevo crea el pendiente"
+if command -v machine >/dev/null 2>&1; then
+    export MACHINE_DB="$TMP/machine.db"
+    if machine init >/dev/null 2>&1 \
+        && machine idea --title "Prueba de captura" "texto de prueba" >/dev/null 2>&1 \
+        && machine ls --json 2>/dev/null | grep -q '"kind": "idea"'; then
+        ok "machine idea --title crea la idea y machine ls la lista"
     else
-        fail "alicia nuevo no creó la nota: $nota"
+        fail "machine idea no dejó la idea en la base temporal"
     fi
-    if alicia --vault "$TMP" next --json 2>/dev/null \
-        | grep -q "prueba-de-captura"; then
-        ok "alicia next lista el pendiente como accionable"
+    if machine idea --title "Segunda" "otra" >/dev/null 2>&1 \
+        && machine ls --json 2>/dev/null | grep -q 'Segunda'; then
+        ok "el nombre corto sobrevive a la captura"
     else
-        fail "alicia next no lista el pendiente"
-    fi
-    if alicia --vault "$TMP" check >/dev/null 2>&1; then
-        ok "alicia check valida el grafo"
-    else
-        fail "alicia check falla en el vault temporal"
+        fail "el nombre corto no aparece en machine ls"
     fi
 else
-    fail "falta el CLI 'alicia' en PATH"
+    fail "falta el CLI 'machine' en PATH"
 fi
 
 if [ "$fails" -eq 0 ]; then
     [ "$QUIET" = 1 ] || printf '\nideas: OK\n'
     exit 0
 fi
-printf '\nideas: %s falla(s)\n' "$fails"
 exit 1

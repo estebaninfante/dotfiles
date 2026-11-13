@@ -191,8 +191,6 @@ window.__ModuleLoader__.load({
 .mr-promo{margin-top:18px;padding:14px 16px;border:1px solid var(--mr-card-line);border-radius:var(--mr-r-lg,12px);
   background:var(--mr-l1);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
 .mr-promo p{margin:0;font-size:12.5px;line-height:19px;color:var(--mr-fg2)}
-.mr-dod{margin:0;padding:12px 14px;border:1px solid var(--mr-card-line);border-radius:var(--mr-r-md,10px);
-  background:var(--mr-l1);font:12px/18px var(--mr-mono);white-space:pre-wrap;color:var(--mr-fg2);overflow:auto;max-height:320px}
 .mr-sub{font-size:12px;line-height:18px;color:var(--mr-fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mr-cell{font-size:12.5px;line-height:18px;color:var(--mr-fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-variant-numeric:tabular-nums}

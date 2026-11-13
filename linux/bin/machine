@@ -545,7 +545,7 @@ def cmd_idea(args) -> None:
     )
     con.commit()
     print(f"idea: {slug} · {title}")
-    print("para convertirla en proyecto: decime en el chat y armamos la DoD")
+    print("para que sea proyecto: machine promote <idea> --to <slug> --goal \"…\" --check \"…\"")
 
 
 def cmd_promote(args) -> None:
@@ -573,16 +573,8 @@ def cmd_promote(args) -> None:
             " ON CONFLICT (entity_id, key) DO UPDATE SET value=excluded.value, observed_at=excluded.observed_at",
             (row["id"], key, value, now()),
         )
-    if args.dod:
-        dod = Path(args.dod).read_text(encoding="utf-8")
-        prev = facts_of(con, row["id"]).get("dod", "")
-        con.execute(
-            "INSERT INTO facts (entity_id, key, value, observed_at) VALUES (?, 'dod', ?, ?)"
-            " ON CONFLICT (entity_id, key) DO UPDATE SET value=excluded.value, observed_at=excluded.observed_at",
-            (row["id"], (prev + "\n\n" if prev else "") + dod, now()),
-        )
     con.commit()
-    print(f"proyecto: {slug} (kind=project, state=active)" + (f" · DoD guardada" if args.dod else ""))
+    print(f"proyecto: {slug} (kind=project, state=active)")
 
 
 def cmd_stats(args) -> None:
@@ -960,7 +952,6 @@ def main() -> None:
     promo.add_argument("--to", help="slug nuevo (el nombre de la carpeta futura)")
     promo.add_argument("--goal", help="objetivo en una frase")
     promo.add_argument("--check", help="cómo se comprueba que funcionó")
-    promo.add_argument("--dod", help="(viejo) archivo markdown; se guarda como nota")
     promo.set_defaults(func=cmd_promote)
 
     idea = sub.add_parser("idea", help="captura una idea en texto libre (sin texto: lista)")

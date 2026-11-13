@@ -1,43 +1,36 @@
-# Estándar de ideas y pendientes (todas las IAs)
+# Estándar de ideas (todas las IAs)
 
-El usuario suelta ideas y pendientes mientras conversa. Ninguna IA los deja en el
-chat: se capturan en el vault `~/alicia` (grafo Markdown, CLI `alicia`), que es la
-**única fuente de verdad**. La página de inicio del navegador lee de ahí.
+Una idea se captura **con nombre** y vive en `machine` (la base de la página
+"Proyectos e ideas" del harness). No va al chat, no va a un archivo Markdown y no
+va al vault `~/alicia`: ese vault queda **congelado** como notas personales del
+usuario, ninguna IA escribe ahí.
 
-## Capturar antes de responder
+## Capturar
 
-Cuando aparezca una idea, duda, pensamiento o pendiente que **no** sea una orden
-concreta sobre la máquina:
+Cuando aparezca una idea que no es una orden concreta sobre la máquina:
 
-1. Guardalo:
+```sh
+machine idea --title "Dos o tres palabras" "<qué es + por qué importa>"
+```
 
-   ```sh
-   alicia nuevo --tipo pensamiento --titulo "<título corto>" \
-     --cuerpo "<lo que dije, tal cual>" --tags <tema1,tema2>
-   ```
-
-   Crea `Inbox/<fecha>-<slug>.md` con `estado: pendiente` e imprime la ruta.
-   Confirmá en una línea: `Anotado: <título>`.
-2. Si el tema ya existe (`alicia dup`, `alicia arbol`), **no dupliques**: agregá
-   al nodo existente.
-3. No preguntes "¿lo guardo?": se guarda y se sigue.
+- El nombre es corto y decible: "Estándar de apps", "Patrones de UI".
+- El cuerpo es una o dos frases. No se escriben documentos, fases ni plantillas.
+- Confirmá en una línea: `Anotado: <título>`. No preguntes "¿lo guardo?".
 
 ## Distinguir
 
-- **Idea / pendiente suelto** → vault, como arriba.
-- **Trabajo concreto sobre un repo o la máquina** → ticket, no idea:
-  `agent-os-cli ticket add <slug> --project <P> --title "<6+ palabras>" --area <A>`
-- **Algo que una IA debe hacer** → nodo `tipo: tarea` con criterios de aceptación:
-  `alicia nuevo --tipo tarea --titulo "<título>" --cuerpo "<criterios>"`
+- **Idea suelta** → `machine idea --title …`.
+- **Ya existe algo parecido** (`machine idea` las lista) → sumá al cuerpo de esa,
+  no dupliques.
+- **Trabajo concreto en un proyecto** → `machine task add <proyecto> "<tarea>"`.
+- **Proyecto nuevo** → `machine promote <idea> --to <slug> --goal "…" --check "…"`.
 
 ## Consultar
 
-- `alicia next` — lo accionable ahora (hojas activas sin subproblemas abiertos).
-- `alicia arbol` — el grafo completo; `alicia ver <id>` — un nodo.
-- `agent-os-cli board` — tablero de tickets.
+- `machine ls` — todo; `machine show <slug>` — una ficha.
+- El panel **Proyectos e ideas** del harness: es la vista que usa el usuario.
 
 ## Cerrar
 
-- Hecho: `alicia estado <id> resuelto`.
-- Descartado: `alicia estado <id> descartado` (no se borra: queda el rastro).
-- Si la sesión tocó ideas: `alicia check`.
+- Tarea hecha: `machine task done <id>`.
+- Proyecto terminado o aparcado: `machine set <slug> --state done|paused|archived`.

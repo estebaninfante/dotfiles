@@ -21,7 +21,7 @@ Una sola forma de nombrar las cosas. Si algo cambia, cambia aca primero.
 | `~/Descargas/` | única carpeta de descargas (XDG) | `~/Downloads` no existe |
 | `~/Escritorio/` | bandeja de entrada de lo que se toca hoy | debe quedar vacío al cerrar el día |
 | `~/Imágenes/` | fotos y capturas | capturas nuevas van a `Imágenes/screenshots/` |
-| `~/alicia/`, `~/ai-chats/`, `~/books/`, `~/go/` | vault de notas, historial de chats, biblioteca, GOPATH | excepciones conocidas en `doctor.sh` |
+| `~/alicia/`, `~/ai-chats/`, `~/books/`, `~/go/` | vault de notas (**congelado**: solo el usuario escribe ahí), historial de chats, biblioteca, GOPATH | excepciones conocidas en `doctor.sh` |
 
 Reglas que mantienen el orden (las verifica `scripts/doctor.sh`):
 
@@ -234,10 +234,11 @@ symlink sin romperlo, asi que `omp config set` desde la maquina termina en el re
 ### Regla global de ideas (`linux/agents/` + `linux/claude/`)
 
 Una sola regla para todas las IAs. El texto canónico es
-`linux/agents/estandar-ideas.md`: toda idea o pendiente que el usuario suelta en
-el chat se captura en el vault `~/alicia` (`alicia nuevo`), no en el chat ni en el
-store viejo `~/.local/share/pi/ideas/`. Los tickets de trabajo van a
-`agent-os-cli`.
+`linux/agents/estandar-ideas.md`: toda idea que el usuario suelta en el chat se
+captura **con nombre** en `machine` (`machine idea --title "…"`), no en el chat,
+no en un Markdown y no en el vault `~/alicia`. El vault quedó **congelado** como
+notas personales del usuario: ninguna IA escribe ahí. El trabajo vive en
+`machine` (`idea`, `promote`, `task add`, `set`).
 
 | Archivo del repo | Ruta destino | Lo lee |
 |------------------|--------------|--------|

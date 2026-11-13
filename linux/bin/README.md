@@ -132,13 +132,14 @@ notificaciones son globales a propósito.
 
 Verificación: `scripts/verify/espacios.sh` (corre sin escritorio: `ESPACIOS_SIN_ESC=1`).
 
-## `ideas` — legado: las ideas viven en el vault `~/alicia`
+## `ideas` — legado: las ideas viven en `machine`
 
-**Canónico: el vault.** El estándar que siguen todas las IAs está en
+**Canónico: `machine`.** El estándar que siguen todas las IAs está en
 `linux/agents/estandar-ideas.md` (symlinkeado a `~/.omp/agent/AGENTS.md`,
-`~/.claude/CLAUDE.md` y `~/.config/opencode/AGENTS.md`): cada idea o pendiente
-se captura con `alicia nuevo --tipo pensamiento ...` en el Inbox del vault y se
-consulta con `alicia next`. La página de inicio del navegador lee de ahí.
+`~/.claude/CLAUDE.md` y `~/.config/opencode/AGENTS.md`): cada idea se captura con
+`machine idea --title "dos o tres palabras" "…"` y se ve en la página
+**Proyectos e ideas** del harness. El vault `~/alicia` quedó **congelado** (notas
+personales, ninguna IA escribe ahí) y `alicia nuevo` ya no se usa.
 
 `ideas` queda como herramienta manual del store viejo
 (`~/.local/share/pi/ideas/`): su extensión y su skill están en
