@@ -172,12 +172,44 @@ def tickets_by_project() -> dict[str, tuple[int, int]]:
     return {k: (v[0], v[1]) for k, v in out.items()}
 
 
-def systemd_units() -> str:
+def systemd_live(units: list[tuple[str, str]]) -> set[str]:
+    """Nombres de units habilitadas o corriendo ahora."""
+    live: set[str] = set()
+    for name, _ in units:
+        try:
+            r = subprocess.run(
+                ["systemctl", "--user", "is-enabled", name],
+                capture_output=True, text=True, timeout=5,
+            )
+            enabled = r.stdout.strip() in ("enabled", "enabled-runtime", "static", "indirect")
+            r2 = subprocess.run(
+                ["systemctl", "--user", "is-active", name],
+                capture_output=True, text=True, timeout=5,
+            )
+            active = r2.stdout.strip() == "active"
+            if enabled or active:
+                live.add(name)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    return live
+
+
+def systemd_units() -> list[tuple[str, str]]:
+    """[(nombre, contenido)] de las units de usuario.
+
+    El nombre es lo que necesita `systemctl --user` (sin el `.service` se
+    acepta igual, pero se devuelve completo para poder mostrarlo).
+    """
+    out: list[tuple[str, str]] = []
     try:
-        return "\n".join(f.read_text(encoding="utf-8", errors="replace")
-                         for f in SYSTEMD.glob("*.service"))
+        for f in sorted(SYSTEMD.glob("*.service")):
+            try:
+                out.append((f.stem, f.read_text(encoding="utf-8", errors="replace")))
+            except OSError:
+                continue
     except OSError:
-        return ""
+        pass
+    return out
 
 
 def readme_excerpt(path: Path, limit: int = 160) -> str:
@@ -222,7 +254,7 @@ def dir_stats(path: Path) -> tuple[int, float]:
     return files, round(size / (1024 * 1024), 1)
 
 
-def collect(path: Path, units: str, tickets: dict[str, tuple[int, int]]) -> dict[str, str]:
+def collect(path: Path, units, live: set[str], tickets: dict[str, tuple[int, int]]) -> dict[str, str]:
     slug = path.name
     is_git = bool(git(path, "rev-parse", "--git-dir"))
     facts: dict[str, str] = {"path": str(path)}
@@ -258,7 +290,13 @@ def collect(path: Path, units: str, tickets: dict[str, tuple[int, int]]) -> dict
     facts["has_readme"] = "true" if (path / "README.md").is_file() else "false"
     facts["has_agents"] = "true" if (path / "AGENTS.md").is_file() else "false"
     facts["has_webapp"] = "true" if (path / ".webapp.json").is_file() else "false"
-    facts["systemd"] = "true" if f"Proyectos/{slug}" in units else "false"
+    names = []
+    for name, block in units:
+        if f"Proyectos/{slug}" in block:
+            names.append(name)
+    facts["systemd"] = "true" if names else "false"
+    facts["systemd_units"] = ",".join(names)
+    facts["systemd_active"] = ",".join(n for n in names if n in live)
     total, opened = tickets.get(slug, (0, 0))
     facts["tickets_total"] = str(total)
     facts["tickets_open"] = str(opened)
@@ -268,6 +306,7 @@ def collect(path: Path, units: str, tickets: dict[str, tuple[int, int]]) -> dict
 def cmd_scan(args) -> None:
     con = connect()
     units = systemd_units()
+    live = systemd_live(units)
     tickets = tickets_by_project()
     stamp = now()
     seen = 0
@@ -276,7 +315,7 @@ def cmd_scan(args) -> None:
         if not path.is_dir() or path.name in SKIP or path.name.startswith("."):
             continue
         seen += 1
-        facts = collect(path, units, tickets)
+        facts = collect(path, units, live, tickets)
         row = con.execute(
             "SELECT id, title FROM entities WHERE kind='project' AND slug=?", (path.name,)
         ).fetchone()
@@ -305,6 +344,21 @@ def cmd_scan(args) -> None:
         (str(ROOT), stamp),
     )
     con.commit()
+
+    # Entidades cuyo proyecto desapareció del disco: la base es un espejo.
+    ghost = []
+    for row in con.execute("SELECT id, slug FROM entities WHERE kind = 'project'").fetchall():
+        path = con.execute(
+            "SELECT value FROM facts WHERE entity_id = ? AND key = 'path'", (row["id"],)
+        ).fetchone()
+        if path and not Path(path["value"]).is_dir():
+            ghost.append(row)
+    for row in ghost:
+        con.execute("DELETE FROM entities WHERE id = ?", (row["id"],))
+    if ghost:
+        con.commit()  # sin esto los DELETE se pierden al cerrar la conexión
+    if ghost:
+        print(f"{len(ghost)} proyecto(s) ya no estaban en el disco: {', '.join(r['slug'] for r in ghost)}")
 
     loose = [
         f for f in ROOT.iterdir()
@@ -565,6 +619,26 @@ def cmd_gh_status(args) -> None:
     print(f"borrar repos: {'sí' if info['can_delete'] else 'NO (falta el permiso delete_repo)'}")
 
 
+def cmd_service_disable(args) -> None:
+    """Para y deshabilita las units que apuntan al proyecto."""
+    con = connect()
+    row = project_row(con, args.slug)
+    facts = facts_of(con, row["id"])
+    names = [n for n in (facts.get("systemd_units") or "").split(",") if n]
+    if not names:
+        sys.exit(f"machine: '{args.slug}' no tiene ninguna unit apuntando a su carpeta")
+    for name in names:
+        for action in ("disable", "stop"):
+            r = subprocess.run(
+                ["systemctl", "--user", action, name],
+                capture_output=True, text=True, timeout=20,
+            )
+            if r.returncode != 0 and action == "disable":
+                print(f"  {name}: {action} dijo ({(r.stderr or r.stdout).strip()[:120]})")
+        print(f"  {name}: parada y deshabilitada")
+    print("corré machine scan para que el guard se actualice")
+
+
 def cmd_trash(args) -> None:
     """Manda la carpeta a la papelera y borra la fila.
 
@@ -580,8 +654,12 @@ def cmd_trash(args) -> None:
         sys.exit(f"machine: la carpeta no existe ({path})")
     if path.parent.resolve() != ROOT.resolve():
         sys.exit(f"machine: me niego a mover {path}: no está directamente en {ROOT}")
-    if facts.get("systemd") == "true":
-        sys.exit(f"machine: '{args.slug}' tiene un servicio systemd; deshabilitá la unit primero")
+    if facts.get("systemd_active"):
+        units = facts["systemd_active"].split(",")
+        sys.exit(
+            f"machine: '{args.slug}' tiene un servicio corriendo ({', '.join(units)}); "
+            f"corré: machine service-disable {args.slug}"
+        )
     if not args.yes:
         sys.exit("machine: falta --yes (el movimiento es reversible pero borra la fila)")
 
@@ -758,6 +836,10 @@ def main() -> None:
     s.set_defaults(func=cmd_set)
 
     sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
+
+    svc = sub.add_parser("service-disable", help="para y deshabilita las units del proyecto")
+    svc.add_argument("slug")
+    svc.set_defaults(func=cmd_service_disable)
 
     trash = sub.add_parser("trash", help="manda la carpeta a la papelera (sin slug: lista la papelera)")
     trash.add_argument("slug", nargs="?")
