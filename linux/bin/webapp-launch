@@ -34,6 +34,9 @@
 # origen (y las cookies del navegador) sean siempre el mismo.
 set -uo pipefail
 
+# ruta absoluta para el .desktop: el lanzador de Omarchy no tiene ~/.local/bin en PATH
+SELF="$HOME/.local/bin/$(basename "$0")"
+[[ -x $SELF ]] || SELF="$(readlink -f "$0")"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/webapp"
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 WAIT_SECS="${WEBAPP_WAIT:-40}"
@@ -102,6 +105,7 @@ TITLE=$(cfg title "$NAME")
 COMMENT=$(cfg comment "")
 PORT=$(cfg port "")
 CMD=$(cfg cmd "")
+SERVICE=$(cfg service "")
 PATH_URL=$(cfg url "/")
 ICON=$(cfg icon "applications-internet")
 PATTERN=$(cfg pattern "$NAME")
@@ -206,15 +210,23 @@ wait_ready() {
 }
 
 open_window() {
-  if have hyprctl && hyprctl clients -j >/dev/null 2>&1; then
-    exec omarchy-launch-or-focus-webapp "$PATTERN" "$URL"
+  if have omarchy-launch-or-focus-webapp; then
+    if have hyprctl && hyprctl clients -j >/dev/null 2>&1; then
+      exec omarchy-launch-or-focus-webapp "$PATTERN" "$URL"
+    fi
+    exec omarchy-launch-webapp "$URL"
   fi
   exec xdg-open "$URL"
 }
 
 # ── acciones ──────────────────────────────────────────────────────────────
 case "$ACTION" in
-  stop) stop_server; exit $? ;;
+  stop)
+    if [[ -n $SERVICE ]]; then
+      systemctl --user stop "$SERVICE" && say "detenido: $SERVICE"
+      exit 0
+    fi
+    stop_server; exit $? ;;
 
   status)
     say "proyecto: $DIR"
@@ -243,7 +255,7 @@ case "$ACTION" in
 Type=Application
 Name=$TITLE
 Comment=${COMMENT:-$TITLE}
-Exec=webapp-launch "$DIR"
+Exec=${SELF} "$DIR"
 Icon=$ICON
 Terminal=false
 Categories=${CATEGORIES}
@@ -253,7 +265,7 @@ Actions=stop;
 
 [Desktop Action stop]
 Name=Detener el servidor
-Exec=webapp-launch "$DIR" --stop
+Exec=${SELF} "$DIR" --stop
 DESKTOP
     chmod 644 "$DESKTOP_OUT"
     have update-desktop-database && update-desktop-database "$APPS" >/dev/null 2>&1
@@ -275,6 +287,15 @@ DESKTOP
 esac
 
 # ── abrir ─────────────────────────────────────────────────────────────────
+if [[ -n $SERVICE ]] && ! http_ok; then
+  say "arrancando $SERVICE…"
+  systemctl --user start "$SERVICE" >/dev/null 2>&1 || true
+  for ((i = 0; i < WAIT_SECS * 4; i++)); do
+    http_ok && break
+    sleep 0.25
+  done
+fi
+
 if http_ok; then
   say "$NAME ya responde en $URL"
 else

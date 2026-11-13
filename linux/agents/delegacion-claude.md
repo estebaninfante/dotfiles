@@ -65,6 +65,12 @@ Al terminarlo:
    en primer plano (`python3 videolab.py serve --no-browser`, `npm run dev`, …).
 2. `webapp-launch <dir> --install` crea el `.desktop`; versioná ese archivo en
    `linux/config/applications/` y enlazalo (link-dotfiles lo hace solo).
+   **El `Exec` va con ruta absoluta** (`/home/<user>/.local/bin/webapp-launch`): el
+   lanzador de Omarchy no tiene `~/.local/bin` en el `PATH` y con el nombre pelado el
+   clic no hace nada. `--install` ya lo escribe así.
+   Mejor todavía: un unit `~/.config/systemd/user/<app>.service` con `Restart=always`
+   y `"service": "<app>.service"` en `.webapp.json`, así el servidor está siempre
+   arriba y el atajo sólo abre la ventana.
 3. Verificá de verdad: `webapp-launch <dir> --no-open` levanta el servidor,
    `--status` responde 200 y `--stop` lo apaga. Después abrí el atajo una vez.
 4. Si el proyecto suma un grupo en el menú, agregalo en

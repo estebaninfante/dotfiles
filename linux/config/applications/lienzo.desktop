@@ -2,14 +2,14 @@
 Type=Application
 Name=Lienzo creativo
 Comment=Tu lienzo creativo: espacios, planos de video, imágenes y notas
-Exec=webapp-launch "/home/eztvn/Proyectos/lienzo-creativo"
+Exec=/home/eztvn/.local/bin/webapp-launch "/home/eztvn/Proyectos/lienzo-creativo"
 Icon=lienzo
 Terminal=false
 Categories=AudioVideo;Video;
-Keywords=lienzo;creativo;video;planos;storyboard;
+Keywords=lienzo;Lienzo creativo;
 StartupNotify=false
 Actions=stop;
 
 [Desktop Action stop]
 Name=Detener el servidor
-Exec=webapp-launch "/home/eztvn/Proyectos/lienzo-creativo" --stop
+Exec=/home/eztvn/.local/bin/webapp-launch "/home/eztvn/Proyectos/lienzo-creativo" --stop
