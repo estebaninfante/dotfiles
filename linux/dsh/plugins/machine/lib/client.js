@@ -186,6 +186,8 @@ window.__ModuleLoader__.load({
 .mr-dtitle h1{cursor:text}
 .mr-rename{height:32px;font-size:15px;font-weight:600;max-width:420px}
 .mr-idea-text{height:auto;min-height:130px;padding:10px 12px;line-height:20px;resize:vertical;font-family:inherit}
+.mr-field-label{display:block;margin:14px 0 6px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--mr-fg3);font-weight:600}
+.mr-goal{height:auto;min-height:56px;padding:9px 11px;line-height:19px;resize:vertical;font-family:inherit}
 .mr-promo{margin-top:18px;padding:14px 16px;border:1px solid var(--mr-card-line);border-radius:var(--mr-r-lg,12px);
   background:var(--mr-l1);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
 .mr-promo p{margin:0;font-size:12.5px;line-height:19px;color:var(--mr-fg2)}
@@ -804,6 +806,92 @@ input.mr-field{height:36px;padding:0 12px}
 							"button",
 							{ type: "button", className: "mr-btn", "data-variant": "solid", disabled: !text.trim() || busy, onClick: save },
 							busy ? "Guardando…" : "Anotar idea",
+						),
+					),
+				),
+			);
+		}
+
+		function PromoteDialog(props) {
+			const { project, onCancel, onDone } = props;
+			const facts = project.facts || {};
+			const [name, setName] = React.useState(/^idea-\\d+$/.test(project.slug) ? "" : project.slug);
+			const [goal, setGoal] = React.useState(facts.goal || "");
+			const [check, setCheck] = React.useState(facts.check || "");
+			const [busy, setBusy] = React.useState(false);
+			const [err, setErr] = React.useState("");
+			const ready = name.trim().length > 1 && goal.trim().length > 3;
+
+			const save = async () => {
+				if (!ready || busy) return;
+				setBusy(true);
+				try {
+					const out = await api("/machine/promote", {
+						slug: project.slug,
+						to: name.trim(),
+						goal: goal.trim(),
+						check: check.trim(),
+					});
+					await onDone(out.project?.slug || name.trim());
+				} catch (error) {
+					setErr(error.message);
+					setBusy(false);
+				}
+			};
+
+			return h(
+				"div",
+				{ className: "mr-layer", role: "presentation" },
+				h("div", { className: "mr-mask", onClick: () => !busy && onCancel() }),
+				h(
+					"div",
+					{ className: "mr-dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": "mr-promote-title" },
+					h(
+						"header",
+						null,
+						h("h2", { id: "mr-promote-title" }, "Convertir en proyecto"),
+						h("button", { type: "button", className: "mr-icon", onClick: onCancel, disabled: busy, title: "Cancelar (Esc)" }, h(IconClose)),
+					),
+					h(
+						"div",
+						{ className: "mr-dialog-body" },
+						h("label", { className: "mr-field-label" }, "Nombre de la carpeta"),
+						h("input", {
+							className: "mr-field",
+							value: name,
+							placeholder: "sin-espacios",
+							spellCheck: false,
+							disabled: busy,
+							onChange: (event) => setName(event.target.value),
+						}),
+						h("label", { className: "mr-field-label" }, "Objetivo"),
+						h("textarea", {
+							className: "mr-field mr-goal",
+							value: goal,
+							rows: 2,
+							placeholder: "Qué quiero que pase, en una frase…",
+							disabled: busy,
+							onChange: (event) => setGoal(event.target.value),
+						}),
+						h("label", { className: "mr-field-label" }, "Cómo sé que funcionó (opcional)"),
+						h("textarea", {
+							className: "mr-field mr-goal",
+							value: check,
+							rows: 2,
+							placeholder: "Qué hago y qué miro…",
+							disabled: busy,
+							onChange: (event) => setCheck(event.target.value),
+						}),
+						err ? h("p", { className: "mr-reason" }, err) : null,
+					),
+					h(
+						"footer",
+						null,
+						h("button", { type: "button", className: "mr-btn", "data-variant": "ghost", onClick: onCancel, disabled: busy }, "Cancelar"),
+						h(
+							"button",
+							{ type: "button", className: "mr-btn", "data-variant": "solid", disabled: !ready || busy, onClick: save },
+							busy ? "Convirtiendo…" : "Convertir",
 						),
 					),
 				),
@@ -1991,61 +2079,53 @@ input.mr-field{height:36px;padding:0 12px}
 							),
 						),
 					),
-					d.kind !== "project"
+					d.kind === "project"
 						? h(
 								"section",
 								{ className: "mr-section" },
-								h("div", { className: "mr-promo" },
-									h(
-										"p",
-										null,
-										"Una idea pasa a ser proyecto cuando aprobás su Definition of Done. Todavía no la tiene.",
-									),
+								h("h2", { className: "mr-section-head" }, "Objetivo"),
+								h("textarea", {
+									key: `${d.slug}-goal`,
+									className: "mr-field mr-goal",
+									defaultValue: f.goal || "",
+									placeholder: "Qué quiero que pase, en una frase…",
+									rows: 2,
+									onBlur: async (event) => {
+										const goal = event.target.value.trim();
+										if (goal === (f.goal || "")) return;
+										await api("/machine/entity", { slug: d.slug, goal }).catch((err) => setError(err.message));
+										refreshDetail(d.slug);
+									},
+								}),
+								h("h2", { className: "mr-section-head", style: { marginTop: 18 } }, "Cómo sé que funcionó"),
+								h("textarea", {
+									key: `${d.slug}-check`,
+									className: "mr-field mr-goal",
+									defaultValue: f.check || "",
+									placeholder: "La prueba: qué hago y qué miro…",
+									rows: 2,
+									onBlur: async (event) => {
+										const check = event.target.value.trim();
+										if (check === (f.check || "")) return;
+										await api("/machine/entity", { slug: d.slug, check }).catch((err) => setError(err.message));
+										refreshDetail(d.slug);
+									},
+								}),
+							)
+						: h(
+								"section",
+								{ className: "mr-section" },
+								h(
+									"div",
+									{ className: "mr-promo" },
+									h("p", null, "Una idea se vuelve proyecto cuando le escribís el objetivo. Después se le agregan tareas."),
 									h(
 										"button",
-										{
-											type: "button",
-											className: "mr-btn",
-											"data-variant": "solid",
-											disabled: promoting,
-											onClick: async () => {
-												const defaultName = /^idea-\d+$/.test(d.slug) ? "" : d.slug;
-												const name = window.prompt("Nombre de la carpeta del proyecto (sin espacios):", defaultName);
-												if (!name) return;
-												const dodText = window.prompt(
-													"DoD en una línea: qué tiene que quedar funcionando y cómo se comprueba.",
-													"",
-												);
-												setPromoting(true);
-												try {
-													const out = await api("/machine/promote", {
-														slug: d.slug,
-														to: name.trim(),
-														dod: dodText ? `# DoD — ${name.trim()}\n\n${dodText.trim()}\n` : "",
-													});
-													setFlash(`${name.trim()} ahora es un proyecto.`);
-													await load();
-													setSelected(out.project?.slug || name.trim());
-													refreshDetail(out.project?.slug || name.trim());
-												} catch (err) {
-													setError(err.message);
-												}
-												setPromoting(false);
-											},
-										},
-										promoting ? "Convirtiendo…" : "Convertir en proyecto",
+										{ type: "button", className: "mr-btn", "data-variant": "solid", onClick: () => setPromoting(true) },
+										"Convertir en proyecto",
 									),
 								),
-							)
-						: null,
-					f.dod
-						? h(
-								"section",
-								{ className: "mr-section" },
-								h("h2", { className: "mr-section-head" }, "Definition of Done"),
-								h("pre", { className: "mr-dod" }, f.dod),
-							)
-						: null,
+							),
 					d.kind === "project" && !f.path
 						? h(
 								"p",
@@ -2144,6 +2224,18 @@ input.mr-field{height:36px;padding:0 12px}
 				"div",
 				{ className: "mr", ref: scrollRef },
 				view === "trash" ? trashView() : selected ? detailView() : listView(),
+				promoting && selected
+					? h(PromoteDialog, {
+							project: detail || projects.find((x) => x.slug === selected) || { slug: selected, facts: {} },
+							onCancel: () => setPromoting(false),
+							onDone: async (slug) => {
+								setPromoting(false);
+								await load();
+								setSelected(slug);
+								refreshDetail(slug);
+							},
+						})
+					: null,
 				ideaOpen
 					? h(IdeaDialog, {
 							onCancel: () => setIdeaOpen(false),

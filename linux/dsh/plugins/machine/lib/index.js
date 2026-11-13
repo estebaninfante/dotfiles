@@ -154,6 +154,8 @@ export function apply(ctx) {
 				if (typeof body.state === "string") args.push("--state", body.state);
 				if (typeof body.kind === "string") args.push("--kind", body.kind);
 				if (typeof body.note === "string") args.push("--note", body.note);
+				if (typeof body.goal === "string") args.push("--goal", body.goal);
+				if (typeof body.check === "string") args.push("--check", body.check);
 				if (args.length === 2) {
 					sendJson(res, 400, { error: "nothing-to-change" });
 					return;
@@ -177,8 +179,12 @@ export function apply(ctx) {
 					sendJson(res, 400, { error: "missing-slug" });
 					return;
 				}
+				const goal = typeof body?.goal === "string" ? body.goal : "";
+				const check = typeof body?.check === "string" ? body.check : "";
 				const args = ["promote", slug];
 				if (to) args.push("--to", to);
+				if (goal.trim()) args.push("--goal", goal.trim());
+				if (check.trim()) args.push("--check", check.trim());
 				let dodFile = "";
 				if (dod.trim()) {
 					dodFile = join(tmpdir(), `machine-dod-${Date.now()}.md`);

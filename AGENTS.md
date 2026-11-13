@@ -253,11 +253,11 @@ el estándar con `@../../agents/estandar-ideas.md`. Editar solo la regla canóni
 
 ### Protocolo de proyectos (`linux/agents/`)
 
-Todo proyecto nuevo pasa por DoD aprobada antes de diseñar o implementar. Las reglas
-viven en `linux/agents/delegacion-claude.md` (sección "Protocolo de proyectos"), que es
-lo que el DeepSeek Harness lee como `~/.dsh/AGENTS.md`; las plantillas (DoD, cierre de
-sesión, ratio de tickets) y los comandos están en `linux/agents/protocolo-proyectos.md`.
-El registro de empezados/terminados es `agent-os-cli` (tickets), no una lista aparte.
+Un proyecto es **objetivo + tareas + la prueba** (ver "Protocolo de proyectos (simple)"
+en `linux/agents/delegacion-claude.md`). El usuario rechazó explícitamente la ceremonia de
+"Definition of Done" y el "qué entra / qué no entra": no volver a proponerla. Las
+plantillas viejas en `linux/agents/protocolo-proyectos.md` quedan como referencia
+histórica; los comandos vigentes son `machine idea / promote / task`.
 
 ### Home (`linux/home/`)
 

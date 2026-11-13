@@ -87,51 +87,34 @@ barra de navegador — y enfoca la que ya está abierta en vez de duplicarla.
 Puertos ya tomados: 8777 foldertinder · 3980 dsh-web · 3031/3040 agentes-platform ·
 8791 lienzo creativo. Para un proyecto nuevo, elegí uno libre y dejalo en `.webapp.json`.
 
-## Protocolo de proyectos (obligatorio)
+## Protocolo de proyectos (simple)
 
-Se aplica **siempre** que el usuario diga que quiere empezar algo ("quiero hacer X",
-"tengo una idea", "arranquemos Z"). No se asume que "ya sabemos cómo trabajar" y no se
-saltea ningún paso, por chico que parezca el proyecto. Contexto: el usuario tiene un
-patrón de hiper-inicio y baja finalización; quiere sistemas que lo obliguen a **terminar**.
+Se aplica cuando el usuario dice que quiere empezar algo. El usuario ya dijo que la
+versión con "Definition of Done", "qué entra / qué no entra" y clasificación lo **limita
+y lo aburre**: no usar esa jerga ni esa ceremonia.
 
-### Orden obligatorio
+Un proyecto tiene **tres cosas** y nada más:
 
-1. Clarificar el objetivo real (qué problema, para qué, qué no).
-2. Alcance + **Definition of Done** → **esperar aprobación explícita**.
-3. Riesgos principales, sobre todo de abandono (dónde se va a trabar).
-4. Hitos pequeños y secuenciales.
-5. Ejecutar **solo el siguiente hito**.
-6. Revisar y cerrar o ajustar.
+1. **Objetivo** — una frase: qué quiere que pase. Se escribe y se puede editar.
+2. **Tareas** — la lista de cosas que hay que hacer, en orden. Se agregan sobre la
+   marcha, sin pedir permiso y sin "congelar el alcance".
+3. **La prueba** — cómo se sabe que funcionó: qué se hace y qué se mira (un número, una
+   captura). Opcional al principio.
 
-**No se diseña ni se implementa nada antes de que el usuario apruebe la DoD.** La DoD no
-se aprueba por silencio; el usuario dice que sí. Plantillas y comandos:
-`linux/agents/protocolo-proyectos.md`.
+### Cómo se trabaja
 
-### Reglas de sesión
+- Se habla normal: el usuario cuenta la idea, el agente la ordena en objetivo + tareas.
+- Se hace **una tarea por vez** y se cierra con algo que se puede ver.
+- Si aparece algo nuevo, **se agrega a la lista**. No se discute si "entra" o "no entra".
+- No se pide aprobación para cada paso: se muestra el avance y se sigue.
+- El cierre de sesión es una línea: qué quedó funcionando, qué sigue.
 
-- Versión mínima usable y cerrable antes que sistema ambicioso incompleto.
-- Si el alcance crece, **frenar y preguntar** en vez de seguir construyendo.
-- Cada sesión termina con un avance visible y verificable, no con "lo pensamos".
-- Cierre obligatorio: **Cerrado / Pendiente / Siguiente paso (uno solo)**.
+### Herramientas
 
-### Interrupción de la dispersión
-
-Si aparece una idea nueva a mitad de un proyecto, **no se persigue**: se anota
-(`alicia nuevo …`) o se abre ticket (`agent-os-cli ticket add …`) y se vuelve al objetivo
-actual, diciéndolo en una línea.
-
-**Varios frentes abiertos, una cosa por sesión.** El usuario trabaja en paralelo a
-propósito (hasta **3 proyectos activos**). Ese es el límite del portfolio; el límite de
-ejecución es otro: en una sesión se avanza **un hito de un proyecto**, no tres a medias.
-Para activar un cuarto frente hay que pausar uno y dejarlo escrito (en qué quedó, por qué
-se pausa, cómo se retoma). Un frente pausado no se toca desde otra sesión sin reactivarlo.
-
-### Ratio empezados vs terminados
-
-El registro es `agent-os-cli` (tickets por proyecto/estado), no una lista aparte. Cuando
-el usuario pregunte cómo viene, o cuando pida empezar algo con otros proyectos abiertos,
-mostrar el ratio real. Un proyecto abierto sin tickets `done` hace semanas se archiva en
-`~/Proyectos/_archivo/`; retomarlo compite con el que está abierto.
+- `machine idea --title "Nombre corto" "<texto>"` — captura la idea antes de que se pierda.
+- `machine promote <idea> --to <carpeta> --goal "…" --check "…"` — la vuelve proyecto.
+- `machine task add <slug> "<tarea>"`, `machine task done <tarea>`, `machine task ls <slug>`.
+- `machine set <slug> --state active|paused|done|archived|unclassified`.
 
 ## Cómo hablarle (lenguaje técnico simple)
 
