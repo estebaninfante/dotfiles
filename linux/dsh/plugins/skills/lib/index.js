@@ -13,15 +13,31 @@
  *   GET  /skills/list       catálogo con origen, ruta y permisos de invocación
  *   GET  /skills/read?name  el SKILL.md completo de una skill
  *   POST /skills/save       { name, content } — guarda el SKILL.md editado
+ *   POST /skills/delete     { name } — mueve la skill a la papelera
  *
- * La escritura solo toca archivos que el descubrimiento ya había encontrado
- * (nunca una ruta que llegue del navegador) y exige el header `x-dsh-skills: 1`:
- * un sitio externo no puede mandarlo sin preflight.
+ * La escritura y el borrado solo tocan rutas que el descubrimiento ya había
+ * encontrado (nunca una ruta que llegue del navegador) y exigen el header
+ * `x-dsh-skills: 1`: un sitio externo no puede mandarlo sin preflight.
+ *
+ * Borrar NO usa `rm -rf`: mueve la carpeta (o el archivo) a
+ * `~/.local/share/skills/trash/<fecha>/`, así se recupera copiándola de vuelta.
+ * Si la skill es un symlink (las de dotfiles), se mueve el enlace: el contenido
+ * del repo queda intacto.
  */
 
-import { existsSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readFileSync,
+	readdirSync,
+	realpathSync,
+	renameSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 export const inject = ["webServer"];
 
@@ -30,6 +46,8 @@ const AGENTS_HOME = process.env.DSH_AGENTS_HOME ?? join(homedir(), ".agents");
 const MAX_NAME_CHARS = 200;
 const MAX_BODY_BYTES = 256 * 1024;
 const CACHE = "no-store, max-age=0";
+/** Papelera: recuperable a mano, nunca un `rm -rf`. */
+const TRASH_DIR = process.env.DSH_SKILLS_TRASH ?? join(homedir(), ".local/share/skills/trash");
 /** Mismo gramático que el harness: kebab-case en minúsculas. */
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
