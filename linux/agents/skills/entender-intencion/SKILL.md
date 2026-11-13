@@ -1,42 +1,25 @@
 ---
 name: entender-intencion
-description: "Aterrizar la intención real antes de construir: cuando dice 'entiende mi intención', 'aterrizá mi idea' o 'no me entendiste'."
+description: "Protocolo cognitivo para clasificar ambigüedades, frenar respuestas automáticas y aterrizar la intención real del usuario mediante preguntas socráticas."
 ---
-# Entender la intención
 
-El pedido suele ser un medio. Leer, nombrar el problema, preguntar poco, devolver la lectura. Recién después construir.
+### 1. Detección y Clasificación de Ambigüedad
 
-## 1. Leer antes de preguntar
+Antes de procesar cualquier instrucción, analiza el input del usuario y clasifícalo en una de estas 4 categorías:
 
-Código, datos, capturas, `machine ls --all --json`, git. Si la respuesta está en la base, preguntarla quema confianza.
+- **Semántica:** Términos polisémicos o vagos sin contexto técnico definido.
+- **Sintáctica:** Estructuras gramaticales confusas con múltiples interpretaciones de relación.
+- **Pragmática:** Instrucción técnicamente clara pero que omite el propósito, objetivo o criterio de éxito final (*el "por qué"*).
+- **Conceptual:** Nivel de abstracción demasiado alto ("hazlo mejor", "optimiza") sin métricas ni límites.
 
-## 2. Separar tres cosas
+### 2. Protocolo de Interrogación Socrática
 
-- **Lo que dijo**: una frase, con sus palabras.
-- **El problema**: qué quiere dejar de sufrir. Si no lo podés decir sin su solución, no lo entendiste.
-- **Lo que asumo**: cada hueco, marcado "asumo", nunca como hecho.
+Dependiendo del tipo detectado, el agente debe detener la ejecución y formular **una única pregunta de sondeo** enfocada en:
 
-Ejemplo real: pidió "un lienzo infinito para mis proyectos". El problema era "no entiendo cómo se relacionan mis proyectos y no tengo un lugar donde empezar a trabajar cada día". El lienzo era el medio.
+- **Criterio de éxito:** ¿Cómo se ve exactamente el resultado terminado y funcional?
+- **Restricción:** ¿Qué limitaciones técnicas, temporales o de entorno aplican?
+- **Motivación raíz:** ¿Qué fricción o evento originó la solicitud?
 
-## 3. Preguntar poco, en el modal
+### 3. Regla de Bloqueo
 
-2 o 3 decisiones que cambien el diseño, con opciones y una recomendada, en `ask_user_question`. Nunca un cuestionario.
-
-- Si contesta "no te entiendo", la pregunta está mal: cambiála a sus palabras, no la repitas.
-- Prohibido inventar jerga propia ("familias", "nodos", "entidades"). Decí problemas, proyectos, tareas.
-
-## 4. Devolver la lectura y frenar
-
-"**Así lo entendí:** … / **Asumo:** … / **Decidís vos:** …". Una corrección y arrancás. No vuelvas a preguntar lo mismo.
-
-## 5. Guardar la intención en `machine`
-
-Lo entendido tiene que quedar donde el copiloto lo lee, no en el chat:
-
-```bash
-machine set <slug> --goal "para qué existe" --check "cómo se comprueba"
-machine idea "<problema>" --title "<2-4 palabras>"
-machine promote <slug> --goal "…" --check "…"
-```
-
-No: repetir sus palabras de loro, meter la solución en el resumen, pedir permiso para lo que ya pidió, preguntar estética antes del problema.
+El agente tiene prohibido generar código, textos o soluciones definitivas si la clasificación cae en Ambigüedad Pragmática o Conceptual hasta que el usuario responda la pregunta de sondeo.
