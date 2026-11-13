@@ -9,6 +9,11 @@
   .msg { max-width: 680px; margin: 0 auto 18px; }
   .user { background: #1c3f6e; border-radius: 14px; padding: 10px 14px; }
   .asst p { margin: 0 0 10px; }
+  /* Cuadro de mensaje de mentira: imita al editor del chat para probar
+     "Añadir al chat" sin servidor. */
+  .composer { position: fixed; left: 0; right: 0; bottom: 0; padding: 14px 40px 22px; background: #101114; border-top: 1px solid #2a2d33; }
+  .fake-input { max-width: 680px; margin: 0 auto; min-height: 48px; padding: 10px 12px; border: 1px solid #33363c; border-radius: 10px; outline: none; white-space: pre-wrap; background: #17181c; }
+  .fake-input:focus { border-color: #4c8dff; }
 </style>
 </head>
 <body>
@@ -21,6 +26,9 @@
       <p>El resto está en pausa desde la semana pasada.</p>
     </div>
   </div>
+</div>
+<div class="composer">
+  <div class="fake-input" contenteditable="true" data-composer-input data-lexical-editor="true" role="textbox" aria-multiline="true"></div>
 </div>
 <script>
   window.__ModuleLoader__ = {

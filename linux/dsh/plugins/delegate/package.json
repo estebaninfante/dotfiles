@@ -1,8 +1,0 @@
-{
-  "name": "dsh-local-delegate",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "Herramienta delegate_claude: corre Claude Code como llamada visible en el hilo",
-  "main": "lib/index.js"
-}

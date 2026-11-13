@@ -20,10 +20,15 @@ No delegues tareas de un paso ni cosas que ya sabés hacer.
 
 ## Cómo (un solo camino)
 
-1. Llamá a la herramienta **`delegate_claude`** con el brief completo en `task`:
-   corre `claude -p --permission-mode bypassPermissions` con el brief por **stdin** y
-   devuelve su reporte. La llamada **se ve en la conversación** como cualquier otra
-   herramienta (`running` mientras corre, `Completed in Ns` con la salida al terminar).
+1. Lanzá `claude-job` con el brief por **stdin** como **trabajo en segundo plano**
+   (bash con `run_in_background: true`). La fila del job aparece arriba del hilo y su
+   salida se puede abrir **mientras Claude trabaja**: `DICE:` (texto), `HACE:` (cada
+   paso), `FIN:` (cierre). Eso es la delegación visible.
+   ```bash
+   claude-job <<'BRIEF'
+   …brief…
+   BRIEF
+   ```
    No hay `brief.md`, ni `out.log`, ni estado en disco.
 
 2. El brief tiene la misma forma de siempre:

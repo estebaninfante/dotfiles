@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# claude-job — corre Claude Code como trabajo en segundo plano, con salida en vivo.
+#
+# Uso:  claude-job <<'BRIEF'  …  BRIEF
+#       claude-job -f brief.md
+#
+# Imprime una línea por hecho mientras Claude trabaja (DICE / HACE / FIN), así la
+# fila del job en la cabecera del hilo se puede abrir y ver el avance en el momento.
+# No escribe archivos de estado: brief por stdin, salida por stdout.
+set -uo pipefail
+CLAUDE="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
+[ -x "$CLAUDE" ] || { echo "claude-job: no encuentro $CLAUDE" >&2; exit 127; }
+
+if [ "${1:-}" = "-f" ] && [ -n "${2:-}" ]; then
+  brief=$(cat "$2")
+else
+  brief=$(cat)
+fi
+if [ "${#brief}" -lt 40 ]; then
+  echo "claude-job: el brief es demasiado corto (${#brief} caracteres)" >&2
+  exit 2
+fi
+
+printf '%s' "$brief" | "$CLAUDE" -p --permission-mode bypassPermissions \
+  --output-format stream-json --verbose 2>&1 | python3 -u -c '
+import json, sys
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        event = json.loads(line)
+    except Exception:
+        print(line[:200], flush=True)
+        continue
+    kind = event.get("type")
+    if kind == "assistant":
+        for part in (event.get("message", {}).get("content") or []):
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "text" and part.get("text", "").strip():
+                print("DICE:", part["text"].strip()[:400], flush=True)
+            elif part.get("type") == "tool_use":
+                args = part.get("input", {})
+                detail = args.get("command") or args.get("file_path") or args.get("pattern") or args.get("description") or ""
+                print("HACE:", part.get("name"), "->", " ".join(str(detail).split())[:160], flush=True)
+    elif kind == "result":
+        print("FIN:", str(event.get("result", ""))[:1500], flush=True)
+'

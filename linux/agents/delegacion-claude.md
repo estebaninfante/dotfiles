@@ -41,9 +41,17 @@ Señales de que ya te estancaste:
 2. Escribí el brief completo (plantilla en la skill): síntoma exacto con evidencia,
    entorno y sus trampas, **las variantes ya probadas y qué pasó con cada una**, qué no
    se puede romper y cómo verificar.
-3. Lanzalo con la herramienta **`delegate_claude`** (plugin `linux/dsh/plugins/delegate`):
-   el brief va en `task`, Claude lo lee por **stdin** y la llamada se ve **en el hilo**
-   como cualquier otra herramienta. **No hay `brief.md`, ni `out.log`, ni `delegar-claude`.**
+3. Lanzalo como **trabajo en segundo plano** con `claude-job` (bash con
+   `run_in_background`): el brief va por stdin y la salida se ve **mientras trabaja** en la
+   fila del job arriba del hilo (`DICE:` lo que piensa, `HACE:` cada paso, `FIN:` el
+   cierre). **No hay `brief.md`, ni `out.log`, ni `delegar-claude`.**
+   ```bash
+   claude-job <<'BRIEF'
+   …brief completo…
+   BRIEF
+   ```
+   Ese job ES la delegación visible: no usar la herramienta `delegate_claude` (muestra
+   recién el resultado final).
 4. Al terminar, leé su reporte, **verificá vos** lo que dice y pasale al usuario: qué
    cambió, con qué evidencia, qué reinicios hubo y qué queda de su lado (sudo, relogin,
    prueba manual).

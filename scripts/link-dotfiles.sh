@@ -169,15 +169,6 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
     fi
 
     # Página de proyectos: inventario vivo desde ~/.local/share/machine/machine.db.
-    if [ -f "$PATCH" ] && ! grep -q "local-delegate" "$PATCH"; then
-        printf '\n# Herramienta delegate_claude: Claude Code corre como llamada visible en el hilo.\n- insert:\n    - id: local-delegate\n      name: dsh-local-delegate\n' >> "$PATCH"
-        ok "patch del perfil web: + local-delegate"
-    fi
-    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-delegate" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
-        dsh plugin --profile web add "link:${HOME}/.dsh/plugins/delegate" >/dev/null 2>&1 \
-            && ok "perfil web: dsh-local-delegate instalado" \
-            || warn "no pude instalar delegate (correr: dsh plugin --profile web add link:~/.dsh/plugins/delegate)"
-    fi
     if [ -f "$PATCH" ] && ! grep -q "local-intra-turn" "$PATCH"; then
         printf '\n# Feedforward: supuestos antes de enviar y corrección en el compositor.\n- insert:\n    - id: local-intra-turn\n      name: dsh-local-intra-turn\n' >> "$PATCH"
         ok "patch del perfil web: + local-intra-turn"
