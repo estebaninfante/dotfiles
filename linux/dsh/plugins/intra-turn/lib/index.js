@@ -14,7 +14,7 @@
 const ROUTE = "/intra-turn/feedforward";
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_DRAFT_CHARS = 4000;
-const MAX_TOKENS = 1200;
+const MAX_TOKENS = 1500;
 const CALL_TIMEOUT_MS = 45_000;
 /**
  * Proveedores como opencode Go rechazan llamadas sin id de sesión (lo usan
@@ -25,13 +25,14 @@ const ROUTING_SESSION_ID = "intra-turn-feedforward";
 
 const SYSTEM = [
 	"Sos el copiloto de alguien que está escribiendo un pedido a un agente de IA.",
-	"Tu trabajo NO es responder el pedido: es mostrar, antes de que lo mande, qué va a asumir por su cuenta.",
+	"Tu trabajo NO es responder el pedido: es mostrar, antes de que lo mande, qué va a interpretar y qué le falta saber, anclado a las palabras exactas del borrador.",
 	"Devolvé SOLO JSON válido, sin markdown ni texto alrededor, con esta forma:",
-	'{"assumptions":[{"label":"...","value":"..."}],"missing":[{"label":"...","options":["...","..."]}]}',
-	"assumptions: 1 a 3 cosas que el agente va a decidir solo y que podrían estar mal (idioma, alcance, formato, profundidad, a quién va dirigido).",
-	"missing: 0 a 3 datos que faltan y que cambiarían la respuesta (con 2 a 4 opciones cortas cada uno).",
-	"label: máximo 6 palabras, en español, concreto. value: la suposición, máximo 8 palabras.",
-	"Prohibido explicar, saludar o agregar claves. Si el pedido ya es preciso, devolvé listas vacías."
+	'{"assumptions":[{"quote":"...","emoji":"🗺️","label":"...","value":"...","options":["...","..."]}],"missing":[{"quote":"...","label":"...","options":["...","..."]}]}',
+	"quote: copiá LITERAL de 1 a 4 palabras del borrador (mismas letras, mayúsculas y tildes) que disparan esa interpretación o pregunta. Nunca inventes ni parafrasees el quote.",
+	"assumptions: 1 a 3 cosas que el agente va a decidir solo y que podrían estar mal (alcance, formato, profundidad, destino, a quién va dirigido). Cada una con un quote distinto.",
+	"label: el aspecto, máximo 4 palabras (ej. 'Formato', 'Destino', 'Nivel de detalle'). value: lo que va a asumir, máximo 6 palabras. options: 2 o 3 alternativas reales, distintas de value, máximo 5 palabras cada una. emoji: uno solo que represente el aspecto.",
+	"missing: 0 a 3 datos que faltan y que cambiarían la respuesta. label es la pregunta corta (ej. '¿Qué edad tienen?'), options 2 a 5 respuestas cortas. Varias preguntas pueden compartir el mismo quote.",
+	"Escribí label, value y options en el idioma del borrador. Prohibido explicar, saludar o agregar claves. Si el pedido ya es preciso, devolvé listas vacías."
 ].join(" ");
 
 function readJsonBody(req) {
@@ -104,36 +105,70 @@ async function collectText(llm, options) {
 	return text.trim();
 }
 
+/**
+ * Ubica `quote` en el borrador y devuelve la subcadena tal cual está escrita.
+ * Primero exacto; después sin distinguir mayúsculas ni espacios repetidos (el
+ * modelo a veces normaliza). Si no aparece, no hay anclaje: undefined.
+ */
+function locateQuote(draft, quote) {
+	if (typeof quote !== "string") return void 0;
+	const wanted = quote.replace(/\s+/g, " ").trim().replace(/^["“”'«»]+|["“”'«».,;:]+$/g, "");
+	if (wanted.length === 0 || wanted.length > 80) return void 0;
+	if (draft.includes(wanted)) return wanted;
+	const pattern = wanted
+		.split(" ")
+		.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+		.join("\\s+");
+	const match = new RegExp(pattern, "iu").exec(draft);
+	return match === null ? void 0 : match[0];
+}
+
+const cleanText = (value, max) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
+const cleanOptions = (list, max, exclude) =>
+	(Array.isArray(list) ? list : [])
+		.map((option) => cleanText(option, 48))
+		.filter((option, index, all) => option.length > 0 && option !== exclude && all.indexOf(option) === index)
+		.slice(0, max);
+
 /** El modelo a veces envuelve el JSON en ```json … ``` o agrega una frase. */
-function parsePayload(text) {
+function parsePayload(text, draft) {
+	const empty = { assumptions: [], missing: [] };
 	const cleaned = text
 		.replace(/^\s*```(?:json)?/i, "")
 		.replace(/```\s*$/i, "")
 		.trim();
 	const start = cleaned.indexOf("{");
 	const end = cleaned.lastIndexOf("}");
-	if (start < 0 || end <= start) return { assumptions: [], missing: [] };
+	if (start < 0 || end <= start) return empty;
 	let parsed;
 	try {
 		parsed = JSON.parse(cleaned.slice(start, end + 1));
 	} catch {
-		return { assumptions: [], missing: [] };
+		return empty;
 	}
-	const clean = (list, withOptions) =>
-		(Array.isArray(list) ? list : [])
-			.map((item) => {
-				if (item === null || typeof item !== "object") return null;
-				const label = typeof item.label === "string" ? item.label.trim().slice(0, 60) : "";
-				const value = typeof item.value === "string" ? item.value.trim().slice(0, 120) : "";
-				const options = withOptions && Array.isArray(item.options)
-					? item.options.filter((o) => typeof o === "string").map((o) => o.trim().slice(0, 40)).slice(0, 4)
-					: [];
-				if (!label) return null;
-				return withOptions ? { label, options } : { label, value };
-			})
-			.filter((item) => item !== null)
-			.slice(0, 3);
-	return { assumptions: clean(parsed.assumptions, false), missing: clean(parsed.missing, true) };
+	const items = (list) => (Array.isArray(list) ? list : []).filter((item) => item !== null && typeof item === "object");
+	// Sin anclaje en el texto no se muestra: la UI vive pegada a las palabras.
+	const assumptions = items(parsed.assumptions)
+		.map((item) => {
+			const quote = locateQuote(draft, item.quote);
+			const label = cleanText(item.label, 60);
+			const value = cleanText(item.value, 120);
+			if (quote === void 0 || !label || !value) return null;
+			const emoji = cleanText(item.emoji, 8);
+			return { quote, label, value, options: cleanOptions(item.options, 3, value), ...(emoji ? { emoji } : {}) };
+		})
+		.filter((item) => item !== null)
+		.slice(0, 3);
+	const missing = items(parsed.missing)
+		.map((item) => {
+			const quote = locateQuote(draft, item.quote);
+			const label = cleanText(item.label, 80);
+			if (quote === void 0 || !label) return null;
+			return { quote, label, options: cleanOptions(item.options, 5) };
+		})
+		.filter((item) => item !== null)
+		.slice(0, 3);
+	return { assumptions, missing };
 }
 
 export const inject = ["webServer", "llm", "sessions", "agentDefaultModel"];
@@ -177,7 +212,7 @@ export function apply(ctx) {
 				sessionId: ROUTING_SESSION_ID,
 				signal: AbortSignal.timeout(CALL_TIMEOUT_MS)
 			});
-			sendJson(res, 200, parsePayload(text));
+			sendJson(res, 200, parsePayload(text, draft));
 		} catch (error) {
 			sendJson(res, 500, {
 				error: "llm-failed",

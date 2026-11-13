@@ -2,12 +2,11 @@
  * dsh-local-skills — client half.
  *
  * Panel "Skills" en la barra lateral, justo debajo de Plugins. Muestra el
- * catálogo real del harness (lo que devuelve `ctx.skills`), no una carpeta
- * escaneada a mano: nombre, descripción, origen, ruta del SKILL.md y si la
- * puede usar el modelo, el usuario (comando) o ambas.
+ * catálogo del harness en una matriz de tarjetas (título + descripción) y, al
+ * abrir una skill, renderiza su Markdown y permite editarlo.
  *
- * Datos: GET /skills/list y GET /skills/read?name (mitad host de este plugin).
- * Solo lectura: no edita ni borra nada.
+ * Datos: GET /skills/list, GET /skills/read?name y POST /skills/save
+ * (mitad host de este plugin).
  */
 window.__ModuleLoader__.load({
 	id: "dsh-local-skills",
@@ -22,18 +21,16 @@ window.__ModuleLoader__.load({
 		const PANEL_ID = "skills";
 		const STYLE_ID = "dsh-skills-style";
 
-		/** Origen → grupo visible. Lo que no esté acá cae en "Otras". */
-		const GROUP = {
-			"user-agents": { key: "user", label: "Tuyas" },
-			"user-dsh": { key: "user", label: "Tuyas" },
-			"project-agents": { key: "project", label: "Del proyecto" },
-			"project-dsh": { key: "project", label: "Del proyecto" },
-			runtime: { key: "plugin", label: "De plugins" },
-			bundled: { key: "plugin", label: "De plugins" },
-			custom: { key: "custom", label: "Otras" },
+		/** Origen del harness → nombre corto para la tarjeta. */
+		const SOURCE_LABEL = {
+			"user-agents": "usuario",
+			"user-dsh": "usuario",
+			"project-agents": "proyecto",
+			"project-dsh": "proyecto",
+			runtime: "plugin",
+			bundled: "plugin",
+			custom: "propia",
 		};
-		const GROUP_ORDER = ["user", "project", "plugin", "custom"];
-		const GROUP_TITLE = { user: "Tuyas", project: "Del proyecto", plugin: "De plugins", custom: "Otras" };
 
 		const CSS = `
 .sk{
@@ -43,108 +40,150 @@ window.__ModuleLoader__.load({
   --sk-cap: var(--dsw-alias-label-caption, #737985);
   --sk-l1: var(--dsw-alias-border-l1, #ffffff0f);
   --sk-l2: var(--dsw-alias-border-l2, #ffffff1f);
+  --sk-l3: var(--dsw-alias-border-l3, #ffffff29);
   --sk-l4: var(--dsw-alias-border-l4, #ffffff33);
   --sk-hover: var(--dsw-alias-interactive-bg-hover, #ffffff14);
   --sk-field: var(--dsw-alias-bg-layer-1, transparent);
+  --sk-card: var(--dsw-alias-settings-card-fill, transparent);
   --sk-ok: var(--dsw-alias-state-success-primary, #2fb36b);
   --sk-info: var(--dsw-alias-state-business-primary, #4d6bfe);
+  --sk-bad: var(--dsw-alias-state-error-primary, #f25a5a);
   --sk-mono: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --sk-r-sm: var(--dsw-radius-sm, 8px);
+  --sk-r-md: var(--dsw-radius-md, 12px);
   --sk-ring: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--sk-info));
   box-sizing:border-box;height:100%;min-height:0;overflow:auto;color:var(--sk-fg);
-  display:flex;flex-direction:column;align-items:center;gap:22px;
-  padding:0 clamp(24px,4vw,48px) 48px;font-size:13px;line-height:20px;
+  display:flex;flex-direction:column;align-items:center;
+  padding:0 clamp(20px,4vw,48px) 40px;font-size:13px;line-height:20px;
 }
 .sk *{box-sizing:border-box}
 .sk>*{width:100%;max-width:960px}
-:where(.sk) button{font:inherit}
+:where(.sk) button,.sk textarea{font:inherit}
 .sk :focus-visible{outline:var(--sk-ring);outline-offset:1px}
 
-.sk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-top:28px}
+/* --- Cabecera ------------------------------------------------------------ */
+.sk-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-top:24px}
+.sk-titles{display:flex;flex-direction:column;gap:3px;min-width:0}
 .sk-h1{margin:0;font-size:20px;font-weight:500;line-height:28px}
-.sk-intro{margin:4px 0 0;font-size:13px;line-height:20px;color:var(--sk-fg2);display:flex;flex-wrap:wrap;gap:0 6px}
+.sk-intro{margin:0;font-size:12.5px;line-height:18px;color:var(--sk-fg2);display:flex;flex-wrap:wrap;gap:0 6px;align-items:center}
 .sk-intro b{font-weight:500;color:var(--sk-fg);font-variant-numeric:tabular-nums}
 .sk-intro i{font-style:normal;color:var(--sk-cap)}
 .sk-tools{display:flex;align-items:center;gap:8px;flex:none}
-.sk-search{display:inline-flex;align-items:center;gap:6px;height:32px;width:240px;padding:0 10px;
-  border:.5px solid var(--sk-l4);border-radius:var(--dsw-radius-md,12px);background:var(--sk-field)}
+.sk-search{display:inline-flex;align-items:center;gap:6px;height:32px;width:230px;padding:0 10px;
+  border:.5px solid var(--sk-l4);border-radius:var(--sk-r-md);background:var(--sk-field)}
 .sk-search:focus-within{border-color:var(--sk-info)}
 .sk-search svg{flex:none;color:var(--sk-fg3)}
 .sk-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--sk-fg);
   font:inherit;font-size:13px;line-height:20px}
 .sk-search input::placeholder{color:var(--sk-fg3)}
-.sk-ghost{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:.5px solid transparent;
-  border-radius:var(--dsw-radius-md,12px);background:transparent;color:var(--sk-fg2);cursor:pointer}
-.sk-ghost:hover{background:var(--sk-hover);color:var(--sk-fg)}
-.sk-ghost[disabled]{opacity:.5;cursor:default}
 
-.sk-groups{display:flex;flex-direction:column;gap:26px;padding-bottom:8px}
-.sk-group-head{margin:0 0 2px;font-size:12px;line-height:20px;font-weight:500;color:var(--sk-fg2);
-  display:flex;align-items:center;gap:8px}
-.sk-group-head .n{color:var(--sk-cap);font-weight:400;font-variant-numeric:tabular-nums}
-.sk-rows{list-style:none;margin:0;padding:0;border-top:.5px solid var(--sk-l2)}
-.sk-row{display:flex;align-items:flex-start;gap:14px;padding:11px 10px;margin:0 -10px;
-  border-bottom:.5px solid var(--sk-l1);border-radius:var(--dsw-radius-sm,8px);cursor:pointer;
-  text-align:left;width:calc(100% + 20px);background:transparent;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit}
-.sk-row:hover{background:var(--sk-hover)}
-.sk-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.sk-name{font-size:13px;line-height:20px;color:var(--sk-fg);font-family:var(--sk-mono);font-weight:500;
-  overflow-wrap:anywhere}
-.sk-desc{font-size:12.5px;line-height:18px;color:var(--sk-fg2);
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.sk-path{margin-top:2px;font-size:11.5px;line-height:16px;color:var(--sk-cap);font-family:var(--sk-mono);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.sk-side{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px;padding-top:1px}
-.sk-tags{display:flex;gap:5px;align-items:center}
-.sk-tag{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;
-  border:.5px solid var(--sk-l4);font-size:11px;line-height:16px;color:var(--sk-fg2);white-space:nowrap}
+/* --- Botones ------------------------------------------------------------- */
+.sk-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;
+  border:.5px solid var(--sk-l4);border-radius:var(--sk-r-md);background:transparent;color:var(--sk-fg2);cursor:pointer;
+  white-space:nowrap}
+.sk-btn:hover{background:var(--sk-hover);color:var(--sk-fg)}
+.sk-btn[disabled]{opacity:.5;cursor:default}
+.sk-btn.primary{border-color:transparent;background:var(--sk-info);color:#fff}
+.sk-btn.primary:hover{filter:brightness(1.08)}
+.sk-btn.quiet{border-color:transparent;padding:0 8px}
+
+/* --- Matriz de tarjetas -------------------------------------------------- */
+.sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;margin-top:20px}
+.sk-card{display:flex;flex-direction:column;justify-content:space-between;gap:10px;min-height:120px;
+  padding:13px 14px;text-align:left;color:inherit;cursor:pointer;
+  border:.5px solid var(--sk-l2);border-radius:var(--sk-r-md);background:var(--sk-card)}
+.sk-card:hover{border-color:var(--sk-l3);background:var(--sk-hover)}
+.sk-card-title{font-family:var(--sk-mono);font-size:12.5px;line-height:18px;font-weight:500;color:var(--sk-fg);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.sk-card-desc{font-size:12px;line-height:17px;color:var(--sk-fg2);
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sk-card-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
+.sk-tags{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.sk-tag{display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:999px;
+  border:.5px solid var(--sk-l4);font-size:10.5px;line-height:15px;color:var(--sk-fg2);white-space:nowrap}
 .sk-tag.model{color:var(--sk-info);border-color:color-mix(in srgb, var(--sk-info) 45%, transparent)}
 .sk-tag.cmd{color:var(--sk-ok);border-color:color-mix(in srgb, var(--sk-ok) 40%, transparent)}
-.sk-src{font-size:11px;line-height:16px;color:var(--sk-cap)}
+.sk-src{font-size:10.5px;line-height:15px;color:var(--sk-cap);white-space:nowrap}
 
-.sk-empty{margin:8px 0 0;font-size:13px;line-height:20px;color:var(--sk-fg2)}
-.sk-ignored{font-size:12px;line-height:18px;color:var(--sk-fg3)}
+/* --- Estados ------------------------------------------------------------- */
+.sk-empty{margin:22px 0 0;font-size:13px;line-height:20px;color:var(--sk-fg2)}
+.sk-note{margin:20px 0 0;font-size:11.5px;line-height:17px;color:var(--sk-fg3);overflow-wrap:anywhere}
+.sk-error{margin:12px 0 0;font-size:12.5px;line-height:18px;color:var(--sk-bad)}
+.sk-skel{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;margin-top:20px}
+.sk-sk{height:120px;border-radius:var(--sk-r-md);background:var(--sk-l1);border:.5px solid var(--sk-l1);
+  animation:sk-pulse 1.4s ease-in-out infinite}
+@keyframes sk-pulse{0%,100%{opacity:.45}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.sk-sk{animation:none;opacity:.7}}
+.sk-ignored{margin-top:18px;font-size:11.5px;line-height:17px;color:var(--sk-fg3)}
 .sk-ignored summary{cursor:pointer}
 .sk-ignored-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
 .sk-ignored-list li{display:flex;gap:8px;flex-wrap:wrap}
 .sk-ignored-list .n{font-family:var(--sk-mono);color:var(--sk-fg2)}
 .sk-ignored-list .r{color:var(--sk-cap)}
-.sk-note{margin:0;font-size:12px;line-height:18px;color:var(--sk-fg3)}
-.sk-error{margin:0;font-size:13px;line-height:20px;color:var(--dsw-alias-state-error-primary,#f25a5a)}
-.sk-skel{display:flex;flex-direction:column;gap:9px;padding:14px 10px 6px;border-top:.5px solid var(--sk-l2)}
-.sk-sk{height:11px;border-radius:4px;background:var(--sk-l2);animation:sk-pulse 1.4s ease-in-out infinite}
-@keyframes sk-pulse{0%,100%{opacity:.4}50%{opacity:.9}}
-@media (prefers-reduced-motion:reduce){.sk-sk{animation:none;opacity:.6}}
 
-.sk-detail{display:flex;flex-direction:column;gap:14px;padding-top:28px;padding-bottom:8px}
-.sk-crumb{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:28px;padding:0 8px;
-  margin-left:-8px;border:0;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--sk-fg2);cursor:pointer}
+/* --- Detalle ------------------------------------------------------------- */
+.sk-detail{display:flex;flex-direction:column;gap:14px;padding:20px 0 8px}
+.sk-crumb{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:26px;padding:0 8px;
+  margin-left:-8px;border:0;border-radius:var(--sk-r-sm);background:transparent;color:var(--sk-fg2);cursor:pointer}
 .sk-crumb:hover{background:var(--sk-hover);color:var(--sk-fg)}
-.sk-dtitle{margin:0;font-size:20px;font-weight:500;line-height:28px;font-family:var(--sk-mono);overflow-wrap:anywhere}
-.sk-dmeta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;line-height:18px;color:var(--sk-cap)}
+.sk-dhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sk-dmain{display:flex;flex-direction:column;gap:6px;min-width:0}
+.sk-dtitle{margin:0;font-size:19px;font-weight:500;line-height:26px;font-family:var(--sk-mono);overflow-wrap:anywhere}
+.sk-dmeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11.5px;line-height:17px;color:var(--sk-cap)}
 .sk-dmeta .p{font-family:var(--sk-mono);color:var(--sk-fg3);overflow-wrap:anywhere}
-.sk-ddesc{margin:0;font-size:13px;line-height:20px;color:var(--sk-fg2)}
-.sk-body{margin:0;padding:14px 16px;border:.5px solid var(--sk-l2);border-radius:var(--dsw-radius-md,12px);
-  background:var(--sk-field);font-family:var(--sk-mono);font-size:12.5px;line-height:19px;color:var(--sk-fg);
-  white-space:pre-wrap;overflow-wrap:anywhere;max-height:none}
+.sk-ddesc{margin:0;font-size:12.5px;line-height:18px;color:var(--sk-fg2);max-width:760px}
+.sk-dactions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:none}
 
-/* Celular: una columna, sin ruta, campos de 16px (iOS no hace zoom) y
-   objetivos táctiles de 36px. Breakpoint único del producto: 820px. */
+/* --- Markdown renderizado ------------------------------------------------ */
+.sk-prose{max-width:780px;font-size:13.5px;line-height:21px;color:var(--sk-fg)}
+.sk-prose>*:first-child{margin-top:0}
+.sk-prose h2{margin:24px 0 8px;font-size:17px;line-height:24px;font-weight:500}
+.sk-prose h3{margin:20px 0 6px;font-size:15px;line-height:22px;font-weight:500}
+.sk-prose h4{margin:16px 0 4px;font-size:13.5px;line-height:20px;font-weight:600}
+.sk-prose h5,.sk-prose h6{margin:14px 0 4px;font-size:12.5px;line-height:18px;font-weight:600;color:var(--sk-fg2)}
+.sk-prose p{margin:0 0 10px}
+.sk-prose ul,.sk-prose ol{margin:0 0 10px;padding-left:20px}
+.sk-prose li{margin:3px 0}
+.sk-prose code{font-family:var(--sk-mono);font-size:12px;background:var(--sk-l2);padding:1px 5px;border-radius:5px}
+.sk-prose pre{margin:0 0 12px;padding:12px 14px;border:.5px solid var(--sk-l2);border-radius:var(--sk-r-sm);
+  overflow:auto;background:var(--sk-field)}
+.sk-prose pre code{background:transparent;padding:0;font-size:12px;line-height:18px}
+.sk-prose blockquote{margin:0 0 12px;padding:2px 0 2px 12px;border-left:2px solid var(--sk-l4);color:var(--sk-fg2)}
+.sk-prose hr{border:0;border-top:.5px solid var(--sk-l2);margin:18px 0}
+.sk-prose table{border-collapse:collapse;margin:0 0 12px;font-size:12.5px;display:block;overflow-x:auto}
+.sk-prose th,.sk-prose td{border:.5px solid var(--sk-l2);padding:5px 9px;text-align:left;vertical-align:top}
+.sk-prose th{background:var(--sk-l1);font-weight:500}
+.sk-prose a{color:var(--sk-info);text-decoration:none}
+.sk-prose a:hover{text-decoration:underline}
+
+/* --- Editor -------------------------------------------------------------- */
+.sk-editor{width:100%;min-height:340px;padding:13px 14px;border:.5px solid var(--sk-l4);border-radius:var(--sk-r-sm);
+  background:var(--sk-field);color:var(--sk-fg);font-family:var(--sk-mono);font-size:12.5px;line-height:19px;
+  resize:vertical;tab-size:2;overflow:hidden}
+.sk-editor:focus{outline:none;border-color:var(--sk-info)}
+.sk-editbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sk-hint{font-size:11.5px;line-height:16px;color:var(--sk-cap)}
+
+/* --- Celular: 2 columnas, campos de 16px, objetivos de 36px -------------- */
 @media (max-width:820px){
-  .sk{padding:0 14px 32px;gap:16px}
-  .sk-head{flex-direction:column;gap:10px;padding-top:18px}
+  .sk{padding:0 14px 28px}
+  .sk-head{padding-top:16px;gap:10px}
   .sk-tools{width:100%}
-  .sk-search{width:100%;height:36px}
+  .sk-search{flex:1;width:auto;height:36px}
   .sk-search input{font-size:16px}
-  .sk-ghost{height:36px}
-  .sk-row{padding:12px 8px;margin:0 -8px;width:calc(100% + 16px);gap:8px}
-  .sk-name{font-size:14px;line-height:21px}
-  .sk-path{display:none}
-  .sk-side{flex-direction:row;align-items:center;gap:6px}
+  .sk-btn{height:36px}
+  .sk-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+  .sk-card{min-height:104px;padding:11px 12px}
+  .sk-card-title{font-size:12px;line-height:17px}
+  .sk-card-desc{font-size:11.5px;line-height:16px;-webkit-line-clamp:2}
   .sk-src{display:none}
-  .sk-crumb{height:36px}
-  .sk-dtitle{font-size:18px;line-height:26px}
-  .sk-body{font-size:12px;line-height:18px;padding:12px}
-  .sk-detail{padding-top:18px}
+  .sk-skel{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sk-detail{padding-top:14px}
+  .sk-dtitle{font-size:17px;line-height:24px}
+  .sk-prose{font-size:14px;line-height:22px}
+  .sk-editor{font-size:16px;line-height:22px;min-height:50vh}
+  .sk-dactions{width:100%}
+  .sk-dactions .sk-btn{flex:1}
 }
 `;
 
@@ -183,8 +222,11 @@ window.__ModuleLoader__.load({
 			return body;
 		}
 
-		function groupOf(source) {
-			return GROUP[source]?.key ?? "custom";
+		/** Separa el frontmatter del cuerpo: el cuerpo es lo que se renderiza. */
+		function splitFrontmatter(text) {
+			const match = text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+			if (match === null) return { head: "", body: text };
+			return { head: match[0], body: text.slice(match[0].length) };
 		}
 
 		function matches(skill, terms) {
@@ -193,11 +235,165 @@ window.__ModuleLoader__.load({
 			return terms.every((term) => haystack.includes(term));
 		}
 
-		/** La ruta completa no entra en una fila: se muestran las dos últimas partes. */
-		function shortPath(path) {
-			if (typeof path !== "string" || path.length === 0) return "";
-			const parts = path.split("/").filter(Boolean);
-			return parts.length <= 2 ? path : `…/${parts.slice(-2).join("/")}`;
+		/* --- Markdown mínimo y seguro (sin HTML crudo) --------------------- */
+
+		const INLINE_RE =
+			/(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|\[[^\]\n]+\]\((?:https?:\/\/[^)\s]+)\))/g;
+
+		function inline(text, prefix) {
+			const out = [];
+			let last = 0;
+			let index = 0;
+			let match = INLINE_RE.exec(text);
+			while (match !== null) {
+				if (match.index > last) out.push(text.slice(last, match.index));
+				const token = match[0];
+				const key = `${prefix}-${index}`;
+				index += 1;
+				if (token.startsWith("`")) {
+					out.push(h("code", { key }, token.slice(1, -1)));
+				} else if (token.startsWith("**") || token.startsWith("__")) {
+					out.push(h("strong", { key }, token.slice(2, -2)));
+				} else if (token.startsWith("[")) {
+					const link = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+					out.push(h("a", { key, href: link[2], target: "_blank", rel: "noreferrer noopener" }, link[1]));
+				} else {
+					out.push(h("em", { key }, token.slice(1, -1)));
+				}
+				last = match.index + token.length;
+				match = INLINE_RE.exec(text);
+			}
+			if (last < text.length) out.push(text.slice(last));
+			return out;
+		}
+
+		function splitRow(line) {
+			return line
+				.trim()
+				.replace(/^\|/, "")
+				.replace(/\|$/, "")
+				.split("|")
+				.map((cell) => cell.trim());
+		}
+
+		/** Markdown → elementos React. Títulos, listas, código, tablas, citas y links. */
+		function renderMarkdown(text) {
+			const lines = text.split(/\r?\n/);
+			const blocks = [];
+			let i = 0;
+			let key = 0;
+			while (i < lines.length) {
+				const line = lines[i];
+				if (/^\s*$/.test(line)) {
+					i += 1;
+					continue;
+				}
+				const fence = line.match(/^\s*(```|~~~)([A-Za-z0-9+#-]*)\s*$/);
+				if (fence !== null) {
+					const buffer = [];
+					const marker = fence[1];
+					i += 1;
+					while (i < lines.length && !new RegExp(`^\\s*${marker}\\s*$`).test(lines[i])) {
+						buffer.push(lines[i]);
+						i += 1;
+					}
+					i += 1;
+					blocks.push(h("pre", { key: key++ }, h("code", null, buffer.join("\n"))));
+					continue;
+				}
+				const heading = line.match(/^(#{1,6})\s+(.*)$/);
+				if (heading !== null) {
+					const level = Math.min(heading[1].length + 1, 6);
+					blocks.push(h(`h${level}`, { key: key++ }, inline(heading[2], `h${key}`)));
+					i += 1;
+					continue;
+				}
+				if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+					blocks.push(h("hr", { key: key++ }));
+					i += 1;
+					continue;
+				}
+				if (/^\s*>\s?/.test(line)) {
+					const buffer = [];
+					while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+						buffer.push(lines[i].replace(/^\s*>\s?/, ""));
+						i += 1;
+					}
+					blocks.push(h("blockquote", { key: key++ }, h("p", null, inline(buffer.join(" "), `bq${key}`))));
+					continue;
+				}
+				if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
+					const ordered = /^\s*\d+[.)]\s+/.test(line);
+					const items = [];
+					let item = "";
+					while (i < lines.length && /^\s*([-*+]|\d+[.)])\s+/.test(lines[i])) {
+						if (item.length > 0) items.push(item);
+						item = lines[i].replace(/^\s*([-*+]|\d+[.)])\s+/, "");
+						i += 1;
+						while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !/^\s*([-*+]|\d+[.)])\s+/.test(lines[i])) {
+							item += ` ${lines[i].trim()}`;
+							i += 1;
+						}
+					}
+					if (item.length > 0) items.push(item);
+					blocks.push(
+						h(
+							ordered ? "ol" : "ul",
+							{ key: key++ },
+							items.map((entry, index) => h("li", { key: index }, inline(entry, `li${key}${index}`))),
+						),
+					);
+					continue;
+				}
+				if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+					const header = splitRow(lines[i]);
+					i += 2;
+					const rows = [];
+					while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+						rows.push(splitRow(lines[i]));
+						i += 1;
+					}
+					blocks.push(
+						h(
+							"table",
+							{ key: key++ },
+							h(
+								"thead",
+								null,
+								h(
+									"tr",
+									null,
+									header.map((cell, ci) => h("th", { key: ci }, inline(cell, `th${key}${ci}`))),
+								),
+							),
+							h(
+								"tbody",
+								null,
+								rows.map((row, ri) =>
+									h(
+										"tr",
+										{ key: ri },
+										row.map((cell, ci) => h("td", { key: ci }, inline(cell, `td${key}${ri}${ci}`))),
+									),
+								),
+							),
+						),
+					);
+					continue;
+				}
+				const buffer = [];
+				while (
+					i < lines.length &&
+					!/^\s*$/.test(lines[i]) &&
+					!/^\s*(#{1,6}\s|```|~~~|>|\|)/.test(lines[i]) &&
+					!/^\s*([-*+]|\d+[.)])\s+/.test(lines[i])
+				) {
+					buffer.push(lines[i]);
+					i += 1;
+				}
+				blocks.push(h("p", { key: key++ }, inline(buffer.join(" "), `p${key}`)));
+			}
+			return blocks;
 		}
 
 		function tagsFor(skill) {
@@ -210,39 +406,47 @@ window.__ModuleLoader__.load({
 			return tags;
 		}
 
-		function SkillRow(props) {
+		function SkillCard(props) {
 			const skill = props.skill;
 			return h(
-				"li",
-				null,
+				"button",
+				{
+					type: "button",
+					className: "sk-card",
+					onClick: () => props.onOpen(skill.name),
+					title: skill.path ? `${skill.name} — ${skill.path}` : skill.name,
+				},
 				h(
-					"button",
-					{
-						type: "button",
-						className: "sk-row",
-						onClick: () => props.onOpen(skill.name),
-						title: "Ver el SKILL.md",
-					},
-					h(
-						"div",
-						{ className: "sk-main" },
-						h("span", { className: "sk-name" }, skill.name),
-						skill.description ? h("span", { className: "sk-desc" }, skill.description) : null,
-						skill.path ? h("span", { className: "sk-path", title: skill.path }, shortPath(skill.path)) : null,
-					),
-					h(
-						"div",
-						{ className: "sk-side" },
-						h("div", { className: "sk-tags" }, tagsFor(skill)),
-						h("span", { className: "sk-src" }, skill.source),
-					),
+					"div",
+					{ className: "sk-titles" },
+					h("span", { className: "sk-card-title" }, skill.name),
+					skill.description ? h("span", { className: "sk-card-desc" }, skill.description) : null,
+				),
+				h(
+					"div",
+					{ className: "sk-card-foot" },
+					h("div", { className: "sk-tags" }, tagsFor(skill)),
+					h("span", { className: "sk-src" }, SOURCE_LABEL[skill.source] ?? skill.source),
 				),
 			);
 		}
 
 		function Detail(props) {
-			const { skill, status, error, onBack, onRetry } = props;
+			const { skill, status, error, onBack, onSaved, onRetry } = props;
+			const [editing, setEditing] = React.useState(false);
+			const [draft, setDraft] = React.useState("");
+			const [saving, setSaving] = React.useState(false);
+			const [saveError, setSaveError] = React.useState("");
 			const [copied, setCopied] = React.useState(false);
+			const editorRef = React.useRef(null);
+
+			// El editor crece con el contenido: nada de un scroll dentro de otro.
+			React.useEffect(() => {
+				const editor = editorRef.current;
+				if (!editing || editor === null) return;
+				editor.style.height = "auto";
+				editor.style.height = `${editor.scrollHeight + 2}px`;
+			}, [editing, draft]);
 
 			React.useEffect(() => {
 				if (!copied) return undefined;
@@ -264,45 +468,141 @@ window.__ModuleLoader__.load({
 					{ className: "sk-detail" },
 					h("button", { type: "button", className: "sk-crumb", onClick: onBack }, ICON_BACK, "Skills"),
 					h("p", { className: "sk-error" }, `No pude leer la skill: ${error}`),
-					h("button", { type: "button", className: "sk-ghost", onClick: onRetry }, "Reintentar"),
+					h("button", { type: "button", className: "sk-btn", onClick: onRetry }, "Reintentar"),
 				);
 			}
+
+			const content = typeof skill.content === "string" ? skill.content : "";
+			const body = splitFrontmatter(content).body;
+			const dirty = editing && draft !== content;
+
+			function startEdit() {
+				setDraft(content);
+				setSaveError("");
+				setEditing(true);
+			}
+
+			function cancelEdit() {
+				if (draft !== content && !window.confirm("¿Descartar los cambios sin guardar?")) return;
+				setEditing(false);
+				setSaveError("");
+			}
+
+			async function save() {
+				if (saving) return;
+				setSaving(true);
+				setSaveError("");
+				try {
+					const res = await fetch("/skills/save", {
+						method: "POST",
+						headers: { "content-type": "application/json", "x-dsh-skills": "1" },
+						body: JSON.stringify({ name: skill.name, content: draft }),
+					});
+					const payload = await res.json().catch(() => null);
+					if (!res.ok || payload === null || payload.ok !== true) {
+						if (res.status === 404 || res.status === 405) {
+							throw new Error("el servidor todavía no tiene la ruta de guardado: reiniciá dsh-web");
+						}
+						throw new Error((payload && payload.error) || `HTTP ${res.status}`);
+					}
+					setEditing(false);
+					onSaved(payload.skill);
+				} catch (failure) {
+					setSaveError(failure instanceof Error ? failure.message : String(failure));
+				} finally {
+					setSaving(false);
+				}
+			}
+
+			function leave() {
+				if (dirty && !window.confirm("Tenés cambios sin guardar. ¿Salir igual?")) return;
+				onBack();
+			}
+
 			return h(
 				"div",
 				{ className: "sk-detail" },
-				h(
-					"button",
-					{ type: "button", className: "sk-crumb", onClick: onBack, title: "Volver (Esc)" },
-					ICON_BACK,
-					"Skills",
-				),
-				h("h1", { className: "sk-dtitle" }, skill.name),
+				h("button", { type: "button", className: "sk-crumb", onClick: leave, title: "Volver (Esc)" }, ICON_BACK, "Skills"),
 				h(
 					"div",
-					{ className: "sk-dmeta" },
-					h("div", { className: "sk-tags" }, tagsFor(skill)),
-					h("span", null, skill.source),
-					skill.path ? h("span", { className: "p" }, skill.path) : null,
-					skill.path
-						? h(
-								"button",
-								{
-									type: "button",
-									className: "sk-ghost",
-									style: { height: 24, padding: "0 8px", fontSize: 12 },
-									onClick: () => {
-										Promise.resolve(navigator.clipboard?.writeText(skill.path)).then(
-											() => setCopied(true),
-											() => setCopied(false),
-										);
+					{ className: "sk-dhead" },
+					h(
+						"div",
+						{ className: "sk-dmain" },
+						h("h1", { className: "sk-dtitle" }, skill.name),
+						h(
+							"div",
+							{ className: "sk-dmeta" },
+							h("div", { className: "sk-tags" }, tagsFor(skill)),
+							h("span", null, SOURCE_LABEL[skill.source] ?? skill.source),
+							skill.path ? h("span", { className: "p" }, skill.path) : null,
+						),
+					),
+					h(
+						"div",
+						{ className: "sk-dactions" },
+						skill.path
+							? h(
+									"button",
+									{
+										type: "button",
+										className: "sk-btn quiet",
+										onClick: () => {
+											Promise.resolve(navigator.clipboard?.writeText(skill.path)).then(
+												() => setCopied(true),
+												() => setCopied(false),
+											);
+										},
 									},
-								},
-								copied ? "Copiada" : "Copiar ruta",
-							)
-						: null,
+									copied ? "Copiada" : "Copiar ruta",
+								)
+							: null,
+						editing ? null : h("button", { type: "button", className: "sk-btn primary", onClick: startEdit }, "Editar"),
+					),
 				),
-				skill.description ? h("p", { className: "sk-ddesc" }, skill.description) : null,
-				h("pre", { className: "sk-body" }, skill.content),
+				skill.description && !editing ? h("p", { className: "sk-ddesc" }, skill.description) : null,
+				saveError ? h("p", { className: "sk-error" }, `No se guardó: ${saveError}`) : null,
+				editing
+					? h(
+							React.Fragment,
+							null,
+							h("textarea", {
+								ref: editorRef,
+								className: "sk-editor",
+								value: draft,
+								spellCheck: false,
+								"aria-label": `Editar ${skill.name}`,
+								onChange: (event) => setDraft(event.target.value),
+								onKeyDown: (event) => {
+									if (event.key === "Escape") {
+										event.preventDefault();
+										event.stopPropagation();
+										cancelEdit();
+										return;
+									}
+									if (event.key === "s" && (event.metaKey || event.ctrlKey)) {
+										event.preventDefault();
+										save();
+									}
+								},
+							}),
+							h(
+								"div",
+								{ className: "sk-editbar" },
+								h(
+									"button",
+									{ type: "button", className: "sk-btn primary", onClick: save, disabled: saving },
+									saving ? "Guardando…" : "Guardar",
+								),
+								h("button", { type: "button", className: "sk-btn", onClick: cancelEdit, disabled: saving }, "Cancelar"),
+								h(
+									"span",
+									{ className: "sk-hint" },
+									"⌘/Ctrl+S guarda · Esc cancela · el frontmatter necesita name y description",
+								),
+							),
+						)
+					: h("div", { className: "sk-prose" }, renderMarkdown(body)),
 			);
 		}
 
@@ -310,6 +610,7 @@ window.__ModuleLoader__.load({
 			const [state, setState] = React.useState({ status: "loading" });
 			const [query, setQuery] = React.useState("");
 			const [detail, setDetail] = React.useState(null);
+			const [notice, setNotice] = React.useState("");
 			const searchRef = React.useRef(null);
 
 			const load = React.useCallback(async () => {
@@ -327,11 +628,17 @@ window.__ModuleLoader__.load({
 				load();
 			}, [load]);
 
+			React.useEffect(() => {
+				if (notice.length === 0) return undefined;
+				const timer = setTimeout(() => setNotice(""), 2400);
+				return () => clearTimeout(timer);
+			}, [notice]);
+
 			const openSkill = React.useCallback(async (name) => {
 				setDetail({ status: "loading", name });
 				try {
-					const body = await getJson(`/skills/read?name=${encodeURIComponent(name)}`);
-					setDetail({ status: "ready", name, skill: body.skill });
+					const payload = await getJson(`/skills/read?name=${encodeURIComponent(name)}`);
+					setDetail({ status: "ready", name, skill: payload.skill });
 				} catch (error) {
 					setDetail({ status: "error", name, error: error instanceof Error ? error.message : String(error) });
 				}
@@ -340,11 +647,13 @@ window.__ModuleLoader__.load({
 			React.useEffect(() => {
 				function onKey(event) {
 					if (event.key === "Escape" && detail !== null) {
+						if (event.target instanceof HTMLElement && event.target.tagName === "TEXTAREA") return;
 						event.preventDefault();
 						setDetail(null);
 						return;
 					}
-					const typing = event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+					const typing =
+						event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
 					if (event.key === "/" && !typing && detail === null) {
 						event.preventDefault();
 						searchRef.current?.focus();
@@ -359,11 +668,17 @@ window.__ModuleLoader__.load({
 					"div",
 					{ className: "sk" },
 					h(Detail, {
+						key: detail.skill?.name ?? detail.name,
 						status: detail.status,
 						skill: detail.skill,
 						error: detail.error,
 						onBack: () => setDetail(null),
 						onRetry: () => openSkill(detail.name),
+						onSaved: (skill) => {
+							setDetail({ status: "ready", name: skill.name, skill });
+							setNotice("Guardado");
+							load();
+						},
 					}),
 				);
 			}
@@ -373,13 +688,6 @@ window.__ModuleLoader__.load({
 			const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 			const visible = skills.filter((skill) => matches(skill, terms));
 
-			const buckets = new Map();
-			for (const skill of visible) {
-				const key = groupOf(skill.source);
-				if (!buckets.has(key)) buckets.set(key, []);
-				buckets.get(key).push(skill);
-			}
-
 			return h(
 				"div",
 				{ className: "sk" },
@@ -388,19 +696,20 @@ window.__ModuleLoader__.load({
 					{ className: "sk-head" },
 					h(
 						"div",
-						null,
+						{ className: "sk-titles" },
 						h("h1", { className: "sk-h1" }, "Skills"),
 						ready
 							? h(
 									"p",
 									{ className: "sk-intro" },
-									h("span", null, h("b", null, String(state.data.count)), "skills"),
+									h("span", null, h("b", null, String(state.data.count)), " skills"),
 									h("i", null, "·"),
-									h("span", null, h("b", null, String(state.data.model)), "las ve el modelo"),
+									h("span", null, h("b", null, String(state.data.model)), " las ve el modelo"),
 									h("i", null, "·"),
-									h("span", null, h("b", null, String(state.data.command)), "solo por /comando"),
+									h("span", null, h("b", null, String(state.data.command)), " solo por /comando"),
+									notice.length > 0 ? h("i", { style: { color: "var(--sk-ok)" } }, `· ${notice}`) : null,
 								)
-							: h("p", { className: "sk-intro" }, h("span", null, "Leyendo el catálogo del harness…")),
+							: h("p", { className: "sk-intro" }, h("span", null, "Leyendo el catálogo…")),
 					),
 					h(
 						"div",
@@ -423,12 +732,7 @@ window.__ModuleLoader__.load({
 						),
 						h(
 							"button",
-							{
-								type: "button",
-								className: "sk-ghost",
-								onClick: load,
-								disabled: ready && state.refreshing === true,
-							},
+							{ type: "button", className: "sk-btn", onClick: load, disabled: ready && state.refreshing === true },
 							ready && state.refreshing === true ? "Actualizando…" : "Actualizar",
 						),
 					),
@@ -445,48 +749,24 @@ window.__ModuleLoader__.load({
 					? h(
 							"div",
 							{ className: "sk-skel", "aria-busy": "true" },
-							[0, 1, 2, 3, 4].map((i) => h("span", { key: i, className: "sk-sk" })),
+							[0, 1, 2, 3, 4, 5].map((i) => h("span", { key: i, className: "sk-sk" })),
 						)
 					: null,
 				ready
 					? h(
 							"div",
-							{ className: "sk-groups" },
-							GROUP_ORDER.filter((key) => buckets.has(key)).map((key) =>
-								h(
-									"section",
-									{ key },
-									h(
-										"h2",
-										{ className: "sk-group-head" },
-										GROUP_TITLE[key],
-										h("span", { className: "n" }, String(buckets.get(key).length)),
-									),
-									h(
-										"ul",
-										{ className: "sk-rows" },
-										buckets.get(key).map((skill) => h(SkillRow, { key: skill.name, skill, onOpen: openSkill })),
-									),
-								),
-							),
+							{ className: "sk-grid" },
+							visible.map((skill) => h(SkillCard, { key: skill.name, skill, onOpen: openSkill })),
 						)
 					: null,
 				ready && visible.length === 0
-					? h(
-							"p",
-							{ className: "sk-empty" },
-							query ? `Nada coincide con “${query}”.` : "No hay skills cargadas en este perfil.",
-						)
+					? h("p", { className: "sk-empty" }, query ? `Nada coincide con “${query}”.` : "No hay skills cargadas.")
 					: null,
 				ready && state.data.ignored.length > 0
 					? h(
 							"details",
 							{ className: "sk-ignored" },
-							h(
-								"summary",
-								null,
-								`${state.data.ignored.length} entrada(s) que el harness no carga`,
-							),
+							h("summary", null, `${state.data.ignored.length} entrada(s) que el harness no carga`),
 							h(
 								"ul",
 								{ className: "sk-ignored-list" },
@@ -505,7 +785,7 @@ window.__ModuleLoader__.load({
 					? h(
 							"p",
 							{ className: "sk-note" },
-							`Solo lectura. Buscando en ${state.data.roots
+							`Leyendo ${state.data.roots
 								.filter((root) => root.exists)
 								.map((root) => root.path)
 								.join(" · ")}`,
@@ -545,6 +825,8 @@ window.__ModuleLoader__.load({
 
 		exports.apply = apply;
 		exports.inject = ["slots"];
+		// Solo para pruebas sin navegador (no lo usa la UI).
+		exports.__test = { renderMarkdown, splitFrontmatter, inline };
 		return module.exports;
 	},
 });
