@@ -35,6 +35,7 @@ DB = Path(os.environ.get("MACHINE_DB", Path.home() / ".local/share/machine/machi
 ROOT = Path(os.environ.get("MACHINE_ROOT", Path.home() / "Proyectos"))
 SKIP = {"_archivo", ".rig-worktrees"}
 TICKETS = Path.home() / ".config/opencode/tickets.json"
+TRASH = Path(os.environ.get("MACHINE_TRASH", Path.home() / ".local/share/machine/trash"))
 SYSTEMD = Path.home() / ".config/systemd/user"
 
 KINDS = ("project", "product", "experiment", "service", "app", "idea", "task")
@@ -458,6 +459,37 @@ def cmd_task_ls(args) -> None:
         print(f"[{mark}] {t['slug']:24} {t['title']}")
 
 
+def cmd_trash(args) -> None:
+    """Manda la carpeta a la papelera y borra la fila.
+
+    No usa `rm -rf`: mueve el directorio a ~/.local/share/machine/trash/<fecha>/.
+    Se puede recuperar a mano. Se niega si hay un servicio systemd apuntando al
+    proyecto: borrarlo dejaría la unit rota y el servicio en bucle de reinicio.
+    """
+    con = connect()
+    row = project_row(con, args.slug)
+    facts = facts_of(con, row["id"])
+    path = Path(facts.get("path", ""))
+    if not path.is_dir():
+        sys.exit(f"machine: la carpeta no existe ({path})")
+    if path.parent.resolve() != ROOT.resolve():
+        sys.exit(f"machine: me niego a mover {path}: no está directamente en {ROOT}")
+    if facts.get("systemd") == "true":
+        sys.exit(f"machine: '{args.slug}' tiene un servicio systemd; deshabilitá la unit primero")
+    if not args.yes:
+        sys.exit("machine: falta --yes (el movimiento es reversible pero borra la fila)")
+
+    stamp = dt.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    dest_dir = TRASH / stamp
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / path.name
+    path.rename(dest)
+    con.execute("DELETE FROM entities WHERE id = ?", (row["id"],))
+    con.commit()
+    print(f"trash: {path.name} → {dest}")
+    print("restaurar: moverla de vuelta a ~/Proyectos y correr machine scan")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="machine", description="el computador como base de datos")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -486,6 +518,11 @@ def main() -> None:
     s.set_defaults(func=cmd_set)
 
     sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
+
+    trash = sub.add_parser("trash", help="manda la carpeta a la papelera y borra la fila")
+    trash.add_argument("slug")
+    trash.add_argument("--yes", action="store_true")
+    trash.set_defaults(func=cmd_trash)
 
     task = sub.add_parser("task", help="tareas de un proyecto")
     task_sub = task.add_subparsers(dest="task_cmd", required=True)

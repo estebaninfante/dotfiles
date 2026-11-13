@@ -142,6 +142,23 @@ export function apply(ctx) {
 			},
 		},
 		{
+			path: "/machine/trash",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+				if (!slug) {
+					sendJson(res, 400, { error: "missing-slug" });
+					return;
+				}
+				try {
+					sendJson(res, 200, { ok: true, out: await machine(["trash", slug, "--yes"]) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
 			path: "/machine/task",
 			method: "POST",
 			handler: async (req, res) => {
