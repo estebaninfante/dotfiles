@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Problemas — maqueta</title>
+<style>
+:root{--fg:#eceef2;--fg2:#a3a8b3;--fg3:#737985;--dim:#4a4f59;--l1:#ffffff0f;--l2:#ffffff1f;--l3:#ffffff29;--l4:#ffffff33;--hover:#ffffff14;--bg:#17191e;--card:#1d2027;--warn:#e5a00d;--ring:#4d6bfe}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:13px/20px -apple-system,"Segoe UI",Inter,system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 24px 12px;flex:none}
+h1{margin:0;font-size:20px;font-weight:500;line-height:28px}
+.intro{margin:4px 0 0;font-size:13px;color:var(--fg2);display:flex;flex-wrap:wrap;gap:0 6px}
+.intro b{font-weight:500;color:var(--fg);font-variant-numeric:tabular-nums}
+.intro [data-warn]{color:var(--warn)}
+.toolbar{display:flex;align-items:center;gap:8px;flex:none}
+.btn{height:32px;padding:0 12px;border:.5px solid var(--l4);border-radius:8px;background:transparent;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn[data-quiet]{border-color:transparent;color:var(--fg2)}
+.btn[data-quiet]:hover{color:var(--fg)}
+.seg{display:inline-flex;border:.5px solid var(--l4);border-radius:8px;overflow:hidden}
+.seg button{height:30px;padding:0 11px;border:0;background:transparent;color:var(--fg2);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--hover);color:var(--fg)}
+#stage{position:relative;flex:1;min-height:0;overflow:hidden;cursor:grab;touch-action:none;border-top:.5px solid var(--l1)}
+#stage.drag{cursor:grabbing}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+#edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.region{position:absolute}
+.region h2{margin:0;font-size:14px;font-weight:500;line-height:20px;letter-spacing:-.1px}
+.region .why{margin:2px 0 0;font-size:11.5px;line-height:16px;color:var(--fg3);max-width:34ch}
+.region .rule{height:.5px;background:var(--l2);margin:9px 0 8px}
+.region .count{font-size:11px;line-height:14px;color:var(--dim);font-variant-numeric:tabular-nums}
+.node{position:absolute;width:204px;padding:6px 8px;border:0;border-radius:10px;background:transparent;text-align:left;cursor:pointer;display:block}
+.node:hover{background:var(--hover)}
+.node.sel{background:var(--hover);box-shadow:inset 0 0 0 .5px var(--l4)}
+.node .name{display:block;font-size:13px;line-height:18px;font-weight:500;overflow-wrap:anywhere}
+.node[data-kind=idea] .name,.node[data-kind=recurso] .name{font-weight:400}
+.node .meta{display:block;margin-top:1px;font-size:11px;line-height:15px;color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .state{color:var(--fg2)}
+.node[data-state=paused]{opacity:.62}
+.node[data-state=done]{opacity:.52}
+.node[data-state=archived]{opacity:.36}
+.node[data-state=archived] .meta{color:var(--dim)}
+.node .tasks{display:none;margin-top:5px;padding-left:7px;border-left:.5px solid var(--l3)}
+#world[data-zoom=near] .node .tasks{display:block}
+.task{display:block;font-size:11px;line-height:15px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.path{stroke:#ffffff;stroke-opacity:.09;stroke-width:1;fill:none;vector-effect:non-scaling-stroke;transition:stroke-opacity .15s}
+.path.lit{stroke-opacity:.5}
+.path.faded{stroke-opacity:.03}
+.elabel{font-size:10.5px;fill:var(--fg3);paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+#world[data-zoom=far] .elabel{display:none}
+#stage[data-dragging] .node,#stage[data-dragging] .path{pointer-events:none}
+.zoom{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px}
+.zoom .btn{width:32px;padding:0;display:grid;place-items:center}
+.hint{position:absolute;left:16px;bottom:16px;font-size:11px;color:var(--dim)}
+#overlay{position:fixed;inset:0;background:#00000066;display:grid;place-items:center;padding:24px}
+#overlay[hidden]{display:none}
+.dialog{width:min(480px,100%);max-height:78vh;overflow:auto;background:var(--card);border:.5px solid var(--l4);border-radius:16px;backdrop-filter:blur(12px);box-shadow:0 8px 40px #0009}
+.dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 20px 0}
+.dialog .kick{font-size:11px;line-height:15px;color:var(--fg3);text-transform:lowercase}
+.dialog h2{margin:2px 0 0;font-size:17px;font-weight:500;line-height:24px;overflow-wrap:anywhere}
+.dialog .x{width:28px;height:28px;flex:none;border:.5px solid transparent;border-radius:8px;background:transparent;color:var(--fg2);cursor:pointer}
+.dialog .x:hover{background:var(--hover);color:var(--fg)}
+.dialog .body{padding:14px 20px 20px;display:flex;flex-direction:column;gap:14px}
+.sect .k{font-size:11px;line-height:15px;color:var(--fg3);margin:0 0 3px}
+.sect p{margin:0;font-size:13px;line-height:20px;color:var(--fg2)}
+.sect p b{font-weight:500;color:var(--fg)}
+.taskline{display:flex;gap:8px;font-size:12.5px;line-height:19px;color:var(--fg2)}
+.taskline span:first-child{color:var(--dim);font-variant-numeric:tabular-nums}
+.linkline{display:flex;gap:8px;font-size:12.5px;line-height:19px;color:var(--fg2)}
+.linkline b{font-weight:500;color:var(--fg)}
+.foot{display:flex;justify-content:flex-end;gap:8px;padding:0 20px 20px}
+.foot .go{border-color:var(--l4);background:var(--l1)}
+.foot .go:hover{background:var(--hover)}
+@media (max-width:820px){header{flex-direction:column;padding:14px 16px 10px}.toolbar{flex-wrap:wrap}.hint{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Problemas</h1>
+    <p class="intro"><b>6 problemas</b> · <b>24 cosas</b> · 7 sin decidir · <span data-warn>2 con cambios sin guardar</span></p>
+  </div>
+  <div class="toolbar">
+    <button class="btn" data-quiet>Buscar</button>
+    <button class="btn">Nueva idea</button>
+    <div class="seg" role="group" aria-label="Vista"><button aria-pressed="true">Mapa</button><button aria-pressed="false">Lista</button></div>
+  </div>
+</header>
+<div id="stage">
+  <div id="world" data-zoom="mid">
+    <svg id="edges"></svg>
+    <div id="regions"></div>
+    <div id="nodes"></div>
+  </div>
+  <div class="hint">Arrastrá para mover · rueda para acercar · click en una cosa para abrirla</div>
+  <div class="zoom">
+    <button class="btn" id="zin" aria-label="Acercar">+</button>
+    <button class="btn" id="zout" aria-label="Alejar">−</button>
+    <button class="btn" id="zfit" aria-label="Encuadrar">⤢</button>
+  </div>
+</div>
+<div id="overlay" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dt"><header><div><div class="kick" id="dk"></div><h2 id="dt"></h2></div><button class="x" aria-label="Cerrar">✕</button></header><div class="body" id="db"></div><div class="foot"><button class="btn" id="dclose">Cerrar</button><button class="btn go" id="dgo">Trabajar</button></div></div></div>
+
+<script>
+const P=[
+ {id:"p1",x:30,y:90,cols:3,title:"Que la IA haga interfaces que nos gusten",why:"Los modelos no entienden cómo nos gustan las interfaces. Generan UI plana o rota.",apuestas:"6"},
+ {id:"p3",x:730,y:90,cols:1,title:"Vibecodear seguro en empresas",why:"Que la gente vibecodee sin exponer vulnerabilidades, con estándar y sin prohibir.",apuestas:"1"},
+ {id:"p2",x:990,y:90,cols:1,title:"Aprender más rápido con IA",why:"Un harness que nos haga aprender mucho más rápido de lo que se aprende hoy.",apuestas:"2"},
+ {id:"p6",x:730,y:250,cols:2,title:"Un estándar para mi computador",why:"Apps, PWA y servicios bajo un mismo estándar, con Tailscale y agentes.",apuestas:"4"},
+ {id:"p5",x:990,y:250,cols:1,title:"Agentes que viven en mi equipo",why:"Una red de agentes que viven en esta máquina y trabajan conmigo.",apuestas:"3"},
+ {id:"p4",x:730,y:470,cols:1,title:"Contenido para redes sin fricción",why:"Crear y organizar lo que grabo: sesiones, clips, publicaciones.",apuestas:"1"},
+ {id:"s0",x:30,y:560,cols:4,title:"Sin problema",why:"Lo que todavía no tiene un problema que lo explique. Si no tiene, es deuda.",apuestas:"7"}
+];
+const N=[
+ {id:"mejorar-ui",p:"p1",kind:"proyecto",state:"activo",name:"Mejorar la UI que genera el modelo",meta:"3 tareas · sin carpeta",tasks:["Cerrar el catálogo: 9 vicios, cada uno con cómo se arregla","Probar métodos y quedarse con el que funcione","Comprobar con una UI nueva y con un cambio a una existente"],note:"Catálogo de los 9 vicios: ~/alicia/Areas/vicios-de-ui.md"},
+ {id:"openui",p:"p1",kind:"idea",state:"sin decidir",name:"OpenUI en el harness",meta:"idea · sin decidir"},
+ {id:"uisdk",p:"p1",kind:"idea",state:"sin decidir",name:"UI SDK de Vercel",meta:"idea · sin decidir"},
+ {id:"gauge",p:"p1",kind:"idea",state:"sin decidir",name:"Gauge vs gusto",meta:"idea · sin decidir"},
+ {id:"refactor-lienzo",p:"p1",kind:"idea",state:"sin decidir",name:"Refactor Lienzo",meta:"idea · sin decidir"},
+ {id:"intra-turno",p:"p1",kind:"idea",state:"sin decidir",name:"Interacción intra-turno",meta:"idea · sin decidir"},
+ {id:"zentr0",p:"p3",kind:"proyecto",state:"activo",name:"zentr0",meta:"2 tareas · 12 nov",tasks:["arreglar el estilo del researcher"]},
+ {id:"learnharness",p:"p2",kind:"proyecto",state:"sin decidir",name:"learnharness-dev",meta:"sin decidir · 10 nov"},
+ {id:"future-learning",p:"p2",kind:"proyecto",state:"activo",name:"future-learning",meta:"activo · 12 nov"},
+ {id:"estandar-apps",p:"p6",kind:"idea",state:"sin decidir",name:"Estándar de apps",meta:"idea · sin decidir"},
+ {id:"omarchy",p:"p6",kind:"idea",state:"sin decidir",name:"Bienvenida de Omarchy",meta:"idea · sin decidir"},
+ {id:"hypr-remote",p:"p6",kind:"proyecto",state:"archivado",name:"hypr-remote",meta:"archivado · servicio systemd"},
+ {id:"kindle",p:"p6",kind:"proyecto",state:"terminado",name:"kindle-display",meta:"terminado · 10 nov"},
+ {id:"agentes-platform",p:"p5",kind:"proyecto",state:"archivado",name:"agentes-platform",meta:"archivado · 9 tickets"},
+ {id:"asistente",p:"p5",kind:"proyecto",state:"archivado",name:"asistente",meta:"archivado · 10 nov"},
+ {id:"vision-hub",p:"p5",kind:"proyecto",state:"pausado",name:"vision-hub",meta:"pausado · 25 oct"},
+ {id:"adriantex",p:"p4",kind:"servicio",state:"sin decidir",name:"Adriantex",meta:"servicio · 11 nov"},
+ {id:"lienzo",p:"s0",kind:"producto",state:"activo",name:"Lienzo Creativo",meta:"activo · 1 cambio sin guardar"},
+ {id:"cobalt",p:"s0",kind:"proyecto",state:"terminado",name:"cobalt",meta:"terminado · 2 cambios sin guardar"},
+ {id:"flakos",p:"s0",kind:"proyecto",state:"terminado",name:"flakos-burguer",meta:"terminado · 30 oct"},
+ {id:"flakos-bot",p:"s0",kind:"proyecto",state:"archivado",name:"flakos-burguer-bot",meta:"archivado · ago"},
+ {id:"airbnb",p:"s0",kind:"proyecto",state:"archivado",name:"airbnb-trip-compare",meta:"archivado · 19 oct"},
+ {id:"flower",p:"s0",kind:"proyecto",state:"archivado",name:"flower-logo",meta:"archivado · 20 oct"},
+ {id:"react-pick",p:"s0",kind:"proyecto",state:"terminado",name:"react-pick",meta:"terminado · 9 tickets"}
+];
+const L=[["future-learning","agentes-platform","aprender con agentes"],["mejorar-ui","zentr0","mismo estándar"],["estandar-apps","mejorar-ui","aplica a"],["refactor-lienzo","lienzo","es de"],["gauge","mejorar-ui","evidencia"],["openui","uisdk","se solapan"],["vision-hub","agentes-platform","depende de"]];
+const W=1258,H=792,CW=224,CH=54;
+const byId=Object.fromEntries(N.map(n=>[n.id,n]));
+P.forEach(p=>{const list=N.filter(n=>n.p===p.id);list.forEach((n,i)=>{n.x=p.x+(i%p.cols)*CW;n.y=p.y+62+Math.floor(i/p.cols)*CH})});
+const world=document.getElementById("world"),stage=document.getElementById("stage"),regions=document.getElementById("regions"),nodesEl=document.getElementById("nodes"),edges=document.getElementById("edges"),overlay=document.getElementById("overlay");
+world.style.width=W+"px";world.style.height=H+"px";edges.setAttribute("width",W);edges.setAttribute("height",H);
+P.forEach(p=>{const d=document.createElement("div");d.className="region";d.style.left=p.x+"px";d.style.top=p.y+"px";d.style.width=(p.cols*CW-16)+"px";d.innerHTML=`<h2>${p.title}</h2><p class="why">${p.why}</p><div class="rule"></div><div class="count">${p.apuestas} cosas</div>`;d.querySelector("h2").style.cursor="pointer";d.querySelector("h2").onclick=()=>openProblem(p);regions.appendChild(d)});
+N.forEach(n=>{const b=document.createElement("button");b.className="node";b.dataset.state=n.state;b.dataset.kind=n.kind;b.style.left=n.x+"px";b.style.top=n.y+"px";b.innerHTML=`<span class="name">${n.name}</span><span class="meta"><span class="state">${n.state}</span> · ${n.meta.split(" · ").slice(1).join(" · ")||n.kind}</span><span class="tasks">${(n.tasks||[]).map(t=>`<span class="task">${t}</span>`).join("")}</span>`;b.onclick=()=>openNode(n);b.onmouseenter=()=>lit(n,true);b.onmouseleave=()=>lit(n,false);b.onfocus=()=>lit(n,true);b.onblur=()=>lit(n,false);nodesEl.appendChild(b)});
+const svgNS="http://www.w3.org/2000/svg";
+function clip(cx,cy,tx,ty){const dx=tx-cx,dy=ty-cy;const w=104,h=22;const sx=dx?(w)/Math.abs(dx):1e9,sy=dy?(h)/Math.abs(dy):1e9,t=Math.min(sx,sy,1);return[cx+dx*t,cy+dy*t]}
+L.forEach(([a,b,label])=>{const A=byId[a],B=byId[b];if(!A||!B)return;const ax=A.x+102,ay=A.y+18,bx=B.x+102,by=B.y+18;const[a1,b1]=clip(ax,ay,bx,by),[a2,b2]=clip(bx,by,ax,ay);const path=document.createElementNS(svgNS,"path");path.setAttribute("d",`M${a1},${b1} L${a2},${b2}`);path.setAttribute("class","path");path.dataset.a=a;path.dataset.b=b;edges.appendChild(path);const mx=(a1+a2)/2,my=(b1+b2)/2;const t=document.createElementNS(svgNS,"text");t.setAttribute("x",mx);t.setAttribute("y",my-4);t.setAttribute("text-anchor","middle");t.setAttribute("class","elabel");t.textContent=label;edges.appendChild(t)});
+function lit(n,on){document.querySelectorAll(".path").forEach(p=>{const hit=on&&(p.dataset.a===n.id||p.dataset.b===n.id);p.classList.toggle("lit",hit);p.classList.toggle("faded",on&&!hit)});document.querySelectorAll(".node").forEach(el=>{if(!on)el.style.opacity="";else{const id=[...el.children].length?el.querySelector(".name").textContent:"";}})}
+let view={x:0,y:0,s:1};
+function apply(){world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.s})`;world.dataset.zoom=view.s<.7?"far":view.s>1.12?"near":"mid"}
+function fit(){const sw=stage.clientWidth,sh=stage.clientHeight;view.s=Math.min((sw-64)/W,(sh-56)/H,1.15);view.x=(sw-W*view.s)/2;view.y=(sh-H*view.s)/2;apply()}
+function zoomAt(cx,cy,f){const s=Math.min(2.4,Math.max(.25,view.s*f));const wx=(cx-view.x)/view.s,wy=(cy-view.y)/view.s;view.x=cx-wx*s;view.y=cy-wy*s;view.s=s;apply()}
+stage.addEventListener("wheel",e=>{e.preventDefault();zoomAt(e.clientX-stage.getBoundingClientRect().left,e.clientY-stage.getBoundingClientRect().top,Math.exp(-e.deltaY*.0015))},{passive:false});
+let drag=null;
+stage.addEventListener("pointerdown",e=>{if(e.target.closest(".node")||e.target.closest(".zoom")||e.target.tagName==="H2")return;drag={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y};stage.classList.add("drag");stage.setPointerCapture(e.pointerId)});
+stage.addEventListener("pointermove",e=>{if(!drag)return;view.x=drag.vx+e.clientX-drag.x;view.y=drag.vy+e.clientY-drag.y;apply()});
+stage.addEventListener("pointerup",()=>{drag=null;stage.classList.remove("drag")});
+document.getElementById("zin").onclick=()=>zoomAt(stage.clientWidth/2,stage.clientHeight/2,1.25);
+document.getElementById("zout").onclick=()=>zoomAt(stage.clientWidth/2,stage.clientHeight/2,.8);
+document.getElementById("zfit").onclick=fit;
+const dk=document.getElementById("dk"),dt=document.getElementById("dt"),db=document.getElementById("db");
+function show(kind,title,state,rows,note){dk.textContent=kind+(state?" · "+state:"");dt.textContent=title;db.innerHTML=rows+(note?`<div class="sect"><p class="k">Nota</p><p>${note}</p></div>`:"");overlay.hidden=false;document.getElementById("dgo").style.display=["proyecto","idea","servicio","producto"].includes(kind)&&kind!=="problema"?"":"none"}
+function openNode(n){const p=P.find(x=>x.id===n.p);const rel=L.filter(([a,b])=>a===n.id||b===n.id).map(([a,b,l])=>`<div class="linkline"><b>${l}</b> <span>·</span> <span>${byId[a===n.id?b:a].name}</span></div>`).join("");let rows=`<div class="sect"><p class="k">Problema</p><p><b>${p.title}</b></p><p>${p.why}</p></div>`;if(n.tasks&&n.tasks.length)rows+=`<div class="sect"><p class="k">Tareas</p>${n.tasks.map((t,i)=>`<div class="taskline"><span>${i+1}</span><span>${t}</span></div>`).join("")}</div>`;else rows+=`<div class="sect"><p class="k">Tareas</p><p>Sin tareas todavía.</p></div>`;if(rel)rows+=`<div class="sect"><p class="k">Vínculos</p>${rel}</div>`;rows+=`<div class="sect"><p class="k">Actividad</p><p>${n.meta}</p></div>`;show(n.kind,n.name,n.state,rows,n.note)}
+function openProblem(p){const ap=N.filter(n=>n.p===p.id).map(n=>`<div class="taskline"><span>·</span><span>${n.name} — ${n.state}</span></div>`).join("");show("problema",p.title,"",`<div class="sect"><p class="k">Por qué existe</p><p>${p.why}</p></div><div class="sect"><p class="k">Apuestas</p>${ap}</div>`,null)}
+function close(){overlay.hidden=true;document.querySelectorAll(".node.sel").forEach(el=>el.classList.remove("sel"))}
+document.querySelector(".x").onclick=close;document.getElementById("dclose").onclick=close;
+overlay.addEventListener("click",e=>{if(e.target===overlay)close()});
+document.getElementById("dgo").onclick=()=>{db.insertAdjacentHTML("afterbegin",`<div class="sect"><p class="k">Copiloto</p><p>Acá se abriría una sesión en DSH con el problema, la necesidad y las tareas ya escritas.</p></div>`);document.getElementById("dgo").disabled=true};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")close();if(e.key==="0")fit();if(e.key==="+"||e.key==="=")zoomAt(stage.clientWidth/2,stage.clientHeight/2,1.25);if(e.key==="-")zoomAt(stage.clientWidth/2,stage.clientHeight/2,.8)});
+addEventListener("resize",fit);fit();
+const q=new URLSearchParams(location.search);if(q.get("abierto")){const n=byId[q.get("abierto")];if(n){document.querySelectorAll(".node").forEach(el=>{if(el.querySelector(".name").textContent===n.name)el.classList.add("sel")});openNode(n)}}
+</script>
+</body>
+</html>

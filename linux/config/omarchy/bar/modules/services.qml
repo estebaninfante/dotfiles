@@ -25,7 +25,11 @@ Item {
     "sunshine.service",
     "voice-daemon.service",
     "lan-mouse.service",
-    "hypr-remote.service"
+    "hypr-remote.service",
+    // Orión: el oído que siempre escucha ("Orión, …" y "dicta"/"transcribe").
+    // Pararlo desde acá apaga la escucha por voz; la tecla Windows sigue
+    // arrancando el asistente cuando haga falta.
+    "asistente-dictado.service"
   ]
 
   // Modo ahorro extremo (power-extreme.sh): estos servicios están parados a
@@ -88,7 +92,8 @@ Item {
     { label: "Sunshine (streaming)", glyph: "󰖨" },
     { label: "Síntesis de voz", glyph: "󰕾" },
     { label: "LAN Mouse (KVM)", glyph: "󰈀" },
-    { label: "Hypr Remote (móvil)", glyph: "󰑔" }
+    { label: "Hypr Remote (móvil)", glyph: "󰑔" },
+    { label: "Orión (asistente)", glyph: "󰍬" }
   ]
 
   readonly property var services: serviceDefs.map(function(def, index) {
