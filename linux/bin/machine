@@ -500,6 +500,41 @@ def cmd_rename(args) -> None:
     print(f"{args.slug}: ahora se llama «{name}»")
 
 
+def cmd_idea(args) -> None:
+    """Captura una idea en texto libre. No la convierte en proyecto todavía."""
+    con = connect()
+    if not args.text:
+        rows = con.execute(
+            "SELECT slug, title, state, created_at FROM entities WHERE kind='idea'"
+            " ORDER BY created_at DESC"
+        ).fetchall()
+        if not rows:
+            print("sin ideas capturadas")
+            return
+        for r in rows:
+            print(f"{r['slug']:14} {r['state']:13} {r['created_at'][:10]}  {r['title']}")
+        return
+
+    text = " ".join(args.text).strip()
+    if not text:
+        sys.exit("machine: la idea está vacía")
+    n = 1
+    while con.execute("SELECT 1 FROM entities WHERE kind='idea' AND slug=?",
+                      (f"idea-{n}",)).fetchone():
+        n += 1
+    slug = f"idea-{n}"
+    title = text if len(text) <= 70 else text[:67].rstrip() + "…"
+    stamp = now()
+    con.execute(
+        "INSERT INTO entities (kind, slug, title, state, note, source, created_at, updated_at)"
+        " VALUES ('idea', ?, ?, 'unclassified', ?, 'human', ?, ?)",
+        (slug, title, text, stamp, stamp),
+    )
+    con.commit()
+    print(f"idea: {slug} · {title}")
+    print("para convertirla en proyecto: decime en el chat y armamos la DoD")
+
+
 def cmd_stats(args) -> None:
     con = connect()
     print("por estado:")
@@ -867,6 +902,10 @@ def main() -> None:
     s.set_defaults(func=cmd_set)
 
     sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
+
+    idea = sub.add_parser("idea", help="captura una idea en texto libre (sin texto: lista)")
+    idea.add_argument("text", nargs="*")
+    idea.set_defaults(func=cmd_idea)
 
     ren = sub.add_parser("rename", help="cambia el nombre visible de un proyecto")
     ren.add_argument("slug")

@@ -153,6 +153,23 @@ export function apply(ctx) {
 			},
 		},
 		{
+			path: "/machine/idea",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const text = typeof body?.text === "string" ? body.text.trim() : "";
+				if (!text) {
+					sendJson(res, 400, { error: "missing-text" });
+					return;
+				}
+				try {
+					sendJson(res, 200, { ok: true, out: await machine(["idea", text]) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
 			path: "/machine/rename",
 			method: "POST",
 			handler: async (req, res) => {

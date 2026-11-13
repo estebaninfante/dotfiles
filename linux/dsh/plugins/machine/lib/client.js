@@ -182,6 +182,7 @@ window.__ModuleLoader__.load({
 .mr-slug{margin-left:7px;font-size:11.5px;font-weight:400;color:var(--mr-fg3)}
 .mr-dtitle h1{cursor:text}
 .mr-rename{height:32px;font-size:15px;font-weight:600;max-width:420px}
+.mr-idea-text{height:auto;min-height:130px;padding:10px 12px;line-height:20px;resize:vertical;font-family:inherit}
 .mr-sub{font-size:12px;line-height:18px;color:var(--mr-fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mr-cell{font-size:12.5px;line-height:18px;color:var(--mr-fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-variant-numeric:tabular-nums}
@@ -699,6 +700,91 @@ input.mr-field{height:36px;padding:0 12px}
 		/* Diálogo de borrado                                                  */
 		/* ------------------------------------------------------------------ */
 
+		function IdeaDialog(props) {
+			const { onCancel, onDone } = props;
+			const [text, setText] = React.useState("");
+			const [busy, setBusy] = React.useState(false);
+			const [err, setErr] = React.useState("");
+			const ref = React.useRef(null);
+
+			React.useEffect(() => {
+				const t = setTimeout(() => ref.current && ref.current.focus(), 30);
+				const onKey = (event) => {
+					if (event.key !== "Escape") return;
+					event.preventDefault();
+					event.stopPropagation();
+					if (!busy) onCancel();
+				};
+				document.addEventListener("keydown", onKey, true);
+				return () => {
+					clearTimeout(t);
+					document.removeEventListener("keydown", onKey, true);
+				};
+			}, [busy, onCancel]);
+
+			const save = async () => {
+				const value = text.trim();
+				if (!value || busy) return;
+				setBusy(true);
+				try {
+					await api("/machine/idea", { text: value });
+					await onDone(value);
+				} catch (error) {
+					setErr(error.message);
+					setBusy(false);
+				}
+			};
+
+			return h(
+				"div",
+				{ className: "mr-layer", role: "presentation" },
+				h("div", { className: "mr-mask", onClick: () => !busy && onCancel() }),
+				h(
+					"div",
+					{ className: "mr-dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": "mr-idea-title" },
+					h(
+						"header",
+						null,
+						h("h2", { id: "mr-idea-title" }, "Nueva idea"),
+						h("button", { type: "button", className: "mr-icon", onClick: onCancel, disabled: busy, title: "Cancelar (Esc)" }, h(IconClose)),
+					),
+					h(
+						"div",
+						{ className: "mr-dialog-body" },
+						h(
+							"p",
+							null,
+							"Escribila como te salga. Queda guardada como «sin decidir»; cuando quieras la convertimos en proyecto con su DoD.",
+						),
+						h("textarea", {
+							ref,
+							className: "mr-field mr-idea-text",
+							value: text,
+							placeholder: "Quiero que…",
+							rows: 6,
+							disabled: busy,
+							onChange: (event) => setText(event.target.value),
+							onKeyDown: (event) => {
+								if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) save();
+							},
+						}),
+						err ? h("p", { className: "mr-reason" }, err) : null,
+					),
+					h(
+						"footer",
+						null,
+						h("span", { className: "mr-hint" }, "Ctrl+Enter guarda"),
+						h("button", { type: "button", className: "mr-btn", "data-variant": "ghost", onClick: onCancel, disabled: busy }, "Cancelar"),
+						h(
+							"button",
+							{ type: "button", className: "mr-btn", "data-variant": "solid", disabled: !text.trim() || busy, onClick: save },
+							busy ? "Guardando…" : "Anotar idea",
+						),
+					),
+				),
+			);
+		}
+
 		function WipeDialog(props) {
 			const { count, onCancel, onConfirm } = props;
 			const [typed, setTyped] = React.useState("");
@@ -1026,6 +1112,7 @@ input.mr-field{height:36px;padding:0 12px}
 			const [trashBusy, setTrashBusy] = React.useState("");
 			const [noteState, setNoteState] = React.useState("");
 			const [renaming, setRenaming] = React.useState(false);
+			const [ideaOpen, setIdeaOpen] = React.useState(false);
 			const searchRef = React.useRef(null);
 			const scrollRef = React.useRef(null);
 			const listScroll = React.useRef(0);
@@ -1400,6 +1487,16 @@ input.mr-field{height:36px;padding:0 12px}
 								title: "Volver a leer ~/Proyectos del disco",
 							},
 							scanning ? "Leyendo…" : "Actualizar",
+						),
+						h(
+							"button",
+							{
+								type: "button",
+								className: "mr-btn",
+								onClick: () => setIdeaOpen(true),
+								title: "Anotar una idea en texto libre",
+							},
+							"Nueva idea",
 						),
 						h(
 							"button",
@@ -1870,6 +1967,17 @@ input.mr-field{height:36px;padding:0 12px}
 				"div",
 				{ className: "mr", ref: scrollRef },
 				view === "trash" ? trashView() : selected ? detailView() : listView(),
+				ideaOpen
+					? h(IdeaDialog, {
+							onCancel: () => setIdeaOpen(false),
+							onDone: async (text) => {
+								setIdeaOpen(false);
+								setFlash("Idea anotada. Aparece en la lista como «sin decidir».");
+								await load();
+								return text;
+							},
+						})
+					: null,
 				wiping
 					? h(WipeDialog, { count: trash.length, onCancel: () => setWiping(false), onConfirm: wipeAll })
 					: null,
