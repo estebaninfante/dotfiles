@@ -436,6 +436,28 @@ cliente declarando en `package.json` `exports["./client"]` + `dsh.client`
 necesita reinicio del servidor, porque el grafo de clientes se compone al
 arrancar.
 
+### UI de plugins: se diseña primero para el celular
+
+El celular entra por Tailscale y es una superficie de uso real: un plugin que se ve
+bien solo en 1440 px está a medias. Reglas al escribir la mitad cliente:
+
+- **Breakpoint único: 820 px.** Todo layout nuevo trae su bloque `@media (max-width:820px)`.
+- **La barra lateral en móvil es riel de 36 px o drawer superpuesto.** Los slots
+  (`sidebar.footer.action`, `sidebar.panellist`) reciben `wide`: si es `false`, dibujar
+  **solo el icono**, nunca texto que se recorte a "…al celular".
+- **Nada de controles `position:fixed`** flotando sobre el chat en móvil: van al slot
+  que corresponda (el pie de la barra lateral es el lugar).
+- **Tablas:** en móvil dejar 3 columnas como máximo y esconder el resto con
+  `display:none` por `nth-child`; el detalle va en **página aparte**, no en un panel
+  al costado. KPIs de 4 columnas pasan a 2.
+- **Campos de texto: 16 px mínimo** (menos que eso iOS hace zoom al enfocar) y
+  `touch-action:manipulation` global, o hay que tocar dos veces para abrir algo.
+- **Objetivos táctiles ≥ 36 px**, contenido centrado con `max-width` (no estirar de
+  borde a borde).
+- **Verificación antes de dar algo por terminado:** abrir el GUI desde el celular
+  (`dsh-web --phone`) o con el viewport a 390 px, y mirar la captura. Un cambio de
+  CSS de cliente **no necesita reiniciar el servidor**: se refresca la página.
+
 `scripts/link-dotfiles.sh` crea los tres symlinks. El brief tiene que incluir **lo ya
 probado y qué resultó** y qué no se puede romper: es lo que hizo que Claude resolviera
 en un intento un caso donde el agente llevaba horas.

@@ -221,6 +221,29 @@ window.__ModuleLoader__.load({
   background:transparent;color:var(--fg);font:inherit;font-size:12.5px;outline:none}
 .mr-add input:focus{border-color:#3b4048}
 .mr-add input::placeholder{color:var(--fg3)}
+/* --- Celular: la ficha manda, la tabla se achica --------------------------- */
+@media (max-width:820px){
+  .mr-head{flex-wrap:wrap;gap:12px;padding:16px 16px 12px}
+  .mr-tools{width:100%;margin-left:0}
+  .mr-search{flex:1}
+  .mr-search input{width:100%}
+  .mr-kpis{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 16px 14px}
+  .mr-filters{padding:0 16px 10px}
+  .mr-sort{margin-left:0}
+  .mr table{table-layout:auto}
+  .mr thead th:first-child,.mr tbody td:first-child{padding-left:16px}
+  .mr thead th:last-child,.mr tbody td:last-child{padding-right:16px}
+  .mr col:nth-child(4),.mr col:nth-child(5),.mr col:nth-child(6),
+  .mr thead th:nth-child(4),.mr thead th:nth-child(5),.mr thead th:nth-child(6),
+  .mr tbody td:nth-child(4),.mr tbody td:nth-child(5),.mr tbody td:nth-child(6){display:none}
+  .mr td,.mr th{padding-left:8px;padding-right:8px}
+  .mr .name{flex-direction:column;align-items:flex-start;gap:2px}
+  .mr .name em{font-size:10.5px}
+  .mr-detail{padding:0 16px}
+  .mr-detail .mr-sheet-head{padding:14px 0 10px}
+  .mr-rows dt{width:86px}
+  .mr-pill select{max-width:96px}
+}
 `;
 
 		async function api(path, body) {
