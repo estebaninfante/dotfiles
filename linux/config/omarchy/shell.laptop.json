@@ -109,7 +109,8 @@
     "omarchy.menu",
     "tomv.battery-usage",
     "omarchy.osd",
-    "omarchy.lock"
+    "omarchy.lock",
+    "omarchy.background"
   ],
   "idle": {
     "lock": 180,
