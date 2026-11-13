@@ -30,20 +30,32 @@ machine idea --title "Two or three words" "<what it is + link + why it matters>"
 - Never write the idea into `~/alicia` or into a Markdown file: the vault is
   frozen, `machine` is the only place.
 
-## 3. Verdict in four lines, no rambling
+## 3. Ask, don't opine (modal, never prose)
 
-1. **What it proposes** (one sentence, plain words).
-2. **What it would cost here** (sessions, at the smallest version).
-3. **Which existing piece it resembles** (so nothing is built from zero).
-4. **Recommendation**: do it, do it small, park it, or drop it.
+Use the **questions modal** (`ask_user_question`), not chat text. Two or three
+questions, only the ones that change the work:
+
+- **Tareas**: "what tasks do you want this to have?" — the user names them. Never
+  propose the obvious ones (a screen with a field, saving to a database, an export
+  button): that is what any app has by default, not a task.
+- **La prueba**: "how do you know it worked?".
+- **Scope**, only if it changes the build (for you alone, or for other people).
+
+**Never** do any of these:
+
+- Estimate time or effort ("2-3 sessions", "a few hours", "a day"). The model is a
+  bad predictor and the number is useless for deciding anything.
+- The four-point summary (what it proposes / what it costs / what it resembles /
+  whether it fits / recommendation). The user called it garbage: drop it.
+- Answer your own questions in prose when the modal exists.
 
 ## 4. If it goes ahead: objetivo + tareas + la prueba
 
 Only three things, nothing more:
 
 - **Objetivo**: one sentence, what should happen.
-- **Tareas**: the ordered list, added as you go. No scope freeze, no approval per
-  step.
+- **Tareas**: the ordered list, exactly the ones the user named in the modal. No
+  scope freeze, no approval per step.
 - **La prueba**: how we know it worked (a number, a screenshot). Optional at the
   start.
 

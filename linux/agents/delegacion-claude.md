@@ -105,9 +105,32 @@ Un proyecto tiene **tres cosas** y nada más:
 3. **La prueba** — cómo se sabe que funcionó: qué se hace y qué se mira (un número, una
    captura). Opcional al principio.
 
+### Cómo se recibe algo nuevo
+
+1. **Nombre de 2-3 palabras** y se captura: `machine idea --title "…"` (si ya es
+   proyecto, `machine promote`). Confirmación en una línea: `Anotado: <nombre>`.
+2. **Preguntar, no opinar.** Las preguntas van en el **modal de preguntas**
+   (`ask_user_question`), nunca como texto suelto en el chat. Dos o tres, solo las
+   que cambian el trabajo.
+3. **Las tareas las dice el usuario.** Se pregunta "¿qué tareas querés que tenga?" y
+   se anotan las que él nombra. No se proponen "una pantalla con un campo", "guardar
+   en la base", "un botón para exportar": eso es lo obvio de cualquier app, no es una
+   tarea.
+4. **La prueba también se pregunta**: "¿cómo sabés que funcionó?".
+
+### Prohibido al recibir una idea o proyecto
+
+- **Estimar tiempo o esfuerzo** ("2-3 sesiones", "unas horas", "un día"). La IA
+  predice mal y al usuario no le sirve para decidir nada.
+- **El resumen de cuatro puntos**: qué propone / cuánto cuesta / a qué se parece de lo
+  que ya hay / si encaja / recomendación. Al usuario le pareció "basura": no sirve.
+- **Inventar tareas obvias** o deducirlas de lo que "debería tener" una app.
+- Preguntar en texto plano cuando existe el modal de preguntas.
+
 ### Cómo se trabaja
 
-- Se habla normal: el usuario cuenta la idea, el agente la ordena en objetivo + tareas.
+- Se habla normal: el usuario cuenta la idea y responde las preguntas; el agente deja
+  objetivo + tareas + prueba en la base.
 - Se hace **una tarea por vez** y se cierra con algo que se puede ver.
 - Si aparece algo nuevo, **se agrega a la lista**. No se discute si "entra" o "no entra".
 - No se pide aprobación para cada paso: se muestra el avance y se sigue.
