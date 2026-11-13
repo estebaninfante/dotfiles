@@ -308,7 +308,8 @@ def pegar(etiqueta: str) -> str | None:
 
 def agregar(texto: str, area: str | None, donde: str | None, archivos: list[str],
             captura_ahora: bool, pegar_ahora: bool, forzar: bool, repite: bool,
-            titulo_override: str | None = None) -> int:
+            titulo_override: str | None = None,
+            relacionados: list[str] | None = None) -> int:
     texto = texto.strip()
     if not texto and not (archivos or captura_ahora or pegar_ahora):
         die("falta el texto del vicio (o al menos una imagen: -c, -p o -i <archivo>)")
@@ -346,6 +347,17 @@ def agregar(texto: str, area: str | None, donde: str | None, archivos: list[str]
         cuerpo += [""]
     else:
         cuerpo += ["## Capturas\n(sin captura)", ""]
+    if relacionados:
+        conocidos = {n["id"] for n in notas}
+        enlaces = []
+        for rel in relacionados:
+            if rel in conocidos:
+                enlaces.append(f"- [[{rel}]]")
+            else:
+                print(f"vicio: aviso, '{rel}' no existe en el vault; lo dejo igual",
+                      file=sys.stderr)
+                enlaces.append(f"- [[{rel}]]")
+        cuerpo += ["## Relacionado"] + enlaces + [""]
     cuerpo += ["## Arreglo\n(pendiente — se decide con el catálogo a la vista)", ""]
 
     args = ["nuevo", "--tipo", "problema", "--titulo", titulo, "--padres", RAIZ_ID,
@@ -444,6 +456,7 @@ def main(argv: list[str]) -> int:
     area = donde = titulo = None
     con_captura = pegar_ahora = forzar = repite = False
     archivos: list[str] = []
+    relacionados: list[str] = []
     texto: list[str] = []
 
     i = 0
@@ -459,6 +472,10 @@ def main(argv: list[str]) -> int:
             i += 1
             if i < len(argv):
                 archivos.append(argv[i])
+        elif a in ("--relacionado", "--rel"):
+            i += 1
+            if i < len(argv):
+                relacionados.append(argv[i])
         elif a in ("-t", "--titulo"):
             i += 1
             titulo = argv[i] if i < len(argv) else None
@@ -483,7 +500,7 @@ def main(argv: list[str]) -> int:
         i += 1
 
     return agregar(" ".join(texto), area, donde, archivos, con_captura, pegar_ahora,
-                   forzar, repite, titulo)
+                   forzar, repite, titulo, relacionados)
 
 
 if __name__ == "__main__":
