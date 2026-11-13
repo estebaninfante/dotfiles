@@ -392,6 +392,37 @@ de archivos (xdg-open); ruta inexistente → aviso abajo, sin abrir nada.
   se activa al reiniciar (`dsh-web --restart`). Para apagarlo, borrar la línea
   `id: local-path-links` del patch y reiniciar.
 
+### `video-preview`: video en el panel lateral
+
+`linux/dsh/plugins/video-preview/` (host + cliente) resuelve "este tipo de archivo
+todavía no tiene vista previa" al abrir un `.mp4`: el visor del producto solo sabe de
+texto, imágenes, PDF, Office y planillas, y un video binario caía en el estado
+"no previsualizable".
+
+- El cliente registra un renderer de documento con
+  `ctx.documentPreviews.register({ id, extensions, binaryExtensions, priority:
+  "extension", loading: "renderer", ... })` y el cuerpo en el slot keyed
+  `sidebar.right.tab.document`. `loading: "renderer"` es clave: el dueño del tab no
+  lee bytes (el techo de lectura son unos MB) y el visor avisa `content.loaded(version)`
+  al llegar `loadedmetadata`; sin ese aviso el tab queda pendiente y no se activa el
+  refresco automático.
+- El `<video>` apunta a `GET /video-preview/stream?path=<absoluto>&r=<revision>`, que
+  sirve el archivo con `Range` (`206`, `Content-Range`, `416` fuera de rango, `HEAD`),
+  así un video largo arranca al instante y se puede adelantar. El `r` es basura de
+  caché: al recargar el tab cambia la revisión y el navegador vuelve a pedir el archivo.
+- La ruta **no es pública**: pasa por `ctx.connection.requestRejection(req)`, el mismo
+  cerco que `/api` (host confiable + cookie firmada). Un `<video>` manda la cookie por
+  ser same-origin, así que funciona igual en local y por Tailscale. No usar un header
+  propio como `path-links`: el elemento `<video>` no puede mandar headers.
+- Formatos: mp4, m4v, mov, webm, mkv, ogv, ogg. Si el códec no va, el visor muestra el
+  error y ofrece Reintentar; el botón "Open in Media Player" del header
+  (`ui-open-in-app`) sigue ahí como salida.
+- Requiere reiniciar el servidor (`dsh-web --restart`), porque el grafo de clientes se
+  compone al arrancar. Para apagarlo, borrar `id: local-video-preview` del
+  `cordis.patch.yml` del perfil y reiniciar.
+- Verificación: `curl -H 'Range: bytes=0-99' -b <cookie> 'http://127.0.0.1:3980/video-preview/stream?path=<abs>'`
+  debe dar `206` con 100 bytes; sin cookie, `401`.
+
 ### `machine`: la página de proyectos del harness
 
 `linux/dsh/plugins/machine/` (host + cliente) monta una **página completa**
