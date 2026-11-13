@@ -463,8 +463,17 @@ def cmd_set(args) -> None:
     if args.note is not None:
         sets.append("note = ?")
         params.append(args.note)
-    if not sets:
-        sys.exit("machine: nada que cambiar (usá --state, --kind o --note)")
+    if getattr(args, "goal", None) is not None or getattr(args, "check", None) is not None:
+        for key, value in (("goal", getattr(args, "goal", None)), ("check", getattr(args, "check", None))):
+            if value is None:
+                continue
+            con.execute(
+                "INSERT INTO facts (entity_id, key, value, observed_at) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT (entity_id, key) DO UPDATE SET value=excluded.value, observed_at=excluded.observed_at",
+                (row["id"], key, value, now()),
+            )
+    if not sets and getattr(args, "goal", None) is None and getattr(args, "check", None) is None:
+        sys.exit("machine: nada que cambiar (usá --state, --kind, --note, --goal o --check)")
     sets.append("updated_at = ?")
     params.append(now())
     params.append(row["id"])
@@ -556,6 +565,14 @@ def cmd_promote(args) -> None:
         "UPDATE entities SET kind='project', state='active', slug=?, title_manual=1, updated_at=? WHERE id=?",
         (slug, now(), row["id"]),
     )
+    for key, value in (("goal", args.goal), ("check", args.check)):
+        if not value:
+            continue
+        con.execute(
+            "INSERT INTO facts (entity_id, key, value, observed_at) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT (entity_id, key) DO UPDATE SET value=excluded.value, observed_at=excluded.observed_at",
+            (row["id"], key, value, now()),
+        )
     if args.dod:
         dod = Path(args.dod).read_text(encoding="utf-8")
         prev = facts_of(con, row["id"]).get("dod", "")
@@ -932,6 +949,8 @@ def main() -> None:
     s.add_argument("--state")
     s.add_argument("--kind")
     s.add_argument("--note")
+    s.add_argument("--goal", help="objetivo en una frase")
+    s.add_argument("--check", help="cómo se comprueba que funcionó")
     s.set_defaults(func=cmd_set)
 
     sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
@@ -939,7 +958,9 @@ def main() -> None:
     promo = sub.add_parser("promote", help="convierte una idea en proyecto")
     promo.add_argument("slug")
     promo.add_argument("--to", help="slug nuevo (el nombre de la carpeta futura)")
-    promo.add_argument("--dod", help="archivo markdown con la Definition of Done")
+    promo.add_argument("--goal", help="objetivo en una frase")
+    promo.add_argument("--check", help="cómo se comprueba que funcionó")
+    promo.add_argument("--dod", help="(viejo) archivo markdown; se guarda como nota")
     promo.set_defaults(func=cmd_promote)
 
     idea = sub.add_parser("idea", help="captura una idea en texto libre (sin texto: lista)")
