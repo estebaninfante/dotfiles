@@ -178,6 +178,17 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
             && ok "perfil web: dsh-local-machine instalado" \
             || warn "no pude instalar el plugin machine (correr: dsh plugin --profile web add file:~/.dsh/plugins/machine)"
     fi
+
+    # Video en el panel lateral: streaming con Range en vez de leer el archivo entero.
+    if [ -f "$PATCH" ] && ! grep -q "local-video-preview" "$PATCH"; then
+        printf '\n# Video en el panel lateral: streaming con Range, sin cargar el archivo entero.\n- insert:\n    - id: local-video-preview\n      name: dsh-local-video-preview\n' >> "$PATCH"
+        ok "patch del perfil web: + local-video-preview"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-video-preview" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "file:${HOME}/.dsh/plugins/video-preview" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-video-preview instalado" \
+            || warn "no pude instalar el plugin video-preview (correr: dsh plugin --profile web add file:~/.dsh/plugins/video-preview)"
+    fi
 fi
 if [ -d "${REPO}/linux/agents/skills" ]; then
     mkdir -p "${HOME}/.agents/skills"
