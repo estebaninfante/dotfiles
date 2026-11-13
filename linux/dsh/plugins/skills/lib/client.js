@@ -20,6 +20,25 @@ window.__ModuleLoader__.load({
 
 		const PANEL_ID = "skills";
 		const STYLE_ID = "dsh-skills-style";
+		const VIEW_KEY = "dsh.skills.view";
+
+		const GROUP_OPTIONS = [
+			{ value: "none", label: "Uno solo" },
+			{ value: "source", label: "Por origen" },
+			{ value: "state", label: "Por estado" },
+		];
+		const SORT_OPTIONS = [
+			{ value: "name", label: "Nombre" },
+			{ value: "source", label: "Origen" },
+			{ value: "modified", label: "Modificadas" },
+		];
+		const FILTER_OPTIONS = [
+			{ value: "all", label: "Todas" },
+			{ value: "model", label: "Las ve el modelo" },
+			{ value: "command", label: "Solo por comando" },
+			{ value: "file", label: "Con archivo propio" },
+		];
+		const SOURCE_RANK = { "user-agents": 1, "user-dsh": 1, "project-agents": 2, "project-dsh": 2, runtime: 3, bundled: 3, custom: 4 };
 
 		/** Origen del harness → nombre corto para la tarjeta. */
 		const SOURCE_LABEL = {
@@ -90,7 +109,39 @@ window.__ModuleLoader__.load({
 .sk-btn.danger:hover{background:color-mix(in srgb, var(--sk-bad) 14%, transparent);color:var(--sk-bad)}
 
 /* --- Matriz de tarjetas -------------------------------------------------- */
-.sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;margin-top:20px}
+.sk-sections{display:flex;flex-direction:column;gap:22px;margin-top:20px}
+.sk-group{margin:0 0 8px;font-size:12px;line-height:18px;font-weight:500;color:var(--sk-fg2);display:flex;gap:8px;align-items:center}
+.sk-group .n{color:var(--sk-cap);font-weight:400;font-variant-numeric:tabular-nums}
+.sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px}
+
+/* --- Menú de vista (agrupar / ordenar / filtrar) --- */
+.sk-menu-wrap{position:relative;flex:none}
+.sk-menu-btn{width:34px;padding:0}
+.sk-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;width:252px;padding:5px 0;
+  border:.5px solid var(--sk-l4);border-radius:14px;background:var(--dsw-alias-bg-layer-2,#1d2027);
+  box-shadow:0 18px 44px #0009;max-height:min(70vh,520px);overflow:auto}
+.sk-menu-sec{padding:5px 0;border-bottom:.5px solid var(--sk-l1)}
+.sk-menu-sec:last-child{border-bottom:0}
+.sk-menu-head{margin:0;padding:4px 14px 6px;font-size:11.5px;line-height:16px;color:var(--sk-cap)}
+.sk-menu-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;height:32px;
+  padding:0 14px;border:0;background:transparent;color:var(--sk-fg);font:inherit;font-size:13px;
+  text-align:left;cursor:pointer}
+.sk-menu-item:hover{background:var(--sk-hover)}
+.sk-menu-item svg{flex:none}
+.sk-menu-item[disabled]{opacity:.4;cursor:default}
+
+/* --- Editar con IA --- */
+.sk-ai{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:.5px solid var(--sk-l2);
+  border-radius:var(--sk-r-sm);background:var(--sk-field)}
+.sk-ai-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sk-ai-input{flex:1;min-width:200px;height:32px;padding:0 10px;border:.5px solid var(--sk-l4);
+  border-radius:var(--sk-r-md);background:transparent;color:var(--sk-fg);font:inherit;font-size:13px}
+.sk-ai-input:focus{outline:none;border-color:var(--sk-info)}
+.sk-ai-result{display:flex;flex-direction:column;gap:8px}
+.sk-ai-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  font-size:12px;line-height:18px;color:var(--sk-fg2)}
+.sk-ai-actions{display:flex;gap:8px}
+.sk-ai-pre{max-height:340px;overflow:auto;font-size:12px;line-height:18px}
 .sk-card{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:8px;min-height:108px;
   padding:13px 14px;text-align:left;color:inherit;cursor:pointer;
   border:.5px solid var(--sk-l2);border-radius:var(--sk-r-md);background:var(--sk-card)}
@@ -178,7 +229,11 @@ window.__ModuleLoader__.load({
   .sk-search{flex:1;width:auto;height:36px}
   .sk-search input{font-size:16px}
   .sk-btn{height:36px}
-  .sk-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+  .sk-sections{margin-top:14px;gap:18px}
+  .sk-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .sk-menu{width:min(320px,calc(100vw - 36px))}
+  .sk-menu-item{height:40px;font-size:15px}
+  .sk-ai-input{height:40px;font-size:16px;min-width:0}
   .sk-card{min-height:104px;padding:11px 12px}
   .sk-del{width:32px;height:32px;top:4px;right:4px;opacity:.75}
   .sk-card-title{padding-right:30px}

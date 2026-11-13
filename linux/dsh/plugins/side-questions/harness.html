@@ -50,6 +50,16 @@
 </script>
 <script src="lib/client.js"></script>
 <script>
+  // El editor real del chat (Lexical) convierte el `beforeinput` de
+  // "insertLineBreak" en un salto de línea. Un contenteditable pelado no, así
+  // que acá lo emulamos para que "Añadir al chat" se comporte igual.
+  document.querySelector("[data-composer-input]").addEventListener("beforeinput", (event) => {
+    if (event.inputType !== "insertLineBreak") return;
+    event.preventDefault();
+    document.execCommand("insertLineBreak");
+  });
+</script>
+<script>
   window.__plugin.apply({ effect: (fn) => { window.__dispose = fn; } });
 </script>
 </body>
