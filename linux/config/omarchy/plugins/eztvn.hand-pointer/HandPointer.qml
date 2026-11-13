@@ -15,6 +15,10 @@ import QtQuick
 // En el entrenamiento pasivo viene además `"target": [x, y]` (la diana celeste)
 // y `head` es la predicción del modelo que se está entrenando.
 //
+// `"hm": "HDMI-A-1"` dice que el anillo de cabeza va en otro monitor (el que
+// mirás según el mapa de monitores del motor); sin `hm` va en la laptop. Cada
+// monitor externo tiene su propia capa, visible sólo mientras el anillo está ahí.
+//
 // El lado y las coordenadas ya vienen resueltos por el motor (espejadas para
 // la cámara frontal); acá sólo se escalan a la pantalla.
 //
@@ -37,6 +41,8 @@ Item {
   property bool okL: true
   property bool okR: true
   property var headTip: null         // [x, y] del puntero de cabeza, o null
+  property string headMon: ""        // monitor del anillo ("" = el de la laptop)
+  readonly property var pantallaPrincipal: Quickshell.screens.find(s => /^eDP/.test(s.name)) || null
   property var targetTip: null       // [x, y] de la diana del entrenamiento, o null
   property int lastSeq: -1
   property real lastFresh: 0         // Date.now() del último `n` nuevo
@@ -110,6 +116,7 @@ Item {
     root.okR = !blockedRight
     root.headTip = (Array.isArray(msg.head) && msg.head.length >= 2)
       ? msg.head : null
+    root.headMon = typeof msg.hm === "string" ? msg.hm : ""
     root.targetTip = (Array.isArray(msg.target) && msg.target.length >= 2)
       ? msg.target : null
     root.present = left.length > 0 || right.length > 0
@@ -168,6 +175,7 @@ Item {
     id: panel
 
     visible: root.present || root.touchPresent
+    screen: root.pantallaPrincipal
     anchors {
       top: true
       bottom: true
@@ -246,7 +254,7 @@ Item {
     }
 
     HeadPointer {
-      tip: root.headTip
+      tip: root.headMon === "" ? root.headTip : null
       screenW: panel.width
       screenH: panel.height
     }
@@ -255,6 +263,37 @@ Item {
       tip: root.targetTip
       screenW: panel.width
       screenH: panel.height
+    }
+  }
+
+  // Anillo de cabeza en los monitores externos.
+  Variants {
+    model: Quickshell.screens.filter(s => s !== root.pantallaPrincipal)
+
+    PanelWindow {
+      id: externo
+
+      required property var modelData
+      screen: modelData
+      visible: root.present && root.headTip !== null && root.headMon === modelData.name
+      anchors {
+        top: true
+        bottom: true
+        left: true
+        right: true
+      }
+      color: "transparent"
+      WlrLayershell.namespace: "vision-hub-hands"
+      WlrLayershell.layer: WlrLayer.Overlay
+      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      exclusionMode: ExclusionMode.Ignore
+      mask: Region {}
+
+      HeadPointer {
+        tip: externo.visible ? root.headTip : null
+        screenW: externo.width
+        screenH: externo.height
+      }
     }
   }
 }
