@@ -57,6 +57,8 @@ window.__ModuleLoader__.load({
 		/** "hover" se cierra solo al salir; "pinned" espera Esc, click afuera o Aplicar. */
 		let cardMode = "hover";
 		let closeTimer = null;
+		/** Cerrada a mano con el cursor adentro: no se reabre hasta que el cursor salga. */
+		let dismissed = null;
 
 		const esc = (value) =>
 			String(value ?? "").replace(/[&<>"']/g, (c) => ({
@@ -107,7 +109,7 @@ window.__ModuleLoader__.load({
   text-decoration-color:var(--dsw-alias-state-business-primary,#6ea8fe)}
 ::highlight(${HL_ACTIVE}){background-color:var(--dsw-alias-interactive-bg-hover,#ffffff1f)}
 
-#${SUMMARY_ID}{display:flex;flex-direction:column;gap:2px;padding:0 6px 8px;box-sizing:border-box;width:100%;
+#${SUMMARY_ID}{display:flex;flex-direction:column;gap:2px;padding:0 6px 8px;box-sizing:border-box;width:100%;min-width:0;max-width:100%;
   font:400 14px/1.6 var(--dsw-font-family,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary,#adb2b8)}
 #${SUMMARY_ID} .line{display:grid;grid-template-columns:1.4rem minmax(0,1fr) auto;align-items:baseline;gap:0 6px}
 #${SUMMARY_ID} .emo{text-align:center}
@@ -156,6 +158,8 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-primary-foreground,#0f1115);font-weight:500}
 #${CARD_ID} button.btn.primary:disabled{opacity:.4;cursor:default}
 @media (max-width:${NARROW_PX}px){
+  #${SUMMARY_ID} .line{grid-template-columns:1.4rem minmax(0,1fr)}
+  #${SUMMARY_ID} .acts{grid-column:1 / -1}
   #${CARD_ID} footer .note{display:none}
   #${CARD_ID} button.chip{height:34px}
 }
@@ -805,10 +809,14 @@ window.__ModuleLoader__.load({
 			if (event.target.closest?.(`#${SUMMARY_ID}`)) return;
 			const group = editor && editor.contains(event.target) ? groupAtPoint(event.clientX, event.clientY) : null;
 			if (group) {
+				dismissed = null;
 				openCard(group, rangeAnchor(group), "pinned");
 				return;
 			}
-			if (card) closeCard();
+			if (card) {
+				dismissed = cardGroup;
+				closeCard();
+			}
 		}
 
 		/** Con teclado: el cursor quieto adentro de un fragmento abre su tarjeta. */
@@ -817,6 +825,8 @@ window.__ModuleLoader__.load({
 			if (!editor || groups.length === 0 || document.activeElement !== editor) return;
 			if (performance.now() - lastTyped < TYPING_QUIET_MS) return;
 			const group = groupAtCaret();
+			if (group !== dismissed) dismissed = null;
+			if (group && group === dismissed) return;
 			if (group) {
 				if (!card || cardGroup !== group) openCard(group, rangeAnchor(group), "pinned");
 			} else if (card && cardAnchor?.phraseQuote === undefined && !card.matches(":hover")) {
@@ -838,6 +848,7 @@ window.__ModuleLoader__.load({
 			if (event.key === "Escape" && card) {
 				event.stopPropagation();
 				event.preventDefault();
+				dismissed = cardGroup;
 				closeCard();
 				return;
 			}
