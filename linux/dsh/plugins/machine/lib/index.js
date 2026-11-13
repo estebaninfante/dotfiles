@@ -89,6 +89,17 @@ export function apply(ctx) {
 			},
 		},
 		{
+			path: "/machine/entities",
+			method: "GET",
+			handler: async (req, res) => {
+				try {
+					sendJson(res, 200, { entities: await machineJson(["ls", "--all", "--json"]) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
 			path: "/machine/project",
 			method: "GET",
 			handler: async (req, res) => {

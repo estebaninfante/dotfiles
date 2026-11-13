@@ -169,6 +169,15 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
     fi
 
     # Página de proyectos: inventario vivo desde ~/.local/share/machine/machine.db.
+    if [ -f "$PATCH" ] && ! grep -q "local-intra-turn" "$PATCH"; then
+        printf '\n# Feedforward: supuestos antes de enviar y corrección en el compositor.\n- insert:\n    - id: local-intra-turn\n      name: dsh-local-intra-turn\n' >> "$PATCH"
+        ok "patch del perfil web: + local-intra-turn"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-intra-turn" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "link:${HOME}/.dsh/plugins/intra-turn" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-intra-turn instalado" \
+            || warn "no pude instalar intra-turn (correr: dsh plugin --profile web add link:~/.dsh/plugins/intra-turn)"
+    fi
     if [ -f "$PATCH" ] && ! grep -q "local-machine" "$PATCH"; then
         printf '\n# Página de proyectos: inventario vivo desde machine.db (estado, hechos, tareas).\n- insert:\n    - id: local-machine\n      name: dsh-local-machine\n' >> "$PATCH"
         ok "patch del perfil web: + local-machine"

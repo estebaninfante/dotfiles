@@ -167,6 +167,9 @@ window.__ModuleLoader__.load({
 .mr-group-head .hint{margin-left:auto;font-size:12px;font-weight:400;color:var(--mr-fg3)}
 .mr-rows{display:flex;flex-direction:column;margin:0 -10px;padding:0;list-style:none}
 .mr-row[data-trash]{grid-template-columns:minmax(0,1fr) 96px auto;cursor:default}
+.mr-row[data-kind="idea"],.mr-row[data-kind="task"]{grid-template-columns:minmax(0,1fr) 70px 150px;cursor:pointer}
+.mr-row[data-kind="idea"] .mr-sub{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mr-bar + .mr-bar{margin-top:-6px}
 .mr-trash-actions{display:flex;gap:6px;justify-content:flex-end}
 .mr-count{display:inline-block;margin-left:7px;padding:0 6px;border-radius:99px;background:var(--mr-l3);
   font-size:11px;line-height:17px;color:var(--mr-fg2);font-variant-numeric:tabular-nums}
@@ -1114,6 +1117,7 @@ input.mr-field{height:36px;padding:0 12px}
 			useStyles();
 			const [projects, setProjects] = React.useState([]);
 			const [filter, setFilter] = React.useState("all");
+			const [kindFilter, setKindFilter] = React.useState("all");
 			const [sort, setSort] = React.useState("attention");
 			const [query, setQuery] = React.useState("");
 			const [selected, setSelected] = React.useState(null);
@@ -1136,8 +1140,8 @@ input.mr-field{height:36px;padding:0 12px}
 
 			const load = React.useCallback(async () => {
 				try {
-					const data = await api("/machine/projects");
-					setProjects((data.projects || []).filter((p) => p.kind !== "task"));
+					const data = await api("/machine/entities");
+					setProjects(data.entities || []);
 					setError("");
 				} catch (err) {
 					setError(err.message);
@@ -1304,23 +1308,36 @@ input.mr-field{height:36px;padding:0 12px}
 				return () => document.removeEventListener("keydown", onKey);
 			}, [selected, trashing, close]);
 
+			const kindCounts = React.useMemo(() => {
+				const by = { project: 0, idea: 0, task: 0 };
+				for (const p of projects) if (by[p.kind] !== undefined) by[p.kind] += 1;
+				return by;
+			}, [projects]);
+
+			const scoped = React.useMemo(
+				() => projects.filter((p) => kindFilter === "all" || p.kind === kindFilter),
+				[projects, kindFilter],
+			);
+
 			const counts = React.useMemo(() => {
 				const by = { unclassified: 0, active: 0, paused: 0, done: 0, archived: 0 };
-				for (const p of projects) by[p.state] = (by[p.state] || 0) + 1;
+				for (const p of scoped) by[p.state] = (by[p.state] || 0) + 1;
 				return {
 					by,
-					total: projects.length,
-					stale: projects.filter((p) => p.state !== "archived" && p.age_days != null && p.age_days >= 30).length,
-					dirty: projects.filter((p) => Number(p.facts?.dirty || 0) > 0).length,
+					total: scoped.length,
+					stale: scoped.filter((p) => p.state !== "archived" && p.age_days != null && p.age_days >= 30).length,
+					dirty: scoped.filter((p) => Number(p.facts?.dirty || 0) > 0).length,
 				};
-			}, [projects]);
+			}, [scoped]);
 
 			const visible = React.useMemo(() => {
 				const q = query.trim().toLowerCase();
-				let list = projects.filter((p) => filter === "all" || p.state === filter);
+				let list = scoped.filter((p) => filter === "all" || p.state === filter);
 				if (q) {
 					list = list.filter((p) =>
-						[p.slug, p.title, p.note, p.facts?.remote_url].some((v) => (v || "").toLowerCase().includes(q)),
+						[p.slug, p.title, p.note, p.facts?.remote_url, p.facts?.readme_excerpt].some((v) =>
+							(v || "").toLowerCase().includes(q),
+						),
 					);
 				}
 				const age = (p, empty) => (p.age_days == null ? empty : p.age_days);
@@ -1329,7 +1346,7 @@ input.mr-field{height:36px;padding:0 12px}
 					if (sort === "stale") return age(b, -1) - age(a, -1);
 					return age(a, 1e9) - age(b, 1e9) || a.slug.localeCompare(b.slug);
 				});
-			}, [projects, filter, query, sort]);
+			}, [scoped, filter, query, sort]);
 
 			const groups = React.useMemo(() => {
 				if (sort !== "attention" || filter !== "all") return [{ key: "flat", rows: visible }];
@@ -1361,7 +1378,50 @@ input.mr-field{height:36px;padding:0 12px}
 					: null,
 			);
 
+			function plainRow(p) {
+				const isIdea = p.kind === "idea";
+				const body = (p.note || "").replace(/\s+/g, " ").trim();
+				return h(
+					"li",
+					{
+						key: p.slug,
+						className: "mr-row",
+						"data-kind": p.kind,
+						tabIndex: 0,
+						role: "button",
+						"aria-label": `Abrir ${p.slug}`,
+						onClick: () => open(p.slug),
+						onKeyDown: (event) => {
+							if (event.target !== event.currentTarget) return;
+							if (event.key === "Enter" || event.key === " ") {
+								event.preventDefault();
+								open(p.slug);
+							}
+						},
+					},
+					h(
+						"div",
+						{ className: "mr-who" },
+						h("span", { className: "mr-name" }, (p.title || "").trim() || p.slug),
+						body ? h("span", { className: "mr-sub" }, body.length > 150 ? body.slice(0, 147) + "…" : body) : null,
+					),
+					h("span", { className: "mr-cell" }, isIdea ? "idea" : "tarea"),
+					p.state
+						? h(
+								"span",
+								{ className: "mr-cell" },
+								h(StateControl, {
+									value: p.state,
+									kind: p.kind,
+									onChange: (next) => changeField(p.slug, "state", next),
+								}),
+							)
+						: null,
+				);
+			}
+
 			function rowView(p) {
+				if (p.kind !== "project") return plainRow(p);
 				const f = p.facts || {};
 				const dirty = Number(f.dirty || 0);
 				const ahead = Number(f.ahead) || 0;
@@ -1471,7 +1531,7 @@ input.mr-field{height:36px;padding:0 12px}
 				const head = h(
 					"header",
 					{ className: "mr-head" },
-					h("div", null, h("h1", { className: "mr-h1" }, "Proyectos"), h("p", { className: "mr-intro" }, intro)),
+					h("div", null, h("h1", { className: "mr-h1" }, "Espacio"), h("p", { className: "mr-intro" }, intro)),
 					h(
 						"div",
 						{ className: "mr-toolbar" },
@@ -1528,6 +1588,35 @@ input.mr-field{height:36px;padding:0 12px}
 							},
 							"Papelera",
 							trash.length ? h("span", { className: "mr-count" }, String(trash.length)) : null,
+						),
+					),
+				);
+
+				const kindBar = h(
+					"div",
+					{ className: "mr-bar", role: "toolbar", "aria-label": "Filtrar por tipo" },
+					[
+						["all", "Todo", projects.length],
+						["project", "Proyectos", kindCounts.project],
+						["idea", "Ideas", kindCounts.idea],
+						["task", "Tareas", kindCounts.task],
+					].map(([value, label, n]) =>
+						h(
+							"button",
+							{
+								key: value,
+								type: "button",
+								className: "mr-pill",
+								"data-kind": 1,
+								"aria-pressed": kindFilter === value ? "true" : "false",
+								"data-empty": n === 0 ? 1 : 0,
+								onClick: () => {
+									setKindFilter(value);
+									setFilter("all");
+								},
+							},
+							label,
+							h("span", { className: "n" }, String(n)),
 						),
 					),
 				);
@@ -1606,7 +1695,7 @@ input.mr-field{height:36px;padding:0 12px}
 					);
 				}
 
-				return h(React.Fragment, null, head, notices, bar, body);
+				return h(React.Fragment, null, head, notices, kindBar, bar, body);
 			}
 
 			function trashView() {
@@ -2023,7 +2112,7 @@ input.mr-field{height:36px;padding:0 12px}
 		function apply(ctx) {
 			ctx.slots.inject("sidebar.panellist", () =>
 				ctx.slots.register(
-					{ name: "sidebar.panellist", id: PANEL_ID, order: 10, label: () => "Proyectos" },
+					{ name: "sidebar.panellist", id: PANEL_ID, order: 10, label: () => "Espacio" },
 					MachineIcon,
 				),
 			);
