@@ -103,9 +103,9 @@ window.__ModuleLoader__.load({
 			const style = document.createElement("style");
 			style.id = STYLE_ID;
 			style.textContent = `
-::highlight(${HL_MARK}){text-decoration:underline dotted 1.5px;text-underline-offset:4px;
-  text-decoration-color:var(--dsw-alias-label-tertiary,#adb2b8)}
-::highlight(${HL_DONE}){text-decoration:underline solid 1.5px;text-underline-offset:4px;
+::highlight(${HL_MARK}){text-decoration:underline dotted 2px;text-underline-offset:5px;
+  text-decoration-color:var(--dsw-alias-label-secondary,#cfd3d6)}
+::highlight(${HL_DONE}){text-decoration:underline solid 2px;text-underline-offset:5px;
   text-decoration-color:var(--dsw-alias-state-business-primary,#6ea8fe)}
 ::highlight(${HL_ACTIVE}){background-color:var(--dsw-alias-interactive-bg-hover,#ffffff1f)}
 
