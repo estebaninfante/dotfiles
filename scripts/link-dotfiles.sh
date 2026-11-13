@@ -209,6 +209,17 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
             && ok "perfil web: dsh-local-skills instalado" \
             || warn "no pude instalar el plugin skills (correr: dsh plugin --profile web add link:~/.dsh/plugins/skills)"
     fi
+
+    # Candado del tool bash: python3 no edita archivos (va por edit/write).
+    if [ -f "$PATCH" ] && ! grep -q "local-bash-guard" "$PATCH"; then
+        printf '\n# Candado del tool bash: python3 dentro de bash no puede editar archivos.\n- insert:\n    - id: local-bash-guard\n      name: dsh-local-bash-guard\n' >> "$PATCH"
+        ok "patch del perfil web: + local-bash-guard"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-bash-guard" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "link:${HOME}/.dsh/plugins/bash-guard" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-bash-guard instalado" \
+            || warn "no pude instalar bash-guard (correr: dsh plugin --profile web add link:~/.dsh/plugins/bash-guard)"
+    fi
 fi
 if [ -d "${REPO}/linux/agents/skills" ]; then
     mkdir -p "${HOME}/.agents/skills"

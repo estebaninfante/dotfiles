@@ -20,6 +20,8 @@ window.__ModuleLoader__.load({
 
 		const PANEL_ID = "skills";
 		const STYLE_ID = "dsh-skills-style";
+		/** Subir cuando cambie el CSS: fuerza reponer la hoja aunque la pestaña ya tenga una. */
+		const STYLE_REV = "2026-11-13.2";
 		const VIEW_KEY = "dsh.skills.view";
 
 		const GROUP_OPTIONS = [
@@ -304,9 +306,15 @@ window.__ModuleLoader__.load({
 		);
 
 		function ensureStyle() {
-			if (document.getElementById(STYLE_ID) !== null) return;
+			const current = document.getElementById(STYLE_ID);
+			// La pestaña puede tener la hoja de una versión anterior (el bundle de
+			// cliente se refresca sin recargar). Si la revisión no coincide, se
+			// reemplaza: si no, los botones nuevos quedan sin estilo.
+			if (current !== null && current.dataset.rev === STYLE_REV && current.textContent === CSS) return;
+			if (current !== null) current.remove();
 			const style = document.createElement("style");
 			style.id = STYLE_ID;
+			style.dataset.rev = STYLE_REV;
 			style.textContent = CSS;
 			document.head.appendChild(style);
 		}
@@ -1283,6 +1291,7 @@ window.__ModuleLoader__.load({
 		}
 
 		function apply(ctx) {
+			ensureStyle();
 			ctx.slots.inject("sidebar.panellist", () =>
 				ctx.slots.register(
 					{ name: "sidebar.panellist", id: PANEL_ID, order: 1, label: () => "Skills" },
