@@ -34,11 +34,12 @@ const SYSTEM = [
 	"Sos el copiloto de alguien que está escribiendo un pedido a un agente de IA.",
 	"Tu trabajo NO es responder el pedido: es mostrar, antes de que lo mande, qué va a interpretar y qué le falta saber, anclado a las palabras exactas del borrador.",
 	"Devolvé SOLO JSON válido, sin markdown ni texto alrededor, con esta forma:",
-	'{"assumptions":[{"quote":"...","emoji":"🗺️","label":"...","value":"...","options":["...","..."]}],"missing":[{"quote":"...","label":"...","options":["...","..."]}]}',
+	'{"assumptions":[{"quote":"...","emoji":"🗺️","question":"...","label":"...","value":"...","options":["...","..."]}],"missing":[{"quote":"...","question":"...","options":["...","..."]}]}',
 	"quote: copiá LITERAL de 1 a 4 palabras del borrador (mismas letras, mayúsculas y tildes) que disparan esa interpretación o pregunta. Nunca inventes ni parafrasees el quote.",
+	"QUESTION es lo más importante: una pregunta real, en segunda persona, terminada en '?', que se entienda sola y diga qué hay que decidir (ej. '¿Cómo querés que se diferencien?', '¿Qué edad tienen los chicos?', '¿Qué parte de Japón?'). Nunca una etiqueta de una o dos palabras.",
 	"assumptions: 1 a 3 cosas que el agente va a decidir solo y que podrían estar mal (alcance, formato, profundidad, destino, a quién va dirigido). Cada una con un quote distinto.",
 	"label: el aspecto, máximo 4 palabras (ej. 'Formato', 'Destino', 'Nivel de detalle'). value: lo que va a asumir, máximo 6 palabras. options: 2 o 3 alternativas reales, distintas de value, máximo 5 palabras cada una. emoji: uno solo que represente el aspecto.",
-	"missing: 0 a 3 datos que faltan y que cambiarían la respuesta. label es la pregunta corta (ej. '¿Qué edad tienen?'), options 2 a 5 respuestas cortas. Varias preguntas pueden compartir el mismo quote.",
+	"missing: 0 a 3 datos que faltan y que cambiarían la respuesta. question es la pregunta (ej. '¿Qué edad tienen?'), options 2 a 5 respuestas cortas. Varias preguntas pueden compartir el mismo quote.",
 	"Escribí label, value y options en el idioma del borrador. Prohibido explicar, saludar o agregar claves. Si el pedido ya es preciso, devolvé listas vacías."
 ].join(" ");
 
@@ -165,7 +166,9 @@ function parsePayload(text, draft) {
 			const value = cleanText(item.value, 120);
 			if (quote === void 0 || !label || !value) return null;
 			const emoji = cleanText(item.emoji, 8);
-			return { quote, label, value, options: cleanOptions(item.options, 3, value), ...(emoji ? { emoji } : {}) };
+			// Sin pregunta no hay tarjeta legible: cae a la etiqueta.
+			const question = cleanText(item.question, 90) || label;
+			return { quote, label, question, value, options: cleanOptions(item.options, 3, value), ...(emoji ? { emoji } : {}) };
 		})
 		.filter((item) => item !== null)
 		.slice(0, 3);
@@ -173,8 +176,9 @@ function parsePayload(text, draft) {
 		.map((item) => {
 			const quote = locateQuote(draft, item.quote);
 			const label = cleanText(item.label, 80);
-			if (quote === void 0 || !label) return null;
-			return { quote, label, options: cleanOptions(item.options, 5) };
+			const question = cleanText(item.question, 90) || label;
+			if (quote === void 0 || !question) return null;
+			return { quote, label, question, options: cleanOptions(item.options, 5) };
 		})
 		.filter((item) => item !== null)
 		.slice(0, 3);
@@ -211,33 +215,39 @@ export function apply(ctx) {
 			return;
 		}
 		try {
-			const call = (reasoningEffort) =>
+			// Modelo de decisión: rápido y barato para un JSON chico. Si no está
+			// disponible, se cae al modelo de la sesión sin que el usuario lo note.
+			const call = (targetModel, reasoningEffort) =>
 				collectText(ctx.llm, {
-					provider: target.provider,
-					model: target.model,
+					provider: targetModel.provider,
+					model: targetModel.model,
 					...reasoningEffort === void 0 ? {} : { reasoningEffort },
 					system: SYSTEM,
 					messages: [{ role: "user", content: [{ type: "text", text: draft }] }],
 					maxTokens: MAX_TOKENS,
-					temperature: 0.2,
+					temperature: 0.1,
 					sessionId: ROUTING_SESSION_ID,
 					signal: AbortSignal.timeout(CALL_TIMEOUT_MS)
 				});
+			const fast = { provider: DECISION_PROVIDER, model: DECISION_MODEL };
 			// Sin razonamiento: con el esfuerzo de la sesión el modelo se gastaba los
 			// tokens pensando y el JSON llegaba cortado (la mitad de las veces, vacío).
-			// Si el proveedor no admite "off", se reintenta como la sesión.
 			let effort = "off";
 			const attempt = async () => {
 				try {
-					return await call(effort);
-				} catch (error) {
-					if (effort === target.reasoningEffort) throw error;
+					const text = await call(fast, effort);
+					if (parsePayload(text, draft) !== null) return text;
+					throw new Error("respuesta vacía");
+				} catch {
+					if (effort === target.reasoningEffort) {
+						return await call(target, target.reasoningEffort);
+					}
 					effort = target.reasoningEffort;
-					return await call(effort);
+					return await call(fast, effort);
 				}
 			};
-			// A veces el proveedor cierra sin texto: un reintento antes de rendirse.
-			const parsed = parsePayload(await attempt(), draft) ?? parsePayload(await attempt(), draft);
+			const first = await attempt();
+			const parsed = parsePayload(first, draft) ?? parsePayload(await call(target, target.reasoningEffort), draft);
 			sendJson(res, 200, parsed ?? { assumptions: [], missing: [] });
 		} catch (error) {
 			sendJson(res, 500, {

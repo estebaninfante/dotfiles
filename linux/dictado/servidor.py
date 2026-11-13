@@ -224,7 +224,8 @@ def remuestrear(pcm: np.ndarray, origen: int, destino: int) -> np.ndarray:
     ).astype(np.float32)
 
 
-def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False, prompt: str | None = None) -> dict:
+def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False, prompt: str | None = None,
+                vad: bool = True, filtrar: bool = True) -> dict:
     if pcm.size < SAMPLE_RATE // 4:
         return {"texto": "", "idioma": idioma, "motivo": "audio muy corto"}
     pico = float(np.abs(pcm).max()) if pcm.size else 0.0
@@ -238,7 +239,9 @@ def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False, prompt: str 
             pcm,
             language=None if idioma == "auto" else idioma,
             beam_size=1,
-            vad_filter=True,
+            # Con `vad=False` no se filtra el audio: las palabras clave cortas
+            # ("grilla", "dicta", "Orión") desaparecían al pasar por Silero.
+            vad_filter=vad,
             vad_parameters={"min_silence_duration_ms": 400},
             initial_prompt=prompt or PROMPT,
             condition_on_previous_text=False,
@@ -250,9 +253,9 @@ def transcribir(pcm: np.ndarray, idioma: str, rapido: bool = False, prompt: str 
     segundos = float(info.duration or 0.0)
     inseguro = bool(logprobs) and sum(logprobs) / len(logprobs) < -0.5
     inseguro = inseguro or (bool(sin_voz) and sum(sin_voz) / len(sin_voz) >= 0.5)
-    if normalizar(texto) in SOSPECHOSAS and (segundos <= 3.0 or inseguro):
+    if filtrar and normalizar(texto) in SOSPECHOSAS and (segundos <= 3.0 or inseguro):
         texto = ""
-    if es_ruido(texto):
+    if filtrar and es_ruido(texto):
         texto = ""
     return {
         "texto": texto,
@@ -316,13 +319,19 @@ class Handler(BaseHTTPRequestHandler):
         formato = (consulta.get("formato") or ["raw"])[0].lower()
         rapido = (consulta.get("rapido") or ["0"])[0] in ("1", "true", "si", "sí")
         prompt = (consulta.get("prompt") or [""])[0] or None  # vocabulario del cliente (p. ej. Estudio)
+        # El oído del asistente ya trae el audio cortado por su VAD y necesita las
+        # palabras sueltas ("grilla", "dicta", "Orión"): para /transcribe no se filtra
+        # salvo que lo pidan explícitamente. `dictado` conserva los filtros de antes.
+        por_defecto = "0" if url.path == "/transcribe" else "1"
+        vad = (consulta.get("vad") or [por_defecto])[0] not in ("0", "false", "no")
+        filtrar = (consulta.get("filtrar") or [por_defecto])[0] not in ("0", "false", "no")
         try:
             pcm = wav_a_pcm(cuerpo) if formato == "wav" else np.frombuffer(cuerpo, dtype="<f4").copy()
         except Exception as exc:  # noqa: BLE001 — se informa al cliente
             self._json({"error": f"audio inválido: {exc}"}, 400)
             return
         try:
-            resultado = transcribir(pcm, idioma, rapido, prompt)
+            resultado = transcribir(pcm, idioma, rapido, prompt, vad=vad, filtrar=filtrar)
             if url.path == "/transcribe":
                 # el oído del asistente lee la clave "text"
                 resultado = {**resultado, "text": resultado.get("texto", "")}

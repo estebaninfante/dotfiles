@@ -202,10 +202,10 @@ window.__ModuleLoader__.load({
 		function setItems(data) {
 			const next = [];
 			for (const a of Array.isArray(data.assumptions) ? data.assumptions : []) {
-				if (a && typeof a.quote === "string" && a.quote) next.push({ kind: "assumption", quote: a.quote, label: a.label, value: a.value, options: a.options || [], emoji: a.emoji || "" });
+				if (a && typeof a.quote === "string" && a.quote) next.push({ kind: "assumption", quote: a.quote, label: a.label, question: a.question || a.label, value: a.value, options: a.options || [], emoji: a.emoji || "" });
 			}
 			for (const m of Array.isArray(data.missing) ? data.missing : []) {
-				if (m && typeof m.quote === "string" && m.quote) next.push({ kind: "missing", quote: m.quote, label: m.label, options: m.options || [] });
+				if (m && typeof m.quote === "string" && m.quote) next.push({ kind: "missing", quote: m.quote, label: m.label, question: m.question || m.label, options: m.options || [] });
 			}
 			items = next;
 			const keys = new Set(items.map(keyOf));
@@ -449,12 +449,13 @@ window.__ModuleLoader__.load({
 				.map((choice) => `<button type="button" class="chip" data-item="${index}" data-choice="${esc(choice)}" aria-pressed="${answer.picked.includes(choice)}">${esc(choice)}</button>`)
 				.join("");
 			const other = answer.other;
-			const label = esc(item.label);
+			// La tarjeta habla con una pregunta, como la demo; la etiqueta es el respaldo.
+			const question = esc(item.question || item.label);
 			return `
 <section data-item="${index}">
-  <div class="q"><span>${label}</span>${multi ? '<span class="hint">elegí las que quieras</span>' : ""}${multi ? "" : `<span class="now" data-now="${index}">${esc(chosenText(item))}</span>`}</div>
+  <div class="q"><span>${question}</span>${multi ? '<span class="hint">elegí las que quieras</span>' : ""}${multi ? "" : `<span class="now" data-now="${index}">${esc(chosenText(item))}</span>`}</div>
   <div class="chips">${chips}<button type="button" class="chip" data-item="${index}" data-other="1" aria-expanded="${other ? "true" : "false"}">＋ Otra cosa</button></div>
-  <input class="other" data-item="${index}" placeholder="${multi ? "Escribila…" : "Otra cosa…"}" value="${esc(other)}"${other ? "" : " hidden"} aria-label="${esc(item.label)}: otra respuesta">
+  <input class="other" data-item="${index}" placeholder="${multi ? "Escribila…" : "Otra cosa…"}" value="${esc(other)}"${other ? "" : " hidden"} aria-label="${esc(item.question || item.label)}: otra respuesta">
 </section>`;
 		}
 
