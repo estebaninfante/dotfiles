@@ -310,7 +310,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         cuerpo = self.rfile.read(largo)
         consulta = parse_qs(url.query)
-        idioma = (consulta.get("idioma") or [IDIOMA])[0] or IDIOMA
+        # /transcribe es el contrato del oído del asistente (f32 crudo + "language");
+        # /transcribir el de `dictado` (raw/wav + "idioma"). Mismo motor, dos nombres.
+        idioma = (consulta.get("idioma") or consulta.get("language") or [IDIOMA])[0] or IDIOMA
         formato = (consulta.get("formato") or ["raw"])[0].lower()
         rapido = (consulta.get("rapido") or ["0"])[0] in ("1", "true", "si", "sí")
         prompt = (consulta.get("prompt") or [""])[0] or None  # vocabulario del cliente (p. ej. Estudio)
@@ -320,7 +322,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": f"audio inválido: {exc}"}, 400)
             return
         try:
-            self._json(transcribir(pcm, idioma, rapido, prompt))
+            resultado = transcribir(pcm, idioma, rapido, prompt)
+            if url.path == "/transcribe":
+                # el oído del asistente lee la clave "text"
+                resultado = {**resultado, "text": resultado.get("texto", "")}
+            self._json(resultado)
         except Exception as exc:  # noqa: BLE001
             log(f"error transcribiendo: {exc}")
             self._json({"error": str(exc)}, 500)
