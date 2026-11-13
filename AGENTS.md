@@ -458,6 +458,38 @@ bien solo en 1440 px está a medias. Reglas al escribir la mitad cliente:
   (`dsh-web --phone`) o con el viewport a 390 px, y mirar la captura. Un cambio de
   CSS de cliente **no necesita reiniciar el servidor**: se refresca la página.
 
+### Lo que iOS hace distinto (PWA y Safari)
+
+Fuente principal: [iOS PWA Compatibility de Firtman](https://firt.dev/notes/pwa-ios/)
+(actualizado oct-2026) y la [guía de iOS de ProgressiveWebApps.com](https://progressivewebapps.com/platforms/ios-safari/).
+Lo que importa acá:
+
+- **Es un WebView de Safari, no Chromium**: mismo motor, mismas rarezas. Probar en el
+  teléfono, no en el inspector de escritorio.
+- **Zoom al enfocar un campo**: si el `font-size` es menor a 16 px, iOS agranda la
+  página. Todos los campos de texto del harness van a 16 px en pantalla táctil.
+- **Doble toque para activar**: sin `touch-action: manipulation` el primer toque se
+  pierde esperando si es zoom. Ponerlo en las zonas que importan (la barra lateral),
+  no en `*`: en el editor y el scroll pelea con los gestos.
+- **`position: fixed` para superponer la barra** rompe el hit-testing del chat: la
+  barra se ve pero los toques caen en el panel de abajo. Si se quiere overlay, hay que
+  hacerlo junto con `pointer-events`, no como parche aislado.
+- **Safe areas**: con `display: standalone` (o desde iOS 26 abriendo del Home Screen)
+  el contenido llega a los bordes; usar `env(safe-area-inset-*)`, nunca `100vh` fijo
+  (`100dvh` o `min-height: 100%`).
+- **Instalación**: desde iOS 16.4 se puede instalar desde cualquier navegador y desde
+  iOS 26 cualquier sitio del Home Screen abre como app. Igual conviene un `manifest`
+  (nombre, icono, `display: standalone`) y `apple-touch-icon` PNG de 180×180: los
+  iconos `maskable` no se usan y el `link` pisa al manifest.
+- **Push**: `Web Push` solo en PWA instalada (16.4+); no hay Background Sync ni
+  Periodic Sync. Todo lo que dependa de correr en segundo plano (reintentos, subida
+  diferida) tiene que ser del lado del host, no del navegador.
+- **Cookies**: la PWA instalada tenía su propio almacenamiento; desde 17.2 se copian
+  las cookies del login al instalar. El enlace con token hay que abrirlo **dentro** de
+  la app instalada, no en Safari.
+
+
+
 `scripts/link-dotfiles.sh` crea los tres symlinks. El brief tiene que incluir **lo ya
 probado y qué resultó** y qué no se puede romper: es lo que hizo que Claude resolviera
 en un intento un caso donde el agente llevaba horas.
