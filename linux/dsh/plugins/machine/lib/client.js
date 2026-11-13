@@ -179,6 +179,9 @@ window.__ModuleLoader__.load({
 .mr-row:focus-visible{outline:var(--mr-ring);outline-offset:-2px}
 .mr-who{display:flex;flex-direction:column;min-width:0}
 .mr-name{font-size:13.5px;font-weight:500;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mr-slug{margin-left:7px;font-size:11.5px;font-weight:400;color:var(--mr-fg3)}
+.mr-dtitle h1{cursor:text}
+.mr-rename{height:32px;font-size:15px;font-weight:600;max-width:420px}
 .mr-sub{font-size:12px;line-height:18px;color:var(--mr-fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mr-cell{font-size:12.5px;line-height:18px;color:var(--mr-fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font-variant-numeric:tabular-nums}
@@ -1022,6 +1025,7 @@ input.mr-field{height:36px;padding:0 12px}
 			const [wiping, setWiping] = React.useState(false);
 			const [trashBusy, setTrashBusy] = React.useState("");
 			const [noteState, setNoteState] = React.useState("");
+			const [renaming, setRenaming] = React.useState(false);
 			const searchRef = React.useRef(null);
 			const scrollRef = React.useRef(null);
 			const listScroll = React.useRef(0);
@@ -1296,7 +1300,14 @@ input.mr-field{height:36px;padding:0 12px}
 					h(
 						"div",
 						{ className: "mr-who" },
-						h("span", { className: "mr-name" }, p.slug),
+						h(
+							"span",
+							{ className: "mr-name" },
+							(p.title && p.title.trim()) || p.slug,
+							(p.title && p.title.trim() && p.title.trim() !== p.slug)
+								? h("span", { className: "mr-slug" }, p.slug)
+								: null,
+						),
 						h("span", { className: "mr-sub" }, sub.length ? sub.join(" · ") : f.path ? KIND_LABEL[p.kind] || "proyecto" : "sin carpeta"),
 					),
 					h("span", { className: "mr-cell", "data-tone": stale ? "warn" : undefined, title: f.last_commit ? `último commit ${f.last_commit}` : undefined }, ageLabel(p.age_days)),
@@ -1635,11 +1646,43 @@ input.mr-field{height:36px;padding:0 12px}
 							h(
 								"div",
 								{ className: "mr-dtitle" },
-								h("h1", null, d.slug),
+								renaming
+									? h("input", {
+											className: "mr-field mr-rename",
+											defaultValue: (d.title && d.title.trim()) || d.slug,
+											autoFocus: true,
+											onBlur: () => setRenaming(null),
+											onKeyDown: async (event) => {
+												if (event.key === "Escape") {
+													setRenaming(null);
+													return;
+												}
+												if (event.key !== "Enter") return;
+												event.preventDefault();
+												const value = event.target.value.trim();
+												if (!value) return;
+												try {
+													await api("/machine/rename", { slug: d.slug, title: value });
+													setRenaming(false);
+													await load();
+													refreshDetail(d.slug);
+												} catch (err) {
+													setError(err.message);
+												}
+											},
+										})
+									: h(
+											"h1",
+											{ onClick: () => setRenaming(true), title: "Clic para renombrar" },
+											(d.title && d.title.trim()) || d.slug,
+										),
 								d.state
 									? h(StateControl, { value: d.state, kind: d.kind, onChange: (next) => changeField(d.slug, "state", next) })
 									: null,
 							),
+							(d.title && d.title.trim() && d.title.trim() !== d.slug)
+								? h("p", { className: "mr-dpath" }, d.slug)
+								: null,
 							desc ? h("p", { className: "mr-ddesc" }, desc) : null,
 							home ? h("p", { className: "mr-dpath" }, home) : null,
 						),

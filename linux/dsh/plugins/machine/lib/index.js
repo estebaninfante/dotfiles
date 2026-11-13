@@ -153,6 +153,30 @@ export function apply(ctx) {
 			},
 		},
 		{
+			path: "/machine/rename",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req).catch(() => null);
+				const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+				if (!slug) {
+					sendJson(res, 400, { error: "missing-slug" });
+					return;
+				}
+				const args = ["rename", slug];
+				if (body?.auto === true) args.push("--auto");
+				else if (typeof body?.title === "string" && body.title.trim()) args.push(body.title.trim());
+				else {
+					sendJson(res, 400, { error: "missing-title" });
+					return;
+				}
+				try {
+					sendJson(res, 200, { ok: true, out: await machine(args), project: await machineJson(["show", slug, "--json"]) });
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
 			path: "/machine/trash",
 			method: "GET",
 			handler: async (req, res) => {

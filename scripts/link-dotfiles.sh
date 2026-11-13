@@ -185,9 +185,9 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
         ok "patch del perfil web: + local-video-preview"
     fi
     if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-video-preview" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
-        dsh plugin --profile web add "file:${HOME}/.dsh/plugins/video-preview" >/dev/null 2>&1 \
+        dsh plugin --profile web add "link:${HOME}/.dsh/plugins/video-preview" >/dev/null 2>&1 \
             && ok "perfil web: dsh-local-video-preview instalado" \
-            || warn "no pude instalar el plugin video-preview (correr: dsh plugin --profile web add file:~/.dsh/plugins/video-preview)"
+            || warn "no pude instalar el plugin video-preview (correr: dsh plugin --profile web add link:~/.dsh/plugins/video-preview)"
     fi
 fi
 if [ -d "${REPO}/linux/agents/skills" ]; then

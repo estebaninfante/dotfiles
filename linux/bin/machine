@@ -85,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_facts_key      ON facts (key);
 # en `schema_version`; nunca se edita una migración ya aplicada.
 MIGRATIONS = {
     2: "ALTER TABLE entities ADD COLUMN parent_id INTEGER REFERENCES entities (id) ON DELETE CASCADE;",
+    3: "ALTER TABLE entities ADD COLUMN title_manual INTEGER NOT NULL DEFAULT 0;",
 }
 
 
@@ -317,13 +318,17 @@ def cmd_scan(args) -> None:
         seen += 1
         facts = collect(path, units, live, tickets)
         row = con.execute(
-            "SELECT id, title FROM entities WHERE kind='project' AND slug=?", (path.name,)
+            "SELECT id, title, title_manual FROM entities WHERE kind='project' AND slug=?",
+            (path.name,),
         ).fetchone()
         title = title_of(path)
         if row:
             entity_id = row["id"]
-            con.execute("UPDATE entities SET title=?, updated_at=? WHERE id=?",
-                        (title, stamp, entity_id))
+            if row["title_manual"]:
+                con.execute("UPDATE entities SET updated_at=? WHERE id=?", (stamp, entity_id))
+            else:
+                con.execute("UPDATE entities SET title=?, updated_at=? WHERE id=?",
+                            (title, stamp, entity_id))
         else:
             cur = con.execute(
                 "INSERT INTO entities (kind, slug, title, state, source, created_at, updated_at)"
@@ -470,6 +475,31 @@ def cmd_set(args) -> None:
           + (f" · {after['note']}" if after["note"] else ""))
 
 
+def cmd_rename(args) -> None:
+    con = connect()
+    row = project_row(con, args.slug)
+    if args.auto:
+        title = title_of(Path(facts_of(con, row["id"]).get("path", "")))
+        con.execute(
+            "UPDATE entities SET title=?, title_manual=0, updated_at=? WHERE id=?",
+            (title, now(), row["id"]),
+        )
+        con.commit()
+        print(f"{args.slug}: vuelve al nombre automático ({title})")
+        return
+    name = " ".join(args.name).strip()
+    if not name:
+        sys.exit("machine: falta el nombre nuevo")
+    if len(name) > 80:
+        sys.exit("machine: el nombre no puede pasar de 80 caracteres")
+    con.execute(
+        "UPDATE entities SET title=?, title_manual=1, updated_at=? WHERE id=?",
+        (name, now(), row["id"]),
+    )
+    con.commit()
+    print(f"{args.slug}: ahora se llama «{name}»")
+
+
 def cmd_stats(args) -> None:
     con = connect()
     print("por estado:")
@@ -505,6 +535,7 @@ def entity_json(con, row) -> dict:
     out = {
         "slug": row["slug"], "kind": row["kind"], "state": row["state"],
         "title": row["title"], "note": row["note"], "source": row["source"],
+        "title_manual": row["title_manual"] if "title_manual" in row.keys() else 0,
         "created_at": row["created_at"], "updated_at": row["updated_at"],
         "facts": facts,
     }
@@ -836,6 +867,12 @@ def main() -> None:
     s.set_defaults(func=cmd_set)
 
     sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
+
+    ren = sub.add_parser("rename", help="cambia el nombre visible de un proyecto")
+    ren.add_argument("slug")
+    ren.add_argument("name", nargs="*")
+    ren.add_argument("--auto", action="store_true", help="volver al nombre del README")
+    ren.set_defaults(func=cmd_rename)
 
     svc = sub.add_parser("service-disable", help="para y deshabilita las units del proyecto")
     svc.add_argument("slug")

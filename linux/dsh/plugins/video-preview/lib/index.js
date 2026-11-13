@@ -70,7 +70,10 @@ function parseRange(header, size) {
 	const start = Number(rawStart);
 	const end = rawEnd === "" ? size - 1 : Number(rawEnd);
 	if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return void 0;
+	// Arrancar más allá del final sí es insatisfacible (416); un tramo invertido
+	// (`bytes=100-50`) es una cabecera inválida: se ignora y va el archivo entero.
 	if (start >= size) return null;
+	if (start > end) return void 0;
 	return { start, end: Math.min(end, size - 1) };
 }
 
