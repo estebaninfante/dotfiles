@@ -70,8 +70,9 @@ Al terminarlo:
    clic no hace nada. `--install` ya lo escribe así.
    **Nunca habilites un servicio (systemd, timer, daemon) sin que el usuario lo pida
    explícitamente.** Nada de `systemctl --user enable`, `--now` ni units "para que
-   quede siempre arriba": el servidor lo levanta el atajo cuando lo abrís y se apaga
-   cuando lo cerrás. Si creés que hace falta un servicio, preguntá primero.
+   quede siempre arriba". El servidor lo levanta el atajo al abrirlo y sigue vivo hasta
+   que se apaga con `webapp-launch <dir> --stop` (o la acción "Detener el servidor" del
+   atajo). Si creés que hace falta un servicio, preguntá primero y esperá el sí.
 3. Verificá de verdad: `webapp-launch <dir> --no-open` levanta el servidor,
    `--status` responde 200 y `--stop` lo apaga. Después abrí el atajo una vez.
 4. Si el proyecto suma un grupo en el menú, agregalo en
