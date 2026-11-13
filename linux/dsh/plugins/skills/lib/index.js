@@ -10,13 +10,16 @@
  * que el registro global sí tenga (runtime / bundled).
  *
  * Rutas (loopback, servidas por el webServer del perfil):
- *   GET /skills/list       catálogo con origen, ruta y permisos de invocación
- *   GET /skills/read?name  el SKILL.md completo de una skill
+ *   GET  /skills/list       catálogo con origen, ruta y permisos de invocación
+ *   GET  /skills/read?name  el SKILL.md completo de una skill
+ *   POST /skills/save       { name, content } — guarda el SKILL.md editado
  *
- * Solo lectura: acá no se escribe ni se borra nada.
+ * La escritura solo toca archivos que el descubrimiento ya había encontrado
+ * (nunca una ruta que llegue del navegador) y exige el header `x-dsh-skills: 1`:
+ * un sitio externo no puede mandarlo sin preflight.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -265,6 +268,45 @@ function queryOf(req) {
 	}
 }
 
+function readJsonBody(req) {
+	return new Promise((resolvePromise, reject) => {
+		let size = 0;
+		const chunks = [];
+		req.on("data", (chunk) => {
+			size += chunk.length;
+			if (size > MAX_BODY_BYTES) {
+				reject(new Error("el cuerpo supera el límite"));
+				req.destroy();
+				return;
+			}
+			chunks.push(chunk);
+		});
+		req.on("end", () => {
+			try {
+				resolvePromise(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
+			} catch (error) {
+				reject(error);
+			}
+		});
+		req.on("error", reject);
+	});
+}
+
+/**
+ * Escritura de un archivo que el descubrimiento ya encontró. Resuelve el
+ * symlink (un skill enlazado a dotfiles escribe el archivo real), conserva los
+ * permisos y no deja el archivo a medias: escribe un temporal al lado y lo
+ * renombra.
+ */
+function writeSkillFile(file, content) {
+	const target = realpathSync(file);
+	if (!statSync(target).isFile()) throw new Error("la ruta no es un archivo");
+	const mode = statSync(target).mode;
+	const temp = `${target}.tmp-${process.pid}`;
+	writeFileSync(temp, content, { encoding: "utf8", mode });
+	renameSync(temp, target);
+}
+
 export function apply(ctx) {
 	const routes = [
 		{
@@ -317,6 +359,67 @@ export function apply(ctx) {
 						ok: true,
 						skill: { ...publicSkill(match), content: readFileSync(match.realPath, "utf8") },
 					});
+				} catch (error) {
+					fail(res, error);
+				}
+			},
+		},
+		{
+			path: "/skills/save",
+			method: "POST",
+			handler: async (req, res) => {
+				if (req.headers["x-dsh-skills"] !== "1") {
+					sendJson(res, 403, { ok: false, error: "falta el header x-dsh-skills" });
+					return;
+				}
+				const body = await readJsonBody(req).catch(() => null);
+				const name = typeof body?.name === "string" ? body.name.trim() : "";
+				const content = typeof body?.content === "string" ? body.content : "";
+				if (name.length === 0 || name.length > MAX_NAME_CHARS || !NAME_RE.test(name)) {
+					sendJson(res, 400, { ok: false, error: "nombre inválido" });
+					return;
+				}
+				if (content.trim().length === 0) {
+					sendJson(res, 400, { ok: false, error: "el contenido está vacío" });
+					return;
+				}
+				try {
+					const { skills } = await collect(ctx, "");
+					const match = skills.find((skill) => skill.name === name);
+					if (match === undefined) {
+						sendJson(res, 404, { ok: false, error: "esa skill no está en el catálogo" });
+						return;
+					}
+					if (typeof match.realPath !== "string" || !existsSync(match.realPath)) {
+						sendJson(res, 409, { ok: false, error: "la skill no tiene archivo propio" });
+						return;
+					}
+					// El frontmatter tiene que seguir siendo válido: si se rompe,
+					// el harness dejaría de cargar la skill.
+					const meta = parseFrontmatter(content);
+					const nextName = typeof meta.name === "string" ? meta.name.trim() : "";
+					const nextDescription = typeof meta.description === "string" ? meta.description.trim() : "";
+					if (!NAME_RE.test(nextName)) {
+						sendJson(res, 422, { ok: false, error: "el frontmatter necesita `name` en kebab-case" });
+						return;
+					}
+					if (nextDescription.length === 0) {
+						sendJson(res, 422, { ok: false, error: "el frontmatter necesita `description`" });
+						return;
+					}
+					if (nextName !== name && skills.some((skill) => skill.name === nextName)) {
+						sendJson(res, 409, { ok: false, error: `ya existe otra skill llamada ${nextName}` });
+						return;
+					}
+					writeSkillFile(match.realPath, content);
+					const after = await collect(ctx, "");
+					const updated =
+						after.skills.find((skill) => skill.realPath === match.realPath) ?? {
+							...match,
+							name: nextName,
+							description: nextDescription,
+						};
+					sendJson(res, 200, { ok: true, skill: { ...publicSkill(updated), content } });
 				} catch (error) {
 					fail(res, error);
 				}
