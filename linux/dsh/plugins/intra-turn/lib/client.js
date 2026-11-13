@@ -112,6 +112,8 @@ window.__ModuleLoader__.load({
 
 #${SUMMARY_ID}{display:flex;flex-direction:column;gap:2px;padding:0 6px 8px;box-sizing:border-box;width:100%;min-width:0;max-width:100%;
   font:400 14px/1.6 var(--dsw-font-family,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary,#adb2b8)}
+#dsh-intra-turn-wait{padding:0 6px 8px;font:400 14px/1.6 var(--dsw-font-family,system-ui,sans-serif);
+  color:var(--dsw-alias-label-caption,#81858c)}
 #${SUMMARY_ID} .line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:0 8px}
 #${SUMMARY_ID} .phrase{all:unset;display:inline;cursor:pointer;border-radius:3px;white-space:pre-wrap;color:var(--dsw-alias-label-secondary,#cfd3d6);
   text-decoration:underline dotted 1.5px;text-underline-offset:4px;text-decoration-color:var(--dsw-alias-label-caption,#81858c)}
@@ -716,10 +718,73 @@ window.__ModuleLoader__.load({
 			return !!card && cardMode === "pinned";
 		}
 
+		/**
+		 * Feedback de espera: el modelo tarda unos segundos, y una espera a ciegas
+		 * se siente rota. Texto plano donde van las líneas, sin spinner ni puntos.
+		 */
+		const WAIT_ID = "dsh-intra-turn-wait";
+		let waitTimer = null;
+
+		function showWait() {
+			const editor = composer();
+			const host = composerCard(editor);
+			if (!host || !host.parentElement) return;
+			let node = document.getElementById(WAIT_ID);
+			if (!node) {
+				node = document.createElement("div");
+				node.id = WAIT_ID;
+				node.setAttribute("role", "status");
+				node.textContent = "Leyendo el borrador…";
+				host.parentElement.insertBefore(node, host);
+			}
+			const box = host.getBoundingClientRect();
+			if (box.width > 0) {
+				node.style.width = `${Math.round(box.width)}px`;
+				const self = node.getBoundingClientRect();
+				if (self.width > 0) node.style.marginLeft = `${Math.round(box.left - self.left)}px`;
+			}
+			clearTimeout(waitTimer);
+			waitTimer = setTimeout(() => {
+				const still = document.getElementById(WAIT_ID);
+				if (still) still.textContent = "El modelo todavía está leyendo…";
+			}, 5000);
+		}
+
+		function hideWait() {
+			clearTimeout(waitTimer);
+			document.getElementById(WAIT_ID)?.remove();
+		}
+
+		/** Mismo borrador dos veces seguidas: no se vuelve a llamar al modelo. */
+		const draftCache = new Map();
+
+		function cachedAnalysis(text) {
+			const hit = draftCache.get(text);
+			if (hit === void 0) return void 0;
+			draftCache.delete(text);
+			draftCache.set(text, hit);
+			return hit;
+		}
+
+		function rememberAnalysis(text, data) {
+			draftCache.set(text, data);
+			while (draftCache.size > 8) draftCache.delete(draftCache.keys().next().value);
+		}
+
 		function analyze(text) {
+			const hit = cachedAnalysis(text);
+			if (hit !== void 0) {
+				hideWait();
+				setItems(hit);
+				locateRanges();
+				paintMarks();
+				renderSummary();
+				return;
+			}
 			const mine = ++seq;
 			inflight?.abort();
 			inflight = new AbortController();
+			showWait();
 			fetch(ENDPOINT, {
 				method: "POST",
 				headers: { "content-type": "application/json", "x-dsh-intra-turn": "1" },
@@ -728,7 +793,10 @@ window.__ModuleLoader__.load({
 			})
 				.then((res) => res.json().then((data) => ({ ok: res.ok, data })))
 				.then(({ ok, data }) => {
-					if (!ok || mine !== seq) return;
+					if (mine !== seq) return;
+					hideWait();
+					if (!ok) return;
+					rememberAnalysis(text, data);
 					// Si ya se mandó o se borró el borrador, la respuesta llega tarde.
 					if (draftText(composer()).length < MIN_CHARS) return;
 					if (cardInUse()) return;
@@ -738,7 +806,9 @@ window.__ModuleLoader__.load({
 					paintMarks();
 					renderSummary();
 				})
-				.catch(() => {});
+				.catch(() => {
+					if (mine === seq) hideWait();
+				});
 		}
 
 		/**
