@@ -539,6 +539,35 @@ def cmd_idea(args) -> None:
     print("para convertirla en proyecto: decime en el chat y armamos la DoD")
 
 
+def cmd_promote(args) -> None:
+    """Convierte una idea en proyecto: cambia kind, state y slug."""
+    con = connect()
+    row = project_row(con, args.slug)
+    if row["kind"] == "project":
+        sys.exit(f"machine: '{args.slug}' ya es un proyecto")
+    target = (args.to or "").strip()
+    if target:
+        if not target.replace("-", "").replace("_", "").isalnum():
+            sys.exit("machine: el slug nuevo solo lleva letras, números, guion y guion bajo")
+        if con.execute("SELECT 1 FROM entities WHERE slug = ? AND id != ?", (target, row["id"])).fetchone():
+            sys.exit(f"machine: ya existe '{target}'")
+    slug = target or row["slug"]
+    con.execute(
+        "UPDATE entities SET kind='project', state='active', slug=?, title_manual=1, updated_at=? WHERE id=?",
+        (slug, now(), row["id"]),
+    )
+    if args.dod:
+        dod = Path(args.dod).read_text(encoding="utf-8")
+        prev = facts_of(con, row["id"]).get("dod", "")
+        con.execute(
+            "INSERT INTO facts (entity_id, key, value, observed_at) VALUES (?, 'dod', ?, ?)"
+            " ON CONFLICT (entity_id, key) DO UPDATE SET value=excluded.value, observed_at=excluded.observed_at",
+            (row["id"], (prev + "\n\n" if prev else "") + dod, now()),
+        )
+    con.commit()
+    print(f"proyecto: {slug} (kind=project, state=active)" + (f" · DoD guardada" if args.dod else ""))
+
+
 def cmd_stats(args) -> None:
     con = connect()
     print("por estado:")
@@ -906,6 +935,12 @@ def main() -> None:
     s.set_defaults(func=cmd_set)
 
     sub.add_parser("stats", help="conteos").set_defaults(func=cmd_stats)
+
+    promo = sub.add_parser("promote", help="convierte una idea en proyecto")
+    promo.add_argument("slug")
+    promo.add_argument("--to", help="slug nuevo (el nombre de la carpeta futura)")
+    promo.add_argument("--dod", help="archivo markdown con la Definition of Done")
+    promo.set_defaults(func=cmd_promote)
 
     idea = sub.add_parser("idea", help="captura una idea en texto libre (sin texto: lista)")
     idea.add_argument("text", nargs="*")
