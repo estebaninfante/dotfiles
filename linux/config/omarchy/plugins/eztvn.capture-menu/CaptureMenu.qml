@@ -235,7 +235,9 @@ Item {
     id: panel
     visible: root.opened
     anchors { top: true; bottom: true; left: true; right: true }
-    color: "transparent"
+    // Fondo opaco: si la imagen congelada no llegara a pintarse, se ve negro,
+    // nunca el escritorio en vivo detrás del overlay.
+    color: Color.background
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "capture-menu"
     WlrLayershell.layer: WlrLayer.Overlay
