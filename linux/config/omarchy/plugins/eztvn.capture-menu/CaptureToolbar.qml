@@ -2,20 +2,18 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 
-// Barra mínima: conmutador Capturar/Grabar + las tres zonas de la pantalla.
-// Sin subtítulos ni pie de ayuda: el gesto (clic en ventana o arrastre) se
-// explica solo, y el conmutador deja claro en qué modo está.
+// Barra de arriba: conmutador Capturar/Grabar y confirmar. La elección entre
+// seleccionar zona o dibujar vive en la barra de abajo.
 Item {
   id: root
 
-  property var rows: []
-  property int currentIndex: 0
   property string intent: "image"
   property bool canConfirm: false
+  property bool showFull: false
   property real reveal: 0
-  signal activated(int index)
-  signal hovered(int index)
+
   signal modeToggled()
+  signal fullRequested()
   signal confirmed()
 
   implicitWidth: card.width
@@ -130,67 +128,47 @@ Item {
         }
       }
 
+      // Captura (o graba) toda la pantalla sin elegir una zona.
       Rectangle {
-        Layout.preferredWidth: Math.max(1, Style.space(1))
-        Layout.preferredHeight: Style.space(18)
-        color: Util.alpha(Color.menu.text, 0.15)
-      }
+        visible: root.showFull
+        width: fullRow.implicitWidth + Style.space(18)
+        height: Style.space(34)
+        radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
+        color: fullArea.containsMouse ? Color.menu.selectedBackground : "transparent"
 
-      Repeater {
-        model: root.rows
+        Behavior on color {
+          ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
 
-        delegate: Rectangle {
-          id: button
-          required property var modelData
-          required property int index
+        RowLayout {
+          id: fullRow
+          anchors.centerIn: parent
+          spacing: Style.space(6)
 
-          readonly property bool current: index === root.currentIndex
-
-          width: itemRow.implicitWidth + Style.space(18)
-          height: Style.space(34)
-          radius: Math.max(Style.space(4), Style.cornerRadius - Style.space(4))
-          color: current
-            ? Util.alpha(Color.accent, 0.16)
-            : (hover.containsMouse ? Color.menu.selectedBackground : "transparent")
-          border.width: current ? Math.max(1, Style.space(1)) : 0
-          border.color: Util.alpha(Color.accent, 0.45)
-
-          Behavior on color {
-            ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+          Text {
+            text: "󰹞"
+            color: Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.icon
           }
 
-          RowLayout {
-            id: itemRow
-            anchors.centerIn: parent
-            spacing: Style.space(6)
-
-            Text {
-              text: button.modelData.icon
-              color: button.current ? Color.accent : Color.menu.text
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.icon
-            }
-
-            Text {
-              text: button.modelData.label
-              color: button.current ? Color.accent : Color.menu.text
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.bodySmall
-              font.bold: button.current
-            }
+          Text {
+            text: "Pantalla"
+            color: Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.bodySmall
           }
+        }
 
-          MouseArea {
-            id: hover
-            anchors.fill: parent
-            hoverEnabled: true
-            onEntered: root.hovered(button.index)
-            onClicked: root.activated(button.index)
-          }
+        MouseArea {
+          id: fullArea
+          anchors.fill: parent
+          hoverEnabled: true
+          onClicked: root.fullRequested()
         }
       }
 
-      // Confirmar la zona elegida (también con Enter o doble clic).
+      // Confirmar: en área hace falta una zona; en dibujo captura la pantalla.
       Rectangle {
         visible: root.canConfirm
         width: Style.space(34)

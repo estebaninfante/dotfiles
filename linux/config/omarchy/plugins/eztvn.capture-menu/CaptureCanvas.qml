@@ -17,8 +17,6 @@ Canvas {
 
   readonly property bool drawing: activeStroke !== null
 
-  signal cancelled()
-
   visible: layerVisible
   onStrokesChanged: requestPaint()
   onActiveStrokeChanged: requestPaint()
@@ -61,8 +59,6 @@ Canvas {
     var dy = pts[pts.length - 1].y - pts[0].y
     if (pts.length > 1 && (dx * dx + dy * dy) > 4)
       root.strokes = root.strokes.concat([st])
-    else
-      root.cancelled() // clic derecho sin trazo: cancela el overlay
   }
 
   function undo() {
