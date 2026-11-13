@@ -14,7 +14,7 @@
 const ROUTE = "/intra-turn/feedforward";
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_DRAFT_CHARS = 4000;
-const MAX_TOKENS = 500;
+const MAX_TOKENS = 1200;
 const CALL_TIMEOUT_MS = 45_000;
 /**
  * Proveedores como opencode Go rechazan llamadas sin id de sesión (lo usan

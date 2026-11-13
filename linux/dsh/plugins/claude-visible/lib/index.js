@@ -225,6 +225,61 @@ function tailLines(dir, wanted) {
   }
 }
 
+
+/**
+ * Pasos en vivo de una delegación en curso.
+ *
+ * `claude -p` no escribe `out.log` hasta que termina, así que mientras corre la
+ * única señal es su transcripción (`~/.claude/projects/<cwd>/<uuid>.jsonl`).
+ * No hay id de sesión guardado: se usa la transcripción más reciente, que es la
+ * de la delegación que está corriendo. Es una heurística y se dice como tal.
+ */
+function liveSteps(limit = 14) {
+  const root = join(homedir(), '.claude', 'projects')
+  if (!existsSync(root)) return { steps: [], file: '' }
+  let newest = null
+  for (const dir of readdirSync(root)) {
+    const full = join(root, dir)
+    let entries = []
+    try {
+      entries = readdirSync(full).filter((f) => f.endsWith('.jsonl'))
+    } catch {
+      continue
+    }
+    for (const file of entries) {
+      const path = join(full, file)
+      try {
+        const info = statSync(path)
+        if (!newest || info.mtimeMs > newest.mtimeMs) newest = { path, mtimeMs: info.mtimeMs }
+      } catch {}
+    }
+  }
+  if (!newest) return { steps: [], file: '' }
+  // Si la transcripción es vieja, no es de esta corrida.
+  if (Date.now() - newest.mtimeMs > 30 * 60 * 1000) return { steps: [], file: newest.path }
+  const steps = []
+  try {
+    for (const line of readFileSync(newest.path, 'utf8').split('\n')) {
+      if (!line.trim()) continue
+      let entry
+      try {
+        entry = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (entry?.type !== 'assistant') continue
+      for (const part of entry.message?.content ?? []) {
+        if (part?.type !== 'tool_use') continue
+        const arg = part.input?.command ?? part.input?.file_path ?? part.input?.description ?? part.input?.pattern ?? ''
+        steps.push(`${part.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 150)}`)
+      }
+    }
+  } catch {
+    return { steps: [], file: newest.path }
+  }
+  return { steps: steps.slice(-limit), file: newest.path }
+}
+
 /** Ficha de cada delegación: nombre, estado, última línea y tamaño del log. */
 function delegationFacts() {
   return listSessions().map((dir) => {
@@ -275,13 +330,23 @@ function registerRoutes(ctx) {
         return
       }
       const lines = Math.min(MAX_LOG_LINES, Math.max(20, Number.parseInt(url.searchParams.get('lines') ?? '120', 10) || 120))
+      const running = isRunning(dir)
       const { text, total } = tailLines(dir, lines)
-      sendJson(res, 200, {
-        name: dir.split('/').pop(),
-        running: isRunning(dir),
-        total,
-        text
-      })
+      if (!text && running) {
+        const { steps, file } = liveSteps()
+        sendJson(res, 200, {
+          name: dir.split('/').pop(),
+          running,
+          total: steps.length,
+          source: 'transcript',
+          transcript: file,
+          text: steps.length
+            ? `pasos en vivo (de la transcripción más reciente)\n\n${steps.join('\n')}`
+            : '(todavía sin pasos: la transcripción no se movió en los últimos 30 min)'
+        })
+        return
+      }
+      sendJson(res, 200, { name: dir.split('/').pop(), running, total, source: 'log', text })
       return
     }
     sendJson(res, 404, { error: 'not-found' })

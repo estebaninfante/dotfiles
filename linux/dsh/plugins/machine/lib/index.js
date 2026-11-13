@@ -19,7 +19,9 @@
 
 import { execFile, spawn } from "node:child_process";
 import { statSync } from "node:fs";
-import { homedir } from "node:os";
+import { writeFile, unlink } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -179,9 +181,6 @@ export function apply(ctx) {
 				if (to) args.push("--to", to);
 				let dodFile = "";
 				if (dod.trim()) {
-					const { writeFile, unlink } = await import("node:fs/promises");
-					const { tmpdir } = await import("node:os");
-					const { join } = await import("node:path");
 					dodFile = join(tmpdir(), `machine-dod-${Date.now()}.md`);
 					await writeFile(dodFile, dod, "utf8");
 					args.push("--dod", dodFile);

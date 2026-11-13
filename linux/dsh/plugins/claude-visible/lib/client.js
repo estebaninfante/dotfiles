@@ -191,7 +191,13 @@ window.__ModuleLoader__.load({
 										h("span", { className: "nm" }, log.name),
 										h("span", { className: "sub" }, log.running ? "corriendo" : "terminada"),
 										h("div", { className: "cv-spacer" }),
-										h("span", { className: "sub" }, `${log.total} líneas · últimas ${Math.min(log.total, 150)}`),
+										h(
+											"span",
+											{ className: "sub" },
+											log.source === "transcript"
+												? `${log.total} pasos en vivo`
+												: `${log.total} líneas · últimas ${Math.min(log.total, 150)}`,
+										),
 									),
 									h("pre", null, log.text || "(el log todavía está vacío)"),
 								)

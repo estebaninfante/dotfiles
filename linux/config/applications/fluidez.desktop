@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=fluidez
+Comment=Ver cómo el motor detecta saltos y zonas en un video
+Exec=webapp-launch "/home/eztvn/Proyectos/fluidez"
+Icon=fluidez
+Terminal=false
+Categories=Development;AudioVideo;
+Keywords=fluidez;
+StartupNotify=false
+Actions=stop;
+
+[Desktop Action stop]
+Name=Detener el servidor
+Exec=webapp-launch "/home/eztvn/Proyectos/fluidez" --stop
