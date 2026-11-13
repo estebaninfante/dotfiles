@@ -1,0 +1,7 @@
+{
+  "name": "dsh-local-bash-guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js"
+}
