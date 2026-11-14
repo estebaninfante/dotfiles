@@ -42,6 +42,7 @@ Item {
   property bool okR: true
   property var headTip: null         // [x, y] del puntero de cabeza, o null
   property string headMon: ""        // monitor del anillo ("" = el de la laptop)
+  property bool headRapido: false    // el anillo es el mouse real: casi sin interpolar
   property var scrollVel: null       // modo scroll con la cabeza: −1…+1, o null
   readonly property bool enScroll: scrollVel !== null
   // Destello al entrar/salir del modo scroll (se nota aunque no mires el anillo).
@@ -131,6 +132,7 @@ Item {
     root.headTip = (Array.isArray(msg.head) && msg.head.length >= 2)
       ? msg.head : null
     root.headMon = typeof msg.hm === "string" ? msg.hm : ""
+    root.headRapido = msg.hr === 1
     root.scrollVel = typeof msg.sc === "number" ? msg.sc : null
     root.targetTip = (Array.isArray(msg.target) && msg.target.length >= 2)
       ? msg.target : null
@@ -273,6 +275,7 @@ Item {
       screenW: panel.width
       screenH: panel.height
       scrollVel: root.scrollVel
+      rapido: root.headRapido
     }
 
     // Destello del borde al entrar/salir del modo scroll.
@@ -320,6 +323,7 @@ Item {
         screenW: externo.width
         screenH: externo.height
         scrollVel: root.scrollVel
+      rapido: root.headRapido
       }
     }
   }

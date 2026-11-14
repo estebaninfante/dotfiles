@@ -14,6 +14,9 @@ Item {
   property real screenH: 0
   property real size: 46
   property var scrollVel: null     // null = modo normal; número = modo scroll
+  // Modo mouse: el anillo ya es la posición real del mouse (suavizada por su
+  // resorte); sólo se interpola entre cuadros de cámara, para ir a su ritmo.
+  property bool rapido: false
 
   readonly property bool enScroll: scrollVel !== null && scrollVel !== undefined
   readonly property color cian: Qt.rgba(0.31, 0.76, 0.85, 0.95)
@@ -97,6 +100,6 @@ Item {
     }
   }
 
-  Behavior on x { NumberAnimation { duration: 90; easing.type: Easing.Linear } }
-  Behavior on y { NumberAnimation { duration: 90; easing.type: Easing.Linear } }
+  Behavior on x { NumberAnimation { duration: head.rapido ? 35 : 90; easing.type: Easing.Linear } }
+  Behavior on y { NumberAnimation { duration: head.rapido ? 35 : 90; easing.type: Easing.Linear } }
 }
