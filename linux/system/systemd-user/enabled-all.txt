@@ -7,6 +7,9 @@ audio-jack-guard.service
 # Un sink Bluetooth nunca reaparece muteado (WirePlumber restaura el mute por ruta).
 audio-bt-unmute.service
 
+# Un micrófono nunca arranca muteado (misma restauración, del lado de las fuentes).
+audio-mic-unmute.service
+
 lan-mouse-sync.path
 lan-mouse-sync.service
 

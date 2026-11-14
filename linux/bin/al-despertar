@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Al volver de la suspensión (hypridle after_sleep_cmd): revisa y repara lo que
+# el s2idle de esta AMD deja trabado. Sólo actúa si algo está mal de verdad.
+#
+# - Micrófono: WirePlumber reaplica al despertar el mute que guardó por ruta, y
+#   un micrófono muteado igual entrega cuadros (silencio): el chequeo de cuadros
+#   no lo ve. Primero se desmutea (audio-mic-unmute --once, que reintenta por si
+#   la ruta se reaplica un instante después de despertar). Después, si tras el
+#   2026-11-13 22:35 PipeWire entregaba 0 cuadros y el oído del asistente quedaba
+#   reabriéndolo cada 2 s, se prueba grabando 1,5 s; si no llega audio, se
+#   reinicia pipewire + wireplumber (el oído se reengancha solo, ya reintenta).
+# - Visión: si el motor corre pero dejó de publicar estado (cámara colgada),
+#   se reinicia con vision-ctl.
+#
+# Log: ~/.cache/al-despertar.log
+set -u
+LOG="$HOME/.cache/al-despertar.log"
+log() { printf '%s %s\n' "$(date +%F' '%T)" "$*" >>"$LOG"; }
+
+# Dejar que el hardware termine de despertar.
+sleep "${AL_DESPERTAR_ESPERA:-4}"
+
+# Micrófono silenciado: no se detecta por cuadros, se desmutea antes de probar.
+if pactl get-source-mute @DEFAULT_SOURCE@ 2>/dev/null | grep -q yes; then
+  log "micrófono silenciado: lo desmuteo"
+fi
+"$HOME/.local/bin/audio-mic-unmute" --once >/dev/null 2>&1 || true
+
+cuadros_mic() {
+  local f
+  f=$(mktemp --suffix=.wav)
+  timeout 1.5 pw-record --channels 1 --rate 16000 "$f" >/dev/null 2>&1
+  python3 - "$f" <<'EOF' 2>/dev/null || echo 0
+import sys, wave
+print(wave.open(sys.argv[1]).getnframes())
+EOF
+  rm -f "$f"
+}
+
+n=$(cuadros_mic)
+if [ "${n:-0}" -lt 1000 ]; then
+  log "micrófono sin audio ($n cuadros): reinicio pipewire"
+  systemctl --user restart pipewire pipewire-pulse wireplumber
+  sleep 3
+  log "micrófono tras reinicio: $(cuadros_mic) cuadros"
+else
+  log "micrófono ok ($n cuadros)"
+fi
+
+ESTADO="$HOME/.cache/vision-hub/state.json"
+if command -v vision-ctl >/dev/null && /usr/bin/pgrep -f "vision_hub run|vision-hub run" >/dev/null 2>&1; then
+  sleep 3
+  edad=$(( $(date +%s) - $(stat -c %Y "$ESTADO" 2>/dev/null || echo 0) ))
+  if [ "$edad" -gt 10 ]; then
+    log "visión sin estado hace ${edad}s: reinicio"
+    vision-ctl restart >>"$LOG" 2>&1
+  else
+    log "visión ok"
+  fi
+fi

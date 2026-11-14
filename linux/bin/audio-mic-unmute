@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# audio-mic-unmute — un micrófono nunca arranca silenciado.
+#
+# WirePlumber guarda el mute de cada ruta de dispositivo en
+# ~/.local/state/wireplumber/default-routes y lo vuelve a aplicar sobre la placa
+# en cuanto recrea los nodos: al arrancar y al volver de suspender, el micrófono
+# quedaba muteado aunque el switch de ALSA y la ganancia estuvieran bien. Un
+# micrófono muteado igual entrega cuadros (silencio), así que un chequeo de
+# cuadros no lo ve y lo daba por bueno.
+#
+# Este guardián desmutea toda fuente real la primera vez que ve su nodo
+# (arranque, reconexión de la placa, micrófono USB nuevo). Un mute puesto a mano
+# después no se toca: el nodo ya está visto y no vuelve a aparecer hasta la
+# próxima reconexión. Al volver de dormir lo llama al-despertar con --once.
+#
+# Igual que audio-bt-unmute, sondea en vez de escuchar `pactl subscribe`:
+# cualquier cambio de propiedad genera un evento de placa, y reaccionar a esos
+# eventos haría que el guardián pelease con vos.
+#
+#   audio-mic-unmute           demonio (arranque + nodos nuevos)
+#   audio-mic-unmute --once    desmutea ahora y termina (al volver de dormir)
+set -u
+
+INTERVAL="${AUDIO_MIC_UNMUTE_INTERVAL:-1}"
+RETRY="${AUDIO_MIC_UNMUTE_RETRY:-2}"   # margen para que WirePlumber reaplique el mute guardado
+
+# Fuentes reales actuales (sin monitores), como "<id>:<nombre>".
+real_sources() {
+  pactl list sources short 2>/dev/null | awk '$2 !~ /\.monitor$/ {print $1 ":" $2}'
+}
+
+# Desmutea la fuente pedida si está muteada.
+unmute() {  # unmute <nombre-de-fuente>
+  pactl get-source-mute "$1" 2>/dev/null | grep -q yes || return 0
+  pactl set-source-mute "$1" 0 >/dev/null 2>&1 || true
+  echo "audio-mic-unmute: desmuteado $1"
+}
+
+# Desmutea todas las fuentes reales, incluida la que quedó por defecto.
+unmute_all() {
+  local entry def
+  for entry in $(real_sources); do
+    unmute "${entry#*:}"
+  done
+  def="$(pactl get-default-source 2>/dev/null)"
+  [ -n "$def" ] && unmute "$def"
+  return 0
+}
+
+# Desmutea las fuentes nuevas y reintenta una vez: el mute guardado puede
+# llegar un instante después de crear el nodo.
+unmute_new() {  # unmute_new <entrada>...
+  local entry
+  for entry in "$@"; do
+    unmute "${entry#*:}"
+  done
+  sleep "$RETRY"
+  for entry in "$@"; do
+    unmute "${entry#*:}"
+  done
+}
+
+if [ "${1:-}" = "--once" ]; then
+  unmute_all
+  sleep "$RETRY"
+  unmute_all
+  exit 0
+fi
+
+seen=""
+while true; do
+  current="$(real_sources)"
+  nuevas=()
+  for entry in $current; do
+    case " $seen " in
+      *" $entry "*) ;;
+      *) nuevas+=("$entry") ;;
+    esac
+  done
+  [ "${#nuevas[@]}" -gt 0 ] && unmute_new "${nuevas[@]}"
+  seen="$current"
+  sleep "$INTERVAL"
+done
