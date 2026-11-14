@@ -4,8 +4,8 @@ import QtQuick
 // las yemas (azul/rojo) y del cursor real del mouse, que no se toca.
 //
 // En modo scroll con la cabeza (`scrollVel` != null) se vuelve una cápsula
-// vertical cian con flechas: la barra interna crece hacia arriba o hacia
-// abajo según el sentido y la velocidad del desplazamiento (−1 … +1).
+// vertical cian con flechas, pegada al borde derecho de la pantalla: la barra
+// interna crece hacia arriba o hacia abajo según el sentido y la velocidad.
 Item {
   id: head
 
@@ -22,8 +22,10 @@ Item {
   width: size
   height: size
 
-  x: (tip ? tip[0] : 0) * screenW - width / 2
-  y: (tip ? tip[1] : 0) * screenH - height / 2
+  // En modo scroll la cápsula se aparta al borde derecho (centrada en alto)
+  // para no tapar el texto que estás leyendo.
+  x: enScroll ? screenW - width - 14 : (tip ? tip[0] : 0) * screenW - width / 2
+  y: enScroll ? screenH / 2 - height / 2 : (tip ? tip[1] : 0) * screenH - height / 2
 
   // ── modo normal: anillo ámbar ──
   Rectangle {
