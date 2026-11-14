@@ -677,6 +677,55 @@ local function in_bottom_left(p)
     return p.x <= x0 + HOT_SIZE and p.y >= y0 + h - 1 - HOT_SIZE
 end
 
+-- Esquinas activas: las SUPERIORES de cada monitor que dan hacia afuera (sin
+-- otro monitor pegado de ese lado). Con el ASUS a la izquierda de la laptop, la
+-- esquina superior izquierda de la laptop cruzaba el puntero al ASUS en vez de
+-- abrir la grilla (sobre todo con el mouse por mirada). Así vale para cualquier
+-- disposición: ASUS → arriba a la izquierda y a la derecha; laptop → arriba a
+-- la derecha.
+local function monitor_rect(m)
+    local scale = (m.scale and m.scale > 0) and m.scale or 1
+    local w, h = (m.width or 0) / scale, (m.height or 0) / scale
+    if m.transform and m.transform % 2 == 1 then w, h = h, w end
+    return m.x or 0, m.y or 0, math.floor(w + 0.5), math.floor(h + 0.5)
+end
+
+local function hay_monitor_en(x, y, salvo)
+    local ok, ms = pcall(hl.get_monitors)
+    if not ok or not ms then return false end
+    for _, m in ipairs(ms) do
+        if m.name ~= salvo and not m.disabled then
+            local x0, y0, w, h = monitor_rect(m)
+            if x >= x0 and x < x0 + w and y >= y0 and y < y0 + h then return true end
+        end
+    end
+    return false
+end
+
+-- ¿El puntero está en una esquina superior "de afuera" del monitor activo?
+local function in_outer_top_corner(p)
+    local ok, m = pcall(hl.get_active_monitor)
+    if not ok or not m or not m.width then return false end
+    local x0, y0, w = monitor_rect(m)
+    if p.y < y0 or p.y > y0 + HOT_SIZE then return false end
+    if p.x <= x0 + HOT_SIZE and p.x >= x0 then
+        return not hay_monitor_en(x0 - 1, y0 + 1, m.name)
+    end
+    if p.x >= x0 + w - 1 - HOT_SIZE and p.x <= x0 + w then
+        return not hay_monitor_en(x0 + w, y0 + 1, m.name)
+    end
+    return false
+end
+
+local function far_from_top_corners(p)
+    local ok, m = pcall(hl.get_active_monitor)
+    if not ok or not m or not m.width then return true end
+    local x0, y0, w = monitor_rect(m)
+    local lejos_izq = p.x > x0 + HOT_REARM
+    local lejos_der = p.x < x0 + w - HOT_REARM
+    return p.y > y0 + HOT_REARM or (lejos_izq and lejos_der)
+end
+
 if plugin ~= nil then
     hl.timer(function()
         local ok, p = pcall(hl.get_cursor_pos)
@@ -697,7 +746,7 @@ if plugin ~= nil then
             end
             return
         end
-        if p.x <= HOT_SIZE and p.y <= HOT_SIZE then
+        if in_outer_top_corner(p) then
             if shot_in_progress() then
                 -- Capturando: ni abrir la grilla ni dejar armado el gesto, para
                 -- que al salir de la captura con el puntero en la esquina no
@@ -709,7 +758,7 @@ if plugin ~= nil then
                 -- lock), asi que la esquina no es del usuario: no abrir la grilla aca.
                 hot_open()
             end
-        elseif p.x > HOT_REARM or p.y > HOT_REARM then
+        elseif far_from_top_corners(p) then
             hot_armed = true
         end
     end, { timeout = HOT_POLL_MS, type = "repeat" })
