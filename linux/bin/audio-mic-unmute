@@ -69,7 +69,8 @@ fi
 
 seen=""
 while true; do
-  current="$(real_sources)"
+  # En una línea: la comparación de abajo busca " <entrada> " con espacios.
+  current="$(real_sources | tr '\n' ' ')"
   nuevas=()
   for entry in $current; do
     case " $seen " in
