@@ -13,10 +13,14 @@ local spaces = require("base.workspaces")
 -- única que manda acá.
 local internal = "eDP-2"
 
--- La vertical colgada de la laptop tiene que verse EXACTAMENTE como cuando
--- cuelga del desktop: mismo panel, mismo modo, misma escala y mismo giro
--- (2560x1440 @ 1.25 con transform 3 = 1152x2048 lógicos). Ver la rama desktop.
-local EXTERNAL_SCALE = 1.25
+-- Colgada de la laptop, la vertical (ASUS 4K) va a escala 2: 3840x2160 con
+-- transform 3 = 1080x1920 lógicos, la misma densidad que el panel interno. Es
+-- la disposición con la que se calibró la visión por mirada (vision-hub) el
+-- 2026-11-13; antes era 1.25 como en el desktop (ver la rama desktop).
+local EXTERNAL_SCALE = 2
+-- Cuánto más arriba que la laptop empieza la vertical (px lógicos): la laptop
+-- en 0x0 y la vertical a su izquierda en -1080x-1086.
+local EXTERNAL_OFFSET_Y = 1086
 local EXTERNAL_DEFAULT_TRANSFORM = 3
 local INTERNAL_MODE = "2880x1800"
 
@@ -119,22 +123,19 @@ local function apply_laptop_monitors()
     ext_w = math.floor(ext_w / EXTERNAL_SCALE + 0.5)
     ext_h = math.floor(ext_h / EXTERNAL_SCALE + 0.5)
 
-    -- La laptop queda a la derecha de la vertical y centrada en vertical, que
-    -- es la posición de siempre: vertical a la izquierda, laptop en el centro.
-    local internal_h = math.floor(tonumber(INTERNAL_MODE:match("x(%d+)$")) / 2 + 0.5)
-    local internal_y = math.max(0, math.floor((ext_h - internal_h) / 2 + 0.5))
-
+    -- La laptop en el origen y la vertical a su izquierda, empezando
+    -- EXTERNAL_OFFSET_Y más arriba (la disposición con la que se usa la mirada).
     hl.monitor({
         output = external.name,
         mode = mode,
-        position = "0x0",
+        position = (-ext_w) .. "x" .. (-EXTERNAL_OFFSET_Y),
         scale = EXTERNAL_SCALE,
         transform = transform,
     })
     hl.monitor({
         output = internal,
         mode = INTERNAL_MODE .. "@" .. refresh,
-        position = ext_w .. "x" .. internal_y,
+        position = "0x0",
         scale = 2,
     })
 
