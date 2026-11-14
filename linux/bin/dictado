@@ -48,6 +48,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HOME = os.path.expanduser("~")
@@ -348,16 +349,51 @@ def asegurar_servidor(espera: float = 45.0) -> dict:
     return datos
 
 
+# Palabras que Whisper escribe mal y cómo van (lo comparte con el asistente, que las enseña por voz):
+# {"correcciones": {"hyperlamp": "Hyprland"}, "palabras": ["Hyprland"]}
+VOCABULARIO = os.path.join(HOME, ".config/dictado/vocabulario.json")
+
+
+def leer_vocabulario() -> dict:
+    try:
+        with open(VOCABULARIO, encoding="utf-8") as fh:
+            datos = json.load(fh)
+    except (OSError, ValueError):
+        datos = {}
+    return {"correcciones": dict(datos.get("correcciones") or {}), "palabras": list(datos.get("palabras") or [])}
+
+
+def _sin_tildes(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", t.lower()) if unicodedata.category(c) != "Mn")
+
+
+def corregir(texto: str, correcciones: dict) -> str:
+    """Palabra o frase completa, sin importar mayúsculas ni tildes. Igual que asistente/vocabulario.py."""
+    for mal in sorted(correcciones, key=len, reverse=True):
+        patron = re.compile(r"(?<!\w)" + r"\s+".join(re.escape(x) for x in _sin_tildes(mal).split()) + r"(?!\w)")
+        plano, partes, ultimo = _sin_tildes(texto), [], 0
+        for m in patron.finditer(plano):
+            partes.append(texto[ultimo:m.start()] + correcciones[mal])
+            ultimo = m.end()
+        if partes:
+            texto = "".join(partes) + texto[ultimo:]
+    return texto
+
+
 def transcribir(crudo: bytes) -> str:
     asegurar_servidor()
+    vocab = leer_vocabulario()
+    pista = ", ".join(vocab["palabras"])
+    consulta = f"/transcribir?idioma={IDIOMA}" + (f"&prompt={urllib.parse.quote(pista)}" if pista else "")
     pedido = urllib.request.Request(
-        servidor_url(f"/transcribir?idioma={IDIOMA}"), data=crudo, method="POST",
+        servidor_url(consulta), data=crudo, method="POST",
         headers={"Content-Type": "application/octet-stream"})
     with urllib.request.urlopen(pedido, timeout=180) as r:
         datos = json.load(r)
     if "error" in datos:
         raise RuntimeError(str(datos["error"]))
-    return str(datos.get("texto") or "").strip()
+    return corregir(str(datos.get("texto") or "").strip(), vocab["correcciones"])
 
 
 # --- salida ---------------------------------------------------------------
