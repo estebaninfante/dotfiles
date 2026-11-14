@@ -683,11 +683,222 @@ def teclear(texto: str) -> bool:
     return hecho.returncode == 0
 
 
+def _ancestros(pid: int) -> set[int]:
+    vistos: set[int] = set()
+    while pid > 1 and pid not in vistos:
+        vistos.add(pid)
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
+                pid = int(fh.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return vistos
+
+
+def panel_tmux() -> tuple[str, str, bool] | None:
+    """(socket, panel, en_modo) si la ventana con foco muestra un cliente de tmux.
+
+    Pegar con Ctrl+Shift+V en un panel en modo copia (lo deja así «sube»/«arriba»
+    del asistente) no escribe nada: tmux toma el texto como teclas de navegación
+    y el Enter sólo cierra el modo (2026-11-14, Claude en tmux). Entregándole el
+    texto a tmux no hay teclado de por medio.
+    """
+    try:
+        salida = subprocess.run(["hyprctl", "-j", "activewindow"], check=False,
+                                capture_output=True, text=True, timeout=2).stdout
+        pid = int(json.loads(salida or "{}").get("pid") or 0)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
+        return None
+    carpeta = f"/tmp/tmux-{os.getuid()}"
+    if not pid or not os.path.isdir(carpeta):
+        return None
+    for nombre in sorted(os.listdir(carpeta)):
+        socket = os.path.join(carpeta, nombre)
+        try:
+            out = subprocess.run(["tmux", "-S", socket, "list-clients", "-F",
+                                  "#{client_pid} #{pane_id} #{pane_in_mode}"],
+                                 check=False, capture_output=True, text=True, timeout=2)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if out.returncode != 0:
+            continue
+        for linea in out.stdout.splitlines():
+            try:
+                cliente, panel, modo = linea.split()
+            except ValueError:
+                continue
+            if pid in _ancestros(int(cliente)):
+                return socket, panel, modo == "1"
+    return None
+
+
+def tmux(socket: str, *args: str, entrada: bytes | None = None) -> bool:
+    try:
+        return subprocess.run(["tmux", "-S", socket, *args], input=entrada, check=False,
+                              timeout=5, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def escribir_tmux(texto: str) -> bool:
+    """Pega en el panel de tmux de la ventana con foco (saliendo del modo copia)."""
+    destino = panel_tmux()
+    if destino is None:
+        return False
+    socket, panel, en_modo = destino
+    if en_modo:
+        tmux(socket, "send-keys", "-t", panel, "-X", "cancel")
+        log_entrega(f"panel {panel} estaba en modo copia: salí")
+    # -p: pegado entre corchetes si la app lo pidió (Claude Code, shells modernos)
+    if not (tmux(socket, "load-buffer", "-b", "dictado", "-", entrada=texto.encode("utf-8"))
+            and tmux(socket, "paste-buffer", "-p", "-d", "-b", "dictado", "-t", panel)):
+        log_entrega(f"tmux no aceptó el pegado en {panel}")
+        return False
+    log_entrega(f"pegado por tmux en {panel} ({len(texto)} car.)")
+    return True
+
+
+# --- navegador: enfocar el campo de texto más cercano ----------------------
+# Si dictás con Brave al frente pero sin hacer clic en un campo, lo pegado se
+# perdía. Por CDP (Brave corre con --remote-debugging-port=9222, el mismo que
+# usa el asistente) se enfoca el campo visible más cercano al puntero (en modo
+# mouse, donde mirás). Nunca un campo de contraseña.
+CDP = "http://127.0.0.1:9222"
+ENFOCAR_JS = r"""((px, py) => {
+  const tipos = /^(text|search|email|url|tel|number|)$/;
+  const sirve = e => e && !e.disabled && !e.readOnly && (e.isContentEditable
+      || e.tagName === 'TEXTAREA' || (e.tagName === 'INPUT' && tipos.test(e.type)));
+  let activo = document.activeElement;
+  while (activo && activo.shadowRoot && activo.shadowRoot.activeElement) activo = activo.shadowRoot.activeElement;
+  if (sirve(activo)) return 'ya';
+  if (px === null) { px = innerWidth / 2; py = innerHeight / 2; }
+  let mejor = null, dist = Infinity;
+  for (const e of document.querySelectorAll('input, textarea, [contenteditable], [role=textbox]')) {
+    if (!sirve(e) && e.getAttribute('role') !== 'textbox') continue;
+    const r = e.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > innerHeight
+        || r.right < 0 || r.left > innerWidth || getComputedStyle(e).visibility === 'hidden') continue;
+    const dx = Math.max(r.left - px, 0, px - r.right), dy = Math.max(r.top - py, 0, py - r.bottom);
+    const d = Math.hypot(dx, dy);
+    if (d < dist) { dist = d; mejor = e; }
+  }
+  if (!mejor) return 'ninguno';
+  mejor.focus();
+  if (mejor.isContentEditable) {  // el cursor al final, no al principio
+    const s = getSelection(), r = document.createRange();
+    r.selectNodeContents(mejor); r.collapse(false); s.removeAllRanges(); s.addRange(r);
+  } else if (typeof mejor.value === 'string') {
+    try { mejor.setSelectionRange(mejor.value.length, mejor.value.length); } catch (_) {}
+  }
+  return 'enfocado ' + (mejor.getAttribute('aria-label') || mejor.placeholder || mejor.name || mejor.tagName);
+})"""
+
+
+def _ws_evaluar(url: str, js: str, espera: float = 2.0):
+    """Runtime.evaluate por un websocket mínimo (sin dependencias)."""
+    import base64
+    import socket
+    import struct
+    destino = urllib.parse.urlparse(url)
+    with socket.create_connection((destino.hostname, destino.port or 80), timeout=espera) as s:
+        clave = base64.b64encode(os.urandom(16)).decode()
+        s.sendall((f"GET {destino.path} HTTP/1.1\r\nHost: {destino.netloc}\r\n"
+                   "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                   f"Sec-WebSocket-Key: {clave}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+        cabecera = b""
+        while b"\r\n\r\n" not in cabecera:
+            trozo = s.recv(4096)
+            if not trozo:
+                return None
+            cabecera += trozo
+        resto = cabecera.split(b"\r\n\r\n", 1)[1]
+        if b" 101 " not in cabecera.split(b"\r\n", 1)[0]:
+            return None
+        carga = json.dumps({"id": 1, "method": "Runtime.evaluate",
+                            "params": {"expression": js, "returnByValue": True}}).encode()
+        mascara = os.urandom(4)
+        n = len(carga)
+        trama = bytes([0x81]) + (bytes([0x80 | n]) if n < 126 else
+                                 bytes([0x80 | 126]) + struct.pack(">H", n) if n < 65536 else
+                                 bytes([0x80 | 127]) + struct.pack(">Q", n))
+        s.sendall(trama + mascara + bytes(b ^ mascara[i % 4] for i, b in enumerate(carga)))
+        buf = resto
+
+        def leer(k: int) -> bytes:
+            nonlocal buf
+            while len(buf) < k:
+                trozo = s.recv(65536)
+                if not trozo:
+                    raise OSError("websocket cerrado")
+                buf += trozo
+            dato, buf = buf[:k], buf[k:]
+            return dato
+
+        while True:
+            b0, b1 = leer(2)
+            n = b1 & 0x7F
+            if n == 126:
+                n = struct.unpack(">H", leer(2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", leer(8))[0]
+            datos = leer(n)
+            if b0 & 0x0F != 1:
+                continue
+            msg = json.loads(datos)
+            if msg.get("id") == 1:
+                return msg.get("result", {}).get("result", {}).get("value")
+
+
+def enfocar_campo_navegador() -> None:
+    """Con Brave al frente y sin campo de texto activo, enfoca el más cercano al puntero."""
+    try:
+        ventana = json.loads(subprocess.run(["hyprctl", "-j", "activewindow"], check=False,
+                                            capture_output=True, text=True, timeout=2).stdout or "{}")
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return
+    if not str(ventana.get("class") or "").lower().startswith("brave"):
+        return
+    titulo = re.sub(r"\s-\sBrave$", "", str(ventana.get("title") or ""))
+    try:
+        with urllib.request.urlopen(CDP + "/json/list", timeout=1) as r:
+            paginas = [p for p in json.load(r) if p.get("type") == "page"
+                       and p.get("webSocketDebuggerUrl") and p.get("title") == titulo]
+    except (OSError, ValueError):
+        return
+    if len(paginas) != 1:  # si no se sabe cuál pestaña es, no se toca ninguna
+        log_entrega(f"campo: {len(paginas)} pestañas con el título {titulo!r}; no enfoco")
+        return
+    px = py = "null"
+    try:
+        cursor = subprocess.run(["hyprctl", "cursorpos"], check=False, capture_output=True,
+                                text=True, timeout=2).stdout
+        cx, cy = (float(v) for v in cursor.split(","))
+        (wx, wy), (ww, wh) = ventana["at"], ventana["size"]
+        if wx <= cx < wx + ww and wy <= cy < wy + wh:
+            # la barra del navegador queda arriba: outerHeight - innerHeight
+            px = f"{cx - wx} - (outerWidth - innerWidth) / 2"
+            py = f"{cy - wy} - (outerHeight - innerHeight)"
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        pass
+    try:
+        resultado = _ws_evaluar(paginas[0]["webSocketDebuggerUrl"], f"{ENFOCAR_JS}({px}, {py})")
+    except (OSError, ValueError) as exc:
+        log_entrega(f"campo: CDP falló ({exc})")
+        return
+    log_entrega(f"campo: {resultado}")
+    if isinstance(resultado, str) and resultado.startswith("enfocado"):
+        time.sleep(0.08)
+
+
 def escribir(texto: str) -> bool:
     """Escribe en la ventana enfocada. False si no pudo (sin foco, etc)."""
     limpio = texto.replace("\n", " ").strip()
     if not limpio:
         return True
+    if escribir_tmux(limpio):
+        return True
+    enfocar_campo_navegador()
     if ENTREGA in ("pegar", "auto") and escribir_portapapeles(limpio):
         return True
     if ENTREGA in ("pegar", "auto"):
@@ -700,8 +911,15 @@ def pulsar_enter() -> bool:
 
     `wtype -k Return` asigna Return al keycode 1 (= Escape físico) y Chromium lo
     interpreta como Escape: el mensaje no se envía. Primero evdev real y el
-    inyector del compositor; wtype queda como último recurso.
+    inyector del compositor; wtype queda como último recurso. En un panel de
+    tmux va por tmux (sale del modo copia si quedó ahí).
     """
+    if destino := panel_tmux():
+        socket, panel, en_modo = destino
+        if en_modo:
+            tmux(socket, "send-keys", "-t", panel, "-X", "cancel")
+        if tmux(socket, "send-keys", "-t", panel, "Enter"):
+            return True
     try:
         if subprocess.run(["ydotool", "key", "28:1", "28:0"], check=False, timeout=5,
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
