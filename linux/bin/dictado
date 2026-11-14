@@ -20,6 +20,8 @@ Uso:
     dictado --enter         si hay dictado abierto: cierra, pega y presiona Enter;
                             si no hay: presiona Enter normal (lo llama el submap de Hyprland)
     dictado --estado        "grabando" o "libre"
+    dictado --pegar-ultimo [N] [--enter]
+                            vuelve a pegar el último dictado (o el N-ésimo) del historial
     dictado --archivo WAV   transcribe un audio y lo escribe (pruebas, sin micrófono)
     dictado --no-escribir   transcribe e imprime, sin teclear
 
@@ -57,6 +59,39 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
 # motor de visión (servicio systemd), el entorno no trae YDOTOOL_SOCKET y la
 # inyección fallaba en silencio: el texto se pegaba pero Enter no llegaba.
 os.environ.setdefault("YDOTOOL_SOCKET", os.path.join(RUNTIME, ".ydotool_socket"))
+
+
+def _sesion_grafica() -> None:
+    """Completa WAYLAND_DISPLAY y HYPRLAND_INSTANCE_SIGNATURE si faltan.
+
+    El motor de visión (vision-gui.service) arranca antes de que la sesión
+    exporte esas variables al manager de systemd; sin ellas `wl-copy` y `wtype`
+    no encuentran el compositor y no se pega nada (2026-11-14: "wl-copy falló
+    (rc=1)" en cada gesto de boca). Se toma el socket vivo más reciente.
+    """
+    def mas_reciente(rutas: list[str]) -> str | None:
+        vivas = [r for r in rutas if os.path.exists(r)]
+        return max(vivas, key=os.path.getmtime) if vivas else None
+
+    if not os.environ.get("WAYLAND_DISPLAY"):
+        try:
+            nombres = [n for n in os.listdir(RUNTIME)
+                       if re.fullmatch(r"wayland-\d+", n)]
+        except OSError:
+            nombres = []
+        if socket := mas_reciente([os.path.join(RUNTIME, n) for n in nombres]):
+            os.environ["WAYLAND_DISPLAY"] = os.path.basename(socket)
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        hypr = os.path.join(RUNTIME, "hypr")
+        try:
+            firmas = os.listdir(hypr)
+        except OSError:
+            firmas = []
+        if socket := mas_reciente([os.path.join(hypr, f, ".socket.sock") for f in firmas]):
+            os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = os.path.basename(os.path.dirname(socket))
+
+
+_sesion_grafica()
 CARPETA = os.path.join(RUNTIME, "dictado")
 PID = os.path.join(CARPETA, "grabando.pid")
 CRUDO = os.path.join(CARPETA, "grabando.f32")
@@ -910,6 +945,45 @@ def archivo(ruta: str, no_escribir: bool = False) -> int:
     return 0 if texto else 1
 
 
+def ultimo_del_historial(n: int = 1) -> str:
+    """Texto del n-ésimo dictado más reciente ("" si no hay tantos)."""
+    try:
+        with open(HISTORIAL, encoding="utf-8") as fh:
+            lineas = fh.readlines()
+    except OSError:
+        return ""
+    vistos = 0
+    for linea in reversed(lineas):
+        try:
+            texto = str(json.loads(linea).get("texto") or "").strip()
+        except (json.JSONDecodeError, AttributeError):
+            continue
+        if texto:
+            vistos += 1
+            if vistos == n:
+                return texto
+    return ""
+
+
+def pegar_ultimo(n: int = 1, enviar: bool = False) -> int:
+    """Vuelve a pegar un dictado del historial en la ventana con foco.
+
+    Para cuando el pegado original falló o cayó en otra ventana: el texto ya
+    está en el historial, no hace falta dictarlo otra vez.
+    """
+    texto = ultimo_del_historial(n)
+    if not texto:
+        avisar("Dictado", "No hay dictados en el historial", 1800)
+        return 1
+    if not escribir(texto):
+        avisar("Dictado", "No pude pegar (¿ventana con foco?)", 2500)
+        return 1
+    if enviar:
+        time.sleep(min(1.5, 0.25 + len(texto) * 0.003))
+        pulsar_enter()
+    return 0
+
+
 def main(argv: list[str]) -> int:
     no_escribir = "--no-escribir" in argv
     args = [a for a in argv if a != "--no-escribir"]
@@ -926,6 +1000,10 @@ def main(argv: list[str]) -> int:
             log("falta la ruta del audio")
             return 2
         return archivo(args[i + 1], no_escribir)
+    if "--pegar-ultimo" in args:
+        i = args.index("--pegar-ultimo")
+        n = int(args[i + 1]) if i + 1 < len(args) and args[i + 1].isdigit() else 1
+        return pegar_ultimo(n, enviar="--enter" in args)
     if "--enter" in args:
         return terminar(enviar=True)
     if pid_grabador():
