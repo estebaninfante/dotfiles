@@ -244,6 +244,20 @@ def limpiar() -> None:
             pass
 
 
+# Lo que Whisper inventa con silencio o ruido. Misma lista que asistente/src/asistente/comandos.py.
+ALUCINACIONES = {"gracias", "muchas gracias", "gracias por ver el video", "gracias por ver", "suscribete",
+                 "hasta la proxima", "subtitulos realizados por la comunidad de amara org", "ok", "mmm", "mm",
+                 "ah", "eh", "uh", "musica"}
+
+
+def es_alucinacion(texto: str) -> bool:
+    import unicodedata
+    t = "".join(c for c in unicodedata.normalize("NFD", texto.lower()) if unicodedata.category(c) != "Mn")
+    t = re.sub(r"[^a-z0-9ñ ]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t in ALUCINACIONES
+
+
 def separar_orden(texto: str, cerrado_con_enter: bool = False) -> tuple[str, str | None]:
     """Recorta la orden hablada del final: "... y listo, enter" -> ("... y listo,", "enviar").
 
@@ -660,6 +674,12 @@ def cerrar_dictado(pedido: str, enviar: bool = False) -> int:
         return 1
     if not texto:
         avisar("Dictado", "No se entendió nada", 1500)
+        return 1
+    if es_alucinacion(texto):
+        # Con silencio o ruido Whisper inventa cierres de video ("¡Gracias por ver el video!",
+        # "Hasta la próxima"): eso no lo dijiste, no se pega.
+        log(f"descarto alucinación: {texto!r}")
+        avisar("Dictado", "Solo oí ruido; no pegué nada", 1800)
         return 1
     # La orden de cierre ("enter", "envíalo", "pausa") está dentro del audio
     # grabado: Whisper la transcribe y antes quedaba pegada al texto.
