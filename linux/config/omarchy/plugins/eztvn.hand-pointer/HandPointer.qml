@@ -42,6 +42,20 @@ Item {
   property bool okR: true
   property var headTip: null         // [x, y] del puntero de cabeza, o null
   property string headMon: ""        // monitor del anillo ("" = el de la laptop)
+  property var scrollVel: null       // modo scroll con la cabeza: −1…+1, o null
+  readonly property bool enScroll: scrollVel !== null
+  // Destello al entrar/salir del modo scroll (se nota aunque no mires el anillo).
+  property real destello: 0
+  property color destelloColor: "#4fc3d9"
+  onEnScrollChanged: {
+    destelloColor = enScroll ? "#4fc3d9" : "#9aa0a6"
+    animDestello.restart()
+  }
+  SequentialAnimation {
+    id: animDestello
+    NumberAnimation { target: root; property: "destello"; from: 0; to: 1; duration: 120 }
+    NumberAnimation { target: root; property: "destello"; from: 1; to: 0; duration: 520; easing.type: Easing.OutCubic }
+  }
   readonly property var pantallaPrincipal: Quickshell.screens.find(s => /^eDP/.test(s.name)) || null
   property var targetTip: null       // [x, y] de la diana del entrenamiento, o null
   property int lastSeq: -1
@@ -117,6 +131,7 @@ Item {
     root.headTip = (Array.isArray(msg.head) && msg.head.length >= 2)
       ? msg.head : null
     root.headMon = typeof msg.hm === "string" ? msg.hm : ""
+    root.scrollVel = typeof msg.sc === "number" ? msg.sc : null
     root.targetTip = (Array.isArray(msg.target) && msg.target.length >= 2)
       ? msg.target : null
     root.present = left.length > 0 || right.length > 0
@@ -174,7 +189,7 @@ Item {
   PanelWindow {
     id: panel
 
-    visible: root.present || root.touchPresent
+    visible: root.present || root.touchPresent || root.destello > 0.01
     screen: root.pantallaPrincipal
     anchors {
       top: true
@@ -257,6 +272,17 @@ Item {
       tip: root.headMon === "" ? root.headTip : null
       screenW: panel.width
       screenH: panel.height
+      scrollVel: root.scrollVel
+    }
+
+    // Destello del borde al entrar/salir del modo scroll.
+    Rectangle {
+      anchors.fill: parent
+      color: "transparent"
+      border.width: 6
+      border.color: root.destelloColor
+      opacity: root.destello * 0.85
+      visible: opacity > 0.01
     }
 
     TargetBall {
@@ -293,6 +319,7 @@ Item {
         tip: externo.visible ? root.headTip : null
         screenW: externo.width
         screenH: externo.height
+        scrollVel: root.scrollVel
       }
     }
   }
