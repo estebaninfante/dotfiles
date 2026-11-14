@@ -46,4 +46,18 @@ Item {
 
   Behavior on x { NumberAnimation { duration: 80; easing.type: Easing.Linear } }
   Behavior on y { NumberAnimation { duration: 80; easing.type: Easing.Linear } }
+
+  // Calibración rápida: el motor manda [u, v, n] y la diana muestra la cuenta.
+  Text {
+    visible: target.tip !== null && target.tip !== undefined && target.tip.length > 2
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: parent.bottom
+    anchors.topMargin: 10
+    text: visible ? "Mirá el centro · " + target.tip[2] : ""
+    color: "white"
+    font.pixelSize: 22
+    font.bold: true
+    style: Text.Outline
+    styleColor: Qt.rgba(0, 0, 0, 0.8)
+  }
 }

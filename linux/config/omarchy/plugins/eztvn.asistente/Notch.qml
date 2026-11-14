@@ -33,6 +33,8 @@ Item {
   property int vistas: -1          // mayor # de tarea terminada que ya miraste
   property bool abierto: false
   property int abiertaN: -1        // tarea con el resultado desplegado
+  property int mayorN: -1          // la tarea más nueva vista: si llega otra, la lista se asoma
+  property bool asomando: false    // la lista se abrió sola por una tarea nueva (se cierra sola)
   property real ahora: Date.now() / 1000
   readonly property int activas: {
     var c = 0
@@ -50,6 +52,8 @@ Item {
     if (nuevas > 0) partes.push(nuevas + (nuevas === 1 ? " lista ✓" : " listas ✓"))
     return partes.join(" · ")
   }
+  // despierto, la píldora también dice cuántas tareas siguen andando
+  readonly property string insignia: compacto ? resumen : (activas > 0 ? "◐ " + activas : "")
 
   function cargarTareas(texto) {
     try {
@@ -61,6 +65,12 @@ Item {
         root.vistas = m
       }
       root.lista = t
+      var mayor = t.length ? t[0].n : 0
+      // una tarea recién pedida: la lista se asoma unos segundos para que veas que quedó andando
+      if (root.mayorN >= 0 && mayor > root.mayorN && !root.abierto) {
+        root.abierto = true; root.asomando = true; root.ahora = Date.now() / 1000; asomo.restart()
+      }
+      root.mayorN = mayor
     } catch (e) {}
     root.actualizarReveal()
   }
@@ -72,7 +82,8 @@ Item {
   }
 
   function alternarLista() {
-    root.abierto = !root.abierto
+    root.abierto = root.asomando ? true : !root.abierto
+    root.asomando = false
     if (root.abierto) { root.marcarVistas(); root.ahora = Date.now() / 1000; cierre.restart() }
     root.actualizarReveal()
     return root.abierto ? "abierta" : "cerrada"
@@ -108,6 +119,7 @@ Item {
 
   Timer { id: reloj; interval: 1000; repeat: true; running: root.abierto; onTriggered: root.ahora = Date.now() / 1000 }
   Timer { id: cierre; interval: 45000; onTriggered: { root.abierto = false; root.actualizarReveal() } }
+  Timer { id: asomo; interval: 8000; onTriggered: { if (root.asomando) { root.asomando = false; root.abierto = false; root.actualizarReveal() } } }
 
   readonly property bool activo: estado !== "dormido"
   readonly property bool compacto: !activo
@@ -138,7 +150,7 @@ Item {
   }
   readonly property bool conTexto: !compacto && etiqueta !== ""
   readonly property int anchoTexto: conTexto ? Math.min(Math.ceil(medida.advanceWidth), maxTexto) : 0
-  readonly property int anchoTareas: compacto && resumen !== "" ? Math.ceil(medidaTareas.advanceWidth) + gap : 0
+  readonly property int anchoTareas: insignia !== "" ? Math.ceil(medidaTareas.advanceWidth) + gap : 0
   readonly property int anchoTotal: pad * 2 + lado + (conBarras ? gap + anchoBarras : 0) + (conTexto ? gap + anchoTexto : 0) + anchoTareas + (compacto ? 0 : Style.space(6))
 
   property real reveal: 0
@@ -192,7 +204,7 @@ Item {
   }
 
   TextMetrics { id: medida; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; text: root.etiqueta }
-  TextMetrics { id: medidaTareas; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; text: root.resumen }
+  TextMetrics { id: medidaTareas; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; text: root.insignia }
 
   IpcHandler {
     target: "asistente"
@@ -454,12 +466,12 @@ Item {
           maximumLineCount: 1
         }
 
-        // tareas delegadas (modo compacto)
+        // tareas delegadas (dormido: resumen; despierto: cuántas siguen)
         Text {
-          visible: root.compacto && root.resumen !== ""
+          visible: root.insignia !== ""
           anchors.verticalCenter: parent.verticalCenter
           textFormat: Text.PlainText
-          text: root.resumen
+          text: root.insignia
           font: medidaTareas.font
           color: root.nuevas > 0 ? "#7dffb3" : Qt.rgba(1, 1, 1, 0.75)
         }
@@ -496,7 +508,7 @@ Item {
 
         Text {
           textFormat: Text.PlainText
-          text: root.lista.length === 0 ? "Sin tareas delegadas todavía" : "Tareas delegadas · un solo hilo de Hermes por día"
+          text: root.lista.length === 0 ? "Sin tareas delegadas todavía" : "Tareas que le pediste a Orión"
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           color: Qt.rgba(1, 1, 1, 0.5)
