@@ -201,6 +201,16 @@ PY
         && ok "extremo: $cls opaco ($op)" || fail "extremo: $cls con opacidad $op (se espera 1)"
     fi
   done
+  # Terminales: kitty baja su propia opacidad (alpha de la app) por rc.
+  if command -v kitten >/dev/null 2>&1; then
+    for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/omarchy-kitty-*; do
+      [ -S "$sock" ] || continue
+      op="$(timeout 3 kitten @ --to "unix:$sock" ls 2>/dev/null |
+        python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["background_opacity"] if d else "")' 2>/dev/null)"
+      [ -n "${op:-}" ] && { awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
+        && ok "extremo: kitty opaca ($op)" || fail "extremo: kitty con opacidad $op (se espera 1)"; }
+    done
+  fi
 else
   [ -f "$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf" ] \
     && fail "extremo: quedó el drop-in de voz en CPU con el modo apagado" \

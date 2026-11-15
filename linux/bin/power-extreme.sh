@@ -28,6 +28,7 @@ FLAG="$STATE_DIR/on"
 RUNNING="$STATE_DIR/services.running"
 TIMERS_ON="$STATE_DIR/timers.running"
 SYSTEM_ON="$STATE_DIR/system.running"
+KITTY_SAVE="$STATE_DIR/kitty-opacity"
 BRIGHT_SAVE="$STATE_DIR/brightness"
 LED_SAVE="$STATE_DIR/kbd-led"
 IDLE_SAVE="$STATE_DIR/idle"
@@ -228,13 +229,58 @@ hypr_lite_off() {
     >/dev/null 2>&1 || true
 }
 
-# Transparencia: las ventanas "acrílicas" (WhatsApp y Spotify) se fuerzan
-# opacas. Las reglas viven en windowrules.lua y leen el flag del modo; acá solo
-# se las re-evalúa en caliente, con el flag ya puesto (engage) o ya borrado
-# (release), sin hyprctl reload.
+# Transparencia del compositor: una regla catch-all en windowrules.lua fuerza
+# opaca toda ventana. La regla lee el flag del modo; acá solo se la re-evalúa en
+# caliente, con el flag ya puesto (engage) o ya borrado (release), sin reload.
 hypr_opacity_apply() {
   command -v hyprctl >/dev/null 2>&1 || return 0
   hyprctl eval 'omarchy.apply_power_opacity()' >/dev/null 2>&1 || true
+}
+
+# ── kitty: transparencia ──────────────────────────────────────────────────
+# La opacidad de kitty (background_opacity 0.88 + background_blur 32) es alpha
+# de la app: el compositor no la puede anular. kitty solo deja cambiarla en
+# caliente si dynamic_background_opacity estaba prendido al arrancar (ver
+# ~/.config/kitty/kitty.conf). Se habla por el socket de listen_on que define
+# /etc/xdg/kitty/kitty.conf, no por KITTY_LISTEN_ON (puede quedar viejo en el
+# entorno de quien invoca el modo). Las instancias nuevas ya nacen opacas por el
+# geninclude del config.
+kitty_socks() {
+  local socket
+  for socket in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/omarchy-kitty-*; do
+    [ -S "$socket" ] && printf '%s\n' "$socket"
+  done
+}
+
+kitty_opacity() { # kitty_opacity <socket> [opacidad]
+  command -v kitten >/dev/null 2>&1 || return 1
+  if [ $# -ge 2 ]; then
+    timeout 3 kitten @ --to "unix:$1" set-background-opacity --all "$2" >/dev/null 2>&1
+  else
+    timeout 3 kitten @ --to "unix:$1" ls 2>/dev/null |
+      python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["background_opacity"] if d else "")' 2>/dev/null
+  fi
+}
+
+kitty_opacity_save_set() {
+  : >"$KITTY_SAVE"
+  local socket opacity
+  while IFS= read -r socket; do
+    opacity="$(kitty_opacity "$socket")" || true
+    [ -n "${opacity:-}" ] || continue
+    printf '%s\t%s\n' "$socket" "$opacity" >>"$KITTY_SAVE"
+    kitty_opacity "$socket" 1.0 ||
+      log "kitty: no se pudo cambiar $socket (¿arrancada sin dynamic_background_opacity?)"
+  done < <(kitty_socks)
+}
+
+kitty_opacity_restore() {
+  [ -f "$KITTY_SAVE" ] || return 0
+  local socket opacity
+  while IFS=$'\t' read -r socket opacity; do
+    [ -S "${socket:-}" ] && [ -n "${opacity:-}" ] && kitty_opacity "$socket" "$opacity"
+  done <"$KITTY_SAVE"
+  rm -f "$KITTY_SAVE"
 }
 
 # La dGPU solo suspende si nadie tiene /dev/nvidia* abierto. Hyprland la abre al
@@ -331,6 +377,7 @@ engage() {
   shell_widgets pause
   hypr_lite_on
   hypr_opacity_apply
+  kitty_opacity_save_set
 
   # 5) Parar la actividad de fondo. Primero timers y servicios del sistema;
   #    los del usuario al final (uno de ellos puede matar este proceso).
@@ -396,6 +443,7 @@ release() {
   shell_widgets resume
   hypr_lite_off
   hypr_opacity_apply
+  kitty_opacity_restore
 
   # 2) Volver a levantar lo que estaba corriendo.
   if [ -s "$RUNNING" ]; then
@@ -422,7 +470,7 @@ release() {
   # esperando a este script. Bloquear acá los deja colgados a los tres.
   sudo -n systemctl --no-block start battery-power-guard.service >/dev/null 2>&1 || true
 
-  rm -f "$RUNNING" "$TIMERS_ON" "$SYSTEM_ON" "$BRIGHT_SAVE" "$LED_SAVE" "$IDLE_SAVE" "$HYPR_SAVE"
+  rm -f "$RUNNING" "$TIMERS_ON" "$SYSTEM_ON" "$BRIGHT_SAVE" "$LED_SAVE" "$IDLE_SAVE" "$HYPR_SAVE" "$KITTY_SAVE"
   log "off: restaurado"
   notify "Ahorro extremo desactivado" "Servicios, brillo y pantalla vueltos a la normalidad."
   echo "Modo ahorro extremo DESACTIVADO."

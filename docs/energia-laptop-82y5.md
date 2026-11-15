@@ -469,6 +469,13 @@ activarlo tiene que ser una decisión explícita.
   solo suma mezcla. La regla catch-all vive en `hypr/windowrules.lua` y se
   alterna en caliente con `hyprctl eval 'omarchy.apply_power_opacity()'`; `off`
   la deshabilita y vuelve el acrílico.
+- **Terminal (kitty):** `background_opacity 0.88` y `background_blur 32` son
+  alpha de la app, no del compositor, así que el modo los baja por el socket de
+  control remoto (`kitten @ set-background-opacity --all 1.0`) y guarda la
+  opacidad previa por socket para restaurarla. Las instancias nuevas nacen
+  opacas por el `geninclude` de `~/.config/kitty/kitty.conf`; esto necesita
+  `dynamic_background_opacity yes` (kitty recarga el config sola, no hace falta
+  reiniciar).
 
 ### Qué persiste (lo único)
 
