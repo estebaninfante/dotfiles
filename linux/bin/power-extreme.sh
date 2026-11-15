@@ -445,10 +445,13 @@ release() {
   hypr_opacity_apply
   kitty_opacity_restore
 
-  # 2) Volver a levantar lo que estaba corriendo.
+  # 2) Volver a levantar lo que estaba corriendo. --no-block: con 25 servicios,
+  #    uno que tarde (o no arranque) dejaba el script esperando y moría antes de
+  #    restaurar timers y servicios del sistema (2026-11-14: Syncthing, cups y
+  #    docker quedaron apagados tras salir del modo).
   if [ -s "$RUNNING" ]; then
     # shellcheck disable=SC2046
-    systemctl --user start $(read_list "$RUNNING") >/dev/null 2>&1 || true
+    systemctl --user start --no-block $(read_list "$RUNNING") >/dev/null 2>&1 || true
   fi
   # El oído de Orión (proyecto asistente) puede haberse instalado después de
   # entrar al modo, así que no está en RUNNING; si está habilitado, tiene que
@@ -458,11 +461,11 @@ release() {
   fi
   if [ -s "$TIMERS_ON" ]; then
     # shellcheck disable=SC2046
-    systemctl --user start $(read_list "$TIMERS_ON") >/dev/null 2>&1 || true
+    systemctl --user start --no-block $(read_list "$TIMERS_ON") >/dev/null 2>&1 || true
   fi
   if have_root && [ -s "$SYSTEM_ON" ]; then
     # shellcheck disable=SC2046
-    sudo -n systemctl start $(read_list "$SYSTEM_ON") >/dev/null 2>&1 || true
+    sudo -n systemctl start --no-block $(read_list "$SYSTEM_ON") >/dev/null 2>&1 || true
   fi
 
   # 3) Que el guard re-evalúe (batería: power-saver y cap normal de 50 %).
