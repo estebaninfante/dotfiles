@@ -464,6 +464,11 @@ activarlo tiene que ser una decisión explícita.
 - **Hardware y kernel:** brillo al **25 %**, luz del teclado apagada, Wi-Fi power
   save forzado, ASPM powersave + NMI watchdog off (guard), pantalla a 60 s y
   bloqueo a 180 s, y `drop_caches` para soltar la caché de páginas.
+- **Compositor:** animaciones, sombras y blur apagados, y las ventanas
+  "acrílicas" (WhatsApp y Spotify) pasan a opacas: sin blur, la transparencia
+  solo suma mezcla. Las reglas viven en `hypr/windowrules.lua` y se alternan en
+  caliente con `hyprctl eval 'omarchy.apply_power_opacity()'`; `off` las vuelve
+  a dejar translúcidas.
 
 ### Qué persiste (lo único)
 
@@ -510,7 +515,7 @@ la máquina quieta (medido con `/proc/stat` y ftrace `sched_process_exec`).
 | `eztvn.power` | `bash -l` (carga el `.bashrc`: starship, zoxide…) cada 5 s | `bash` sin login |
 | `moonlight.lua` | `lan-mouse-capture.sh` cada 3 s aunque lan-mouse esté parado | sólo en cambios de estado; el poll de 3 s mira sockets (`moonlight-live`, ~8 ms) |
 | `kvm-ensure.sh` | al volver de suspensión hacía `restart` de lan-mouse | respeta el flag del modo |
-| Hyprland | animaciones y sombras | apagadas en extremo (`hyprctl eval`, se restauran) |
+| Hyprland | animaciones, sombras, blur y transparencia | apagadas en extremo (`hyprctl eval`, se restauran; WhatsApp/Spotify quedan opacas) |
 
 Los widgets se pausan por IPC (`qs ipc … call <widget> pause|resume`, lista en
 `SHELL_WIDGETS` de `power-extreme.sh`) y, si la barra arranca con el modo

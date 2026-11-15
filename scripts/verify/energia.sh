@@ -193,10 +193,26 @@ except Exception:
 PY
 )"
   [ -n "${idle:-}" ] && [ "$idle" -le 60 ] 2>/dev/null && ok "extremo: pantalla se apaga a ${idle}s" || warn "extremo: screensaver en ${idle:-?}s (se espera <=60)"
+  # Transparencia: el modo fuerza opacas las ventanas acrílicas (si están
+  # abiertas). Se consulta la opacidad efectiva del compositor.
+  for cls in 'Spotify' '.*whatsapp.*'; do
+    if op="$(hyprctl getprop "class:$cls" opacity 2>/dev/null)" && [[ "$op" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
+        && ok "extremo: $cls opaco ($op)" || fail "extremo: $cls con opacidad $op (se espera 1)"
+    fi
+  done
 else
   [ -f "$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf" ] \
     && fail "extremo: quedó el drop-in de voz en CPU con el modo apagado" \
     || ok "extremo: apagado y sin restos"
+  # Al salir, las ventanas acrílicas tienen que volver a ser translúcidas.
+  for cls in 'Spotify' '.*whatsapp.*'; do
+    if op="$(hyprctl getprop "class:$cls" opacity 2>/dev/null)" && [[ "$op" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      awk -v o="$op" 'BEGIN{exit !(o < 0.999)}' \
+        && ok "extremo: $cls volvió al acrílico ($op)" \
+        || warn "extremo: $cls quedó opaco ($op) con el modo apagado"
+    fi
+  done
 fi
 
 printf '\n'

@@ -6,15 +6,54 @@
 # si un agente se lleva puesto el servidor, la UI reconecta sola y no hay que
 # cerrar y abrir la app.
 #
+# Al revés, si está corriendo sin uso lo apaga: ninguna ventana conectada (ni la
+# local ni la del celular, que entra por tailscale serve al mismo puerto), ninguna
+# sesión escrita y ningún comando de agente vivo durante DSH_WEB_IDLE_MIN minutos.
+# Deja la bandera stopped, así que no se resucita solo; `dsh-web` la borra al
+# abrir la UI. Ocioso gasta ~350 MB y despierta la CPU un par de veces por segundo.
+#
+# En ahorro extremo (bandera de power-extreme.sh) no hace nada: el modo lo apagó
+# y no debe volver; si el dueño lo abre a mano en ese modo, tampoco se lo tumba.
+#
 # Un harness que no está instalado no es un problema: sin el unit, sale 0.
 set -uo pipefail
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/dsh-web"
+POWER_EXTREME_FLAG="${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on"
+SESSIONS="$HOME/.dsh/sessions"
 UNIT=dsh-web.service
+PORT="${DSH_WEB_PORT:-3980}"
+IDLE_MIN="${DSH_WEB_IDLE_MIN:-30}"
 
 systemctl --user cat "$UNIT" >/dev/null 2>&1 || exit 0
+[[ -f $POWER_EXTREME_FLAG ]] && exit 0
+
+# Minutos desde que el unit entró en active (0 si no se sabe).
+active_minutes() {
+  local since now
+  since=$(systemctl --user show -p ActiveEnterTimestampMonotonic --value "$UNIT")
+  now=$(awk '{printf "%d", $1 * 1000000}' /proc/uptime)
+  [[ ${since:-0} -gt 0 ]] || { echo 0; return; }
+  echo $(((now - since) / 60000000))
+}
+
+in_use() {
+  ss -tnH state established "( sport = :$PORT )" 2>/dev/null | grep -q . && return 0
+  [[ -d $SESSIONS ]] && [[ -n $(find "$SESSIONS" -type f -mmin -"$IDLE_MIN" -print -quit 2>/dev/null) ]] && return 0
+  /usr/bin/pgrep -f 'dsh-subprocess-local/lib/runner[.]js' >/dev/null 2>&1 && return 0
+  return 1
+}
+
+if systemctl --user is-active --quiet "$UNIT"; then
+  if [[ $(active_minutes) -ge $IDLE_MIN ]] && ! in_use; then
+    mkdir -p "$STATE"
+    : >"$STATE/stopped"
+    systemctl --user stop "$UNIT" >/dev/null 2>&1
+  fi
+  exit 0
+fi
+
 [[ -f $STATE/stopped ]] && exit 0
-systemctl --user is-active --quiet "$UNIT" && exit 0
 
 systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
 if systemctl --user start "$UNIT" >/dev/null 2>&1; then

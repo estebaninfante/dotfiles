@@ -89,6 +89,7 @@ STOP_TIMERS=(
   wallpaper-power-guard.timer dev-sync.timer dotfiles-sync.timer
   ai-chats-sync.timer harness-research.timer res-budget.timer
   res-reap.timer rig-db-sync.timer tmux-reap.timer lan-mouse-auto.timer
+  dsh-web-guard.timer
 )
 STOP_PATHS=(ai-chats-ingest.path lan-mouse-sync.path)
 
@@ -227,6 +228,15 @@ hypr_lite_off() {
     >/dev/null 2>&1 || true
 }
 
+# Transparencia: las ventanas "acrílicas" (WhatsApp y Spotify) se fuerzan
+# opacas. Las reglas viven en windowrules.lua y leen el flag del modo; acá solo
+# se las re-evalúa en caliente, con el flag ya puesto (engage) o ya borrado
+# (release), sin hyprctl reload.
+hypr_opacity_apply() {
+  command -v hyprctl >/dev/null 2>&1 || return 0
+  hyprctl eval 'omarchy.apply_power_opacity()' >/dev/null 2>&1 || true
+}
+
 # La dGPU solo suspende si nadie tiene /dev/nvidia* abierto. Hyprland la abre al
 # arrancar y no la suelta en caliente; env.lua la deja fuera cuando la sesión
 # arranca con el modo activo, así que hace falta cerrar sesión y volver a entrar.
@@ -320,6 +330,7 @@ engage() {
   idle_set "$IDLE_SCREENSAVER" "$IDLE_LOCK"
   shell_widgets pause
   hypr_lite_on
+  hypr_opacity_apply
 
   # 5) Parar la actividad de fondo. Primero timers y servicios del sistema;
   #    los del usuario al final (uno de ellos puede matar este proceso).
@@ -384,6 +395,7 @@ release() {
   voice_cpu_off
   shell_widgets resume
   hypr_lite_off
+  hypr_opacity_apply
 
   # 2) Volver a levantar lo que estaba corriendo.
   if [ -s "$RUNNING" ]; then
