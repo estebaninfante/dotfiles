@@ -1,0 +1,19 @@
+#!/bin/sh
+# NetworkManager dispatcher: al conectar el Kindle por cable (perfil
+# kindle-usbnet), manda ~/books a la biblioteca de LearnHarness y al Kindle
+# (lh-books.service del usuario; aditivo, nunca borra en el Kindle).
+#
+# Va en /etc/NetworkManager/dispatcher.d/92-kindle-books.
+
+[ "$2" = "up" ] || exit 0
+[ "$CONNECTION_ID" = "kindle-usbnet" ] || exit 0
+
+USER_NAME="eztvn"
+USER_ID="$(id -u "$USER_NAME")"
+[ -d "/run/user/$USER_ID" ] || exit 0
+
+# USBNetwork tarda unos segundos en abrir el SSH del Kindle.
+sudo -u "$USER_NAME" env XDG_RUNTIME_DIR="/run/user/$USER_ID" \
+    sh -c 'sleep 8; systemctl --user start --no-block lh-books.service' >/dev/null 2>&1 &
+
+exit 0

@@ -92,7 +92,7 @@ STOP_TIMERS=(
   res-reap.timer rig-db-sync.timer tmux-reap.timer lan-mouse-auto.timer
   dsh-web-guard.timer
 )
-STOP_PATHS=(ai-chats-ingest.path lan-mouse-sync.path)
+STOP_PATHS=(ai-chats-ingest.path lan-mouse-sync.path lh-books.path)
 
 # Servicios del sistema. No se tocan red (NetworkManager, tailscaled, sshd),
 # logind, udev ni lo que sostiene la sesión.

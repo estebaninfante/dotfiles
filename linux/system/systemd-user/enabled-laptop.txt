@@ -13,6 +13,10 @@ dsh-web-guard.timer
 # Lee en voz alta las respuestas del tutor de LearnHarness (audífonos, manos
 # libres). Se apaga con `leer off`. Unit: lh-leer.service
 
+# ~/books entra solo a la biblioteca de LearnHarness y al Kindle (lh-books).
+# El cable del Kindle lo dispara el dispatcher NM 92-kindle-books.
+lh-books.path
+
 # Omni (oído abierto) NO se levanta al iniciar: su llama-server deja ~2.4 GB de
 # VRAM ocupados aunque no lo estés usando. Se prende a mano cuando hace falta:
 #   systemctl --user start omni-oido omni-web

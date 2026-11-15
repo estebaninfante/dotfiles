@@ -1,0 +1,8 @@
+[Unit]
+Description=lh-books: ~/books a la biblioteca de LearnHarness y al Kindle
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/lh-books sync
+Nice=10
+TimeoutStartSec=15min

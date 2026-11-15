@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# lh-books — la carpeta de libros (~/books) manda: lo que esté ahí entra solo a
+# la biblioteca de LearnHarness y llega solo al Kindle.
+#
+#   lh-books import   importa a la biblioteca lo que falte (importador de la app)
+#   lh-books kindle   copia al Kindle lo que falte (cable primero, Wi-Fi después)
+#   lh-books sync     las dos cosas (lo corre lh-books.service)
+#   lh-books status   qué falta en cada lado, sin tocar nada
+#
+# Por qué existe: la app solo importa cuando se aprieta el botón en su ventana,
+# y su sincronización con el Kindle solo busca el Wi-Fi (192.168.1.4:2222) y
+# solo mientras la app está abierta. Por cable (USBNetwork, perfil NM
+# kindle-usbnet) el Kindle está en 192.168.15.244 y su SSH escucha en el 22.
+#
+# Disparadores: lh-books.path (cambios en ~/books) y el dispatcher de NM
+# 92-kindle-books al levantar kindle-usbnet. En ahorro extremo no hace nada.
+#
+# En el Kindle solo agrega: escribe con nombre temporal y renombra, nunca pisa
+# ni borra. Un libro cuenta como presente si su nombre ya está en documents/ o
+# books/ (las tildes salen como "?" en la FAT del Kindle) o si el registro de la
+# app (.lh-sync.json) ya lo vincula a otro nombre.
+#
+# El importador es la fuente de LearnHarness 0.5.0 copiada en
+# ~/.local/share/lh-importer/app (con sus node_modules). Si la app cambia el
+# formato de la biblioteca, hay que refrescar esa copia desde el repo.
+set -uo pipefail
+
+BOOKS="${LH_BOOKS_DIR:-$HOME/books}"
+DATA="${LH_DATA_DIR:-$HOME/.config/LearnHarness/data}"
+APP="${LH_IMPORTER_APP:-$HOME/.local/share/lh-importer/app}"
+IMPORT_JS="$(dirname "$(readlink -f "$0")")/../share/lh-books/import.mjs"
+POWER_EXTREME_FLAG="${XDG_STATE_HOME:-$HOME/.local/state}/power-extreme/on"
+KEY="${KINDLE_KEY:-$HOME/.ssh/id_ed25519}"
+KNOWN="$DATA/kindle/known_hosts"
+# host:puerto, en orden de preferencia: cable, Wi-Fi.
+KINDLE_TARGETS=(${KINDLE_TARGETS:-192.168.15.244:22 192.168.1.4:2222})
+DEVICE_DIR=/mnt/us/documents
+# Un archivo tocado hace menos que esto puede estar copiándose todavía.
+SETTLE_S=10
+
+log() { printf '%s\n' "$*"; }
+
+supported() {
+  case "${1,,}" in *.pdf | *.epub | *.md | *.markdown | *.txt) return 0 ;; esac
+  return 1
+}
+
+settled() {
+  local mtime
+  mtime=$(stat -c %Y "$1" 2>/dev/null) || return 1
+  (($(date +%s) - mtime >= SETTLE_S))
+}
+
+local_books() {
+  local f
+  for f in "$BOOKS"/*; do
+    [[ -f $f ]] || continue
+    [[ $(basename "$f") == .* ]] && continue
+    supported "$f" && settled "$f" && printf '%s\n' "$f"
+  done
+}
+
+cmd_import() {
+  [[ -d $APP/node_modules ]] || { log "falta el importador en $APP"; return 1; }
+  (cd "$APP" && LH_DATA_DIR="$DATA" LH_BOOKS_DIR="$BOOKS" LH_KINDLE_AUTOSYNC=0 \
+    LH_IMPORTER_APP="$APP" nice -n 10 "$APP/node_modules/.bin/tsx" "$IMPORT_JS" "$@")
+}
+
+KINDLE=()
+kindle_ssh() { ssh "${KINDLE[@]}" "$@" 2>/dev/null; }
+
+find_kindle() {
+  local t host port
+  for t in "${KINDLE_TARGETS[@]}"; do
+    host=${t%:*} port=${t##*:}
+    timeout 3 bash -c "echo >/dev/tcp/$host/$port" 2>/dev/null || continue
+    KINDLE=(-p "$port" -i "$KEY" -o BatchMode=yes -o ConnectTimeout=8
+      -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$KNOWN"
+      -o LogLevel=ERROR "root@$host")
+    kindle_ssh true && return 0
+  done
+  return 1
+}
+
+# Comillas simples para el sh del Kindle.
+q() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
+
+# Lo que ya está en el Kindle: nombres de documents/ y books/ y las claves
+# del registro de la app, una por línea.
+device_names() {
+  kindle_ssh "ls -1 $DEVICE_DIR /mnt/us/books 2>/dev/null; cat $DEVICE_DIR/.lh-sync.json 2>/dev/null" \
+    | python3 -I -c '
+import json, sys
+text = sys.stdin.read()
+start = text.find("{\"version\"")
+names = text[:start] if start >= 0 else text
+for line in names.splitlines():
+    if line.strip(): print(line)
+if start >= 0:
+    try:
+        for name in json.loads(text[start:]).get("files", {}): print(name)
+    except ValueError:
+        pass
+'
+}
+
+# Nombre como lo guarda la FAT del Kindle: todo lo no ASCII queda en "?".
+fat_name() { LC_ALL=C sed 's/[^ -~]\+/?/g' <<<"$1"; }
+
+missing_on_kindle() {
+  local present f name
+  present=$(device_names)
+  while IFS= read -r f; do
+    name=$(basename "$f")
+    grep -qxF -- "$name" <<<"$present" && continue
+    grep -qxF -- "$(fat_name "$name")" <<<"$present" && continue
+    printf '%s\n' "$f"
+  done < <(local_books)
+}
+
+cmd_kindle() {
+  find_kindle || { log "Kindle no disponible (ni por cable ni por Wi-Fi)"; return 0; }
+  local f name tmp sent=0
+  while IFS= read -r f; do
+    name=$(basename "$f")
+    tmp="$DEVICE_DIR/.lh-books-tmp-$$"
+    if kindle_ssh "cat > $(q "$tmp") && mv $(q "$tmp") $(q "$DEVICE_DIR/$name")" <"$f"; then
+      log "al Kindle: $name"
+      sent=$((sent + 1))
+    else
+      kindle_ssh "rm -f $(q "$tmp")"
+      log "no se pudo copiar al Kindle: $name"
+    fi
+  done < <(missing_on_kindle)
+  ((sent == 0)) && log "Kindle al día"
+  return 0
+}
+
+cmd_status() {
+  log "== sin importar"
+  cmd_import --list
+  log "== faltan en el Kindle"
+  if find_kindle; then missing_on_kindle | xargs -r -d '\n' -n1 basename; else log "(Kindle no disponible)"; fi
+}
+
+cmd="${1:-sync}"
+case "$cmd" in
+  import | kindle | sync)
+    if [[ -f $POWER_EXTREME_FLAG ]]; then
+      log "ahorro extremo: no sincronizo"
+      exit 0
+    fi
+    exec 9>"${XDG_RUNTIME_DIR:-/tmp}/lh-books.lock"
+    flock -w 600 9 || exit 1
+    case "$cmd" in
+      import) cmd_import ;;
+      kindle) cmd_kindle ;;
+      *) rc=0; cmd_import || rc=$?; cmd_kindle; exit $rc ;;
+    esac
+    ;;
+  status) cmd_status ;;
+  *) sed -n '2,10p' "$0"; exit 2 ;;
+esac

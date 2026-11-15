@@ -1,0 +1,9 @@
+[Unit]
+Description=lh-books: sincroniza al cambiar ~/books
+
+[Path]
+PathChanged=%h/books
+Unit=lh-books.service
+
+[Install]
+WantedBy=default.target
