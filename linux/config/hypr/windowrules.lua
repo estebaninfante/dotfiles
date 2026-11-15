@@ -66,11 +66,12 @@ hl.window_rule({ match = { class = "ssh-peer" }, opacity = "1.0 1.0", border_col
 hl.window_rule({ match = { class = "^brave-web\\.whatsapp\\.com__-Default$" }, opacity = "0.92 0.85" })
 hl.window_rule({ match = { class = "^Spotify$" }, opacity = "0.92 0.85" })
 
--- Modo ahorro extremo (power-extreme.sh): sin blur, el acrílico queda turbio y
--- suma mezcla en el compositor. Estas reglas van después de las de arriba y
--- fuerzan las mismas ventanas opacas; el script las habilita/deshabilita en
--- caliente con `hyprctl eval` (omarchy.apply_power_opacity), leyendo el flag
--- del modo. Con el flag ausente nacen deshabilitadas y manda el acrílico.
+-- Modo ahorro extremo (power-extreme.sh): sin blur, la transparencia solo
+-- suma mezcla en el compositor. Esta regla va al final y fuerza opaca toda
+-- ventana (gana sobre el acrílico de arriba); el script la habilita/deshabilita
+-- en caliente con `hyprctl eval` (omarchy.apply_power_opacity), leyendo el flag
+-- del modo. Con el flag ausente nace deshabilitada y mandan las reglas de
+-- siempre.
 local EXTREME_FLAG = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) ..
     "/power-extreme/on"
 
@@ -81,17 +82,12 @@ local function power_extreme_active()
     return true
 end
 
-local opaque_rules = {
-    hl.window_rule({ match = { class = "^brave-web\\.whatsapp\\.com__-Default$" }, opacity = "1.0 1.0" }),
-    hl.window_rule({ match = { class = "^Spotify$" }, opacity = "1.0 1.0" }),
-}
+local opaque_rule = hl.window_rule({ match = { class = ".*" }, opacity = "1.0 1.0" })
 
 _G.omarchy = _G.omarchy or {}
 _G.omarchy.apply_power_opacity = function()
     local active = power_extreme_active()
-    for _, rule in ipairs(opaque_rules) do
-        rule:set_enabled(active)
-    end
+    opaque_rule:set_enabled(active)
     return active and "opaque" or "acrylic"
 end
 _G.omarchy.apply_power_opacity()
