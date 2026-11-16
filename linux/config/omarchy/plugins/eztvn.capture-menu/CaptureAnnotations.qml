@@ -24,8 +24,8 @@ Item {
   signal clearRequested()
 
   readonly property var modes: [
-    { key: "area", icon: "󰹵" },
-    { key: "draw", icon: "󰏫" }
+    { key: "area" },
+    { key: "draw" }
   ]
 
   readonly property var tools: [
@@ -88,12 +88,55 @@ Item {
             ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
           }
 
-          Text {
+          // Íconos dibujados (no glifos): marco de recorte y lápiz, con el
+          // mismo trazo que los íconos de herramientas de al lado.
+          Canvas {
             anchors.centerIn: parent
-            text: modeButton.modelData.icon
-            color: modeButton.current ? Color.accent : Util.alpha(Color.menu.text, 0.75)
-            font.family: Style.font.menuFamily
-            font.pixelSize: Style.font.icon
+            width: Style.space(16)
+            height: Style.space(16)
+
+            property bool active: modeButton.current
+            onActiveChanged: requestPaint()
+            Component.onCompleted: requestPaint()
+
+            onPaint: {
+              var ctx = getContext("2d")
+              ctx.reset()
+              ctx.strokeStyle = modeButton.current ? Color.accent : Color.menu.text
+              ctx.lineWidth = 1.6
+              ctx.lineCap = "round"
+              ctx.lineJoin = "round"
+              var w = width
+              var h = height
+
+              if (modeButton.modelData.key === "area") {
+                // Marco de recorte: dos esquinas en L enfrentadas.
+                ctx.beginPath()
+                ctx.moveTo(w * 0.62, h * 0.16)
+                ctx.lineTo(w * 0.16, h * 0.16)
+                ctx.lineTo(w * 0.16, h * 0.62)
+                ctx.stroke()
+                ctx.beginPath()
+                ctx.moveTo(w * 0.38, h * 0.84)
+                ctx.lineTo(w * 0.84, h * 0.84)
+                ctx.lineTo(w * 0.84, h * 0.38)
+                ctx.stroke()
+              } else {
+                // Lápiz, el mismo trazo que la herramienta de dibujo.
+                ctx.beginPath()
+                ctx.moveTo(w * 0.10, h * 0.90)
+                ctx.lineTo(w * 0.24, h * 0.58)
+                ctx.lineTo(w * 0.68, h * 0.14)
+                ctx.lineTo(w * 0.86, h * 0.32)
+                ctx.lineTo(w * 0.42, h * 0.76)
+                ctx.closePath()
+                ctx.stroke()
+                ctx.beginPath()
+                ctx.moveTo(w * 0.24, h * 0.58)
+                ctx.lineTo(w * 0.42, h * 0.76)
+                ctx.stroke()
+              }
+            }
           }
 
           MouseArea {

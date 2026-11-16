@@ -125,7 +125,9 @@ Item {
     var done = root.doneFile
     var annPath = root.annotationPath()
     var ann = ""
-    if (key && !root.isVideoKey(key) && annPath !== "" && root.drawMode)
+    // Los trazos van en cualquier captura (zona, ventana o pantalla), no sólo
+    // cuando el modo activo es dibujar: dibujar es para señalar la captura.
+    if (key && !root.isVideoKey(key) && annPath !== "")
       ann = drawing.serialized(root.outputScale())
 
     root.selectionFile = ""
@@ -151,10 +153,10 @@ Item {
     if (root.intent === "video") {
       root.intent = "image"
     } else {
-      // Las anotaciones no se graban: al pasar a video se descartan.
+      // En grabación se ocultan los trazos (no se graban), pero se conservan
+      // por si se vuelve a captura.
       root.intent = "video"
       root.interaction = "area"
-      drawing.clear()
     }
     annotations.closePicker()
     keys.forceActiveFocus()
@@ -284,11 +286,11 @@ Item {
       CaptureCanvas {
         id: drawing
         anchors.fill: parent
-        // Siempre visible: ocultarlo en modo área rompía la imagen congelada y
-        // el velo (el resto de la capa dejaba de pintarse). Los trazos se
-        // ocultan con renderStrokes.
+        // Siempre visible: ocultarlo rompía la imagen congelada y el velo (el
+        // resto de la capa dejaba de pintarse). Los trazos se ven tanto en
+        // área como en dibujo; en grabación se ocultan porque no se graban.
         layerVisible: true
-        renderStrokes: root.drawMode
+        renderStrokes: root.intent === "image"
         tool: root.drawTool
         color: root.drawColor
         strokeWidth: root.drawWidth
