@@ -284,8 +284,11 @@ Item {
       CaptureCanvas {
         id: drawing
         anchors.fill: parent
-        // Los trazos sólo se ven (y se guardan) en modo dibujo.
-        layerVisible: root.drawMode
+        // Siempre visible: ocultarlo en modo área rompía la imagen congelada y
+        // el velo (el resto de la capa dejaba de pintarse). Los trazos se
+        // ocultan con renderStrokes.
+        layerVisible: true
+        renderStrokes: root.drawMode
         tool: root.drawTool
         color: root.drawColor
         strokeWidth: root.drawWidth

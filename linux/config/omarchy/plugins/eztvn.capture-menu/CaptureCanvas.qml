@@ -14,6 +14,10 @@ Canvas {
   property var activeStroke: null
   property int revision: 0
   property bool layerVisible: true
+  // Si es false el lienzo queda visible pero transparente: que el lienzo
+  // siempre esté visible es a propósito (ocultarlo rompía el resto del overlay
+  // en la capa de Wayland: desaparecían la imagen congelada y el velo).
+  property bool renderStrokes: true
 
   readonly property bool drawing: activeStroke !== null
 
@@ -21,6 +25,7 @@ Canvas {
   onStrokesChanged: requestPaint()
   onActiveStrokeChanged: requestPaint()
   onRevisionChanged: requestPaint()
+  onRenderStrokesChanged: requestPaint()
 
   function begin(x, y) {
     root.activeStroke = {
@@ -80,6 +85,7 @@ Canvas {
   onPaint: {
     var ctx = getContext("2d")
     ctx.reset()
+    if (!root.renderStrokes) return
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
     for (var i = 0; i < root.strokes.length; i++)
