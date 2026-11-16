@@ -52,6 +52,17 @@ Item {
     if (nuevas > 0) partes.push(nuevas + (nuevas === 1 ? " lista ✓" : " listas ✓"))
     return partes.join(" · ")
   }
+  // La lista muestra solo lo que importa ahora: en curso o terminadas hace menos de 10 min, máximo 3
+  // (con 8 y su resultado, crecía hacia abajo hasta tapar media pantalla). Sin nada reciente, la última.
+  readonly property var visibles: {
+    var r = []
+    for (var i = 0; i < lista.length; i++) {
+      var t = lista[i]
+      if (t.estado === "en cola" || t.estado === "corriendo" || root.ahora - (t.fin || t.creada) < 600) r.push(t)
+    }
+    if (r.length === 0 && lista.length > 0) r = [lista[0]]
+    return r.slice(0, 3)
+  }
   // despierto, la píldora también dice cuántas tareas siguen andando
   readonly property string insignia: compacto ? resumen : (activas > 0 ? "◐ " + activas : "")
 
@@ -508,14 +519,14 @@ Item {
 
         Text {
           textFormat: Text.PlainText
-          text: root.lista.length === 0 ? "Sin tareas delegadas todavía" : "Tareas que le pediste a Orión"
+          text: root.lista.length === 0 ? "Sin tareas delegadas todavía" : "Tareas de Orión"
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           color: Qt.rgba(1, 1, 1, 0.5)
         }
 
         Repeater {
-          model: root.lista.slice(0, 8)
+          model: root.visibles
           delegate: Item {
             required property var modelData
             readonly property var t: modelData
