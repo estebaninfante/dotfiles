@@ -29,7 +29,14 @@ Item {
     // Orión: el oído que siempre escucha ("Orión, …" y "dicta"/"transcribe").
     // Pararlo desde acá apaga la escucha por voz; la tecla Windows sigue
     // arrancando el asistente cuando haga falta.
-    "asistente-dictado.service"
+    "asistente-dictado.service",
+    // Orión siempre despierto (proyecto asistente, scripts/instalar-servicios.sh):
+    // el arnés, su voz (Kokoro, ~1,8 GB RAM + 0,7 GB VRAM) y su cerebro (Hermes).
+    // Apagar el arnés desde acá lo deja dormido del todo; la tecla Windows lo
+    // vuelve a prender.
+    "asistente.service",
+    "asistente-kokoro.service",
+    "asistente-hermes.service"
   ]
 
   // Modo ahorro extremo (power-extreme.sh): estos servicios están parados a
@@ -93,7 +100,10 @@ Item {
     { label: "Síntesis de voz", glyph: "󰕾" },
     { label: "LAN Mouse (KVM)", glyph: "󰈀" },
     { label: "Hypr Remote (móvil)", glyph: "󰑔" },
-    { label: "Orión (asistente)", glyph: "󰍬" }
+    { label: "Orión: oído", glyph: "󰍬" },
+    { label: "Orión: asistente", glyph: "󰚩" },
+    { label: "Orión: voz (Kokoro)", glyph: "󰕾" },
+    { label: "Orión: cerebro (Hermes)", glyph: "󰧑" }
   ]
 
   readonly property var services: serviceDefs.map(function(def, index) {

@@ -51,6 +51,7 @@ STOP_USER_UNITS=(
   voice-pi-shim.service
   kokoro-tts.service ollama.service
   omni-oido.service omni-web.service dictado.service asistente-dictado.service asistente-tecla.service
+  asistente.service asistente-kokoro.service asistente-hermes.service
   lh-leer.service
   # KVM, streaming y escritorio remoto
   lan-mouse.service lan-mouse-auto.service sunshine.service
