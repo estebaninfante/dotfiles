@@ -66,10 +66,11 @@ hl.window_rule({ match = { class = "ssh-peer" }, opacity = "1.0 1.0", border_col
 hl.window_rule({ match = { class = "^brave-web\\.whatsapp\\.com__-Default$" }, opacity = "0.92 0.85" })
 hl.window_rule({ match = { class = "^Spotify$" }, opacity = "0.92 0.85" })
 
--- Transparencia ligada a la fuente de energía: desconectado (batería) o con
--- perfil power-saver, toda ventana queda opaca, incluido el acrílico de
--- WhatsApp y Spotify de arriba. Sin blur, la transparencia solo suma mezcla en
--- el compositor. La regla va al final y gana sobre las anteriores; power-
+-- Transparencia ligada a la fuente de energía: desconectado (batería), toda
+-- ventana queda opaca, incluido el acrílico de WhatsApp y Spotify de arriba.
+-- No se usa power-saver: el perfil "silencioso" está activo también con AC, y
+-- ahí la transparencia tiene que seguir. Sin blur, la transparencia solo suma
+-- mezcla en el compositor. La regla va al final y gana sobre las anteriores; power-
 -- session-guard.sh y power-extreme.sh la re-evalúan en caliente con
 -- `hyprctl eval` (omarchy.apply_power_opacity), sin recargar Hyprland.
 -- El flag del modo extremo también la activa por si se entra con --auto en AC.
@@ -89,7 +90,7 @@ local opaque_rule = hl.window_rule({ match = { class = ".*" }, opacity = "1.0 1.
 
 _G.omarchy = _G.omarchy or {}
 _G.omarchy.apply_power_opacity = function()
-    local active = power.low_power() or power_extreme_active()
+    local active = power.on_battery() or power_extreme_active()
     opaque_rule:set_enabled(active)
     return active and "opaque" or "acrylic"
 end

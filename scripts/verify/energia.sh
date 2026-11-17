@@ -200,15 +200,11 @@ else
 fi
 
 # --- sin transparencia al desconectar -------------------------------------
-# Sigue la fuente/perfil, no el modo extremo: batería o power-saver dejan toda
-# ventana opaca (regla catch-all de windowrules.lua) y toda kitty en 1.0
+# Sigue la fuente, no el modo extremo ni el perfil: batería deja toda ventana
+# opaca (regla catch-all de windowrules.lua) y toda kitty en 1.0
 # (kitty-opacity.sh). Con AC vuelven el acrílico y la opacidad de la terminal.
-prof_now="$(busctl get-property org.freedesktop.UPower.PowerProfiles \
-  /org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles \
-  ActiveProfile 2>/dev/null | cut -d'"' -f2)"
 low_power=0
 [ "$battery" = 1 ] && low_power=1
-[ "${prof_now:-}" = "power-saver" ] && low_power=1
 
 kitty_bg_opacity() { # kitty_bg_opacity <socket>
   timeout 3 kitten @ --to "unix:$1" ls 2>/dev/null |
@@ -221,7 +217,7 @@ for cls in 'Spotify' '.*whatsapp.*'; do
   if [ "$low_power" = 1 ]; then
     awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
       && ok "sin transparencia: $cls opaco ($op)" \
-      || fail "sin transparencia: $cls con opacidad $op (batería/power-saver exige 1)"
+      || fail "sin transparencia: $cls con opacidad $op (batería exige 1)"
   else
     awk -v o="$op" 'BEGIN{exit !(o < 0.999)}' \
       && ok "AC: $cls acrílico ($op)" \
@@ -236,7 +232,7 @@ if command -v kitten >/dev/null 2>&1; then
     if [ "$low_power" = 1 ]; then
       awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
         && ok "sin transparencia: kitty opaca ($op)" \
-        || fail "sin transparencia: kitty con opacidad $op (batería/power-saver exige 1)"
+        || fail "sin transparencia: kitty con opacidad $op (batería exige 1)"
     else
       awk -v o="$op" 'BEGIN{exit !(o < 0.999)}' \
         && ok "AC: kitty translúcida ($op)" \

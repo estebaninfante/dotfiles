@@ -476,12 +476,13 @@ activarlo tiene que ser una decisión explícita.
   `dynamic_background_opacity yes` (kitty recarga el config sola, no hace falta
   reiniciar).
 
-### Sin transparencia al desconectar (batería o power-saver)
+### Sin transparencia al desconectar (batería)
 
 No depende del modo extremo: **desenchufar la laptop ya apaga toda
-transparencia**, y volver a enchufarla la restaura. El criterio es el mismo
-`low_power()` de `hypr/base/power.lua` (batería O perfil power-saver), y
-`power-session-guard.sh` lo re-aplica en cada cambio de fuente/perfil:
+transparencia**, y volver a enchufarla la restaura. El criterio es
+`on_battery()` (`hypr/base/power.lua`), no `low_power()`: el perfil power-saver
+("modo silencioso") está activo también con AC y ahí la transparencia se
+conserva. `power-session-guard.sh` lo re-aplica en cada cambio de fuente:
 
 - **Ventanas:** la regla catch-all de `windowrules.lua` queda habilitada, así
   que WhatsApp y Spotify pierden el acrílico.
@@ -536,7 +537,7 @@ la máquina quieta (medido con `/proc/stat` y ftrace `sched_process_exec`).
 | `eztvn.power` | `bash -l` (carga el `.bashrc`: starship, zoxide…) cada 5 s | `bash` sin login |
 | `moonlight.lua` | `lan-mouse-capture.sh` cada 3 s aunque lan-mouse esté parado | sólo en cambios de estado; el poll de 3 s mira sockets (`moonlight-live`, ~8 ms) |
 | `kvm-ensure.sh` | al volver de suspensión hacía `restart` de lan-mouse | respeta el flag del modo |
-| Hyprland | animaciones, sombras, blur y transparencia | apagadas con batería/power-saver (`hyprctl eval`, se restauran; toda ventana queda opaca) |
+| Hyprland | animaciones, sombras, blur y transparencia | animaciones/blur con power-saver; transparencia solo en batería (`hyprctl eval`, se restauran; toda ventana queda opaca) |
 
 Los widgets se pausan por IPC (`qs ipc … call <widget> pause|resume`, lista en
 `SHELL_WIDGETS` de `power-extreme.sh`) y, si la barra arranca con el modo

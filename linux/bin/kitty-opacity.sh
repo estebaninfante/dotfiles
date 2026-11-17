@@ -2,13 +2,14 @@
 # kitty-opacity.sh — opacidad de kitty según la fuente de energía.
 #
 # background_opacity 0.88 + background_blur 32 son alpha de la app: el
-# compositor no puede anularlas. Desconectado (batería) o con perfil
-# power-saver, toda instancia corriendo pasa a 1.0 y se guarda su opacidad por
-# socket para devolverla al enchufar. Las instancias nuevas nacen opacas por el
+# compositor no puede anularlas. Desconectado (batería), toda instancia
+# corriendo pasa a 1.0 y se guarda su opacidad por socket para devolverla al
+# enchufar. Solo batería: el perfil power-saver ("modo silencioso") está activo
+# también con AC. Las instancias nuevas nacen opacas por el
 # geninclude de kitty.conf (kitty-opacity-config.sh).
 #
 # Uso:
-#   kitty-opacity.sh auto      apply si low_power, restore si no (guard)
+#   kitty-opacity.sh auto      apply si batería, restore si no (guard)
 #   kitty-opacity.sh apply     opaca todo y guarda lo previo (idempotente)
 #   kitty-opacity.sh restore   devuelve lo guardado
 set -uo pipefail
@@ -27,16 +28,6 @@ on_battery() {
   done
   return 0
 }
-
-power_saver() {
-  local v
-  v="$(busctl get-property org.freedesktop.UPower.PowerProfiles \
-      /org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles \
-      ActiveProfile 2>/dev/null | cut -d'"' -f2)"
-  [ "$v" = "power-saver" ]
-}
-
-low_power() { on_battery || power_saver; }
 
 # Se habla por el socket de listen_on que define /etc/xdg/kitty/kitty.conf, no
 # por KITTY_LISTEN_ON (puede quedar viejo en el entorno de quien invoca).
@@ -83,7 +74,7 @@ restore() {
 }
 
 case "${1:-auto}" in
-  auto) low_power && apply || restore ;;
+  auto) if on_battery; then apply; else restore; fi ;;
   apply) apply ;;
   restore) restore ;;
   *)

@@ -243,8 +243,8 @@ hypr_opacity_apply() {
 # en baja energía y la restaura al enchufar, guardando la opacidad por socket.
 # `auto` decide por fuente/perfil, así salir del modo extremo con batería
 # sigue opaco y con AC restaura (ver kitty-opacity-config.sh para las nuevas).
-kitty_opacity_apply() {
-  "$BIN_DIR/kitty-opacity.sh" auto >/dev/null 2>&1 || true
+kitty_opacity_apply() { # kitty_opacity_apply [auto|apply|restore]
+  "$BIN_DIR/kitty-opacity.sh" "${1:-auto}" >/dev/null 2>&1 || true
 }
 
 # La dGPU solo suspende si nadie tiene /dev/nvidia* abierto. Hyprland la abre al
@@ -341,7 +341,7 @@ engage() {
   shell_widgets pause
   hypr_lite_on
   hypr_opacity_apply
-  kitty_opacity_apply
+  kitty_opacity_apply apply
 
   # 5) Parar la actividad de fondo. Primero timers y servicios del sistema;
   #    los del usuario al final (uno de ellos puede matar este proceso).
@@ -407,7 +407,7 @@ release() {
   shell_widgets resume
   hypr_lite_off
   hypr_opacity_apply
-  kitty_opacity_apply
+  kitty_opacity_apply auto
 
   # 2) Volver a levantar lo que estaba corriendo. --no-block: con 25 servicios,
   #    uno que tarde (o no arranque) dejaba el script esperando y moría antes de
