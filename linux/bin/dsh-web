@@ -380,9 +380,16 @@ fi
 
 # Si ya hay un panel abierto, enfocarlo; si no, abrirlo como web app en Brave.
 # El patrón es la clase de la ventana de Brave para --app con host loopback
-# (brave-127.0.0.1__-Default): el título no sirve porque "DeepSeek Harness"
-# también aparece en pestañas comunes del navegador.
+# (brave-127.0.0.1__-Default) Y el título: la clase sola no alcanza porque
+# todas las web apps locales (Calco, Lienzo…) comparten esa clase, y el título
+# solo tampoco porque "DeepSeek Harness" aparece en pestañas comunes.
 if command -v hyprctl >/dev/null && hyprctl clients -j >/dev/null 2>&1; then
-  exec omarchy-launch-or-focus-webapp "brave-127.0.0.1__" "$url"
+  addr=$(hyprctl clients -j | jq -r '.[] | select((.class | startswith("brave-127.0.0.1__"))
+           and (.title | test("DeepSeek|dsh"; "i"))) | .address' | head -n1)
+  if [[ -n $addr ]]; then
+    hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null 2>&1 \
+      || hyprctl dispatch focuswindow "address:$addr" >/dev/null
+    exit 0
+  fi
 fi
 exec omarchy-launch-webapp "$url"
