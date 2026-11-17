@@ -193,34 +193,54 @@ except Exception:
 PY
 )"
   [ -n "${idle:-}" ] && [ "$idle" -le 60 ] 2>/dev/null && ok "extremo: pantalla se apaga a ${idle}s" || warn "extremo: screensaver en ${idle:-?}s (se espera <=60)"
-  # Transparencia: el modo fuerza opacas las ventanas acrílicas (si están
-  # abiertas). Se consulta la opacidad efectiva del compositor.
-  for cls in 'Spotify' '.*whatsapp.*'; do
-    if op="$(hyprctl getprop "class:$cls" opacity 2>/dev/null)" && [[ "$op" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-      awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
-        && ok "extremo: $cls opaco ($op)" || fail "extremo: $cls con opacidad $op (se espera 1)"
-    fi
-  done
-  # Terminales: kitty baja su propia opacidad (alpha de la app) por rc.
-  if command -v kitten >/dev/null 2>&1; then
-    for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/omarchy-kitty-*; do
-      [ -S "$sock" ] || continue
-      op="$(timeout 3 kitten @ --to "unix:$sock" ls 2>/dev/null |
-        python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["background_opacity"] if d else "")' 2>/dev/null)"
-      [ -n "${op:-}" ] && { awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
-        && ok "extremo: kitty opaca ($op)" || fail "extremo: kitty con opacidad $op (se espera 1)"; }
-    done
-  fi
 else
   [ -f "$HOME/.config/systemd/user/voice-daemon.service.d/extreme-cpu.conf" ] \
     && fail "extremo: quedó el drop-in de voz en CPU con el modo apagado" \
     || ok "extremo: apagado y sin restos"
-  # Al salir, las ventanas acrílicas tienen que volver a ser translúcidas.
-  for cls in 'Spotify' '.*whatsapp.*'; do
-    if op="$(hyprctl getprop "class:$cls" opacity 2>/dev/null)" && [[ "$op" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+fi
+
+# --- sin transparencia al desconectar -------------------------------------
+# Sigue la fuente/perfil, no el modo extremo: batería o power-saver dejan toda
+# ventana opaca (regla catch-all de windowrules.lua) y toda kitty en 1.0
+# (kitty-opacity.sh). Con AC vuelven el acrílico y la opacidad de la terminal.
+prof_now="$(busctl get-property org.freedesktop.UPower.PowerProfiles \
+  /org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles \
+  ActiveProfile 2>/dev/null | cut -d'"' -f2)"
+low_power=0
+[ "$battery" = 1 ] && low_power=1
+[ "${prof_now:-}" = "power-saver" ] && low_power=1
+
+kitty_bg_opacity() { # kitty_bg_opacity <socket>
+  timeout 3 kitten @ --to "unix:$1" ls 2>/dev/null |
+    python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["background_opacity"] if d else "")' 2>/dev/null
+}
+
+for cls in 'Spotify' '.*whatsapp.*'; do
+  op="$(hyprctl getprop "class:$cls" opacity 2>/dev/null)" || continue
+  [[ "$op" =~ ^[0-9]+(\.[0-9]+)?$ ]] || continue
+  if [ "$low_power" = 1 ]; then
+    awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
+      && ok "sin transparencia: $cls opaco ($op)" \
+      || fail "sin transparencia: $cls con opacidad $op (batería/power-saver exige 1)"
+  else
+    awk -v o="$op" 'BEGIN{exit !(o < 0.999)}' \
+      && ok "AC: $cls acrílico ($op)" \
+      || warn "AC: $cls opaco ($op; se espera acrílico)"
+  fi
+done
+if command -v kitten >/dev/null 2>&1; then
+  for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/omarchy-kitty-*; do
+    [ -S "$sock" ] || continue
+    op="$(kitty_bg_opacity "$sock")"
+    [ -n "${op:-}" ] || continue
+    if [ "$low_power" = 1 ]; then
+      awk -v o="$op" 'BEGIN{exit !(o >= 0.999)}' \
+        && ok "sin transparencia: kitty opaca ($op)" \
+        || fail "sin transparencia: kitty con opacidad $op (batería/power-saver exige 1)"
+    else
       awk -v o="$op" 'BEGIN{exit !(o < 0.999)}' \
-        && ok "extremo: $cls volvió al acrílico ($op)" \
-        || warn "extremo: $cls quedó opaco ($op) con el modo apagado"
+        && ok "AC: kitty translúcida ($op)" \
+        || warn "AC: kitty quedó opaca ($op; nació con el equipo desconectado)"
     fi
   done
 fi

@@ -3,8 +3,10 @@
 #
 # Al cambiar la fuente de alimentacion re-evalua en caliente lo unico que
 # depende del estado de bateria (monitors.lua -> 60Hz/120Hz, looknfeel.lua ->
-# blur) con `hyprctl eval`, sin un `hyprctl reload` completo (tarda ~1.5s y
-# deja el panel en negro todo ese rato). El cambio de modo del panel, que es el
+# blur, windowrules.lua -> sin transparencia) con `hyprctl eval`, sin un
+# `hyprctl reload` completo (tarda ~1.5s y deja el panel en negro todo ese
+# rato). La transparencia propia de kitty (alpha de la app) la ajusta
+# kitty-opacity.sh, que no necesita Hyprland. El cambio de modo del panel, que es el
 # que realmente parpadea, se hace detras de un fundido a negro (`pantalla-fade`)
 # para que se sienta como un apagado lento y no como un golpe. Despues
 # arranca/para Sunshine.
@@ -74,9 +76,17 @@ if [ -f "$EXTREME_FLAG" ] && ! on_battery; then
 fi
 
 if ! wait_hypr; then
-  log "Hyprland no responde; nada que hacer"
+  log "Hyprland no responde; solo ajusto kitty"
+  "$HOME/.local/bin/kitty-opacity.sh" auto >/dev/null 2>&1 || true
   exit 0
 fi
+
+# Transparencia: desconectado (bateria) o power-saver deja toda ventana opaca
+# (regla catch-all, gana sobre el acrilico) y toda kitty en 1.0; con AC vuelve
+# el acrilico y la opacidad propia de la terminal. Se aplica siempre, aunque el
+# modo de pantalla no cambie: el estado guardado puede venir de un boot previo.
+hyprctl eval 'omarchy.apply_power_opacity()' >/dev/null 2>&1 || true
+"$HOME/.local/bin/kitty-opacity.sh" auto >/dev/null 2>&1 || true
 
 desired=performance
 low_power && desired=save

@@ -467,8 +467,7 @@ activarlo tiene que ser una decisión explícita.
 - **Compositor:** animaciones, sombras y blur apagados, y toda ventana pasa a
   opaca (incluido el acrílico de WhatsApp y Spotify): sin blur, la transparencia
   solo suma mezcla. La regla catch-all vive en `hypr/windowrules.lua` y se
-  alterna en caliente con `hyprctl eval 'omarchy.apply_power_opacity()'`; `off`
-  la deshabilita y vuelve el acrílico.
+  alterna en caliente con `hyprctl eval 'omarchy.apply_power_opacity()'`.
 - **Terminal (kitty):** `background_opacity 0.88` y `background_blur 32` son
   alpha de la app, no del compositor, así que el modo los baja por el socket de
   control remoto (`kitten @ set-background-opacity --all 1.0`) y guarda la
@@ -476,6 +475,21 @@ activarlo tiene que ser una decisión explícita.
   opacas por el `geninclude` de `~/.config/kitty/kitty.conf`; esto necesita
   `dynamic_background_opacity yes` (kitty recarga el config sola, no hace falta
   reiniciar).
+
+### Sin transparencia al desconectar (batería o power-saver)
+
+No depende del modo extremo: **desenchufar la laptop ya apaga toda
+transparencia**, y volver a enchufarla la restaura. El criterio es el mismo
+`low_power()` de `hypr/base/power.lua` (batería O perfil power-saver), y
+`power-session-guard.sh` lo re-aplica en cada cambio de fuente/perfil:
+
+- **Ventanas:** la regla catch-all de `windowrules.lua` queda habilitada, así
+  que WhatsApp y Spotify pierden el acrílico.
+- **kitty:** `kitty-opacity.sh auto` pone las instancias abiertas en 1.0 y
+  guarda la opacidad por socket en `~/.local/state/kitty-opacity/restore`;
+  `kitty-opacity-config.sh` (geninclude) hace nacer opacas las nuevas.
+- **Barra, paneles y notificaciones** ya son opacos por `shell.toml`
+  (`background-alpha = 1.0`), así que no cambian.
 
 ### Qué persiste (lo único)
 
@@ -522,7 +536,7 @@ la máquina quieta (medido con `/proc/stat` y ftrace `sched_process_exec`).
 | `eztvn.power` | `bash -l` (carga el `.bashrc`: starship, zoxide…) cada 5 s | `bash` sin login |
 | `moonlight.lua` | `lan-mouse-capture.sh` cada 3 s aunque lan-mouse esté parado | sólo en cambios de estado; el poll de 3 s mira sockets (`moonlight-live`, ~8 ms) |
 | `kvm-ensure.sh` | al volver de suspensión hacía `restart` de lan-mouse | respeta el flag del modo |
-| Hyprland | animaciones, sombras, blur y transparencia | apagadas en extremo (`hyprctl eval`, se restauran; toda ventana queda opaca) |
+| Hyprland | animaciones, sombras, blur y transparencia | apagadas con batería/power-saver (`hyprctl eval`, se restauran; toda ventana queda opaca) |
 
 Los widgets se pausan por IPC (`qs ipc … call <widget> pause|resume`, lista en
 `SHELL_WIDGETS` de `power-extreme.sh`) y, si la barra arranca con el modo
