@@ -4,6 +4,12 @@
 # Apaga TODO servicio de fondo que no sea imprescindible para la sesión o para
 # entrar por SSH: modelos locales (RAM/VRAM a cero), voz, KVM/streaming, agentes
 # y servidores, timers periódicos, impresión, docker, bluetooth. Pone
+#
+# EXCEPCIÓN: dsh-web.service (el harness) NO se apaga. Es el dueño de las
+# conversaciones y de los agentes del usuario: pararlo mata todo turno en curso
+# y, al volver a arrancar, la UI aparece sin conversaciones. Un corte de 15 s
+# del cargador (2026-11-18 14:23) alcanzó para perder todos los agentes. Pesa
+# ~300 MB y en reposo no quema CPU: se queda.
 # power-saver, brillo 25 %, luz del teclado apagada, pantalla 60 s y libera las
 # cachés del kernel. Solo quedan: Tailscale, sshd, red, sesión gráfica, entrada
 # y los servicios del sistema.
@@ -57,11 +63,12 @@ STOP_USER_UNITS=(
   app-dev.lizardbyte.app.Sunshine.service
   wireless-control.service wireless-control-tablet.service wireless-control-toques.service
   hypr-remote.service hypr-outline.service present-remote.service
-  # agentes y servidores de desarrollo (incluida la silla del agente: sin ella
-  # no queda ningún agente vivo, que es justo lo que pide el modo; para
-  # conservarla, POWER_EXTREME_KEEP_SEAT=1)
+  # agentes y servidores de desarrollo (la silla del agente incluida: el harness
+  # dsh-web queda vivo, pero la silla de la plataforma de canales se apaga).
+  # Para conservarla, POWER_EXTREME_KEEP_SEAT=1)
   rig-main-seat.service rig-discord-bot.service rig-telegram-bot.service
-  dsh-web.service agentes-platform-main.service
+  # dsh-web.service NO va acá: sostiene las conversaciones y agentes abiertos.
+  agentes-platform-main.service
   agentes-platform-developing.service zentro-developing.service
   openclaw-gateway.service speeedy.service vision-gui.service
   ohm.service foldertinder.service omarchy-crash-watch.service
@@ -90,7 +97,7 @@ STOP_TIMERS=(
   wallpaper-power-guard.timer dev-sync.timer dotfiles-sync.timer
   ai-chats-sync.timer harness-research.timer res-budget.timer
   res-reap.timer rig-db-sync.timer tmux-reap.timer lan-mouse-auto.timer
-  dsh-web-guard.timer
+  # dsh-web-guard.timer sigue vivo: vigila el harness que ahora se conserva.
 )
 STOP_PATHS=(ai-chats-ingest.path lan-mouse-sync.path lh-books.path)
 
@@ -366,7 +373,7 @@ engage() {
   local dgpu_msg=""
   dgpu_held && dgpu_msg=" Cerrá sesión y volvé a entrar para apagar la dGPU (≈8-10 W más)."
   notify "Ahorro extremo activo" \
-    "IA local, voz, KVM, agentes y timers apagados. Solo SSH/Tailscale. Brillo ${BRIGHT_PCT}%, pantalla ${IDLE_SCREENSAVER}s.${dgpu_msg}"
+    "IA local, voz, KVM y timers apagados (el harness sigue vivo). Solo SSH/Tailscale. Brillo ${BRIGHT_PCT}%, pantalla ${IDLE_SCREENSAVER}s.${dgpu_msg}"
   echo "Modo ahorro extremo ACTIVO. Se sale al enchufar el cargador (o «power-extreme.sh off»).${dgpu_msg}"
 
   # lan-mouse deja el socket al parar: sin borrarlo, moonlight.lua y la barra
