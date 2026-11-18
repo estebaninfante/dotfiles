@@ -206,10 +206,10 @@ def una_pasada(estado: dict, arranque: bool) -> None:
         vistos[nombre] = {"firma": firma, "leidos": leidos}
         if not con_texto:
             continue
-        # Primera vez que vemos este chat: se toma todo como línea base y se
-        # calla (no queremos leerte la conversación vieja al prender el
-        # servicio).
-        if not prev and arranque:
+        # Al arrancar el servicio NUNCA se habla: todo lo que ya está en los
+        # chats es línea base y se marca leído en silencio. Así un reinicio del
+        # equipo (o del servicio) no te recita la lección vieja.
+        if arranque:
             vistos[nombre] = {
                 "firma": firma,
                 "leidos": [uid(m) for m in con_texto][-MAX_LEIDOS:],
