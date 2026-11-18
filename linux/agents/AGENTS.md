@@ -8,6 +8,9 @@
 - Es deber del agente ayudarme a resolver la ambigüedad y la abstracción que tengo en la mente.
 - Si el pedido es vago, abstracto o le falta el por qué: frená y hacé las preguntas que hagan falta (una por vez) hasta que el objetivo esté claro (skill `entender-intencion`), antes de construir.
 
+## Resolver
+- Cuando algo se rompe: dame primero la solución que lo deje usable ya, y después la causa.
+
 ## Archivos
 - Editá siempre con `edit`/`write`, nunca desde bash: `bash-guard` bloquea redirecciones, `sed -i`, `tee`, python/node.
 - Notas y reglas atómicas: una idea por línea, sin explicar lo obvio.
