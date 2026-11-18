@@ -866,6 +866,21 @@ def enfocar_campo_navegador() -> None:
                        and p.get("webSocketDebuggerUrl") and p.get("title") == titulo]
     except (OSError, ValueError):
         return
+    if len(paginas) > 1:
+        # pestañas con el mismo título (dos chats de Gemini): la de atrás está
+        # "hidden"; si aún empatan (dos ventanas), la que tiene el foco
+        for js in ("document.visibilityState === 'visible'", "document.hasFocus()"):
+            vivas = []
+            for p in paginas:
+                try:
+                    if _ws_evaluar(p["webSocketDebuggerUrl"], js, espera=1.0) is True:
+                        vivas.append(p)
+                except (OSError, ValueError):
+                    pass
+            if vivas:
+                paginas = vivas
+            if len(paginas) == 1:
+                break
     if len(paginas) != 1:  # si no se sabe cuál pestaña es, no se toca ninguna
         log_entrega(f"campo: {len(paginas)} pestañas con el título {titulo!r}; no enfoco")
         return
