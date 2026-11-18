@@ -995,7 +995,15 @@ window.__ModuleLoader__.load({
 			if (card) placeCard();
 		}
 
+		/**
+		 * Apagado a pedido del usuario (2026-11-13): no convenció. La mitad host
+		 * sigue registrando la ruta pero sin cliente no se llama nunca. Para
+		 * reactivarlo: poner `ENABLED = true` y refrescar la página.
+		 */
+		const ENABLED = false;
+
 		function apply() {
+			if (!ENABLED) return;
 			injectStyles();
 			document.addEventListener("focusin", onFocusIn, true);
 			document.addEventListener("beforeinput", onBeforeInput, true);
