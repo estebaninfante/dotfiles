@@ -45,6 +45,8 @@ const allowed = [
 	["lectura en sustitución", "ps -o pid,cmd -p $(cat /run/user/1000/dictado/x.pid 2>/dev/null) 2>/dev/null"],
 	["redirección citada a /dev/null", 'cmd 2>"/dev/null"'],
 	["flecha dentro de comillas", 'echo "a > b"'],
+	["escape autorizado por el usuario", "DSH_GUARD_ALLOW=1 echo hola > notas.md"],
+	["escape autorizado en python", "DSH_GUARD_ALLOW=1 python3 -c \"open('a.md','w')\""],
 ];
 
 const denied = [
@@ -66,6 +68,8 @@ const denied = [
 	["python os.remove", "cd /tmp && python3 -c \"import os; os.remove('x')\""],
 	["node writeFileSync", "node -e \"require('fs').writeFileSync('a.md','x')\""],
 	["ruby File.write", "ruby -e \"File.write('a.md','x')\""],
+	["escape a mitad de comando", "echo DSH_GUARD_ALLOW=1 > notas.md"],
+	["escape con prefijo parecido", "DSH_GUARD_ALLOW=0 echo hola > notas.md"],
 ];
 
 const problems = [];
@@ -75,6 +79,13 @@ for (const [label, command] of allowed) {
 }
 for (const [label, command] of denied) {
 	if (run(command) === undefined) problems.push(`prohibido que pasó: ${label}`);
+}
+
+// El motivo se explica solo: nombra el guard, la regla que disparó y la salida
+// autorizada, para que el agente pueda decírselo al usuario.
+const reason = run("echo hola > notas.md");
+for (const needle of ["bash-guard", "redirección a archivo (notas.md)", "DSH_GUARD_ALLOW=1"]) {
+	if (!reason?.includes(needle)) problems.push(`el motivo no menciona "${needle}": ${reason}`);
 }
 
 // El guard no mira herramientas que no son bash.

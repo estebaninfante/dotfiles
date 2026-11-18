@@ -16,17 +16,25 @@
  * Es determinista: mira el texto del comando y devuelve un motivo; el harness
  * convierte la llamada en error antes de ejecutarla.
  *
+ * El motivo se explica solo: nombra el guard, dice qué regla se disparó y da la
+ * salida para el caso que no era una edición (el agente le pide permiso al
+ * usuario y reintenta con `DSH_GUARD_ALLOW=1` adelante).
+ *
  * @module dsh-local-bash-guard
  */
 
 export const name = "dsh-local-bash-guard";
 export const inject = ["tools"];
 
+/** Prefijo de escape: el usuario autoriza la escritura. Va primero en el comando. */
+const OVERRIDE = /^\s*DSH_GUARD_ALLOW=1\s+/;
+
 const DENIED =
-	"Editar archivos desde bash está prohibido. " +
-	"Usá la herramienta `edit` (cambios puntuales) o `write` (archivo completo): " +
-	"el cambio queda visible (diff al final del turno) y protegido contra escrituras viejas. " +
-	"Para datos de prueba generados, creá el archivo con `write`.";
+	"bash-guard bloqueó el comando: escribiría un archivo desde bash. " +
+	"Las ediciones van por `edit`/`write` para que el usuario vea el diff y la escritura pase por el guard de versión. " +
+	"Si NO ibas a editar un archivo (captura, diagnóstico, temporal, prueba), decíselo al usuario y pedile permiso: " +
+	"con su OK reintentá el mismo comando con `DSH_GUARD_ALLOW=1` adelante. No lo uses por tu cuenta. " +
+	"El tool bash ya devuelve stdout y stderr: para diagnosticar no hace falta redirigir a un archivo.";
 
 /** Destinos de redirección que no escriben un archivo real. */
 const HARMLESS_TARGET = /^\/(?:dev\/(?:null|stdout|stderr|zero|full|fd\/[0-9]+)|proc\/self\/fd\/[0-9]+)$/;
@@ -97,15 +105,16 @@ function readTarget(command, start) {
 }
 
 /**
- * Redirección que escribe un archivo (`>`, `>>`, `&>`, `2>`), salvo `/dev/*`.
+ * Destino de la primera redirección que escribe un archivo (`>`, `>>`, `&>`,
+ * `2>`), salvo `/dev/*`, o `null` si no hay.
  *
  * Mira el comando fuera de comillas: `echo "a > b"` no redirige y
  * `ps -p $(cat x.pid 2>/dev/null)` no escribe. No confunde flechas (`->`) ni
  * comparaciones (`>=`).
  * @param {string} command
- * @returns {boolean}
+ * @returns {string | null} destino, para nombrarlo en el motivo
  */
-function redirectsToFile(command) {
+function redirectTarget(command) {
 	let quote = null;
 	for (let i = 0; i < command.length; i++) {
 		const ch = command[i];
@@ -132,10 +141,10 @@ function redirectsToFile(command) {
 		if (command[j] === ">") j++;
 		while (command[j] === " " || command[j] === "\t") j++;
 		const { target, next } = readTarget(command, j);
-		if (!HARMLESS_TARGET.test(target)) return true;
+		if (!HARMLESS_TARGET.test(target)) return target;
 		i = Math.max(i, next - 1);
 	}
-	return false;
+	return null;
 }
 
 /**
@@ -164,6 +173,21 @@ export function pythonWritesFiles(command) {
 }
 
 /**
+ * Regla que se dispara, para nombrarla en el motivo: `redirección a archivo
+ * (/tmp/x)`, `python escribe un archivo`, `sed -i`, … O `undefined` si pasa.
+ * @param {string} command
+ * @returns {string | undefined}
+ */
+function findDenial(command) {
+	const target = redirectTarget(command);
+	if (target !== null) return `redirección a archivo (${target})`;
+	if (pythonWritesFiles(command)) return "python escribe un archivo";
+	const rule = WRITE_PATTERNS.find(([pattern]) => pattern.test(command));
+	if (rule) return rule[1];
+	return undefined;
+}
+
+/**
  * Motivo de denegación para una ejecución del harness, o `undefined` si pasa.
  * @param {{ name?: string, arguments?: unknown }} execution
  * @returns {string | undefined}
@@ -176,10 +200,10 @@ export function denialReason(execution) {
 		: {};
 	const command = typeof args.command === "string" ? args.command : "";
 	if (command.trim() === "") return undefined;
-	if (redirectsToFile(command)) return DENIED;
-	if (pythonWritesFiles(command)) return DENIED;
-	if (WRITE_PATTERNS.some(([pattern]) => pattern.test(command))) return DENIED;
-	return undefined;
+	if (OVERRIDE.test(command)) return undefined;
+	const rule = findDenial(command);
+	if (rule === undefined) return undefined;
+	return `${DENIED}\nMotivo: ${rule}.`;
 }
 
 /**

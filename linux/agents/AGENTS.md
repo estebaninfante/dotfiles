@@ -13,6 +13,8 @@
 
 ## Archivos
 - Editá siempre con `edit`/`write`, nunca desde bash: `bash-guard` bloquea redirecciones, `sed -i`, `tee`, python/node.
+- Si `bash-guard` te frena y no era una edición: decímelo, no lo rodees en silencio.
+- Reintentá el comando con `DSH_GUARD_ALLOW=1` adelante solo con mi OK.
 - Notas y reglas atómicas: una idea por línea, sin explicar lo obvio.
 
 ## Proyectos
