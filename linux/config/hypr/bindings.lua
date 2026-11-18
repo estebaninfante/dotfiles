@@ -100,6 +100,10 @@ hl.bind("F5", hl.dsp.exec_cmd("~/.local/bin/notify-push-toggle.sh"))
 hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("~/.local/bin/dictado"))
 hl.bind(main_mod .. " + CTRL + I", hl.dsp.exec_cmd("omarchy-launch-or-focus-tui \"~/.local/bin/dictado-historial\""), { description = "Historial de dictado" })
 
+-- Ajustes del escritorio (omatings): ventana nativa del shell con las páginas
+-- del sistema y la página Voz, que reproduce los audios que escuchó Whisper.
+hl.bind(main_mod .. " + COMMA", hl.dsp.exec_cmd("omarchy-shell shell toggle omatings '{}'"), { description = "Ajustes del escritorio" })
+
 -- Submap "dictado": lo activa `dictado` mientras graba y lo quita al
 -- terminar. Ahí la tecla Enter no llega a la app: cierra el dictado, espera a
 -- que se pegue todo y recién entonces presiona Enter. Se define en
