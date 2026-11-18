@@ -150,6 +150,22 @@ Panel {
 
   readonly property string rutaBin: Quickshell.env("HOME") + "/.local/bin/audio-ruta"
 
+  // ---------- monitoreo del micrófono ----------
+  // Escuchar en vivo lo que entra por el micrófono por la salida actual (con
+  // el delay propio de pasarlo por PipeWire). Lo hace `audio-monitor`, que
+  // carga/apaga un module-loopback desde la fuente por defecto al sink por
+  // defecto: así sigue al dispositivo que elijas en este mismo panel.
+  property bool monitoreando: false
+  readonly property string monitorBin: Quickshell.env("HOME") + "/.local/bin/audio-monitor"
+
+  function cargarMonitoreo() {
+    if (!monitoreoEstado.running) monitoreoEstado.running = true
+  }
+
+  function alternarMonitoreo() {
+    if (monitoreoAlternar.running) return
+    monitoreoAlternar.running = true
+  }
 
   // A DSP sink -- a speaker tuning, or EasyEffects -- can be the selected output
   // without being where loudness lives: changing its volume alters the level going
@@ -682,6 +698,29 @@ Panel {
     onTriggered: root.cargarRutas()
   }
 
+  Process {
+    id: monitoreoEstado
+    command: [root.monitorBin, "estado"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.monitoreando = String(text).trim() === "encendido"
+    }
+  }
+
+  Process {
+    id: monitoreoAlternar
+    command: [root.monitorBin, "toggle"]
+    onExited: root.cargarMonitoreo()
+  }
+
+  Timer {
+    interval: 4000
+    running: root.opened
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.cargarMonitoreo()
+  }
+
   Timer {
     id: audioModelRefreshTimer
     interval: 75
@@ -1029,6 +1068,49 @@ Panel {
                 width: panelColumn.width
                 node: modelData
                 rowIndex: index
+              }
+            }
+
+            // Monitoreo: escuchar el micrófono por la salida actual (con delay).
+            Item {
+              width: parent.width
+              height: monitoreoFila.implicitHeight + Style.spacing.controlGap
+
+              Row {
+                id: monitoreoFila
+                width: parent.width - Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(6)
+                spacing: Style.space(8)
+
+                Text {
+                  textFormat: Text.PlainText
+                  text: "Escuchar el micrófono"
+                  width: parent.width * 0.62
+                  elide: Text.ElideRight
+                  color: root.bar.foreground
+                  font.family: root.bar.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  text: (root.monitoreando ? "encendido" : "apagado") + "  ›"
+                  width: parent.width * 0.38 - Style.space(8)
+                  horizontalAlignment: Text.AlignRight
+                  elide: Text.ElideRight
+                  color: Qt.darker(root.bar.foreground, 1.35)
+                  font.family: root.bar.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.alternarMonitoreo()
               }
             }
           }
