@@ -906,8 +906,13 @@ def enfocar_campo_navegador() -> None:
         time.sleep(0.08)
 
 
+TECLEADO = False  # ¿la última entrega fue letra por letra (wtype)?
+
+
 def escribir(texto: str) -> bool:
     """Escribe en la ventana enfocada. False si no pudo (sin foco, etc)."""
+    global TECLEADO
+    TECLEADO = False
     limpio = texto.replace("\n", " ").strip()
     if not limpio:
         return True
@@ -918,7 +923,17 @@ def escribir(texto: str) -> bool:
         return True
     if ENTREGA in ("pegar", "auto"):
         log_entrega("cayó a teclear: el portapapeles no sirvió")
+    TECLEADO = True
     return teclear(limpio)
+
+
+def espera_antes_de_enter(texto: str) -> float:
+    """Si el Enter llega pegado a lo escrito, algunas apps lo toman como salto de línea.
+
+    Tecleado letra por letra hace falta esperar según el largo; pegado es un solo
+    evento (y el portapapeles ya esperó 0,6 s), así que basta un respiro.
+    """
+    return min(1.5, 0.25 + len(texto) * 0.003) if TECLEADO else 0.15
 
 
 def pulsar_enter() -> bool:
@@ -1005,9 +1020,7 @@ def cerrar_dictado(pedido: str, enviar: bool = False) -> int:
         print(texto, flush=True)
         return 1
     if enviar:
-        # Esperar a que la app procese lo tecleado: si el Enter llega pegado,
-        # algunas apps lo toman como salto de línea en vez de "enviar".
-        time.sleep(min(1.5, 0.25 + len(texto) * 0.003))
+        time.sleep(espera_antes_de_enter(texto))
         if pulsar_enter():
             log_entrega("Enter enviado")
         else:
@@ -1212,7 +1225,7 @@ def pegar_ultimo(n: int = 1, enviar: bool = False) -> int:
         avisar("Dictado", "No pude pegar (¿ventana con foco?)", 2500)
         return 1
     if enviar:
-        time.sleep(min(1.5, 0.25 + len(texto) * 0.003))
+        time.sleep(espera_antes_de_enter(texto))
         pulsar_enter()
     return 0
 
