@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# audio-monitor — escuchá tu propio micrófono por la salida actual.
+#
+#   audio-monitor toggle|on|off|estado
+#
+# Carga un module-loopback de PipeWire de la fuente por defecto a la salida
+# por defecto, con una latencia corta (es monitoreo: siempre hay delay). El id
+# del módulo queda en $XDG_RUNTIME_DIR/audio-monitor.id para poder apagarlo.
+set -u
+
+ESTADO="${XDG_RUNTIME_DIR:-/tmp}/audio-monitor.id"
+
+cargado() {
+  local id
+  [ -r "$ESTADO" ] || return 1
+  id="$(cat "$ESTADO" 2>/dev/null)" || return 1
+  [ -n "$id" ] || return 1
+  pactl list modules short 2>/dev/null | awk -v id="$id" '$1 == id { encontrado = 1 } END { exit !encontrado }'
+}
+
+apagar() {
+  if cargado; then
+    pactl unload-module "$(cat "$ESTADO")" >/dev/null 2>&1 || true
+  fi
+  rm -f "$ESTADO"
+}
+
+encender() {
+  local src sink id
+  if cargado; then
+    return 0
+  fi
+  apagar
+  src="$(pactl get-default-source 2>/dev/null)" || return 1
+  sink="$(pactl get-default-sink 2>/dev/null)" || return 1
+  [ -n "$src" ] && [ -n "$sink" ] || return 1
+  id="$(pactl load-module module-loopback source="$src" sink="$sink" latency_msec=60 rate=48000 channels=1 2>/dev/null)" || return 1
+  echo "$id" > "$ESTADO"
+}
+
+case "${1:-toggle}" in
+  on) encender ;;
+  off) apagar ;;
+  toggle) if cargado; then apagar; else encender; fi ;;
+  estado) if cargado; then echo encendido; else echo apagado; fi ;;
+  *) echo "uso: audio-monitor toggle|on|off|estado" >&2; exit 2 ;;
+esac
