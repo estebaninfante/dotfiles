@@ -235,8 +235,10 @@ window.__ModuleLoader__.load({
 			}, [props.sessionId]);
 
 			const picked = pickedId === "auto" ? null : tasks.find((item) => item.id === pickedId) ?? null;
-			const latest = proof ? tasks.find((item) => (item.turns ?? []).includes(proof.turn)) ?? null : null;
-			const shown = picked ?? latest;
+			// Con "auto" la tarjeta muestra el último pedido terminado; el menú marca ese renglón.
+			const latestId = String(proof?.task?.id ?? "");
+			const latest = latestId ? tasks.find((item) => item.id === latestId) ?? null : null;
+			const selectedId = picked ? picked.id : latest?.id ?? "auto";
 			const media = picked ? picked.media ?? [] : proof?.evidence?.media ?? [];
 			const deliverables = picked ? picked.deliverables ?? [] : proof?.evidence?.deliverables ?? [];
 			const summary = picked ? String(picked.summary ?? "").trim() : String(proof?.summary ?? "").trim();
@@ -325,7 +327,7 @@ window.__ModuleLoader__.load({
 									open: menuOpen,
 									anchor: picker,
 									items,
-									selectedId: pickedId,
+									selectedId,
 									side: "top",
 									align: "start",
 									dense: true,
