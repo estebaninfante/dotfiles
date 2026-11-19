@@ -50,7 +50,7 @@ detectar() {
 capturar() {
     local destino="$1" obj tipo resto carpeta base
     obj="$(detectar)"
-    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento (agent-seat run …) o montá pantalla-agente"
+    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento (agent-seat run …)"
     tipo="${obj%%:*}"
     resto="${obj#*:}"
     carpeta="$(dirname "$destino")"
@@ -87,7 +87,7 @@ cmd_iniciar() {
         esac
     done
     obj="$(detectar)"
-    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento o montá pantalla-agente"
+    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento (agent-seat run …)"
 
     local dir="$BASE/${nombre:-evidencia}-$(sello)"
     mkdir -p "$dir/frames" || die "no pude crear $dir"
@@ -157,7 +157,7 @@ cmd_grabar() {
     local dir="$BASE/${nombre}-$(sello)"
     mkdir -p "$dir/frames" || die "no pude crear $dir"
     local obj; obj="$(detectar)"
-    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento o montá pantalla-agente"
+    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento (agent-seat run …)"
     printf 'OBJETIVO=%s\nNOMBRE=%s\n' "$obj" "$nombre" > "$dir/meta"
 
     setsid "$@" >/dev/null 2>&1 </dev/null &

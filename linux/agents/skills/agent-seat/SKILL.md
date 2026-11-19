@@ -16,8 +16,8 @@ workspace.
 - Verificar algo que sólo se ve en pantalla y no alcanza con el DOM/CLI.
 - Cuando abrir una ventana en la sesión del usuario lo interrumpiría.
 
-Para pruebas web con Puppeteer/Playwright headless no hace falta; para capturas
-de UI usá `pantalla-agente` + `evidencia`.
+Para pruebas web con Puppeteer/Playwright headless no hace falta; para evidencia
+de UI usá `evidencia` (skill `evidencia`).
 
 ## Flujo
 

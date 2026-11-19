@@ -47,29 +47,6 @@ hl.window_rule({ match = { float = true }, opacity = "1.0 1.0" })
 hl.window_rule({ match = { class = "discord", float = true }, opacity = "1.0 1.0" })
 hl.window_rule({ match = { class = "^foldertinder$" }, workspace = "special:ft silent", no_initial_focus = 1, no_anim = true, border_size = 0, no_blur = 1, opacity = "1.0 1.0" })
 
--- Ventanas de prueba de agentes (pantalla-agente): nunca en las pantallas del
--- usuario, sin foco y con borde naranja. La clase la pone quien lanza la prueba:
--- `foot -a agente-test-tui …`, `chromium --class=agente-test-web …`.
--- El workspace es fijo (12) y `pantalla-agente montar` lo muestra en su salida
--- virtual; así la ventana nace ya oculta, sin carrera contra el mapeo.
-hl.window_rule({
-    match = { class = "^agente-test-" },
-    workspace = "12 silent",
-    no_initial_focus = 1,
-    focus_on_activate = false,
-    render_unfocused = 1,
-    no_anim = true,
-    border_color = "rgba(ff8800ee)",
-})
-hl.window_rule({
-    match = { initial_class = "^agente-test-" },
-    workspace = "12 silent",
-    no_initial_focus = 1,
-    focus_on_activate = false,
-    render_unfocused = 1,
-    no_anim = true,
-    border_color = "rgba(ff8800ee)",
-})
 hl.window_rule({ match = { class = "com.stremio.Stremio" }, idle_inhibit = "always" })
 hl.window_rule({ match = { class = "leia" }, workspace = "10" })
 hl.window_rule({ match = { class = "leia" }, fullscreen = 1 })

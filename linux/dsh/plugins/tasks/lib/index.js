@@ -407,7 +407,7 @@ export function apply(ctx) {
 					"Si el mensaje es una continuación (“continue”, “dale”, “seguí”), no abras tarea nueva: seguí la tarea abierta y sumá ahí tu evidencia.",
 					"Al terminar el trabajo, antes de tu respuesta final, llamá a `task_review` con el resultado de cada tarea de esta conversación: `ok` si la terminaste con prueba, `parcial` si quedó a medias, `falló` si no salió, `abierta` si sigue pendiente y `cancelada` si el usuario detuvo el turno, con una línea de qué pasó. Después decile al usuario qué quedó abierto o falló y qué sigue.",
 					"Una tarea no está terminada porque se tocaron archivos: está terminada cuando hay prueba que se pueda VER.",
-					"- Si el cambio se ve en pantalla, capturá la app real (pantalla-agente montar y capturar, o grim) y guardá la imagen bajo el proyecto o /tmp.",
+					"- Si el cambio se ve en pantalla, capturá la app real con `evidencia` (o `agent-seat screenshot`) y guardá la imagen bajo el proyecto o /tmp.",
 					"- Si hay tests o build, corrélos y mostrá cómo terminaron.",
 					"- Cerrá nombrando las rutas de las imágenes o videos y qué prueba cada una; la tarjeta de Evidencia las levanta del log de la sesión.",
 					"Sin captura ni prueba visual, la tarea queda sin evidencia visible.",

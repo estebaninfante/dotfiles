@@ -56,7 +56,24 @@ agent-*)
     if [ -n "$destino" ]; then
         hypr dispatch "hl.dsp.focus({ window = \"address:$destino\" })" >/dev/null
     else
-        "$AGENTE" show >/dev/null 2>&1 || { echo "no hay ventanas en el asiento" >&2; exit 1; }
+        # Asiento vacío: abrir chromium ahí y saltar (mismo gesto que el botón).
+        # Reintenta una vez: justo después de `stop`, el broker viejo puede
+        # seguir con el socket y el primer `run` falla.
+        for intento in 1 2; do
+            timeout 30 "$AGENTE" run chromium about:blank >/dev/null 2>&1 && break
+            sleep 2
+        done
+        for _ in 1 2 3 4 5 6; do
+            destino="$("$AGENTE" windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).address // empty) else empty end' 2>/dev/null || true)"
+            [ -n "$destino" ] && break
+            sleep 0.5
+        done
+        if [ -n "$destino" ]; then
+            hypr dispatch "hl.dsp.focus({ window = \"address:$destino\" })" >/dev/null
+        else
+            echo "no pude abrir nada en el asiento" >&2
+            exit 1
+        fi
     fi
     ;;
 esac

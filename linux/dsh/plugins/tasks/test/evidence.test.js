@@ -98,7 +98,7 @@ test("una sesión vacía no inventa evidencia", () => {
 
 test("las imágenes capturadas o entregadas son prueba visual", () => {
 	const list = [
-		call(1, "m1", "bash", { command: "pantalla-agente capturar /tmp/prueba-login.png", description: "Capturar login" }),
+		call(1, "m1", "bash", { command: "agent-seat screenshot 1 --output /tmp/prueba-login.png", description: "Capturar login" }),
 		result(2, "m1", "ok"),
 		call(3, "m2", "read_image", { path: "/tmp/prueba-login.png" }),
 		result(4, "m2", "una imagen de 1440x900"),
