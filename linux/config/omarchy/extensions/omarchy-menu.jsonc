@@ -33,6 +33,14 @@
   // reproduce los audios capturados por el asistente con su transcripción.
   "ajustes": {"icon":"󰒓","label":"Ajustes","aliases":["settings","ajustes","configuracion","preferencias"],"description":"Ventana de ajustes: pantallas, sonido, red, atajos, voz","action":"omarchy-shell shell toggle omatings '{}'"},
 
+  // Agent Seat (PR #15087): apps que maneja un agente, sandboxeadas en su
+  // workspace (20), con puntero y teclado propios. Ir/volver es lo mismo que
+  // Super+Ctrl+Alt+X y el botón de la barra.
+  "asiento": {"icon":"󰖟","label":"Agent Seat","aliases":["asiento","seat","agente","agentes"],"description":"Apps del agente en su workspace: ir, volver, estado y cerrar"},
+  "asiento.ir": {"icon":"󰁔","label":"Ir al asiento","aliases":["ir asiento","volver asiento"],"description":"Si ya estás en el asiento, volver; si no, saltar. Igual que Super+Ctrl+Alt+X y el botón","action":"agent-seat-switch"},
+  "asiento.estado": {"icon":"󰋼","label":"Estado","description":"Ventanas del asiento y si corre el broker","action":"omarchy-launch-floating-terminal-with-presentation 'agent-seat status; agent-seat windows'"},
+  "asiento.cerrar": {"icon":"󰜺","label":"Cerrar asiento","description":"Cierra el broker y todos los sandboxes","when":"agent-seat status | grep -q running","action":"agent-seat stop"},
+
   // Dotfiles sync (scripts/dotfiles-sync.sh + timer systemd-user cada 5 min)
   "sync": {"icon":"󰓦","label":"Dotfiles sync"},
   "sync.now": {"icon":"󰐯","label":"Sincronizar ahora","description":"git pull --rebase --autostash","action":"~/dotfiles/scripts/dotfiles-sync.sh --force"},

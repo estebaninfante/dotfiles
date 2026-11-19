@@ -36,16 +36,18 @@ BarWidget {
     root.where = String(parsed.where || "user")
   }
 
-  visible: root.running
-  implicitWidth: root.running ? button.implicitWidth : 0
-  implicitHeight: root.running ? button.implicitHeight : 0
+  // Siempre visible: el ícono cambia entre ir (→) y volver (←).
+  visible: true
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
   readonly property bool enAsiento: root.where === "seat"
-  readonly property string barText: root.enAsiento ? "󰌍" : "󰖟"
+  readonly property string barText: root.enAsiento ? "󰌍" : "󰁔"
   readonly property string tooltipText: root.enAsiento
     ? "Volver a tu ventana (" + root.windows + " en el asiento)"
-    : "Ir al asiento (" + root.windows + " ventana)" +
-      (root.windows > 1 ? "s" : "")
+    : (root.running
+        ? "Ir al asiento (" + root.windows + " ventana)" + (root.windows > 1 ? "s" : "")
+        : "Abrir el Agent Seat")
 
   onBarChanged: root.refresh()
   Component.onCompleted: root.refresh()

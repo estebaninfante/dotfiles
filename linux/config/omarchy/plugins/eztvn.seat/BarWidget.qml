@@ -37,15 +37,19 @@ BarWidget {
     root.titles = String(parsed.titles || "")
   }
 
-  // Sin ventanas no ocupa lugar: el aviso es que aparece y late con el número.
-  visible: root.running
-  implicitWidth: root.running ? button.implicitWidth : 0
-  implicitHeight: root.running ? button.implicitHeight : 0
+  // Siempre visible: el globo solo aparece con ventanas, y con el número al lado.
+  visible: true
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
-  readonly property string barText: root.windows > 1 ? "󰖟 " + root.windows : "󰖟"
-  readonly property string tooltipText: "Agent Seat · " + root.windows + " ventana(s)" +
-    (root.titles.length > 0 ? " · " + root.titles : "") +
-    " · clic: saltar (Super+Ctrl+Alt+X)"
+  readonly property string barText: root.running
+    ? (root.windows > 1 ? "󰖟 " + root.windows : "󰖟")
+    : "󰖟"
+  readonly property string tooltipText: root.running
+    ? ("Agent Seat · " + root.windows + " ventana(s)" +
+       (root.titles.length > 0 ? " · " + root.titles : "") +
+       " · clic: saltar (Super+Ctrl+Alt+X)")
+    : "Agent Seat libre · clic: abrir (Super+Ctrl+Alt+X)"
 
   onBarChanged: root.refresh()
   Component.onCompleted: root.refresh()
@@ -76,7 +80,7 @@ BarWidget {
     verticalPadding: 8.75
     tooltipText: root.tooltipText
     onPressed: function(b) {
-      if (b === Qt.LeftButton && root.bar) root.bar.run("agent-seat show")
+      if (b === Qt.LeftButton && root.bar) root.bar.run("agent-seat-switch")
     }
   }
 }
