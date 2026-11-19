@@ -77,6 +77,7 @@ window.__ModuleLoader__.load({
 				: { headers: { accept: "application/json" } };
 			const response = await fetch(`/tasks${path}`, init);
 			const payload = await response.json().catch(() => ({}));
+			if (response.status === 404) throw new Error("El servidor todavía no tiene las tareas cargadas. Reiniciá el harness: dsh-web --restart.");
 			if (!response.ok) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
 			return payload;
 		}
