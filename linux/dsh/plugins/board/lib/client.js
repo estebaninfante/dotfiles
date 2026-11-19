@@ -28,6 +28,11 @@ window.__ModuleLoader__.load({
 			".brd-filter{height:26px;padding:0 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);font:inherit;font-size:12px;cursor:pointer}",
 			".brd-filter:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".brd-filter[data-active='true']{border-color:var(--dsw-alias-border-l2,#3b3e46);color:var(--dsw-alias-label-primary,#ececf1)}",
+			".brd-menu-wrap{position:relative}",
+			".brd-caret{margin-left:6px;font-size:10px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".brd-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:40;min-width:200px;padding:6px;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:10px;background:var(--dsw-specific-menu,#202226);box-shadow:0 12px 30px #0008;display:flex;flex-direction:column;gap:2px}",
+			".brd-menu-item{display:flex;align-items:center;justify-content:space-between;gap:16px;height:30px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);font:inherit;font-size:12.5px;cursor:pointer;text-align:left}.brd-menu-item:hover{color:var(--dsw-alias-label-primary,#ececf1)}.brd-menu-item[data-active='true']{color:var(--dsw-alias-label-primary,#ececf1)}.brd-menu-item:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
+			".brd-menu-count{color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".brd-filter:focus-visible,.brd-icon:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".brd-section{margin:20px 0 2px;font:500 12px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".brd-list{display:flex;flex-direction:column;gap:8px;padding-top:8px}",
@@ -119,6 +124,7 @@ window.__ModuleLoader__.load({
 			const [filter, setFilter] = useState("abiertas");
 			const [error, setError] = useState(null);
 			const [busy, setBusy] = useState(false);
+			const [menuOpen, setMenuOpen] = useState(false);
 
 			const load = React.useCallback(async () => {
 				try {
@@ -198,14 +204,53 @@ window.__ModuleLoader__.load({
 					h(
 						"div",
 						{ className: "brd-filters" },
-						filters.map((item) =>
-							h("button", {
+						h(
+							"div",
+							{ className: "brd-menu-wrap" },
+							h(
+								"button",
+								{
+									type: "button",
+									className: "brd-filter",
+									"data-active": "true",
+									"aria-haspopup": "menu",
+									"aria-expanded": String(menuOpen),
+									onClick: () => setMenuOpen((open) => !open),
+								},
+								`${active.label} (${active.count})`,
+								h("span", { className: "brd-caret" }, "▾"),
+							),
+							menuOpen
+								? h(
+										"div",
+										{ className: "brd-menu", role: "menu" },
+										filters.map((item) =>
+											h(
+												"button",
+												{ type: "button", key: item.id, role: "menuitem", className: "brd-menu-item", "data-active": String(item.id === filter), onClick: () => { setFilter(item.id); setMenuOpen(false); } },
+												h("span", null, item.label),
+												h("span", { className: "brd-menu-count" }, String(item.count)),
+											),
+										),
+									)
+								: null,
+						),
+						h(
+							"button",
+							{
 								type: "button",
-								key: item.id,
 								className: "brd-filter",
-								"data-active": String(item.id === filter),
-								onClick: () => setFilter(item.id),
-							}, `${item.label} (${item.count})`),
+								title: "Reiniciar el harness para aplicar cambios del host",
+								onClick: async () => {
+									try {
+										await api("/restart", {});
+										setError(null);
+									} catch (cause) {
+										setError(cause);
+									}
+								},
+							},
+							"Reiniciar",
 						),
 					),
 					error ? h("p", { className: "brd-note" }, error.message) : null,
