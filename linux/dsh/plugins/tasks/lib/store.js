@@ -72,6 +72,17 @@ export async function listTasks(workspace) {
 	return tasks.slice().sort(order);
 }
 
+function cleanSteps(value) {
+	if (!Array.isArray(value)) return null;
+	const steps = [];
+	for (const item of value) {
+		const title = clean(typeof item === "string" ? item : item?.title, 120);
+		if (title && !steps.includes(title)) steps.push(title);
+		if (steps.length >= 12) break;
+	}
+	return steps;
+}
+
 export function createTask(input) {
 	return serialized(async () => {
 		const db = await readDb();
@@ -81,6 +92,8 @@ export function createTask(input) {
 			workspace: clean(input.workspace, 1024),
 			title: clean(input.title, 200),
 			goal: clean(input.goal, 2000),
+			// Los pasos son lo que hay que hacer dentro de la tarea, no tareas aparte.
+			steps: cleanSteps(input.steps) ?? [],
 			state: "abierta",
 			sessionId: clean(input.sessionId, 120) || null,
 			turn: Number.isSafeInteger(input.turn) && input.turn > 0 ? input.turn : null,
@@ -110,6 +123,8 @@ export function updateTask(id, patch) {
 		if (!task) throw new Error("tarea no encontrada");
 		if (typeof patch.title === "string") task.title = clean(patch.title, 200) || task.title;
 		if (typeof patch.goal === "string") task.goal = clean(patch.goal, 2000);
+		const steps = cleanSteps(patch.steps);
+		if (steps) task.steps = steps;
 		if (typeof patch.sessionId === "string" && patch.sessionId.trim()) task.sessionId = clean(patch.sessionId, 120);
 		if (Number.isSafeInteger(patch.turn) && patch.turn > 0) task.turn = patch.turn;
 		if (typeof patch.closeReason === "string" && patch.closeReason.trim()) {

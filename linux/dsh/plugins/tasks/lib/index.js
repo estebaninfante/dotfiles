@@ -23,21 +23,22 @@ const TASK_PLAN_PARAMETERS = {
 	type: "object",
 	additionalProperties: false,
 	properties: {
-		tasks: {
+		title: { type: "string", description: "Título de la tarea: lo que pidió el usuario, no el primer paso (3 a 8 palabras)." },
+		detail: { type: "string", description: "Qué tiene que quedar hecho, en una línea (opcional)." },
+		steps: {
 			type: "array",
-			description: "Tareas del pedido, en el orden en que conviene hacerlas.",
+			description: "Pasos para cumplir la tarea, en orden. Son pasos de la tarea, no tareas aparte.",
 			items: {
 				type: "object",
 				additionalProperties: false,
 				properties: {
-					title: { type: "string", description: "Nombre corto y concreto de la tarea." },
-					detail: { type: "string", description: "Qué incluye esta tarea, en una línea (opcional)." },
+					title: { type: "string", description: "Qué se hace en este paso." },
 				},
 				required: ["title"],
 			},
 		},
 	},
-	required: ["tasks"],
+	required: ["title"],
 };
 
 export function apply(ctx) {
@@ -116,7 +117,7 @@ export function apply(ctx) {
 		() =>
 			ctx.tools.register({
 				name: "task_plan",
-				description: `${TASK_PLAN_DESCRIPTION} Si el pedido tiene una sola tarea, una sola entrada.`,
+				description: `${TASK_PLAN_DESCRIPTION} Una tarea por pedido: lo que pidió el usuario. Lo que hay que hacer para cumplirla va en "steps", no como tareas aparte.`,
 				parameters: TASK_PLAN_PARAMETERS,
 				output: {
 					schema: {
@@ -145,9 +146,9 @@ export function apply(ctx) {
 						required: ["tasks", "pending"],
 					},
 					render: (_args, value) => {
-						const names = value.tasks.map((task) => task.title).join(" · ") || "(ninguna)";
+						const name = value.tasks[0]?.title ?? "(sin nombrar)";
 						const pending = value.pending.map((task) => `${task.title} (turno ${task.turn}${task.outcome ? `, ${task.outcome}` : ""})`).join(" · ");
-						return [{ type: "text", text: `Tareas del pedido: ${names}${pending ? `\nPendientes de turnos anteriores: ${pending}` : ""}` }];
+						return [{ type: "text", text: `Tarea del pedido: ${name}${pending ? `\nPendientes de turnos anteriores: ${pending}` : ""}` }];
 					},
 				},
 				async execute(args, exec) {
@@ -157,21 +158,23 @@ export function apply(ctx) {
 					const turn = live.currentTurn.get(sessionId) ?? 1;
 					const plan = planTasks(args);
 					if (!plan.length) return { tasks: [], pending: [] };
+					const item = plan[0];
+					// Un pedido = una tarea. Si el turno ya tenía tareas (planes viejos con
+					// varias entradas), la primera las absorbe y los títulos pasan a pasos.
 					const existing = await findTurnTasks(sessionId, turn);
-					const registered = [];
-					for (let index = 0; index < plan.length; index += 1) {
-						const item = plan[index];
-						const task =
-							index === 0 && existing[0]
-								? await updateTask(existing[0].id, { title: item.title, goal: item.detail })
-								: await createTask({ workspace: session.header.cwd, title: item.title, goal: item.detail, sessionId, turn, origin: "auto" });
-						registered.push({ id: task.id, title: task.title });
+					const steps = [...item.steps];
+					for (const extra of existing.slice(1)) {
+						if (extra.title && !steps.includes(extra.title)) steps.push(extra.title);
+						await mergeTasks(existing[0].id, extra.id).catch(() => null);
 					}
+					const task = existing[0]
+						? await updateTask(existing[0].id, { title: item.title, goal: item.detail, steps })
+						: await createTask({ workspace: session.header.cwd, title: item.title, goal: item.detail, steps, sessionId, turn, origin: "auto" });
 					live.planned.set(sessionId, turn);
 					const pending = (await findSessionTasks(sessionId))
-						.filter((task) => task.turn !== turn && (task.state === "abierta" || task.outcome === "falló" || task.outcome === "parcial" || task.outcome === "abierta"))
+						.filter((task) => !taskTurns(task).includes(turn) && (task.state === "abierta" || task.outcome === "falló" || task.outcome === "parcial" || task.outcome === "abierta"))
 						.map((task) => ({ title: task.title, turn: task.turn ?? 0, outcome: task.outcome ?? "", state: task.state }));
-					return { tasks: registered, pending };
+					return { tasks: [{ id: task.id, title: task.title }], pending };
 				},
 			}),
 		"tasks: nombrar el pedido",
