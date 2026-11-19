@@ -32,6 +32,13 @@ if plugin ~= nil then
             hl.bind(ws_keys[i], function() expo_select(i) end)
             hl.bind(string.lower(ws_keys[i]), function() expo_select(i) end)
         end
+        -- Números 1..9 dentro de la grilla: mismo destino que la tecla del
+        -- workspace. Con Súper apretado (hold) también, por si el bind con
+        -- modificador no matchea en el submap.
+        for i = 1, 9 do
+            hl.bind(tostring(i), function() expo_select(i) end)
+            hl.bind(main_mod .. " + " .. tostring(i), function() expo_select(i) end)
+        end
         -- Capturar desde la grilla: cierra el overview y lanza la captura. Sin esto
         -- el `catchall` se come la tecla (solo resetea el submap) y parecia que no
         -- se podia capturar mientras la grilla estaba abierta.
@@ -69,6 +76,9 @@ local expo_hold = {
     super_down = false,
     suppressed = false,
     open       = false,
+    -- Se eligió un workspace desde la grilla del hold: al soltar Súper NO hay
+    -- que cancelar el viaje (antes el cancel se comía el salto).
+    selected   = false,
 }
 
 local function expo_hold_cancel_timer()
@@ -83,10 +93,13 @@ local function expo_hold_close()
     if expo_hold.open then
         expo_hold.open = false
         if expo_fly then expo_fly.deliberate = false end
-        if plugin ~= nil then
+        -- Si ya elegiste un workspace desde la grilla, el viaje está en curso:
+        -- cancelar acá lo abortaba y la grilla quedaba pegada.
+        if plugin ~= nil and not expo_hold.selected then
             plugin.expo("cancel")
         end
     end
+    expo_hold.selected = false
 end
 
 -- moonlight.lua lo llama al entrar en modo streaming: si el overview quedó
@@ -177,6 +190,7 @@ if plugin ~= nil then
                 if state == 1 then
                     expo_hold.super_down = true
                     expo_hold.suppressed = false
+                    expo_hold.selected = false
                     expo_hold_arm()
                 end
             elseif expo_hold.super_down then
@@ -380,11 +394,25 @@ local function expo_fly_back()
 end
 
 expo_select = function(i)
+    -- Elegir desde la grilla del hold: el usuario ya decidió, así que el
+    -- release de Súper no tiene que cancelar el viaje (era el bug: la grilla
+    -- quedaba pegada o el salto se abortaba).
+    if expo_hold.open then
+        expo_hold.selected = true
+        expo_hold.open = false
+        expo_hold_cancel_timer()
+    end
     if not EXPO_3D and plugin ~= nil then
         reset_ws_style()
-        -- Por ÍNDICE de la grilla, no por número de workspace: la grilla de cada
-        -- pantalla está anclada en su base (1 o 28). Ver plugins/hyprexpo.lua.
-        plugin.kb_selecti(i)
+        -- Por NÚMERO de workspace (id real de la pantalla), no por posición
+        -- visible: con la grilla dinámica los tiles no están en orden 1..9, así
+        -- que `kb_selecti(i)` elegía otro tile o fallaba.
+        local gid = spaces.to_global(i) or i
+        if pcall(plugin.kb_selectn, gid) then return end
+        -- El workspace no está en la grilla (vacío, oculto en modo dinámico):
+        -- cerrar la grilla y enfocarlo directo, sin quedar pegado.
+        pcall(plugin.expo, "cancel")
+        hl.dispatch(hl.dsp.focus({ workspace = tostring(gid) }))
         return
     end
     expo_focus(i)
@@ -446,6 +474,11 @@ end
 -- Expuesto para probar el viaje en caliente con `hyprctl eval` (misma prueba que
 -- hicieron los 3D). No lo usa ningún bind.
 _G.expo_focus = expo_focus
+-- Para probar el hold con `hyprctl eval`: elegir un workspace desde la grilla y
+-- verificar que el release de Súper no cancele el viaje.
+_G.expo_select = expo_select
+_G.expo_hold = expo_hold
+_G.expo_hold_close = expo_hold_close
 
 -- Para comandos de voz/dictado (Orión): mismo viaje animado que SUPER+N.
 -- `_G.expo_paso(delta)` va al espacio relativo (+1 siguiente, -1 anterior) con
