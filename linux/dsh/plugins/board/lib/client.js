@@ -82,21 +82,23 @@ window.__ModuleLoader__.load({
 			return payload;
 		}
 
+		/** Los cinco estados vienen resueltos del servidor. */
 		function statusOf(task) {
-			if (task.state === "cancelada" || task.outcome === "cancelada") return { text: "cancelada", bad: false };
-			if (task.state === "resuelta") return { text: "resuelta", bad: false };
-			if (task.outcome) return { text: task.outcome, bad: task.outcome === "falló" };
-			if (task.closeReason) return { text: "sin revisar", bad: false };
-			if (task.status) return { text: task.status, bad: false };
+			const text = String(task?.status ?? "").trim();
+			const bad = text === "fallada" || task?.outcome === "falló";
+			if (text) return { text, bad };
+			if (task?.state === "cancelada" || task?.outcome === "cancelada") return { text: "cancelada", bad: false };
+			if (task?.outcome === "falló") return { text: "fallada", bad: true };
+			if (task?.state === "resuelta" || task?.outcome === "ok") return { text: "cerrada", bad: false };
 			return { text: "abierta", bad: false };
 		}
 
-		/** El nombre es el objetivo de la tarea; el título corto solo si no hay objetivo. */
+		/** El nombre es el título que eligió el agente. */
 		function nameOf(task) {
-			const goal = String(task?.goal ?? "").trim();
-			if (goal) return goal;
 			const title = String(task?.title ?? "").trim();
-			return title || "Tarea sin título";
+			if (title) return title;
+			const goal = String(task?.goal ?? "").trim();
+			return goal ? goal.slice(0, 72) : "Tarea sin título";
 		}
 
 		function BoardPanel(props) {

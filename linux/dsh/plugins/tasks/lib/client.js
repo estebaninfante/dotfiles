@@ -37,6 +37,11 @@ window.__ModuleLoader__.load({
 			".tsk-steps{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
 			".tsk-steps li{position:relative;padding-left:13px;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-steps li::before{content:'·';position:absolute;left:3px}",
+			".tsk-lightbox{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:28px;background:#08090bd9;backdrop-filter:blur(2px)}",
+			".tsk-lightbox-img{max-width:94vw;max-height:88vh;border-radius:10px;box-shadow:0 24px 60px #000a;display:block}",
+			".tsk-lightbox-close{position:fixed;top:16px;right:18px;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);cursor:pointer}.tsk-lightbox-close:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
+			".tsk-lightbox-close:focus-visible,.tsk-lightbox-more:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:2px}",
+			".tsk-lightbox-more{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);border:0;border-radius:7px;padding:6px 10px;background:transparent;color:var(--dsw-alias-label-tertiary,#9a9aa3);font:inherit;font-size:12px;cursor:pointer}.tsk-lightbox-more:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".tsk-summary{margin:0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
 			".tsk-gallery{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 0}.tsk-thumb{display:block;width:118px;height:74px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c)}.tsk-thumb img{width:100%;height:100%;object-fit:cover;display:block}.tsk-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".tsk-video{width:198px;height:112px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
@@ -75,15 +80,15 @@ window.__ModuleLoader__.load({
 			}, []);
 		}
 
+		/** Los cinco estados vienen resueltos del servidor: abierta, en curso, cerrada, fallada, cancelada. */
 		function statusOf(task) {
-			if (task.state === "cancelada" || task.outcome === "cancelada") return { text: "cancelada", bad: false };
-			if (task.state === "resuelta") return { text: "resuelta", bad: false };
-			if (task.outcome === "falló") return { text: "falló", bad: true };
-			if (task.outcome === "parcial") return { text: "parcial", bad: false };
-			if (task.outcome === "ok") return { text: "ok", bad: false };
-			if (task.outcome === "abierta") return { text: "abierta", bad: false };
-			if (task.closeReason) return { text: "sin revisar", bad: false };
-			return { text: task.status ?? task.state ?? "abierta", bad: false };
+			const text = String(task?.status ?? "").trim();
+			const bad = text === "fallada" || task?.outcome === "falló";
+			if (text) return { text, bad };
+			if (task?.state === "cancelada") return { text: "cancelada", bad: false };
+			if (task?.outcome === "falló") return { text: "fallada", bad: true };
+			if (task?.state === "resuelta" || task?.outcome === "ok") return { text: "cerrada", bad: false };
+			return { text: "abierta", bad: false };
 		}
 
 		/** Qué turno(s) de la conversación trabaja esta tarea. */
@@ -94,19 +99,87 @@ window.__ModuleLoader__.load({
 			return `turnos ${turns[0]}–${turns[turns.length - 1]}`;
 		}
 
+		/**
+		 * Las imágenes se abren acá adentro, no en otra pestaña del navegador. Con
+		 * Ctrl+clic o clic del medio sigue abriendo la pestaña de siempre.
+		 */
 		function Gallery(props) {
+			const items = (props.items ?? []).slice(0, props.max ?? 8);
+			const [view, setView] = useState(null);
+			const current = view === null ? null : items[view] ?? null;
+			const move = React.useCallback(
+				(delta) => {
+					if (view === null) return;
+					setView((index) => (index + delta + items.length) % items.length);
+				},
+				[view, items.length],
+			);
+			useEffect(() => {
+				if (view === null) return undefined;
+				const onKey = (event) => {
+					if (event.key === "Escape") setView(null);
+					if (event.key === "ArrowRight") move(1);
+					if (event.key === "ArrowLeft") move(-1);
+				};
+				window.addEventListener("keydown", onKey);
+				return () => window.removeEventListener("keydown", onKey);
+			}, [view, move]);
 			return h(
-				"div",
-				{ className: "tsk-gallery" },
-				(props.items ?? []).slice(0, props.max ?? 8).map((item) =>
-					item.kind === "video"
-						? h("video", { key: item.path, className: "tsk-video", controls: true, preload: "metadata", src: item.url })
-						: h(
-								"a",
-								{ key: item.path, className: "tsk-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.path },
-								h("img", { src: item.url, alt: item.label, loading: "lazy" }),
-							),
+				React.Fragment,
+				null,
+				h(
+					"div",
+					{ className: "tsk-gallery" },
+					items.map((item, index) =>
+						item.kind === "video"
+							? h("video", { key: item.path, className: "tsk-video", controls: true, preload: "metadata", src: item.url })
+							: h(
+									"a",
+									{
+										key: item.path,
+										className: "tsk-thumb",
+										href: item.url,
+										title: item.label,
+										onClick: (event) => {
+											if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+											event.preventDefault();
+											setView(index);
+										},
+									},
+									h("img", { src: item.url, alt: item.label, loading: "lazy" }),
+								),
+					),
 				),
+				current
+					? h(
+							"div",
+							{ className: "tsk-lightbox", role: "dialog", "aria-modal": "true", "aria-label": current.label ?? "Imagen de la evidencia", onClick: () => setView(null) },
+							h("img", { className: "tsk-lightbox-img", src: current.url, alt: current.label ?? "", onClick: (event) => event.stopPropagation() }),
+							h(
+								"button",
+								{ type: "button", className: "tsk-lightbox-close", "aria-label": "Cerrar", onClick: () => setView(null) },
+								h(
+									"svg",
+									{ width: 18, height: 18, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
+									h("path", { d: "M4 4l8 8M12 4l-8 8", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" }),
+								),
+							),
+							items.length > 1
+								? h(
+										"button",
+										{
+											type: "button",
+											className: "tsk-lightbox-more",
+											onClick: (event) => {
+												event.stopPropagation();
+												move(1);
+											},
+										},
+										`${view + 1} / ${items.length}`,
+									)
+								: null,
+						)
+					: null,
 			);
 		}
 

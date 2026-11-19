@@ -58,6 +58,11 @@ window.__ModuleLoader__.load({
 			".evd-steps li::before{content:'·';position:absolute;left:3px}",
 			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px}.evd-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c);cursor:zoom-in}.evd-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
 			".evd-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}.evd-video{width:212px;height:120px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
+			".evd-lightbox{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:28px;background:#08090bd9;backdrop-filter:blur(2px)}",
+			".evd-lightbox-img{max-width:94vw;max-height:88vh;border-radius:10px;box-shadow:0 24px 60px #000a;display:block}",
+			".evd-lightbox-close{position:fixed;top:16px;right:18px;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);cursor:pointer}.evd-lightbox-close:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
+			".evd-lightbox-close:focus-visible,.evd-lightbox-more:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:2px}",
+			".evd-lightbox-more{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);border:0;border-radius:7px;padding:6px 10px;background:transparent;color:var(--dsw-alias-label-tertiary,#9a9aa3);font:inherit;font-size:12px;cursor:pointer}.evd-lightbox-more:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".evd-opt{display:flex;align-items:baseline;gap:10px;min-width:0;max-width:100%}",
 			".evd-opt-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 			".evd-opt-state{flex:none;font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
@@ -102,14 +107,14 @@ window.__ModuleLoader__.load({
 		}
 
 		/** Un renglón de estado: lo que el host ya resolvió, sin inventar nada. */
+		/** Los cinco estados vienen resueltos del servidor. */
 		function stateOf(task) {
-			const state = String(task?.state ?? "").trim();
-			if (task?.outcome === "falló") return "falló";
-			if (state === "resuelta") return "resuelta";
-			if (state === "cancelada") return "cancelada";
-			const status = String(task?.status ?? "").trim();
-			if (status) return status;
-			return state || "abierta";
+			const text = String(task?.status ?? "").trim();
+			if (text) return text;
+			if (task?.state === "cancelada" || task?.outcome === "cancelada") return "cancelada";
+			if (task?.outcome === "falló") return "fallada";
+			if (task?.state === "resuelta" || task?.outcome === "ok") return "cerrada";
+			return "abierta";
 		}
 
 		/** Nombre del archivo, sin la ruta: el entregable se ve como archivo. */
@@ -134,20 +139,84 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		/** La imagen se abre acá adentro, no en otra pestaña del navegador. */
 		function Gallery(props) {
 			const media = (props.media ?? []).slice(0, props.max ?? 99);
+			const [view, setView] = useState(null);
+			const current = view === null ? null : media[view] ?? null;
+			const move = React.useCallback(
+				(delta) => {
+					if (view === null) return;
+					setView((index) => (index + delta + media.length) % media.length);
+				},
+				[view, media.length],
+			);
+			useEffect(() => {
+				if (view === null) return undefined;
+				const onKey = (event) => {
+					if (event.key === "Escape") setView(null);
+					if (event.key === "ArrowRight") move(1);
+					if (event.key === "ArrowLeft") move(-1);
+				};
+				window.addEventListener("keydown", onKey);
+				return () => window.removeEventListener("keydown", onKey);
+			}, [view, move]);
 			return h(
-				"div",
-				{ className: "evd-gallery", style: { marginTop: 8 } },
-				media.map((item) =>
-					item.kind === "video"
-						? h("video", { key: item.path, className: "evd-video", controls: true, preload: "metadata", src: item.url })
-						: h(
-								"a",
-								{ key: item.path, className: "evd-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.label },
-								h("img", { src: item.url, alt: item.label, loading: "lazy" }),
-							),
+				React.Fragment,
+				null,
+				h(
+					"div",
+					{ className: "evd-gallery", style: { marginTop: 8 } },
+					media.map((item, index) =>
+						item.kind === "video"
+							? h("video", { key: item.path, className: "evd-video", controls: true, preload: "metadata", src: item.url })
+							: h(
+									"a",
+									{
+										key: item.path,
+										className: "evd-thumb",
+										href: item.url,
+										title: item.label,
+										onClick: (event) => {
+											if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+											event.preventDefault();
+											setView(index);
+										},
+									},
+									h("img", { src: item.url, alt: item.label, loading: "lazy" }),
+								),
+					),
 				),
+				current
+					? h(
+							"div",
+							{ className: "evd-lightbox", role: "dialog", "aria-modal": "true", "aria-label": current.label ?? "Imagen de la evidencia", onClick: () => setView(null) },
+							h("img", { className: "evd-lightbox-img", src: current.url, alt: current.label ?? "", onClick: (event) => event.stopPropagation() }),
+							h(
+								"button",
+								{ type: "button", className: "evd-lightbox-close", "aria-label": "Cerrar", onClick: () => setView(null) },
+								h(
+									"svg",
+									{ width: 18, height: 18, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
+									h("path", { d: "M4 4l8 8M12 4l-8 8", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" }),
+								),
+							),
+							media.length > 1
+								? h(
+										"button",
+										{
+											type: "button",
+											className: "evd-lightbox-more",
+											onClick: (event) => {
+												event.stopPropagation();
+												move(1);
+											},
+										},
+										`${view + 1} / ${media.length}`,
+									)
+								: null,
+						)
+					: null,
 			);
 		}
 

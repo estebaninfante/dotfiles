@@ -65,26 +65,42 @@ function absoluteWorkspace(value) {
 	return path && isAbsolute(path) ? path : "";
 }
 
-/** Motivo de cierre en palabras, no en jerga del log. */
+/**
+ * Los cinco estados de una tarea. Todo lo demás (motivo de cierre, resultado,
+ * si el turno sigue) se traduce a uno de estos; la UI no inventa variantes.
+ */
+const STATE_TEXT = { abierta: "abierta", en_curso: "en curso", cerrada: "cerrada", fallada: "fallada", cancelada: "cancelada" };
+
+/** Motivo de cierre en palabras, para el detalle: no es el estado. */
 function closeText(reason) {
-	if (reason === "completed") return "cerró bien";
-	if (reason === "interrupted") return "cancelada por el usuario";
-	if (reason === "aborted") return "cancelada por el usuario";
+	if (reason === "completed") return "terminó el turno";
+	if (reason === "interrupted") return "lo detuviste";
+	if (reason === "aborted") return "se abortó";
 	if (reason === "error") return "terminó con error";
 	return `cerró: ${reason}`;
 }
 
-/** Estado en vivo de un pedido: el turno que lo originó sigue o ya cerró. */
-function liveStatus(live, task) {
-	if (task.state === "cancelada") return "cancelada";
-	if (task.closeReason) return closeText(task.closeReason);
+/**
+ * Estado de una tarea: cerrada si el agente la cerró bien, fallada si falló,
+ * cancelada si el usuario detuvo el turno, en curso si se está trabajando ahora,
+ * y abierta en cualquier otro caso.
+ */
+function taskState(task, live = {}) {
+	if (task?.state === "cancelada" || task?.outcome === "cancelada") return STATE_TEXT.cancelada;
+	if (task?.outcome === "falló") return STATE_TEXT.fallada;
+	if (task?.state === "resuelta" || task?.outcome === "ok") return STATE_TEXT.cerrada;
 	const turns = taskTurns(task);
-	if (!task.sessionId || !turns.length) return null;
-	const end = live.turnEnds.get(task.sessionId);
-	if (end && turns.includes(end.turn)) return closeText(end.reason);
-	const current = live.currentTurn.get(task.sessionId);
-	if (live.running.has(task.sessionId) && current && turns.includes(current)) return "en curso";
-	return null;
+	if (live.running && live.current && turns.includes(live.current)) return STATE_TEXT.en_curso;
+	return STATE_TEXT.abierta;
+}
+
+/** Estado en vivo de un pedido con lo que sabe el proceso ahora mismo. */
+function liveStatus(live, task) {
+	const state = taskState(task, {
+		running: Boolean(task.sessionId && live.running.has(task.sessionId)),
+		current: task.sessionId ? live.currentTurn.get(task.sessionId) : null,
+	});
+	return state;
 }
 
 function routes(ctx, live) {
@@ -214,7 +230,14 @@ function routes(ctx, live) {
 					turn: chosen?.turn ?? currentTurn ?? 0,
 					latestTurn: latest,
 					running,
-					status: chosen ? closeText(chosen.reason) : turnEnded ? closeText(turnEnded) : running ? "en curso" : null,
+					status: task
+						? taskState(task, { running, current: running ? latest : null })
+						: turnEnded
+							? "abierta"
+							: running
+								? "en curso"
+								: null,
+					closeReason: chosen ? closeText(chosen.reason) : turnEnded ? closeText(turnEnded) : null,
 					summary: chosen ? assistantSummary(byTurn.get(chosen.turn)) : currentTurn ? assistantSummary(byTurn.get(currentTurn) ?? []) : "",
 					task,
 					evidence,
@@ -277,10 +300,10 @@ function routes(ctx, live) {
 						turns: list,
 						request: userText.get(first) ?? "",
 						state: task?.state ?? "abierta",
-						status: reason ? closeText(reason) : list.includes(latest) ? "en curso" : "sin cerrar",
+						status: taskState(task, { running: list.includes(latest) && !ends.has(latest), current: latest }),
 						outcome: task?.outcome ?? "",
 						note: task?.note ?? "",
-						closeReason: task?.closeReason ?? null,
+						closeReason: reason ? closeText(reason) : null,
 						summary: assistantSummary(bucket),
 						media: evidence.media,
 						deliverables: evidence.deliverables,
