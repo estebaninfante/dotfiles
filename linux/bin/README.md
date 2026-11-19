@@ -173,3 +173,21 @@ texto/código/config/notas a `omarchy-launch-editor`; imagen, audio, video, PDF,
 comprimidos, fuentes y binarios a `xdg-open`. `file-open --kind ARCHIVO...` imprime
 `tipo<TAB>ruta` y es lo que usa el buscador del launcher para etiquetar cada resultado.
 Los `.ts` y otros formatos ambiguos se deciden por contenido, no por nombre.
+
+## `iphone-tether` — el iPhone por USB no se lleva la salida a internet
+
+El iPhone enchufado con Punto de Acceso Personal aparece como una Ethernet más (driver
+`ipheth`). NetworkManager la activa con métrica 100 contra 600 del Wi-Fi: se lleva la ruta
+por defecto y el DNS, y el tráfico empieza a salir por los datos del celular sin avisar.
+`iphone-tether` lo deja bloqueado por defecto y permite habilitarlo a demanda desde el menú
+de Omarchy (Setup → Network → Datos del iPhone por USB), que muestra el ✓ cuando está
+permitido.
+
+- `iphone-tether` · `on` · `off` · `toggle` · `status`
+- `iphone-tether setup` — instala las piezas de sistema (sudo): `.link` en
+  `/etc/systemd/network/` (`Driver=ipheth` → `iphone0`, mismo nombre en cualquier puerto),
+  perfil NM "iPhone USB" con `never-default` según estado, y dispatcher
+  `/etc/NetworkManager/dispatcher.d/50-iphone-tether` como red de seguridad si igual
+  aparece una "Wired connection N" generada.
+
+Estado en `~/.local/state/iphone-tether/allow`.
