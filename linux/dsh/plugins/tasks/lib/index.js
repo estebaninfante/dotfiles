@@ -9,7 +9,7 @@
  * le impide trabajar hasta que la nombró. Las rutas HTTP viven en routes.js.
  */
 import { firstLine, rootSession, textOfMessage } from "./events.js";
-import { planTasks } from "./plan.js";
+import { planTasks, shortTaskTitle } from "./plan.js";
 import { registerRoutes } from "./routes.js";
 import { adoptTurn, createTask, findSessionTask, findSessionTasks, findTurnTask, findTurnTasks, updateTask } from "./store.js";
 
@@ -221,7 +221,7 @@ export function apply(ctx) {
 		}
 		await createTask({
 			workspace: session.header.cwd,
-			title: firstLine(request) || `Pedido del turno ${turn}`,
+			title: shortTaskTitle(request) || firstLine(request) || `Pedido del turno ${turn}`,
 			sessionId,
 			turn,
 			origin: "auto",
@@ -255,7 +255,24 @@ export function apply(ctx) {
 			if (Number.isSafeInteger(turn) && turn > 0) {
 				live.turnEnds.set(session.id, { turn, reason });
 				findTurnTasks(session.id, turn)
-					.then((tasks) => Promise.all(tasks.map((task) => updateTask(task.id, { closeReason: reason, closedAt: Date.now() }))))
+					.then((tasks) =>
+						Promise.all(
+							tasks.map((task) =>
+								updateTask(task.id, {
+									closeReason: reason,
+									closedAt: Date.now(),
+									// Cierre automático si el agente no llamó a task_review:
+									// completado = ok; error = falló; interrumpido = sigue abierta.
+									...(task.outcome
+										? {}
+										: {
+												outcome: reason === "completed" ? "ok" : reason === "error" ? "falló" : "abierta",
+												note: "cierre automático (sin revisión del agente)",
+											}),
+								}),
+							),
+						),
+					)
 					.catch(() => undefined);
 			}
 			return;

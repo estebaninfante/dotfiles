@@ -30,3 +30,18 @@ export function planTasks(args) {
 	}
 	return plan;
 }
+
+/**
+ * Título provisorio cuando el agente todavía no nombró el pedido: primera
+ * oración útil, corta, sin relleno de conversación.
+ */
+export function shortTaskTitle(text) {
+	const plain = String(text ?? "")
+		.replace(/```[\s\S]*?```/g, " ")
+		.replace(/`([^`]*)`/g, "$1")
+		.replace(/[*_#>\s]+/g, " ")
+		.trim();
+	const sentence = plain.split(/(?<=[.!?])\s/)[0] ?? plain;
+	const words = sentence.split(" ").filter(Boolean).slice(0, 10);
+	return words.join(" ").replace(/[.,;:]+$/, "").slice(0, 72);
+}

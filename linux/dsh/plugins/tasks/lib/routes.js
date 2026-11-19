@@ -22,6 +22,7 @@ import { planBackfill } from "./backfill.js";
 import { assistantSummary, firstLine, textOfMessage } from "./events.js";
 import { summarizeEvidence } from "./evidence.js";
 import { MAX_MEDIA_BYTES, enrichMedia, mediaInfo } from "./media.js";
+import { shortTaskTitle } from "./plan.js";
 import { createTask, deleteTask, findSessionTask, findTurnTask, listTasks, updateTask } from "./store.js";
 
 const MAX_BODY = 64 * 1024;
@@ -253,10 +254,13 @@ function routes(ctx, live) {
 					deliverablesTotal += evidence.deliverables.length;
 					items.push({
 						id: task?.id ?? `turn-${turn}`,
-						title: task?.title ?? firstLine(userText.get(turn) ?? "") ?? "",
+						title: task?.title ?? (shortTaskTitle(userText.get(turn) ?? "") || firstLine(userText.get(turn) ?? "") || ""),
 						turn,
 						state: task?.state ?? "abierta",
 						status: reason ? closeText(reason) : turn === latest ? "en curso" : "sin cerrar",
+						outcome: task?.outcome ?? "",
+						note: task?.note ?? "",
+						closeReason: task?.closeReason ?? null,
 						summary: assistantSummary(bucket),
 						media: evidence.media,
 						deliverables: evidence.deliverables,
@@ -281,6 +285,7 @@ function routes(ctx, live) {
 				items.sort((a, b) => (a.turn ?? 0) - (b.turn ?? 0));
 				sendJson(res, 200, {
 					sessionId,
+					workspace,
 					tasks: items,
 					stats: { tasks: items.length, media: mediaTotal, deliverables: deliverablesTotal },
 				});

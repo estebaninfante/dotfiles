@@ -37,17 +37,6 @@ window.__ModuleLoader__.load({
 			".evd-group-h{margin:10px 0 4px;font-size:12px;font-weight:500;line-height:18px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-item{display:flex;align-items:baseline;gap:6px;margin:0;font:400 12px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-secondary,#b9b9c2);overflow-wrap:anywhere}",
 			".evd-item a{color:var(--dsw-alias-label-primary,#e9e9ee);text-decoration:none;border-bottom:1px solid var(--dsw-alias-border-l2,#3b3e46)}",
-			".evs-root{height:100%;overflow:auto;box-sizing:border-box}",
-			".evs-wrap{max-width:820px;margin:0 auto;padding:30px 32px 80px}",
-			".evs-h1{margin:0;font-size:18px;font-weight:550;letter-spacing:-.01em;color:var(--dsw-alias-label-primary,#ececf1)}",
-			".evs-line{margin:6px 0 0;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
-			".evs-item{padding:14px 2px;border-bottom:1px solid var(--dsw-alias-border-l1,#2c2f36)}.evs-item:first-of-type{border-top:1px solid var(--dsw-alias-border-l1,#2c2f36)}",
-			".evs-row{display:flex;align-items:baseline;gap:14px;justify-content:space-between}",
-			".evs-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere}",
-			".evs-status{flex:none;font:400 11px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap}",
-			".evs-summary{margin:3px 0 0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
-			".evs-note{margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
-			"@media (max-width:640px){.evs-wrap{padding:20px 18px 88px}.evs-row{flex-direction:column;gap:2px}}",
 		].join("\n");
 
 		function useStyles() {
@@ -139,31 +128,6 @@ window.__ModuleLoader__.load({
 			return turn;
 		}
 
-		function useSessionEvidence(sessionId) {
-			const [data, setData] = useState(null);
-			useEffect(() => {
-				if (!sessionId) {
-					setData(null);
-					return undefined;
-				}
-				let cancelled = false;
-				const load = () => {
-					getJson(`/tasks/session?session=${encodeURIComponent(sessionId)}`)
-						.then((payload) => {
-							if (!cancelled) setData(payload);
-						})
-						.catch(() => {});
-				};
-				load();
-				const timer = setInterval(load, 15000);
-				return () => {
-					cancelled = true;
-					clearInterval(timer);
-				};
-			}, [sessionId]);
-			return data;
-		}
-
 		function EvidenceCard(props) {
 			useStyles();
 			const proof = useTurnEvidence(props.sessionId);
@@ -214,7 +178,7 @@ window.__ModuleLoader__.load({
 								{ className: "evd-panel" },
 								proof.summary ? h("p", { className: "evd-summary" }, proof.summary) : null,
 								h(Gallery, { media, max: 4 }),
-								media.length > 4 ? h("p", { className: "evd-more" }, `+${media.length - 4} más en la pestaña Evidencia`) : null,
+								media.length > 4 ? h("p", { className: "evd-more" }, `+${media.length - 4} más en la pestaña Tareas`) : null,
 								h(Deliverables, { items: deliverables.slice(0, 3) }),
 							)
 						: null,
@@ -222,52 +186,9 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		function EvidenceView(props) {
-			useStyles();
-			const data = useSessionEvidence(props.sessionId);
-			if (!data) return h("div", { className: "evs-root" });
-			const stats = data.stats ?? { tasks: 0, media: 0, deliverables: 0 };
-			const statsLine = [
-				`${stats.tasks} ${stats.tasks === 1 ? "pedido" : "pedidos"}`,
-				stats.media ? `${stats.media} ${stats.media === 1 ? "prueba visual" : "pruebas visuales"}` : null,
-				stats.deliverables ? `${stats.deliverables} ${stats.deliverables === 1 ? "entregable" : "entregables"}` : null,
-			]
-				.filter(Boolean)
-				.join(" · ");
-			return h(
-				"div",
-				{ className: "evs-root" },
-				h(
-					"div",
-					{ className: "evs-wrap" },
-					h("h1", { className: "evs-h1" }, "Evidencia"),
-					h("p", { className: "evs-line" }, statsLine),
-					!data.tasks.length ? h("p", { className: "evs-note" }, "Todavía no hay evidencia registrada en esta conversación. Cada pedido deja acá su resumen y su prueba visual.") : null,
-					data.tasks.map((task) =>
-						h(
-							"section",
-							{ className: "evs-item", key: task.id },
-							h(
-								"div",
-								{ className: "evs-row" },
-								h("h2", { className: "evs-title", title: task.title }, shortTitle(task)),
-								h("span", { className: "evs-status" }, task.status),
-							),
-							task.summary ? h("p", { className: "evs-summary" }, task.summary) : null,
-							task.media.length ? h(Gallery, { media: task.media, max: 8 }) : null,
-							h(Deliverables, { items: task.deliverables }),
-						),
-					),
-				),
-			);
-		}
-
 		function apply(ctx) {
 			ctx.slots.inject("conversation.input.dock", () =>
 				ctx.slots.register({ name: "conversation.input.dock", id: "local-evidence", order: 40 }, EvidenceCard),
-			);
-			ctx.slots.inject("conversation.view", () =>
-				ctx.slots.register({ name: "conversation.view", id: "evidence", order: 30, label: () => "Evidencia" }, EvidenceView),
 			);
 		}
 
