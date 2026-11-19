@@ -72,3 +72,4 @@ evidencia skill "wf-recorder graba sólo salidas montadas; el asiento usa frames
 - Si la regla contradice a otra, borrá la vieja en el mismo cambio.
 
 ## Aprendido
+- 2026-11-19 — wf-recorder graba salidas montadas; el asiento vive en una ventana oculta y se muestrea con grabar

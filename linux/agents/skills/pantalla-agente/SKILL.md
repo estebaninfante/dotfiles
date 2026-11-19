@@ -16,8 +16,8 @@ nativas, diálogos. Nunca en las pantallas del usuario, ni "un segundo".
 ## Flujo
 
 ```bash
-pantalla-agente montar --tamano 1440x900      # salida AGENTE-1, invisible, con su espacio
-pantalla-agente abrir --clase brave-tester -- brave --user-data-dir=/tmp/t https://…
+pantalla-agente montar --tamano 1440x900      # salida AGENTE-1, invisible, en el espacio 12
+pantalla-agente abrir --clase agente-test-ui -- foot -a agente-test-ui sh -c '…'
 pantalla-agente capturar /tmp/shot.png       # PNG de la pantalla completa
 pantalla-agente cerrar                       # cierra las ventanas de prueba
 pantalla-agente desmontar
@@ -26,7 +26,8 @@ pantalla-agente desmontar
 ## Reglas
 
 - `montar` sin `--tamano` da 1440x900. Poné el del caso: `--tamano 390x844` para mobile, `--transform 3` para vertical.
-- `abrir` manda la ventana nueva directo al espacio propio con una window rule: no se ve en las pantallas del usuario.
+- El espacio es **fijo (12)** y `montar` lo muestra en la salida virtual; la regla estática de `windowrules.lua` manda ahí las clases `agente-test-*`, así la ventana nace oculta sin carrera.
+- Por eso la clase tiene que empezar con `agente-test-`: `foot -a agente-test-ui …`, `chromium --class=agente-test-web …`, `kitty --class=agente-test-tui …`.
 - `capturar` saca la salida entera. La barra de Omarchy ocupa 24 px arriba: recortá si el test es de contenido.
 - Ventanas ya abiertas: `mover class:<clase>` (o `title:<regex>`, `address:0x…`). Nunca mover ventanas del usuario.
 - Al terminar, `desmontar`. Si te olvidás, el watchdog la descuelga a los 10 min sin uso (`PANTALLA_AGENTE_TTL`).

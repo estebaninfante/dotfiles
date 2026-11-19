@@ -169,15 +169,16 @@ cmd_montar() {
     if hyprctl workspaces -j 2>/dev/null | jq -e --arg ws "$WS" 'any(.[]; (.id|tostring) == $ws and .windows > 0)' >/dev/null 2>&1; then
         die "el workspace $WS ya tiene ventanas del usuario; elegí otro con PANTALLA_AGENTE_WORKSPACE"
     fi
-    lua "hl.dispatch(hl.dsp.workspace.move({ workspace = [[$WS]], monitor = [[$OUT]] }))"
-    sleep 0.3
     MON="$mon_antes"
     WIN="$win_antes"
+    # El workspace no existe hasta que alguien lo enfoca: se enfoca el monitor
+    # virtual y después el workspace, y se devuelve el foco al usuario.
+    lua "hl.dispatch(hl.dsp.focus({ monitor = [[$OUT]] }))"
+    lua "hl.dispatch(hl.dsp.focus({ workspace = [[$WS]] }))"
+    sleep 0.2
+    restaurar_foco
     printf 'OUT=%s\nWS=%s\nMON=%s\nWIN=%s\n' "$OUT" "$WS" "$MON" "$WIN" > "$ENVF"
 
-    # Por si el montaje se llevó el foco a la salida nueva: el usuario vuelve
-    # a donde estaba antes de que la pantalla existiera.
-    [ "$(focused_monitor)" = "$OUT" ] && restaurar_foco
     [ -n "$PATRON" ] && regla_para "$PATRON"
     start_watchdog
 
@@ -191,7 +192,7 @@ cmd_montar() {
 cmd_desmontar() {
     local conservar=0
     [ "${1:-}" = "--conservar" ] && conservar=1
-    local mon="" win="" win_ahora="" cerrradas=" "
+    local mon="" win="" win_ahora="" cerradas=" "
     if [ -f "$ENVF" ]; then
         cargar_env
         mon="${MON:-}"; win="${WIN:-}"

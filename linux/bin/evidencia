@@ -40,11 +40,19 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 detectar() {
     if [ -n "${OBJETIVO:-}" ]; then printf '%s' "$OBJETIVO"; return; fi
     local n
-    n=$(agent-seat windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).window) else empty end' 2>/dev/null)
-    if [ -n "$n" ]; then printf 'asiento:%s' "$n"; return; fi
-    if pantalla-agente estado 2>/dev/null | grep -q 'montada'; then
-        printf 'pantalla:%s' "${PANTALLA_AGENTE_NOMBRE:-AGENTE-1}"; return
+    # `agent-seat windows` imprime un texto si el broker no corre: sin el chequeo
+    # de estado, jq se traga ese texto y la detección queda vacía.
+    if agent-seat status 2>/dev/null | grep -q '^Agent seat: running'; then
+        n=$(agent-seat windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).window) else empty end' 2>/dev/null)
+        [ -n "$n" ] && { printf 'asiento:%s' "$n"; return; }
     fi
+    # Sin tubería con grep -q: con pipefail, el `estado` puede morir por SIGPIPE
+    # si grep corta temprano y la detección fallaría de forma intermitente.
+    local est
+    est="$(pantalla-agente estado 2>/dev/null || true)"
+    case "$est" in
+        *montada*) printf 'pantalla:%s' "${PANTALLA_AGENTE_NOMBRE:-AGENTE-1}"; return ;;
+    esac
     printf ''
 }
 
@@ -207,14 +215,15 @@ cmd_limpiar() {
 
 cmd_comparar() {
     local etiquetas="" a b salida
+    local -a pos=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --etiquetas) etiquetas="${2:?}"; shift 2 ;;
-            --) shift; break ;;
-            *) break ;;
+            --) shift ;;
+            *) pos+=("$1"); shift ;;
         esac
     done
-    a="${1:-}"; b="${2:-}"; salida="${3:-$SALIDA/comparar-$(sello).png}"
+    a="${pos[0]:-}"; b="${pos[1]:-}"; salida="${pos[2]:-$SALIDA/comparar-$(sello).png}"
     [ -f "$a" ] && [ -f "$b" ] || die "comparar: faltan dos imágenes existentes"
     local ea="antes" eb="después"
     [ -n "$etiquetas" ] && { ea="${etiquetas%%,*}"; eb="${etiquetas#*,}"; }
