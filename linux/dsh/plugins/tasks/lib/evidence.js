@@ -18,10 +18,16 @@ const TEST_CMD =
 
 const EXIT_MARK = /\[exit code: (\d+)\]/;
 const PATH_TOKEN = /(?:~\/|\/)[^\s"'`()[\]<>,;]+/g;
+// Solo una captura o grabación cuenta como prueba: nombrar o borrar un archivo no prueba nada.
+const CAPTURE_CMD = /\b(captur\w*|screenshot\w*|grim|scrot|ffmpeg|record\w*|grab\w*|snapshot\w*)\b/i;
 const MAX_FILES = 200;
 const MAX_COMMANDS = 120;
 const MAX_FAILURES = 40;
 const MAX_TEXT = 4000;
+const MAX_MEDIA = 20;
+const MEDIA_EXT = /\.(?:png|jpe?g|webp|gif|avif|bmp|svg|mp4|webm|mov|mkv)$/i;
+const MEDIA_IN_TEXT = /(?:~\/|\/|\.{1,2}\/)[^\s"'`;|&()<>,]*\.(?:png|jpe?g|webp|gif|avif|bmp|svg|mp4|webm|mov|mkv)\b/gi;
+const MEDIA_SOURCE = { adjunto: 3, captura: 2, entregable: 1 };
 
 function parseJson(value) {
 	if (typeof value !== "string") return value && typeof value === "object" ? value : {};
@@ -50,6 +56,23 @@ function short(value, max) {
 function fileLike(token) {
 	const last = token.split("/").pop() ?? "";
 	return last.includes(".") && !last.endsWith(".");
+}
+
+/** Una imagen o video que el agente miró, capturó o entregó: prueba que se puede ver. */
+function addMedia(media, path, source, turn) {
+	const value = String(path ?? "").trim();
+	if (!value || !MEDIA_EXT.test(value)) return;
+	const known = media.get(value);
+	const rank = MEDIA_SOURCE[source] ?? 0;
+	if (known === undefined) {
+		media.set(value, { path: value, kind: /\.(?:mp4|webm|mov|mkv)$/i.test(value) ? "video" : "imagen", source, turn });
+	} else if (rank > (MEDIA_SOURCE[known.source] ?? 0)) {
+		known.source = source;
+	}
+}
+
+function collectMedia(media, text, source, turn) {
+	for (const match of String(text ?? "").matchAll(MEDIA_IN_TEXT)) addMedia(media, match[0], source, turn);
 }
 
 /** Cruza las rutas que el agente nombró al cerrar contra lo que hizo de verdad. */
@@ -88,6 +111,7 @@ export function summarizeEvidence(events, options = {}) {
 	const turns = [];
 	const texts = new Map();
 	const todos = [];
+	const media = new Map();
 	let tools = 0;
 
 	for (const event of Array.isArray(events) ? events : []) {
@@ -121,15 +145,21 @@ export function summarizeEvidence(events, options = {}) {
 				if (!known) files.set(path, { path, action: fileAction, turn });
 				else if (fileAction === "creado") known.action = "creado";
 			}
+			if (call.name === "read_image" && typeof call.args.path === "string") {
+				addMedia(media, call.args.path, "adjunto", turn);
+			}
+			for (const path of output.matchAll(/<path>([^<]+)<\/path>/g)) addMedia(media, path[1], "adjunto", turn);
 			if (call.name === "bash" && typeof call.args.command === "string") {
 				const command = short(call.args.command, 300);
 				commands.push({ command, description: short(call.args.description ?? "", 120), exitCode, turn });
+				if (CAPTURE_CMD.test(call.args.command)) collectMedia(media, call.args.command, "captura", turn);
 				if (exitCode !== 0) failures.push({ kind: "comando", detail: command, code: exitCode, turn });
 			}
 			if (call.name === "present" && Array.isArray(call.args.files)) {
 				for (const file of call.args.files) {
 					if (!file || typeof file.path !== "string") continue;
 					deliverables.push({ path: file.path, description: short(file.description ?? "", 160), turn });
+					addMedia(media, file.path, "entregable", turn);
 				}
 			}
 			if (call.name === "todo_write" && Array.isArray(call.args.todos)) {
@@ -159,6 +189,7 @@ export function summarizeEvidence(events, options = {}) {
 	const lastTurn = [...texts.keys()].sort((a, b) => a - b).at(-1);
 	const declaration = lastTurn === undefined ? "" : short(texts.get(lastTurn), MAX_TEXT);
 	const fileList = [...files.values()].slice(0, MAX_FILES);
+	const mediaList = [...media.values()].slice(0, MAX_MEDIA);
 	const lastEnd = turns.at(-1) ?? null;
 
 	return {
@@ -171,8 +202,10 @@ export function summarizeEvidence(events, options = {}) {
 			testsFail: commands.filter((item) => TEST_CMD.test(item.command) && item.exitCode !== 0).length,
 			deliverables: deliverables.length,
 			failures: failures.length,
+			media: mediaList.length,
 		},
 		end: lastEnd,
+		media: mediaList.map((item) => ({ ...item, label: item.path.split("/").pop() })),
 		files: fileList,
 		commands: commands.slice(-MAX_COMMANDS),
 		tests: commands.filter((item) => TEST_CMD.test(item.command)).slice(-20),

@@ -233,12 +233,12 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
 
     # Tareas por proyecto (carpeta) y evidencia real al final de cada conversación:
     # la lista vive en ~/.dsh/storages/local-tasks.json y la evidencia sale del log
-    # de la sesión (archivos, comandos, tests, entregables).
+    # de la sesión (archivos, comandos, tests, entregables, capturas y videos).
     if [ -f "$PATCH" ] && ! grep -q "local-tasks" "$PATCH"; then
-        printf '\n# Tareas por proyecto (carpeta) y evidencia real al final de cada conversación.\n- insert:\n    - id: local-tasks\n      name: dsh-local-tasks\n    - id: local-evidence\n      name: dsh-local-evidence\n' >> "$PATCH"
-        ok "patch del perfil web: + local-tasks y local-evidence"
+        printf '\n# Tareas por proyecto (carpeta) y evidencia real al final de cada conversación.\n- insert:\n    - id: local-tasks\n      name: dsh-local-tasks\n    - id: local-evidence\n      name: dsh-local-evidence\n    - id: local-folder\n      name: dsh-local-folder\n' >> "$PATCH"
+        ok "patch del perfil web: + local-tasks, local-evidence y local-folder"
     fi
-    for plugin in tasks evidence; do
+    for plugin in tasks evidence folder; do
         if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-${plugin}" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
             dsh plugin --profile web add "link:${HOME}/.dsh/plugins/${plugin}" >/dev/null 2>&1 \
                 && ok "perfil web: dsh-local-${plugin} instalado" \

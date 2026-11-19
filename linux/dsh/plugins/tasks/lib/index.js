@@ -1,31 +1,52 @@
 /**
  * dsh-local-tasks — host half.
  *
- * Tareas por carpeta (proyecto) y evidencia de cada conversación tomada del log
- * real de la sesión (`ctx.sessionQuery`), no de lo que el agente dice.
+ * Tareas por proyecto (carpeta) y evidencia real de cada conversación tomada del
+ * log de la sesión (`ctx.sessionQuery`), no de lo que el agente dice.
+ *
+ * Cada pedido del usuario queda registrado como tarea: al abrirse un turno se
+ * crea la tarea del proyecto con el texto del pedido, y un guard impide que el
+ * agente actúe mientras esa tarea no exista.
  *
  * Rutas (loopback, servidas por el webServer del perfil):
  *   GET  /tasks/list?workspace=/abs/path   tareas de esa carpeta
  *   POST /tasks/create                     { workspace, title, goal }
  *   POST /tasks/update                     { id, state?, title?, goal?, sessionId? }
  *   POST /tasks/delete                     { id }
- *   GET  /tasks/evidence?session=<id>      evidencia verificable de la sesión
+ *   GET  /tasks/evidence?session=<id>[&turn=N]   evidencia verificable
+ *   GET  /tasks/media?path=/abs/file       imagen o video de la evidencia
  *   POST /tasks/open                       { path }  abre la carpeta en el gestor
  *
  * Los POST exigen `x-dsh-tasks: 1`: un sitio externo no puede mandarlo sin
  * preflight. Las GET son de solo lectura.
  */
 import { spawn } from "node:child_process";
-import { statSync } from "node:fs";
+import { createReadStream, statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute } from "node:path";
+import { extname, isAbsolute, resolve } from "node:path";
 import { summarizeEvidence } from "./evidence.js";
-import { createTask, deleteTask, listTasks, updateTask } from "./store.js";
+import { adoptTurn, createTask, deleteTask, findSessionTask, findTurnTask, listTasks, updateTask } from "./store.js";
 
 const MAX_BODY = 64 * 1024;
+const MAX_MEDIA_BYTES = 120 * 1024 * 1024;
 const SESSION_ID = /^[A-Za-z0-9:._-]{8,160}$/;
+const MIME = {
+	png: "image/png",
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	webp: "image/webp",
+	gif: "image/gif",
+	avif: "image/avif",
+	bmp: "image/bmp",
+	svg: "image/svg+xml",
+	mp4: "video/mp4",
+	webm: "video/webm",
+	mov: "video/quicktime",
+	mkv: "video/x-matroska",
+};
 
-export const inject = ["webServer", "sessionQuery"];
+export const inject = ["webServer", "sessionQuery", "systemPrompt", "tools"];
 
 function sendJson(res, status, payload) {
 	res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -33,7 +54,7 @@ function sendJson(res, status, payload) {
 }
 
 function readJsonBody(req) {
-	return new Promise((resolve, reject) => {
+	return new Promise((resolveBody, reject) => {
 		let size = 0;
 		const chunks = [];
 		req.on("data", (chunk) => {
@@ -47,7 +68,7 @@ function readJsonBody(req) {
 		});
 		req.on("end", () => {
 			try {
-				resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
+				resolveBody(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
 			} catch (error) {
 				reject(error);
 			}
@@ -65,6 +86,50 @@ function absoluteWorkspace(value) {
 	return path && isAbsolute(path) ? path : "";
 }
 
+/** Solo imágenes y videos bajo el home o /tmp: nunca URLs, binarios ni rutas raras. */
+function mediaInfo(path) {
+	const target = resolve(path);
+	const home = homedir();
+	if (target !== home && !target.startsWith(`${home}/`) && !target.startsWith("/tmp/")) return null;
+	const mime = MIME[extname(target).slice(1).toLowerCase()];
+	if (!mime) return null;
+	return { path: target, mime };
+}
+
+async function readableMedia(path) {
+	const info = mediaInfo(path);
+	if (!info) return null;
+	try {
+		const details = await stat(info.path);
+		if (!details.isFile() || details.size <= 0 || details.size > MAX_MEDIA_BYTES) return null;
+		return { ...info, bytes: details.size, url: `/tasks/media?path=${encodeURIComponent(info.path)}` };
+	} catch {
+		return null;
+	}
+}
+
+function textOfMessage(message) {
+	if (!message || !Array.isArray(message.content)) return "";
+	return message.content
+		.filter((part) => part && part.type === "text" && typeof part.text === "string")
+		.map((part) => part.text)
+		.join("\n")
+		.trim();
+}
+
+function rootSession(session) {
+	const header = session?.header;
+	if (!header) return false;
+	if (header.origin === "subagent") return false;
+	if ((header.delegationDepth ?? 0) > 0) return false;
+	return typeof header.cwd === "string" && header.cwd.startsWith("/");
+}
+
+function firstLine(text) {
+	const line = String(text ?? "").split("\n").find((item) => item.trim() !== "") ?? "";
+	return line.trim().slice(0, 120);
+}
+
 function routes(ctx) {
 	return [
 		{
@@ -73,8 +138,7 @@ function routes(ctx) {
 			handler: async (req, res) => {
 				const url = new URL(req.url ?? "/", "http://127.0.0.1");
 				const workspace = absoluteWorkspace(url.searchParams.get("workspace"));
-				const tasks = await listTasks(workspace);
-				sendJson(res, 200, { workspace: workspace || null, tasks });
+				sendJson(res, 200, { workspace: workspace || null, tasks: await listTasks(workspace) });
 			},
 		},
 		{
@@ -85,8 +149,16 @@ function routes(ctx) {
 				const workspace = absoluteWorkspace(body?.workspace);
 				if (!workspace) return sendJson(res, 400, { error: "missing-workspace" });
 				if (typeof body?.title !== "string" || !body.title.trim()) return sendJson(res, 400, { error: "missing-title" });
-				const task = await createTask({ workspace, title: body.title, goal: body.goal });
-				sendJson(res, 200, { task });
+				sendJson(res, 200, {
+					task: await createTask({
+						workspace,
+						title: body.title,
+						goal: body.goal,
+						sessionId: body?.sessionId,
+						turn: body?.turn,
+						origin: "ui",
+					}),
+				});
 			},
 		},
 		{
@@ -96,12 +168,7 @@ function routes(ctx) {
 				const body = await readJsonBody(req);
 				const id = typeof body?.id === "string" ? body.id.trim() : "";
 				if (!id) return sendJson(res, 400, { error: "missing-id" });
-				const patch = {
-					state: body?.state,
-					title: body?.title,
-					goal: body?.goal,
-					sessionId: body?.sessionId,
-				};
+				const patch = { state: body?.state, title: body?.title, goal: body?.goal, sessionId: body?.sessionId, turn: body?.turn };
 				sendJson(res, 200, { task: await updateTask(id, patch) });
 			},
 		},
@@ -121,19 +188,50 @@ function routes(ctx) {
 			handler: async (req, res) => {
 				const url = new URL(req.url ?? "/", "http://127.0.0.1");
 				const sessionId = (url.searchParams.get("session") ?? "").trim();
+				const turnParam = (url.searchParams.get("turn") ?? "").trim();
+				const turn = /^\d+$/.test(turnParam) ? Number(turnParam) : null;
 				if (!SESSION_ID.test(sessionId)) return sendJson(res, 400, { error: "missing-session" });
 				try {
 					const snapshot = await ctx.sessionQuery.readSession(sessionId);
-					sendJson(res, 200, {
-						sessionId,
-						title: snapshot.session?.title ?? null,
-						evidence: summarizeEvidence(snapshot.events, { cwd: snapshot.session?.cwd ?? null }),
-					});
+					const events = turn === null ? snapshot.events : snapshot.events.filter((event) => Number(event.data?.turn) === turn);
+					const evidence = summarizeEvidence(events, { cwd: snapshot.session?.cwd ?? null });
+					const media = [];
+					for (const item of evidence.media) {
+						const readable = await readableMedia(item.path);
+						if (readable) media.push({ ...item, ...readable });
+					}
+					evidence.media = media;
+					evidence.stats.media = media.length;
+					sendJson(res, 200, { sessionId, turn, title: snapshot.session?.title ?? null, evidence });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					if (/not.?found/i.test(message)) return sendJson(res, 404, { error: "session-not-found" });
 					throw error;
 				}
+			},
+		},
+		{
+			path: "/tasks/media",
+			method: "GET",
+			handler: async (req, res) => {
+				const url = new URL(req.url ?? "/", "http://127.0.0.1");
+				const info = mediaInfo(url.searchParams.get("path") ?? "");
+				if (!info) return sendJson(res, 400, { error: "unsupported-media" });
+				let details;
+				try {
+					details = statSync(info.path);
+				} catch {
+					return sendJson(res, 404, { error: "missing" });
+				}
+				if (!details.isFile() || details.size <= 0 || details.size > MAX_MEDIA_BYTES) return sendJson(res, 413, { error: "too-large" });
+				res.writeHead(200, {
+					"content-type": info.mime,
+					"content-length": details.size,
+					"cache-control": "private, max-age=120",
+				});
+				const stream = createReadStream(info.path);
+				stream.on("error", () => res.destroy());
+				stream.pipe(res);
 			},
 		},
 		{
@@ -188,5 +286,94 @@ export function apply(ctx) {
 			`tasks: route ${path}`,
 		);
 	}
+
+	// Cada pedido es una tarea: cuando llega el mensaje del usuario dentro de un
+	// turno se crea la tarea del proyecto con ese texto. Un turno = una tarea.
+	const currentTurn = new Map();
+	const requestText = new Map();
+	const registering = new Map();
+	async function registerRequest(session) {
+		const sessionId = session.id;
+		const turn = currentTurn.get(sessionId);
+		const request = requestText.get(sessionId) ?? "";
+		if (!turn || !request) return;
+		if ((await findTurnTask(sessionId, turn)) !== null) return;
+		const linked = await findSessionTask(sessionId);
+		if (linked !== null && linked.turn == null) {
+			await adoptTurn(sessionId, turn);
+			return;
+		}
+		const title = firstLine(request) || `Pedido del turno ${turn}`;
+		await createTask({
+			workspace: session.header.cwd,
+			title,
+			goal: request.length > title.length ? request.slice(0, 2000) : "",
+			sessionId,
+			turn,
+			origin: "auto",
+		});
+	}
+	ctx.on("session/event", (session, event) => {
+		if (event.type === "turn/start") {
+			if (!rootSession(session)) return;
+			const turn = Number(event.data?.turn ?? 0);
+			if (!Number.isSafeInteger(turn) || turn <= 0) return;
+			currentTurn.set(session.id, turn);
+			if (!requestText.has(session.id)) return;
+			registering.set(session.id, { at: Date.now() });
+			registerRequest(session)
+				.catch(() => undefined)
+				.finally(() => {
+					registering.delete(session.id);
+					requestText.delete(session.id);
+				});
+			return;
+		}
+		if (event.type !== "user/message") return;
+		if (!rootSession(session)) return;
+		const text = textOfMessage(event.data?.message ?? event.data) || textOfMessage(event.data);
+		if (!text) return;
+		requestText.set(session.id, text);
+		if (!currentTurn.has(session.id)) return;
+		registering.set(session.id, { at: Date.now() });
+		registerRequest(session)
+			.catch(() => undefined)
+			.finally(() => {
+				registering.delete(session.id);
+				requestText.delete(session.id);
+			});
+	});
+	ctx.effect(
+		() =>
+			ctx.tools.guard((execution) => {
+				const sessionId = execution?.agent?.id;
+				if (!sessionId) return undefined;
+				const state = registering.get(sessionId);
+				if (!state) return undefined;
+				if (Date.now() - state.at > 8000) return undefined;
+				if (execution.name === "ask_user_question") return undefined;
+				return "El harness está registrando este pedido como tarea del proyecto. Reintentá la misma llamada en un instante.";
+			}),
+		"tasks: cada pedido necesita tarea",
+	);
+
+	ctx.effect(
+		() =>
+			ctx.systemPrompt.section({
+				name: "local-tasks/evidence",
+				order: 45,
+				text: [
+					"## Tareas y evidencia",
+					"Cada pedido del usuario queda registrado como una tarea del proyecto en la vista Tareas; no hace falta crearla a mano.",
+					"Una tarea no está terminada porque se tocaron archivos: está terminada cuando hay prueba que se pueda VER.",
+					"- Si el cambio se ve en pantalla, capturá la app real (pantalla-agente montar y capturar, o grim) y guardá la imagen bajo el proyecto o /tmp.",
+					"- Si hay tests o build, corrélos y mostrá cómo terminaron.",
+					"- Cerrá nombrando las rutas de las imágenes o videos y qué prueba cada una; la tarjeta de Evidencia las levanta del log de la sesión.",
+					"Sin captura ni prueba visual, la tarea queda sin evidencia visible.",
+				].join("\n"),
+			}),
+		"tasks: instrucciones de evidencia",
+	);
+
 	ctx.logger?.info?.("tasks: tareas por proyecto y evidencia montadas");
 }

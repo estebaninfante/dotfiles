@@ -31,6 +31,11 @@ window.__ModuleLoader__.load({
 			".evd-chevron{display:grid;place-items:center;flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3);transition:transform .18s ease}",
 			".evd-chevron[data-open='true']{transform:rotate(180deg)}",
 			".evd-panel{max-height:264px;overflow-y:auto;margin-top:6px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2)}",
+			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}",
+			".evd-thumb{display:block;width:124px;height:78px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-3,#2a2d35);cursor:zoom-in}",
+			".evd-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
+			".evd-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
+			".evd-video{width:200px;height:114px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
 			".evd-group{margin:0 0 10px}",
 			".evd-group:last-child{margin-bottom:2px}",
 			".evd-group-h{margin:0 0 3px;font-size:12px;font-weight:500;line-height:18px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
@@ -100,9 +105,26 @@ window.__ModuleLoader__.load({
 
 		function EvidencePanel(props) {
 			const { evidence } = props;
+			const media = evidence.media ?? [];
 			return h(
 				"div",
 				{ className: "evd-panel" },
+				h("p", { className: "evd-group-h" }, "Prueba visual"),
+				media.length
+					? h(
+							"div",
+							{ className: "evd-gallery" },
+							media.map((item) =>
+								item.kind === "video"
+									? h("video", { key: item.path, className: "evd-video", controls: true, preload: "metadata", src: item.url })
+									: h(
+											"a",
+											{ key: item.path, className: "evd-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.path },
+											h("img", { src: item.url, alt: item.label, loading: "lazy" }),
+										),
+							),
+						)
+					: h("p", { className: "evd-decl" }, "Sin captura ni video en esta conversación: no hay prueba que se pueda ver."),
 				h(Group, { title: `Archivos · ${evidence.files.length}`, items: evidence.files.slice(0, 16).map((file) => ({ flag: file.action, code: file.path })) }),
 				h(Group, {
 					title: `Comandos · ${evidence.commands.length}`,
@@ -135,8 +157,9 @@ window.__ModuleLoader__.load({
 			const [open, setOpen] = useState(false);
 			if (!evidence) return null;
 			const { stats } = evidence;
-			if (!stats.files && !stats.commands && !stats.deliverables) return null;
+			if (!stats.files && !stats.commands && !stats.deliverables && !stats.media) return null;
 			const summary = [
+				stats.media ? `${stats.media} ${stats.media === 1 ? "prueba visual" : "pruebas visuales"}` : "sin prueba visual",
 				`${stats.files} ${stats.files === 1 ? "archivo" : "archivos"}`,
 				`${stats.commands} ${stats.commands === 1 ? "comando" : "comandos"}`,
 				stats.testsOk || stats.testsFail ? `tests ${stats.testsOk} ok${stats.testsFail ? ` · ${stats.testsFail} fallaron` : ""}` : null,

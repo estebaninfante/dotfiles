@@ -95,3 +95,41 @@ test("una sesión vacía no inventa evidencia", () => {
 	assert.equal(summary.declaration, null);
 	assert.equal(summary.end, null);
 });
+
+test("las imágenes capturadas o entregadas son prueba visual", () => {
+	const list = [
+		call(1, "m1", "bash", { command: "pantalla-agente capturar /tmp/prueba-login.png", description: "Capturar login" }),
+		result(2, "m1", "ok"),
+		call(3, "m2", "read_image", { path: "/tmp/prueba-login.png" }),
+		result(4, "m2", "una imagen de 1440x900"),
+		call(5, "m3", "present", { files: [{ path: "/repo/out/demo.mp4", description: "Demo" }] }),
+		result(6, "m3", "presented"),
+	];
+	const summary = summarizeEvidence(list);
+	assert.equal(summary.stats.media, 2);
+	const image = summary.media.find((item) => item.path.endsWith("prueba-login.png"));
+	const video = summary.media.find((item) => item.path.endsWith("demo.mp4"));
+	assert.equal(image.kind, "imagen");
+	assert.equal(image.source, "adjunto");
+	assert.equal(image.label, "prueba-login.png");
+	assert.equal(video.kind, "video");
+	assert.equal(video.source, "entregable");
+});
+
+test("un turno filtrado deja solo la evidencia de ese pedido", () => {
+	const list = [
+		call(1, "a1", "write", { file_path: "/repo/a.ts", content: "x" }, 1),
+		result(2, "a1", "ok", { turn: 1 }),
+		call(3, "b1", "bash", { command: "pnpm test", description: "Tests" }, 2),
+		result(4, "b1", "ok", { turn: 2 }),
+		assistant(5, "listo", 1),
+		{ type: "turn/end", seq: 6, time: T, data: { turn: 1, reason: { kind: "completed" } } },
+		assistant(7, "listo también", 2),
+		{ type: "turn/end", seq: 8, time: T, data: { turn: 2, reason: { kind: "completed" } } },
+	];
+	const turn2 = summarizeEvidence(list.filter((event) => Number(event.data?.turn) === 2));
+	assert.equal(turn2.stats.files, 0);
+	assert.equal(turn2.stats.commands, 1);
+	assert.equal(turn2.stats.testsOk, 1);
+	assert.equal(turn2.declaration.text, "listo también");
+});

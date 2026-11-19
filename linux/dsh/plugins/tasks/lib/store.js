@@ -1,6 +1,9 @@
 /**
  * Tareas por proyecto. Un solo JSON bajo ~/.dsh/storages; escritura atómica y
  * serializada para que dos pestañas no pisen el archivo.
+ *
+ * Cada pedido del usuario se registra como tarea del proyecto: `turn` es el
+ * turno de la conversación del que salió y `origin` dice quién la creó.
  */
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -66,6 +69,8 @@ export function createTask(input) {
 			goal: clean(input.goal, 2000),
 			state: "abierta",
 			sessionId: clean(input.sessionId, 120) || null,
+			turn: Number.isSafeInteger(input.turn) && input.turn > 0 ? input.turn : null,
+			origin: typeof input.origin === "string" ? clean(input.origin, 20) : "ui",
 			createdAt: now,
 			updatedAt: now,
 			resolvedAt: null,
@@ -85,10 +90,36 @@ export function updateTask(id, patch) {
 		if (typeof patch.title === "string") task.title = clean(patch.title, 200) || task.title;
 		if (typeof patch.goal === "string") task.goal = clean(patch.goal, 2000);
 		if (typeof patch.sessionId === "string" && patch.sessionId.trim()) task.sessionId = clean(patch.sessionId, 120);
+		if (Number.isSafeInteger(patch.turn) && patch.turn > 0) task.turn = patch.turn;
 		if (STATES.has(patch.state) && patch.state !== task.state) {
 			task.state = patch.state;
 			task.resolvedAt = patch.state === "resuelta" ? Date.now() : null;
 		}
+		task.updatedAt = Date.now();
+		await writeDb(db);
+		return task;
+	});
+}
+
+/** Tarea ligada a una conversación, para saber si el turno ya tiene tarea. */
+export async function findSessionTask(sessionId) {
+	const db = await readDb();
+	return db.tasks.find((task) => task.sessionId === sessionId) ?? null;
+}
+
+/** Tarea de un pedido concreto: un turno de la conversación. */
+export async function findTurnTask(sessionId, turn) {
+	const db = await readDb();
+	return db.tasks.find((task) => task.sessionId === sessionId && task.turn === turn) ?? null;
+}
+
+/** Tarea recién creada desde la UI que todavía no sabe de qué turno salió. */
+export async function adoptTurn(sessionId, turn) {
+	return serialized(async () => {
+		const db = await readDb();
+		const task = db.tasks.find((item) => item.sessionId === sessionId && item.turn == null);
+		if (!task) return null;
+		task.turn = turn;
 		task.updatedAt = Date.now();
 		await writeDb(db);
 		return task;
