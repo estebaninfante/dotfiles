@@ -525,6 +525,23 @@ window.__ModuleLoader__.load({
 							h("p", { className: "tsk-line" }, `${abiertas} abiertas · ${porCerrar} por cerrar · ${fallos} con fallos · ${canceladas} canceladas · ${cerradas} cerradas`),
 						),
 						cwd ? h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: () => setFormOpen((open) => !open) }, "Nueva tarea") : null,
+						h(
+							"button",
+							{
+								type: "button",
+								className: "tsk-btn",
+								title: "Reiniciar el harness para aplicar cambios del host",
+								onClick: async () => {
+									try {
+										await api("/restart", {});
+										setError(null);
+									} catch (cause) {
+										setError(cause);
+									}
+								},
+							},
+							"Reiniciar",
+						),
 					),
 					h(
 						"div",
