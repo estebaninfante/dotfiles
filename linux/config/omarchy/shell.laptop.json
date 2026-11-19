@@ -94,6 +94,9 @@
           "showProvider": false,
           "showValue": false,
           "tabNames": true
+        },
+        {
+          "id": "eztvn.seat"
         }
       ]
     },
