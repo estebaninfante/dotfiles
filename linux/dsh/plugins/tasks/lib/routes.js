@@ -83,14 +83,6 @@ function liveStatus(live, task) {
 	return null;
 }
 
-function turnStatus(task, evidence, end, turn, running) {
-	if (running) return "en curso";
-	if (task?.closeReason) return closeText(task.closeReason);
-	if (end && end.turn === turn) return closeText(end.reason);
-	if (evidence.end) return closeText(evidence.end.reason);
-	return null;
-}
-
 function routes(ctx, live) {
 	return [
 		{
@@ -164,18 +156,41 @@ function routes(ctx, live) {
 				const sessionId = (url.searchParams.get("session") ?? "").trim();
 				if (!SESSION_ID.test(sessionId)) return sendJson(res, 400, { error: "missing-session" });
 				const snapshot = await ctx.sessionQuery.readSession(sessionId);
-				const events = snapshot.events;
+				const byTurn = new Map();
+				const ends = new Map();
 				let latest = 0;
-				for (const event of events) {
-					const value = Number(event.data?.turn);
-					if (Number.isSafeInteger(value) && value > latest) latest = value;
+				for (const event of snapshot.events) {
+					const turn = Number(event.data?.turn);
+					if (!Number.isSafeInteger(turn) || turn <= 0) continue;
+					if (turn > latest) latest = turn;
+					if (event.type === "turn/end") ends.set(turn, String(event.data?.reason?.kind ?? "?"));
+					const bucket = byTurn.get(turn) ?? [];
+					bucket.push(event);
+					byTurn.set(turn, bucket);
 				}
-				const running = live.running.has(sessionId);
-				const end = live.turnEnds.get(sessionId);
-				const turn = running ? (live.currentTurn.get(sessionId) ?? latest) : (end?.turn ?? latest);
-				const task = (turn ? await findTurnTask(sessionId, turn) : null) ?? (await findSessionTask(sessionId));
-				const evidence = await enrichMedia(summarizeEvidence(turn ? events.filter((event) => Number(event.data?.turn) === turn) : [], { cwd: snapshot.session?.cwd ?? null }));
-				sendJson(res, 200, { sessionId, turn, running, status: turnStatus(task, evidence, end, turn, running), task, evidence });
+				const running = latest > 0 && !ends.has(latest);
+				// La tarjeta muestra la evidencia del último pedido terminado que dejó
+				// prueba visual: un turno nuevo sin terminar no la esconde.
+				let chosen = null;
+				for (const turn of [...byTurn.keys()].sort((a, b) => b - a)) {
+					if (!ends.has(turn)) continue;
+					const evidence = await enrichMedia(summarizeEvidence(byTurn.get(turn), { cwd: snapshot.session?.cwd ?? null }));
+					if (evidence.media.length || evidence.deliverables.length) {
+						chosen = { turn, evidence, reason: ends.get(turn) };
+						break;
+					}
+				}
+				const task = (chosen ? await findTurnTask(sessionId, chosen.turn) : null) ?? (await findSessionTask(sessionId));
+				const evidence = chosen?.evidence ?? (await enrichMedia(summarizeEvidence([], { cwd: snapshot.session?.cwd ?? null })));
+				sendJson(res, 200, {
+					sessionId,
+					turn: chosen?.turn ?? 0,
+					latestTurn: latest,
+					running,
+					status: chosen ? closeText(chosen.reason) : null,
+					task,
+					evidence,
+				});
 			},
 		},
 		{

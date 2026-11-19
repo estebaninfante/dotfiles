@@ -10,6 +10,9 @@
 #   evidencia foto [ARCHIVO]             # una captura; imprime la ruta
 #   evidencia cerrar [--borrar]          # GIF + hoja de contactos; imprime rutas
 #   evidencia grabar [--fps N] [--max S] -- COMANDO...   # video mientras corre
+#   evidencia grabar-vivo [--fps N] -- COMANDO...        # tiempo real (pantalla montada)
+#   evidencia comparar A.png B.png [--etiquetas "antes,despues"]
+#   evidencia skill "REGLA"              # automejora: agrega una regla atómica
 #   evidencia estado
 #   evidencia limpiar
 #

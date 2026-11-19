@@ -58,11 +58,11 @@ window.__ModuleLoader__.load({
 			return `/api/file?path=${encodeURIComponent(path)}`;
 		}
 
-		/** Solo se pide cuando el turno ya terminó: mientras corre no hay evidencia. */
-		function useTurnEvidence(sessionId, running) {
+		/** Muestra el último pedido terminado con prueba; un turno en curso no la esconde. */
+		function useTurnEvidence(sessionId) {
 			const [turn, setTurn] = useState(null);
 			useEffect(() => {
-				if (!sessionId || running) {
+				if (!sessionId) {
 					setTurn(null);
 					return undefined;
 				}
@@ -81,7 +81,7 @@ window.__ModuleLoader__.load({
 					cancelled = true;
 					clearInterval(timer);
 				};
-			}, [sessionId, running]);
+			}, [sessionId]);
 			return turn;
 		}
 
@@ -124,10 +124,9 @@ window.__ModuleLoader__.load({
 		function EvidenceCard(props) {
 			useStyles();
 			const sessionId = props.sessionId;
-			const running = props.useSession((state) => state.running);
-			const proof = useTurnEvidence(sessionId, running);
+			const proof = useTurnEvidence(sessionId);
 			const [open, setOpen] = useState(false);
-			if (!proof || proof.running) return null;
+			if (!proof) return null;
 			const evidence = proof.evidence;
 			const media = evidence.media ?? [];
 			const deliverables = evidence.deliverables ?? [];
