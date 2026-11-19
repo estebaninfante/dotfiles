@@ -1,11 +1,10 @@
 /**
  * dsh-local-evidence — client half.
  *
- * Tarjeta sobre el compositor, al final de la conversación, con la evidencia
- * real de lo que hizo el agente: archivos, comandos, tests y entregables. Sale
- * del log de la sesión (lo sirve /tasks/evidence), no de lo que el agente dice.
- * Copia el lenguaje de la tarjeta de To-dos del harness: mismo ancho, misma
- * elevación, mismo header colapsable.
+ * Tarjeta sobre el compositor, SOLO cuando el pedido terminó y dejó prueba:
+ * capturas y videos que el agente miró, capturó o entregó en ese turno, más los
+ * entregables. Nada de comandos ni proceso: eso ya está en Chat y Trajectory.
+ * Dice a qué tarea del proyecto corresponde y cómo cerró.
  */
 window.__ModuleLoader__.load({
 	id: "dsh-local-evidence",
@@ -19,7 +18,6 @@ window.__ModuleLoader__.load({
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 
 		const STYLE_ID = "dsh-local-evidence-style";
-		const POLL_MS = 6000;
 		const CSS = [
 			".evd-root{box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance,0px) - var(--dsh-composer-side-clearance,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px));max-width:calc(var(--dsh-composer-card-max-width,952px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px));border-radius:var(--dsw-radius-lg,16px);background:var(--dsw-specific-menu,#202226);box-shadow:var(--dsw-elevation-panel,0 10px 30px #0007);backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px));flex:none;margin:0 auto;overflow:hidden}",
 			".evd-body{display:flex;flex-direction:column;padding:6px 12px}",
@@ -27,22 +25,20 @@ window.__ModuleLoader__.load({
 			".evd-head:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:2px}",
 			".evd-lead{display:grid;place-items:center;flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-title{flex:none;font-size:13px;font-weight:500;line-height:24px;color:var(--dsw-alias-label-primary,#ececf1)}",
-			".evd-progress{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-task{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-secondary,#b9b9c2)}",
+			".evd-progress{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-chevron{display:grid;place-items:center;flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3);transition:transform .18s ease}",
 			".evd-chevron[data-open='true']{transform:rotate(180deg)}",
-			".evd-panel{max-height:264px;overflow-y:auto;margin-top:6px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2)}",
+			".evd-panel{max-height:300px;overflow-y:auto;margin-top:6px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2)}",
 			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}",
-			".evd-thumb{display:block;width:124px;height:78px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-3,#2a2d35);cursor:zoom-in}",
+			".evd-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-3,#2a2d35);cursor:zoom-in}",
 			".evd-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
 			".evd-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
-			".evd-video{width:200px;height:114px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
-			".evd-group{margin:0 0 10px}",
-			".evd-group:last-child{margin-bottom:2px}",
-			".evd-group-h{margin:0 0 3px;font-size:12px;font-weight:500;line-height:18px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
-			".evd-item{display:flex;align-items:baseline;gap:6px;margin:0;font-size:12.5px;line-height:19px;color:var(--dsw-alias-label-secondary,#b9b9c2)}",
-			".evd-flag{flex:none;font-weight:500;color:var(--dsw-alias-label-primary,#e9e9ee)}",
-			".evd-code{min-width:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;overflow-wrap:anywhere}",
-			".evd-decl{margin:0;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);white-space:pre-wrap}",
+			".evd-video{width:212px;height:120px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
+			".evd-group-h{margin:0 0 4px;font-size:12px;font-weight:500;line-height:18px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-item{display:flex;align-items:baseline;gap:6px;margin:0;font:400 12px/1.6 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-secondary,#b9b9c2);overflow-wrap:anywhere}",
+			".evd-item a{color:var(--dsw-alias-label-primary,#e9e9ee);text-decoration:none;border-bottom:1px solid var(--dsw-alias-border-l2,#3b3e46)}",
+			".evd-item a:hover{border-bottom-color:currentColor}",
 			"@media (prefers-reduced-motion:reduce){.evd-chevron{transition:none}}",
 		].join("\n");
 
@@ -58,94 +54,70 @@ window.__ModuleLoader__.load({
 			}, []);
 		}
 
-		function short(text, max) {
-			const value = String(text ?? "").replace(/\s+/g, " ").trim();
-			return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+		function fileUrl(path) {
+			return `/api/file?path=${encodeURIComponent(path)}`;
 		}
 
-		function outcome(code) {
-			if (code === null || code === undefined) return "falló";
-			return code === 0 ? "ok" : `salió ${code}`;
-		}
-
-		function useEvidence(sessionId) {
-			const [evidence, setEvidence] = useState(null);
+		/** Solo se pide cuando el turno ya terminó: mientras corre no hay evidencia. */
+		function useTurnEvidence(sessionId, running) {
+			const [turn, setTurn] = useState(null);
 			useEffect(() => {
-				if (!sessionId) return undefined;
+				if (!sessionId || running) {
+					setTurn(null);
+					return undefined;
+				}
 				let cancelled = false;
 				const load = () => {
-					fetch(`/tasks/evidence?session=${encodeURIComponent(sessionId)}`, { headers: { accept: "application/json" } })
+					fetch(`/tasks/turn?session=${encodeURIComponent(sessionId)}`, { headers: { accept: "application/json" } })
 						.then((response) => (response.ok ? response.json() : null))
 						.then((payload) => {
-							if (!cancelled && payload) setEvidence(payload.evidence ?? null);
+							if (!cancelled) setTurn(payload);
 						})
 						.catch(() => {});
 				};
 				load();
-				const timer = setInterval(load, POLL_MS);
+				const timer = setInterval(load, 15000);
 				return () => {
 					cancelled = true;
 					clearInterval(timer);
 				};
-			}, [sessionId]);
-			return evidence;
+			}, [sessionId, running]);
+			return turn;
 		}
 
-		function Group(props) {
-			if (!props.items.length) return null;
+		function Gallery(props) {
+			const media = props.media;
 			return h(
 				"div",
-				{ className: "evd-group" },
-				h("p", { className: "evd-group-h" }, props.title),
-				props.items.map((item, index) =>
-					h("p", { className: "evd-item", key: index }, h("span", { className: "evd-flag" }, item.flag), h("code", { className: "evd-code" }, item.code)),
+				{ className: "evd-gallery" },
+				media.map((item) =>
+					item.kind === "video"
+						? h("video", { key: item.path, className: "evd-video", controls: true, preload: "metadata", src: item.url })
+						: h(
+								"a",
+								{ key: item.path, className: "evd-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.path },
+								h("img", { src: item.url, alt: item.label, loading: "lazy" }),
+							),
 				),
 			);
 		}
 
-		function EvidencePanel(props) {
-			const { evidence } = props;
-			const media = evidence.media ?? [];
+		function Panel(props) {
+			const { proof } = props;
 			return h(
 				"div",
 				{ className: "evd-panel" },
-				h("p", { className: "evd-group-h" }, "Prueba visual"),
-				media.length
+				proof.evidence.media.length ? h(Gallery, { media: proof.evidence.media }) : null,
+				proof.evidence.deliverables.length
 					? h(
 							"div",
-							{ className: "evd-gallery" },
-							media.map((item) =>
-								item.kind === "video"
-									? h("video", { key: item.path, className: "evd-video", controls: true, preload: "metadata", src: item.url })
-									: h(
-											"a",
-											{ key: item.path, className: "evd-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.path },
-											h("img", { src: item.url, alt: item.label, loading: "lazy" }),
-										),
+							null,
+							h("p", { className: "evd-group-h" }, `Entregables · ${proof.evidence.deliverables.length}`),
+							proof.evidence.deliverables.map((file) =>
+								h("p", { className: "evd-item", key: file.path }, h("a", { href: fileUrl(file.path), target: "_blank", rel: "noreferrer" }, file.label ?? file.path), file.description ? ` — ${file.description}` : ""),
 							),
 						)
-					: h("p", { className: "evd-decl" }, "Sin captura ni video en esta conversación: no hay prueba que se pueda ver."),
-				h(Group, { title: `Archivos · ${evidence.files.length}`, items: evidence.files.slice(0, 16).map((file) => ({ flag: file.action, code: file.path })) }),
-				h(Group, {
-					title: `Comandos · ${evidence.commands.length}`,
-					items: evidence.commands
-						.slice(-10)
-						.reverse()
-						.map((command) => ({ flag: outcome(command.exitCode), code: short(command.command, 110) })),
-				}),
-				h(Group, {
-					title: `Fallos · ${evidence.failures.length}`,
-					items: evidence.failures.slice(0, 8).map((failure) => ({ flag: failure.kind, code: short(failure.detail, 130) })),
-				}),
-				h(Group, {
-					title: `Entregables · ${evidence.deliverables.length}`,
-					items: evidence.deliverables.map((file) => ({ flag: "presentó", code: `${file.path}${file.description ? ` — ${file.description}` : ""}` })),
-				}),
-				h(Group, {
-					title: "Lo que dijo el agente",
-					items: evidence.claims.map((claim) => ({ flag: claim.verified ? "verificado" : "sin verificar", code: `${claim.claim} — ${claim.note}` })),
-				}),
-				evidence.declaration ? h("p", { className: "evd-decl" }, evidence.declaration.text) : null,
+					: null,
 			);
 		}
 
@@ -153,19 +125,14 @@ window.__ModuleLoader__.load({
 			useStyles();
 			const sessionId = props.sessionId;
 			const running = props.useSession((state) => state.running);
-			const evidence = useEvidence(sessionId);
+			const proof = useTurnEvidence(sessionId, running);
 			const [open, setOpen] = useState(false);
-			if (!evidence) return null;
-			const { stats } = evidence;
-			if (!stats.files && !stats.commands && !stats.deliverables && !stats.media) return null;
-			const summary = [
-				stats.media ? `${stats.media} ${stats.media === 1 ? "prueba visual" : "pruebas visuales"}` : "sin prueba visual",
-				`${stats.files} ${stats.files === 1 ? "archivo" : "archivos"}`,
-				`${stats.commands} ${stats.commands === 1 ? "comando" : "comandos"}`,
-				stats.testsOk || stats.testsFail ? `tests ${stats.testsOk} ok${stats.testsFail ? ` · ${stats.testsFail} fallaron` : ""}` : null,
-				stats.failures ? `${stats.failures} ${stats.failures === 1 ? "fallo" : "fallos"}` : null,
-				running ? "en curso" : evidence.end ? (evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`) : null,
-			]
+			if (!proof || proof.running) return null;
+			const evidence = proof.evidence;
+			const media = evidence.media ?? [];
+			const deliverables = evidence.deliverables ?? [];
+			if (!media.length && !deliverables.length) return null;
+			const summary = [`${media.length} ${media.length === 1 ? "prueba visual" : "pruebas visuales"}`, deliverables.length ? `${deliverables.length} ${deliverables.length === 1 ? "entregable" : "entregables"}` : null, proof.status]
 				.filter(Boolean)
 				.join(" · ");
 			return h(
@@ -188,6 +155,7 @@ window.__ModuleLoader__.load({
 							),
 						),
 						h("span", { className: "evd-title" }, "Evidencia"),
+						proof.task ? h("span", { className: "evd-task", title: proof.task.title }, proof.task.title) : null,
 						h("span", { className: "evd-progress" }, summary),
 						h(
 							"span",
@@ -199,7 +167,7 @@ window.__ModuleLoader__.load({
 							),
 						),
 					),
-					open ? h(EvidencePanel, { evidence }) : null,
+					open ? h(Panel, { proof }) : null,
 				),
 			);
 		}

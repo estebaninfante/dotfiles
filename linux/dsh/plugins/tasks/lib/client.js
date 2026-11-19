@@ -90,13 +90,12 @@ window.__ModuleLoader__.load({
 			return days === 1 ? "ayer" : `hace ${days} d`;
 		}
 
-		function proofLine(stats) {
+		function proofLine(evidence) {
+			const stats = evidence.stats;
 			return [
-				stats.media ? `${stats.media} ${stats.media === 1 ? "prueba" : "pruebas"} visual${stats.media === 1 ? "" : "es"}` : null,
-				`${stats.files} ${stats.files === 1 ? "archivo" : "archivos"}`,
-				`${stats.commands} ${stats.commands === 1 ? "comando" : "comandos"}`,
-				stats.testsOk || stats.testsFail ? `tests ${stats.testsOk} ok${stats.testsFail ? ` · ${stats.testsFail} fallaron` : ""}` : null,
-				stats.failures ? `${stats.failures} ${stats.failures === 1 ? "fallo" : "fallos"}` : null,
+				stats.media ? `${stats.media} ${stats.media === 1 ? "prueba visual" : "pruebas visuales"}` : null,
+				stats.deliverables ? `${stats.deliverables} ${stats.deliverables === 1 ? "entregable" : "entregables"}` : null,
+				evidence.end ? (evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`) : null,
 			]
 				.filter(Boolean)
 				.join(" · ");
@@ -120,12 +119,38 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		function Deliverables(props) {
+			const items = props.items ?? [];
+			if (!items.length) return null;
+			return h(
+				"div",
+				{ className: "tsk-deliverables" },
+				h("p", { className: "tsk-label" }, `Entregables · ${items.length}`),
+				items.map((file) =>
+					h(
+						"p",
+						{ className: "tsk-evline", key: file.path },
+						h("a", { href: `/api/file?path=${encodeURIComponent(file.path)}`, target: "_blank", rel: "noreferrer" }, file.path),
+						file.description ? ` — ${file.description}` : "",
+					),
+				),
+			);
+		}
+
 		function Proof(props) {
 			const { proof } = props;
 			if (proof.phase === "loading") return h("p", { className: "tsk-note" }, "Leyendo la prueba del pedido…");
 			if (proof.phase === "error") return h("p", { className: "tsk-error" }, proof.error.message);
 			const evidence = proof.evidence;
-			return h("div", { className: "tsk-proof" }, h("p", { className: "tsk-evline" }, proofLine(evidence.stats)), h(Media, { items: evidence.media }));
+			const empty = !evidence.media.length && !evidence.deliverables.length;
+			return h(
+				"div",
+				{ className: "tsk-proof" },
+				h("p", { className: "tsk-evline" }, proofLine(evidence)),
+				empty ? h("p", { className: "tsk-note" }, "Sin prueba visual: el agente cerró sin captura ni video.") : null,
+				empty ? null : h(Media, { items: evidence.media }),
+				h(Deliverables, { items: evidence.deliverables ?? [] }),
+			);
 		}
 
 		function TaskRow(props) {
@@ -156,7 +181,7 @@ window.__ModuleLoader__.load({
 							: h("button", { type: "button", className: "tsk-btn tsk-btn--quiet", onClick: () => onReopen(task), disabled: busy }, "Reabrir"),
 					),
 				),
-				h("span", { className: "tsk-state" }, task.state),
+				h("span", { className: "tsk-state" }, task.status ?? task.state),
 			);
 		}
 
@@ -204,6 +229,8 @@ window.__ModuleLoader__.load({
 
 			useEffect(() => {
 				load();
+				const timer = setInterval(load, 8000);
+				return () => clearInterval(timer);
 			}, [load]);
 
 			const mutate = async (task, patch) => {

@@ -130,7 +130,27 @@ function firstLine(text) {
 	return line.trim().slice(0, 120);
 }
 
-function routes(ctx) {
+/** Estado en vivo de un pedido: el turno que lo originó sigue o ya cerró. */
+function liveStatus(live, task) {
+	if (!task.sessionId || !task.turn) return null;
+	const end = live.turnEnds.get(task.sessionId);
+	if (end && end.turn === task.turn) return end.reason === "completed" ? "cerró bien" : `cerró: ${end.reason}`;
+	if (live.running.has(task.sessionId) && live.currentTurn.get(task.sessionId) === task.turn) return "en curso";
+	return null;
+}
+
+async function enrichMedia(evidence) {
+	const media = [];
+	for (const item of evidence.media) {
+		const readable = await readableMedia(item.path);
+		if (readable) media.push({ ...item, ...readable });
+	}
+	evidence.media = media;
+	evidence.stats.media = media.length;
+	return evidence;
+}
+
+function routes(ctx, live) {
 	return [
 		{
 			path: "/tasks/list",
@@ -138,7 +158,37 @@ function routes(ctx) {
 			handler: async (req, res) => {
 				const url = new URL(req.url ?? "/", "http://127.0.0.1");
 				const workspace = absoluteWorkspace(url.searchParams.get("workspace"));
-				sendJson(res, 200, { workspace: workspace || null, tasks: await listTasks(workspace) });
+				const tasks = await listTasks(workspace);
+				sendJson(res, 200, { workspace: workspace || null, tasks: tasks.map((task) => ({ ...task, status: liveStatus(live, task) })) });
+			},
+		},
+		{
+			path: "/tasks/turn",
+			method: "GET",
+			handler: async (req, res) => {
+				const url = new URL(req.url ?? "/", "http://127.0.0.1");
+				const sessionId = (url.searchParams.get("session") ?? "").trim();
+				if (!SESSION_ID.test(sessionId)) return sendJson(res, 400, { error: "missing-session" });
+				try {
+					const snapshot = await ctx.sessionQuery.readSession(sessionId);
+					const events = snapshot.events;
+					let latest = 0;
+					for (const event of events) {
+						const value = Number(event.data?.turn);
+						if (Number.isSafeInteger(value) && value > latest) latest = value;
+					}
+					const running = live.running.has(sessionId);
+					const end = live.turnEnds.get(sessionId);
+					const turn = running ? (live.currentTurn.get(sessionId) ?? latest) : (end?.turn ?? latest);
+					const task = (turn ? await findTurnTask(sessionId, turn) : null) ?? (await findSessionTask(sessionId));
+					const evidence = await enrichMedia(summarizeEvidence(turn ? events.filter((event) => Number(event.data?.turn) === turn) : [], { cwd: snapshot.session?.cwd ?? null }));
+					const reason = running ? "en curso" : end && end.turn === turn ? (end.reason === "completed" ? "cerró bien" : `cerró: ${end.reason}`) : evidence.end ? (evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`) : null;
+					sendJson(res, 200, { sessionId, turn, running, status: reason, task, evidence });
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					if (/not.?found/i.test(message)) return sendJson(res, 404, { error: "session-not-found" });
+					throw error;
+				}
 			},
 		},
 		{
@@ -194,14 +244,7 @@ function routes(ctx) {
 				try {
 					const snapshot = await ctx.sessionQuery.readSession(sessionId);
 					const events = turn === null ? snapshot.events : snapshot.events.filter((event) => Number(event.data?.turn) === turn);
-					const evidence = summarizeEvidence(events, { cwd: snapshot.session?.cwd ?? null });
-					const media = [];
-					for (const item of evidence.media) {
-						const readable = await readableMedia(item.path);
-						if (readable) media.push({ ...item, ...readable });
-					}
-					evidence.media = media;
-					evidence.stats.media = media.length;
+					const evidence = await enrichMedia(summarizeEvidence(events, { cwd: snapshot.session?.cwd ?? null }));
 					sendJson(res, 200, { sessionId, turn, title: snapshot.session?.title ?? null, evidence });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
@@ -258,8 +301,17 @@ function routes(ctx) {
 }
 
 export function apply(ctx) {
+	// Estado en vivo de los pedidos: turno actual, cierre y registro en curso.
+	const live = {
+		currentTurn: new Map(),
+		turnEnds: new Map(),
+		running: new Set(),
+		registering: new Map(),
+		inflight: new Map(),
+		requestText: new Map(),
+	};
 	const byPath = new Map();
-	for (const route of routes(ctx)) {
+	for (const route of routes(ctx, live)) {
 		if (!byPath.has(route.path)) byPath.set(route.path, {});
 		const methods = byPath.get(route.path);
 		if (methods[route.method]) throw new Error(`tasks: ruta duplicada ${route.method} ${route.path}`);
@@ -287,15 +339,14 @@ export function apply(ctx) {
 		);
 	}
 
-	// Cada pedido es una tarea: cuando llega el mensaje del usuario dentro de un
-	// turno se crea la tarea del proyecto con ese texto. Un turno = una tarea.
-	const currentTurn = new Map();
-	const requestText = new Map();
-	const registering = new Map();
+	// Cada pedido es una tarea: cuando llega el mensaje escrito por el usuario
+	// dentro de un turno se crea la tarea del proyecto. Un turno = una tarea.
+	// Solo cuentan los mensajes con source.kind "user": los recordatorios y el
+	// runtime context del harness también llegan como user/message.
 	async function registerRequest(session) {
 		const sessionId = session.id;
-		const turn = currentTurn.get(sessionId);
-		const request = requestText.get(sessionId) ?? "";
+		const turn = live.currentTurn.get(sessionId);
+		const request = live.requestText.get(sessionId) ?? "";
 		if (!turn || !request) return;
 		if ((await findTurnTask(sessionId, turn)) !== null) return;
 		const linked = await findSessionTask(sessionId);
@@ -313,42 +364,49 @@ export function apply(ctx) {
 			origin: "auto",
 		});
 	}
+	function scheduleRegister(session) {
+		const sessionId = session.id;
+		if (live.inflight.has(sessionId)) return;
+		live.registering.set(sessionId, { at: Date.now() });
+		const job = registerRequest(session)
+			.catch(() => undefined)
+			.finally(() => {
+				live.inflight.delete(sessionId);
+				live.registering.delete(sessionId);
+				live.requestText.delete(sessionId);
+			});
+		live.inflight.set(sessionId, job);
+	}
 	ctx.on("session/event", (session, event) => {
+		if (!rootSession(session)) return;
 		if (event.type === "turn/start") {
-			if (!rootSession(session)) return;
 			const turn = Number(event.data?.turn ?? 0);
 			if (!Number.isSafeInteger(turn) || turn <= 0) return;
-			currentTurn.set(session.id, turn);
-			if (!requestText.has(session.id)) return;
-			registering.set(session.id, { at: Date.now() });
-			registerRequest(session)
-				.catch(() => undefined)
-				.finally(() => {
-					registering.delete(session.id);
-					requestText.delete(session.id);
-				});
+			live.currentTurn.set(session.id, turn);
+			live.running.add(session.id);
+			if (live.requestText.has(session.id)) scheduleRegister(session);
+			return;
+		}
+		if (event.type === "turn/end") {
+			const turn = Number(event.data?.turn ?? 0);
+			const reason = String(event.data?.reason?.kind ?? "?");
+			live.running.delete(session.id);
+			if (Number.isSafeInteger(turn) && turn > 0) live.turnEnds.set(session.id, { turn, reason });
 			return;
 		}
 		if (event.type !== "user/message") return;
-		if (!rootSession(session)) return;
-		const text = textOfMessage(event.data?.message ?? event.data) || textOfMessage(event.data);
+		if (event.data?.source?.kind !== "user") return;
+		const text = textOfMessage(event.data);
 		if (!text) return;
-		requestText.set(session.id, text);
-		if (!currentTurn.has(session.id)) return;
-		registering.set(session.id, { at: Date.now() });
-		registerRequest(session)
-			.catch(() => undefined)
-			.finally(() => {
-				registering.delete(session.id);
-				requestText.delete(session.id);
-			});
+		live.requestText.set(session.id, text);
+		if (live.currentTurn.has(session.id)) scheduleRegister(session);
 	});
 	ctx.effect(
 		() =>
 			ctx.tools.guard((execution) => {
 				const sessionId = execution?.agent?.id;
 				if (!sessionId) return undefined;
-				const state = registering.get(sessionId);
+				const state = live.registering.get(sessionId);
 				if (!state) return undefined;
 				if (Date.now() - state.at > 8000) return undefined;
 				if (execution.name === "ask_user_question") return undefined;
