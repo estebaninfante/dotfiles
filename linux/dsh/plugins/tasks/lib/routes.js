@@ -131,7 +131,7 @@ function routes(ctx, live) {
 				const body = await readJsonBody(req);
 				const id = typeof body?.id === "string" ? body.id.trim() : "";
 				if (!id) return sendJson(res, 400, { error: "missing-id" });
-				const patch = { state: body?.state, title: body?.title, goal: body?.goal, sessionId: body?.sessionId, turn: body?.turn };
+				const patch = { state: body?.state, title: body?.title, goal: body?.goal, steps: body?.steps, sessionId: body?.sessionId, turn: body?.turn };
 				sendJson(res, 200, { task: await updateTask(id, patch) });
 			},
 		},
@@ -272,6 +272,7 @@ function routes(ctx, live) {
 						// El título lo elige el agente. Si no lo nombró, se dice, no se
 						// rellena con el mensaje del usuario.
 						title: task?.title ?? `Sin título · turno ${first}`,
+						steps: task?.steps ?? [],
 						turn: first,
 						turns: list,
 						request: userText.get(first) ?? "",

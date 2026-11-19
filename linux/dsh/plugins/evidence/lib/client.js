@@ -53,6 +53,9 @@ window.__ModuleLoader__.load({
 			".evd-summary{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
 			".evd-more{margin:6px 0 0;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-empty{margin:0;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-steps{margin:0 0 8px;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
+			".evd-steps li{position:relative;padding-left:13px;font:400 12px/1.55 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-steps li::before{content:'·';position:absolute;left:3px}",
 			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px}.evd-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c);cursor:zoom-in}.evd-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
 			".evd-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}.evd-video{width:212px;height:120px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
 			".evd-opt{display:flex;align-items:baseline;gap:10px;min-width:0;max-width:100%}",
@@ -352,6 +355,9 @@ window.__ModuleLoader__.load({
 								"div",
 								{ className: "evd-panel" },
 								summary ? h("p", { className: "evd-summary" }, summary) : null,
+								task?.steps?.length
+									? h("ul", { className: "evd-steps" }, task.steps.map((step) => h("li", { key: step }, step)))
+									: null,
 								media.length ? h(Gallery, { media, max: 4 }) : null,
 								media.length > 4 ? h("p", { className: "evd-more" }, `+${media.length - 4} más en la pestaña Tareas`) : null,
 								deliverables.length ? h(Deliverables, { items: deliverables.slice(0, 3) }) : null,

@@ -34,6 +34,9 @@ window.__ModuleLoader__.load({
 			".tsk-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty}",
 			".tsk-side{display:flex;align-items:center;gap:2px;flex:none}",
 			".tsk-state{font-size:12px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;margin-right:6px}.tsk-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
+			".tsk-steps{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
+			".tsk-steps li{position:relative;padding-left:13px;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".tsk-steps li::before{content:'·';position:absolute;left:3px}",
 			".tsk-summary{margin:0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
 			".tsk-gallery{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 0}.tsk-thumb{display:block;width:118px;height:74px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c)}.tsk-thumb img{width:100%;height:100%;object-fit:cover;display:block}.tsk-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".tsk-video{width:198px;height:112px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
@@ -163,12 +166,12 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		/** El nombre de la tarea es su objetivo; el título corto solo si no hay objetivo. */
+		/** El nombre de la tarea es el título que eligió el agente. */
 		function nameOf(task) {
-			const goal = String(task?.goal ?? "").trim();
-			if (goal) return goal;
 			const title = String(task?.title ?? "").trim();
-			return title || "Tarea sin título";
+			if (title) return title;
+			const goal = String(task?.goal ?? "").trim();
+			return goal ? goal.slice(0, 72) : "Tarea sin título";
 		}
 
 		function TaskCard(props) {
@@ -193,6 +196,7 @@ window.__ModuleLoader__.load({
 					),
 				),
 				task.summary ? h("p", { className: "tsk-summary" }, task.summary) : null,
+				task.steps?.length ? h("ul", { className: "tsk-steps" }, task.steps.map((step) => h("li", { key: step }, step))) : null,
 				task.note ? h("p", { className: "tsk-note" }, task.note) : null,
 				task.media?.length ? h(Gallery, { items: task.media }) : null,
 				h(Deliverables, { items: task.deliverables ?? [] }),

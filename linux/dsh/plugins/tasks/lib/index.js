@@ -17,7 +17,7 @@ import { addTurn, adoptTurn, createTask, findOpenTask, findSessionTasks, findTur
 export const inject = ["webServer", "sessionQuery", "systemPrompt", "tools"];
 
 const TASK_PLAN_DESCRIPTION =
-	"Nombrá las tareas de este pedido antes de trabajar. Una entrada por cada cosa distinta que pidió el usuario, con un título corto y concreto (3 a 8 palabras, en el idioma del usuario).";
+	"Nombrá la tarea de este pedido antes de trabajar. Una tarea por pedido: el título dice qué pidió el usuario (3 a 8 palabras, en su idioma) y los pasos van en `steps`.";
 
 const TASK_PLAN_PARAMETERS = {
 	type: "object",
@@ -61,6 +61,32 @@ export function apply(ctx) {
 	 * cancelado en vez de abierto para siempre.
 	 */
 	async function reconcile() {
+		// Una tarea por pedido: las tareas sueltas del mismo turno se juntan en una
+		// y sus títulos pasan a ser pasos. La que manda es la primera que se creó,
+		// que es la que nombró el pedido.
+		const byTurn = new Map();
+		for (const task of (await listTasks(undefined)).filter((item) => item.sessionId)) {
+			const turns = taskTurns(task);
+			if (turns.length !== 1) continue;
+			const key = `${task.sessionId}:${turns[0]}`;
+			const list = byTurn.get(key) ?? [];
+			list.push(task);
+			byTurn.set(key, list);
+		}
+		for (const list of byTurn.values()) {
+			if (list.length < 2) continue;
+			const ordered = list.slice().sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+			const first = ordered[0];
+			const steps = (first.steps ?? []).filter((step) => step && step !== first.title);
+			for (const extra of ordered.slice(1)) {
+				const title = String(extra.title ?? "").trim();
+				if (title && title !== first.title && !steps.includes(title)) steps.push(title);
+				const merged = await mergeTasks(first.id, extra.id);
+				if (merged) first.turns = taskTurns(merged);
+			}
+			await updateTask(first.id, { steps }).catch(() => null);
+			first.steps = steps;
+		}
 		const tasks = (await listTasks(undefined)).filter((task) => task.sessionId);
 		const bySession = new Map();
 		for (const task of tasks) {
@@ -364,7 +390,7 @@ export function apply(ctx) {
 				const denials = live.denials.get(session.id) ?? 0;
 				if (denials >= 2) return undefined;
 				live.denials.set(session.id, denials + 1);
-				return "Primero nombrá este pedido: llamá a task_plan con un título corto por cada cosa distinta que pidió el usuario.";
+				return "Primero nombrá esta tarea: llamá a task_plan con un título para el pedido y los pasos para cumplirlo.";
 			}),
 		"tasks: cada pedido se nombra antes de trabajar",
 	);
@@ -377,7 +403,7 @@ export function apply(ctx) {
 				text: [
 					"## Tareas y evidencia",
 					"Una tarea no es un turno: es el trabajo. Un turno puede abrir varias tareas y una tarea puede abarcar varios turnos.",
-					"Al empezar cada turno llamá a `task_plan` con las tareas del pedido: un título corto y concreto (3 a 8 palabras) por cada cosa distinta que pidió. El título lo elegís vos y describe el trabajo; nunca es el mensaje del usuario ni una palabra suelta como “continue”. Si el pedido es una sola cosa, una sola entrada. Después trabajás; las herramientas están bloqueadas hasta que el pedido tenga nombre.",
+					"Al empezar cada turno llamá a `task_plan` con UNA tarea: el título dice qué pidió el usuario (3 a 8 palabras) y `steps` son los pasos para cumplirlo. Una tarea es el pedido, no cada cosa suelta que hay que tocar: si el pedido es uno, la tarea es una y los detalles van en los pasos. El título lo elegís vos; nunca es el mensaje del usuario ni una palabra suelta como “continue”. Después trabajás; las herramientas están bloqueadas hasta que el pedido tenga nombre.",
 					"Si el mensaje es una continuación (“continue”, “dale”, “seguí”), no abras tarea nueva: seguí la tarea abierta y sumá ahí tu evidencia.",
 					"Al terminar el trabajo, antes de tu respuesta final, llamá a `task_review` con el resultado de cada tarea de esta conversación: `ok` si la terminaste con prueba, `parcial` si quedó a medias, `falló` si no salió, `abierta` si sigue pendiente y `cancelada` si el usuario detuvo el turno, con una línea de qué pasó. Después decile al usuario qué quedó abierto o falló y qué sigue.",
 					"Una tarea no está terminada porque se tocaron archivos: está terminada cuando hay prueba que se pueda VER.",

@@ -2,31 +2,41 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { isContinuation, planTasks } from "../lib/plan.js";
 
-test("limpia y deduplica los títulos que declara el agente", () => {
+test("un pedido es una tarea, con sus pasos adentro", () => {
 	const plan = planTasks({
-		tasks: [
-			{ title: "  Arreglar   el login ", detail: "Que la sesión persista." },
-			{ title: "arreglar el login" },
-			{ title: "" },
-			{ title: "Revisar tests" },
-		],
+		title: "  Revisar   el modo llamada ",
+		detail: "Que el input y la barra se transformen.",
+		steps: [{ title: "Ver el modal actual" }, { title: "Rediseñar la barra" }, { title: "Probar en pantalla" }],
 	});
-	assert.deepEqual(
-		plan.map((item) => item.title),
-		["Arreglar el login", "Revisar tests"],
-	);
-	assert.equal(plan[0].detail, "Que la sesión persista.");
+	assert.equal(plan.length, 1);
+	assert.equal(plan[0].title, "Revisar el modo llamada");
+	assert.equal(plan[0].detail, "Que el input y la barra se transformen.");
+	assert.deepEqual(plan[0].steps, ["Ver el modal actual", "Rediseñar la barra", "Probar en pantalla"]);
 });
 
-test("un pedido puede tener varias tareas y se recortan a un máximo", () => {
-	const plan = planTasks({ tasks: Array.from({ length: 12 }, (_, index) => ({ title: `Tarea ${index}` })) });
-	assert.equal(plan.length, 8);
+test("si manda varias entradas, la primera es la tarea y el resto pasos", () => {
+	const plan = planTasks({
+		tasks: [{ title: "Arreglar el login" }, { title: "Revisar tests" }, { title: "Revisar tests" }, { title: "" }],
+	});
+	assert.equal(plan.length, 1);
+	assert.equal(plan[0].title, "Arreglar el login");
+	assert.deepEqual(plan[0].steps, ["Revisar tests"]);
+});
+
+test("los pasos se recortan a un máximo y no se repiten", () => {
+	const plan = planTasks({
+		title: "Tarea grande",
+		steps: Array.from({ length: 20 }, (_, index) => ({ title: `Paso ${index % 15}` })),
+	});
+	assert.equal(plan[0].steps.length, 12);
+	assert.equal(new Set(plan[0].steps).size, 12);
 });
 
 test("sin argumentos válidos no inventa tareas", () => {
 	assert.deepEqual(planTasks(undefined), []);
 	assert.deepEqual(planTasks({ tasks: "no" }), []);
 	assert.deepEqual(planTasks({ tasks: [{ title: "   " }] }), []);
+	assert.deepEqual(planTasks({ steps: [{ title: "Paso sin título de tarea" }] }), []);
 });
 
 test("un 'continue' no es una tarea nueva: sigue el trabajo abierto", () => {
