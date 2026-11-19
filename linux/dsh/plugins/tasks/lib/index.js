@@ -117,6 +117,94 @@ export function apply(ctx) {
 		"tasks: nombrar el pedido",
 	);
 
+	ctx.effect(
+		() =>
+			ctx.tools.register({
+				name: "task_review",
+				description:
+					"Revisá las tareas de esta conversación al final del turno: marcá en cuáles terminaste (ok), en cuáles fallaste (falló), cuáles quedaron parciales y cuáles siguen abiertas, con una línea de qué pasó. Después contale al usuario las que quedaron abiertas o fallaron.",
+				parameters: {
+					type: "object",
+					additionalProperties: false,
+					properties: {
+						items: {
+							type: "array",
+							description: "Una entrada por tarea de esta conversación. Las que no marques quedan sin revisar.",
+							items: {
+								type: "object",
+								additionalProperties: false,
+								properties: {
+									id: { type: "string", description: "id que devolvió task_plan." },
+									outcome: { type: "string", enum: ["ok", "parcial", "falló", "abierta"] },
+									note: { type: "string", description: "Qué pasó con esta tarea, en una línea." },
+								},
+								required: ["id", "outcome"],
+							},
+						},
+					},
+					required: ["items"],
+				},
+				output: {
+					schema: {
+						type: "object",
+						additionalProperties: false,
+						properties: {
+							tasks: {
+								type: "array",
+								items: {
+									type: "object",
+									additionalProperties: false,
+									properties: {
+										id: { type: "string" },
+										title: { type: "string" },
+										turn: { type: "number" },
+										state: { type: "string" },
+										outcome: { type: "string" },
+										note: { type: "string" },
+									},
+									required: ["id", "title", "turn", "state", "outcome", "note"],
+								},
+							},
+							open: { type: "number" },
+							failed: { type: "number" },
+						},
+						required: ["tasks", "open", "failed"],
+					},
+					render: (_args, value) => {
+						const ok = value.tasks.filter((task) => task.outcome === "ok").length;
+						const pending = value.tasks.filter((task) => task.state !== "resuelta" && task.outcome !== "ok").map((task) => `${task.title} (${task.outcome || "sin revisar"})`);
+						return [
+							{
+								type: "text",
+								text: `Revisión del turno: ${ok} ok · ${value.failed} fallaron · ${value.open} abiertas${pending.length ? `\nPendientes: ${pending.join(" · ")}` : ""}`,
+							},
+						];
+					},
+				},
+				async execute(args, exec) {
+					const session = exec.agent?.session;
+					if (!session) return { tasks: [], open: 0, failed: 0 };
+					const items = Array.isArray(args?.items) ? args.items : [];
+					for (const item of items) {
+						if (typeof item?.id !== "string") continue;
+						await updateTask(item.id, { outcome: item.outcome, note: item.note }).catch(() => null);
+					}
+					const shaped = (await findSessionTasks(session.id)).map((task) => ({
+						id: task.id,
+						title: task.title,
+						turn: task.turn ?? 0,
+						state: task.state,
+						outcome: task.outcome ?? "",
+						note: task.note ?? "",
+					}));
+					const open = shaped.filter((task) => task.state !== "resuelta" && (task.outcome === "" || task.outcome === "abierta" || task.outcome === "parcial")).length;
+					const failed = shaped.filter((task) => task.outcome === "falló").length;
+					return { tasks: shaped, open, failed };
+				},
+			}),
+		"tasks: revisar al cerrar",
+	);
+
 	// Un turno = un pedido. Solo cuentan los mensajes con source.kind "user":
 	// los recordatorios y el runtime context del harness también llegan como
 	// user/message y no son pedidos. El título provisorio es la primera línea.
@@ -205,6 +293,7 @@ export function apply(ctx) {
 					"## Tareas y evidencia",
 					"Cada pedido del usuario se registra como una tarea del proyecto en la vista Tareas.",
 					"Al empezar cada turno llamá a `task_plan` con las tareas del pedido: un título corto y concreto (3 a 8 palabras) por cada cosa distinta que pidió. Si pidió una sola cosa, una sola entrada. Después trabajás; las herramientas están bloqueadas hasta que el pedido tenga nombre.",
+					"Al terminar el trabajo, antes de tu respuesta final, llamá a `task_review` con el resultado de cada tarea de esta conversación: `ok` si la terminaste con prueba, `parcial` si quedó a medias, `falló` si no salió y `abierta` si sigue pendiente, con una línea de qué pasó. Después decile al usuario qué quedó abierto o falló y qué sigue.",
 					"Una tarea no está terminada porque se tocaron archivos: está terminada cuando hay prueba que se pueda VER.",
 					"- Si el cambio se ve en pantalla, capturá la app real (pantalla-agente montar y capturar, o grim) y guardá la imagen bajo el proyecto o /tmp.",
 					"- Si hay tests o build, corrélos y mostrá cómo terminaron.",

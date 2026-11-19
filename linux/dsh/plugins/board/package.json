@@ -1,0 +1,18 @@
+{
+  "name": "dsh-local-board",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Panel global de tareas en el sidebar: abiertas, cerradas y con fallos de todas las conversaciones.",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  }
+}

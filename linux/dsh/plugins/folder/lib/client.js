@@ -18,7 +18,7 @@ window.__ModuleLoader__.load({
 		const STYLE_ID = "dsh-local-folder-style";
 		const CSS = [
 			".fld-root{display:inline-flex;align-items:center;gap:6px;max-width:280px;height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);font:inherit;font-size:12px;cursor:pointer}",
-			".fld-root:hover{background:var(--dsw-alias-bg-layer-3,#2a2d35);color:var(--dsw-alias-label-primary,#ececf1)}",
+			".fld-root:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".fld-root:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".fld-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 		].join("\n");
