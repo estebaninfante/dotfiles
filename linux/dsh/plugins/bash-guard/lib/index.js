@@ -13,6 +13,13 @@
  * `npm`, `curl -o`, ni correr scripts existentes (`scripts/publish.sh`,
  * `machine scan`) — lo que un script hace por dentro no lo ve este guard.
  *
+ * Además cuida la sesión del usuario: bloquea input sintético (`ydotool`,
+ * `wtype`, `xdotool`, `wmctrl`), capturas de sus pantallas (`grim`, `slurp`,
+ * `wf-recorder` salvo sobre la salida virtual), `hyprctl` que le mueve el
+ * workspace o el monitor, abrir apps con `pantalla-agente abrir` y lanzar GUI
+ * fuera del asiento. El camino sancionado es `agent-seat` (GUI) y
+ * `pantalla-agente montar/capturar` (sólo capturas).
+ *
  * Es determinista: mira el texto del comando y devuelve un motivo; el harness
  * convierte la llamada en error antes de ejecutarla.
  *
@@ -172,6 +179,52 @@ export function pythonWritesFiles(command) {
 	return PY_WRITE_CALLS.some((pattern) => pattern.test(command));
 }
 
+/** Motivo para comandos que invaden la sesión del usuario. */
+const SESSION_DENIED =
+	"bash-guard bloqueó el comando: tocaría la sesión del usuario (cursor, foco, workspace o sus ventanas). " +
+	"Para GUI usá `agent-seat` (skill `agent-seat`): apps sandboxeadas en su workspace, con puntero y teclado propios. " +
+	"Para capturas usá `pantalla-agente montar/capturar` o `evidencia`. " +
+	"Si de verdad necesitás esto, pedile permiso al usuario y reintentá con `DSH_GUARD_ALLOW=1` adelante.";
+
+/** Reglas de sesión: [patrón, qué dispara]. */
+const SESSION_PATTERNS = [
+	[/\b(?:ydotool|wtype|xdotool|wmctrl)\b/, "input sintético en el seat del usuario"],
+	[/\bgrim\b(?![^\n]*\b(?:AGENTE-1|HEADLESS))/,
+		"captura de las pantallas del usuario (usá `agent-seat screenshot` o `pantalla-agente capturar`)"],
+	[/\b(?:slurp|wf-recorder)\b(?![^\n]*\b(?:AGENTE-1|HEADLESS))/,
+		"captura/grabación de las pantallas del usuario (usá `evidencia`)"],
+	[/\bhyprctl\s+(?:dispatch|keyword)\b[^\n]*\b(?:workspace|movetoworkspace|focusmonitor|focusworkspace|swapactiveworkspaces|renameworkspace)\b/,
+		"mover el workspace o el monitor del usuario"],
+	[/\bpantalla-agente\s+abrir\b/,
+		"abrir una app en la pantalla virtual (el app-id llega tarde y la ventana aparece un instante en las pantallas del usuario; usá `agent-seat run`)"],
+];
+
+/**
+ * Lanzamiento de una GUI en el seat del usuario: el binario al principio de un
+ * segmento, con wrappers habituales delante. Las apariciones dentro de scripts
+ * o en un `node -e` no cuentan; tampoco los chequeos (`command -v`).
+ */
+const GUI_LAUNCH =
+	/(?:^|[;&|]\s*)(?:(?:setsid|env|nohup|uwsm-app)\s+|timeout\s+\d+\s+)*(?:chromium|chromium-browser|google-chrome(?:-stable)?|brave|brave-browser|firefox|foot|kitty|alacritty|xdg-open)\b/;
+
+/** Excusas válidas: no abren una ventana en la sesión del usuario. */
+const GUI_EXCUSAS = /(?:--headless|agent-seat\b|command\s+-v|which\s|type\s+-p|pacman\s+-Q)/;
+
+/**
+ * Regla de sesión que se dispara, o `undefined` si el comando es seguro.
+ * @param {string} command
+ * @returns {string | undefined}
+ */
+export function sessionDenial(command) {
+	for (const [pattern, why] of SESSION_PATTERNS) {
+		if (pattern.test(command)) return why;
+	}
+	if (GUI_LAUNCH.test(command) && !GUI_EXCUSAS.test(command)) {
+		return "abrir una GUI en las pantallas del usuario (usá `agent-seat run`)";
+	}
+	return undefined;
+}
+
 /**
  * Regla que se dispara, para nombrarla en el motivo: `redirección a archivo
  * (/tmp/x)`, `python escribe un archivo`, `sed -i`, … O `undefined` si pasa.
@@ -201,6 +254,8 @@ export function denialReason(execution) {
 	const command = typeof args.command === "string" ? args.command : "";
 	if (command.trim() === "") return undefined;
 	if (OVERRIDE.test(command)) return undefined;
+	const sesion = sessionDenial(command);
+	if (sesion !== undefined) return `${SESSION_DENIED}\nMotivo: ${sesion}.`;
 	const rule = findDenial(command);
 	if (rule === undefined) return undefined;
 	return `${DENIED}\nMotivo: ${rule}.`;

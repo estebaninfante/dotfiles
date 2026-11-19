@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# agent-seat-watch — avisa cuando un agente abre o cierra ventanas en el asiento.
+#
+# El asiento vive en un workspace oculto: sin esto el usuario no se entera de
+# que hay un agente trabajando ahí. Manda una notificación al abrir la primera
+# ventana (con títulos) y al cerrarse la última. Se apaga solo cuando el broker
+# se detiene o cuando pasan AGENT_SEAT_WATCH_IDLE segundos sin ventanas.
+#
+# Uso: agent-seat-watch [-v]     (-v: además imprime cada cambio, para probar)
+set -uo pipefail
+
+INTERVALO="${AGENT_SEAT_WATCH_INTERVALO:-2}"
+IDLE="${AGENT_SEAT_WATCH_IDLE:-900}"
+VERBOSO=0
+[ "${1:-}" = "-v" ] && VERBOSO=1
+
+RUTA="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-watch.pid"
+ULTIMO=-1
+SIN_VENTANAS=0
+
+aviso() {
+    omarchy-notification-send -u normal "$*" >/dev/null 2>&1 \
+        || notify-send "$*" >/dev/null 2>&1 || true
+}
+decir() { [ "$VERBOSO" = 1 ] && echo "$*"; return 0; }
+
+decir "vigía del asiento: arrancando"
+while :; do
+    estado="$(agent-seat status 2>/dev/null || true)"
+    case "$estado" in
+        *running*) ;;
+        *)
+            rm -f "$RUTA"
+            [ "$ULTIMO" -gt 0 ] && aviso "Agent Seat cerrado (las apps del agente terminaron)"
+            decir "vigía: broker detenido, salgo"
+            exit 0
+            ;;
+    esac
+
+    n="$(agent-seat windows 2>/dev/null | jq -r 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)"
+    n="${n:-0}"
+
+    if [ "$n" != "$ULTIMO" ]; then
+        if [ "$n" -gt 0 ]; then
+            titulos="$(agent-seat windows 2>/dev/null \
+                | jq -r '[.[] | "\(.app_id): \(.title)"] | join(" · ")' 2>/dev/null || true)"
+            aviso "Agente trabajando en el asiento (${n} ventana): ${titulos} — Super+Ctrl+Alt+X para ver"
+            decir "vigía: ${n} ventana(s) — ${titulos}"
+        else
+            aviso "Agent Seat libre (el agente ya no tiene ventanas abiertas)"
+            decir "vigía: 0 ventanas"
+        fi
+        ULTIMO="$n"
+    fi
+
+    if [ "$n" -eq 0 ]; then
+        SIN_VENTANAS=$((SIN_VENTANAS + INTERVALO))
+        if [ "$SIN_VENTANAS" -ge "$IDLE" ]; then
+            decir "vigía: ${IDLE}s sin ventanas, salgo"
+            rm -f "$RUTA"
+            exit 0
+        fi
+    else
+        SIN_VENTANAS=0
+    fi
+
+    sleep "$INTERVALO"
+done

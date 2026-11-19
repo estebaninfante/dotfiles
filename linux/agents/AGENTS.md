@@ -36,10 +36,17 @@
 - Antes de decir "listo": `npx impeccable detect <url-o-dir>` y captura a 390 y 1440 px.
 - Lienzo Creativo (`~/Proyectos/lienzo-creativo`): `webapp-launch ~/Proyectos/lienzo-creativo`.
 
+## Agent Seat (interactuar con GUI)
+- Para abrir una app gráfica, clickear, tipear o scrollear: `agent-seat` (skill `agent-seat`). Corre sandboxeado, en su workspace (20), con puntero y teclado propios.
+- `pantalla-agente abrir` NO se usa para apps: si el app-id llega tarde, la ventana aparece un instante en las pantallas del usuario. El asiento es el único camino para GUI.
+- `pantalla-agente` queda sólo para capturas de pantalla completa sin abrir apps (`montar` + `capturar` + `desmontar`).
+- Prohibido `ydotool`, `wtype`, `xdotool`, `grim` y `wf-recorder` sobre la sesión del usuario.
+- Login, captcha o 2FA: pedile al usuario que salte con `Super + Ctrl + Alt + X` y esperá.
+- Mientras el usuario escribe en una ventana del asiento, no toques esa ventana.
+
 ## Pruebas con ventanas
-- Montá una pantalla headless antes de probar: `pantalla-agente montar` (skill `pantalla-agente`).
-- Las ventanas de prueba nunca van en las pantallas del usuario. Capturá con `pantalla-agente capturar`.
-- Desmontá al terminar: `pantalla-agente desmontar`. El watchdog la descuelga sola a los 10 min sin uso.
+- Las ventanas de prueba nunca van en las pantallas del usuario: van al asiento del agente.
+- Capturas de UI completas: `pantalla-agente montar`, `capturar`, `desmontar`; sin abrir apps ahí.
 
 ## Evidencia
 - Para varios pasos usá `evidencia`: `evidencia iniciar`, `evidencia paso "…"` (silencioso), `evidencia cerrar` → imprime `gif=` y `hoja=`.

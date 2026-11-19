@@ -31,10 +31,22 @@ fi
 export OMARCHY_PATH="$RAIZ"
 export PATH="$RAIZ/bin:$PATH"
 
+# Aviso visible para el usuario: el asiento vive en un workspace oculto, así que
+# al lanzar la primera app arrancamos un vigía que notifica aperturas y cierres.
+arrancar_vigia() {
+    local ruta="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-watch.pid"
+    if [ -f "$ruta" ] && kill -0 "$(cat "$ruta" 2>/dev/null)" 2>/dev/null; then return 0; fi
+    setsid agent-seat-watch >/dev/null 2>&1 </dev/null &
+    printf '%s\n' "$!" > "$ruta"
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
-    run|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
+    run)
+        arrancar_vigia
+        exec "omarchy-agent-seat-run" "$@" ;;
+    state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
         exec "omarchy-agent-seat-$cmd" "$@" ;;
     show-or-start)
         # Salta al asiento si ya hay ventanas; si está vacío, abre chromium ahí.
