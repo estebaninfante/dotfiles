@@ -246,9 +246,10 @@ window.__ModuleLoader__.load({
 		 * Lleva al mensaje que originó la tarea: abre Chat y, si hace falta, va
 		 * cargando los mensajes viejos hasta encontrar ese turno.
 		 */
-		function jumpToTurn(turn) {
+		function jumpToTurn(turn, request = "") {
 			const target = Number(turn);
 			if (!Number.isSafeInteger(target) || target <= 0) return;
+			const needle = String(request ?? "").replace(/\s+/g, " ").trim().slice(0, 40).toLowerCase();
 			const chatTab = [...document.querySelectorAll("[role=tab]")].find((tab) => tab.innerText.trim() === "Chat");
 			if (chatTab && chatTab.getAttribute("aria-selected") !== "true") chatTab.click();
 			const scroller = () => {
@@ -260,14 +261,24 @@ window.__ModuleLoader__.load({
 				}
 				return null;
 			};
+			// El turno puede estar en varios nodos: se busca el del mensaje del usuario.
+			const pick = () => {
+				const nodes = [...document.querySelectorAll(`[data-chat-turn="${target}"]`)];
+				if (!nodes.length) return null;
+				if (needle) {
+					const match = nodes.find((node) => (node.innerText ?? "").replace(/\s+/g, " ").toLowerCase().includes(needle));
+					if (match) return match;
+				}
+				return nodes.sort((a, b) => a.innerText.length - b.innerText.length)[0];
+			};
 			let tries = 0;
 			const step = () => {
 				tries += 1;
-				const found = document.querySelector(`[data-chat-turn="${target}"]`);
+				const found = pick();
 				if (found) {
 					found.scrollIntoView({ block: "center", behavior: "smooth" });
 					found.classList.add("tsk-flash");
-					setTimeout(() => found.classList.remove("tsk-flash"), 1800);
+					setTimeout(() => found.classList.remove("tsk-flash"), 2400);
 					return;
 				}
 				const earlier = [...document.querySelectorAll("button")].find((button) => /load earlier|cargar anteriores/i.test(button.innerText));
@@ -304,7 +315,7 @@ window.__ModuleLoader__.load({
 						{ className: "tsk-side" },
 						turns ? h("span", { className: "tsk-turn" }, turns) : null,
 						h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined }, status.text),
-						task.turn ? h(Action, { icon: "jump", label: "Ir al mensaje que originó la tarea", onClick: () => jumpToTurn(task.turn) }) : null,
+						task.turn ? h(Action, { icon: "jump", label: "Ir al mensaje que originó la tarea", onClick: () => jumpToTurn(task.turn, task.request) }) : null,
 						task.state === "abierta" || task.state === "cancelada"
 							? h(Action, { icon: "check", label: "Resolver tarea", onClick: () => onChange(task, "resuelta"), disabled: busy })
 							: h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy }),

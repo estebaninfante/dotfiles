@@ -102,9 +102,10 @@ window.__ModuleLoader__.load({
 		 * Lleva al mensaje que originó la tarea: abre Chat y, si hace falta, va
 		 * cargando los mensajes viejos hasta encontrar ese turno.
 		 */
-		function jumpToTurn(turn) {
+		function jumpToTurn(turn, request = "") {
 			const target = Number(turn);
 			if (!Number.isSafeInteger(target) || target <= 0) return;
+			const needle = String(request ?? "").replace(/\s+/g, " ").trim().slice(0, 40).toLowerCase();
 			const chatTab = [...document.querySelectorAll("[role=tab]")].find((tab) => tab.innerText.trim() === "Chat");
 			if (chatTab && chatTab.getAttribute("aria-selected") !== "true") chatTab.click();
 			const scroller = () => {
@@ -116,14 +117,23 @@ window.__ModuleLoader__.load({
 				}
 				return null;
 			};
+			const pick = () => {
+				const nodes = [...document.querySelectorAll(`[data-chat-turn="${target}"]`)];
+				if (!nodes.length) return null;
+				if (needle) {
+					const match = nodes.find((node) => (node.innerText ?? "").replace(/\s+/g, " ").toLowerCase().includes(needle));
+					if (match) return match;
+				}
+				return nodes.sort((a, b) => a.innerText.length - b.innerText.length)[0];
+			};
 			let tries = 0;
 			const step = () => {
 				tries += 1;
-				const found = document.querySelector(`[data-chat-turn="${target}"]`);
+				const found = pick();
 				if (found) {
 					found.scrollIntoView({ block: "center", behavior: "smooth" });
 					found.classList.add("evd-flash");
-					setTimeout(() => found.classList.remove("evd-flash"), 1800);
+					setTimeout(() => found.classList.remove("evd-flash"), 2400);
 					return;
 				}
 				const earlier = [...document.querySelectorAll("button")].find((button) => /load earlier|cargar anteriores/i.test(button.innerText));
@@ -454,7 +464,7 @@ window.__ModuleLoader__.load({
 										setOpen(true);
 										// Cambiar de tarea te lleva al mensaje que la originó.
 										const chosen = tasks.find((item) => item.id === id);
-										if (chosen?.turn) jumpToTurn(chosen.turn);
+										if (chosen?.turn) jumpToTurn(chosen.turn, chosen.request);
 									},
 									onClose: () => setMenuOpen(false),
 								})
