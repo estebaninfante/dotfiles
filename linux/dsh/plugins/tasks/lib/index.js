@@ -44,7 +44,6 @@ export function apply(ctx) {
 		await createTask({
 			workspace: session.header.cwd,
 			title,
-			goal: request.length > title.length ? request.slice(0, 2000) : "",
 			sessionId,
 			turn,
 			origin: "auto",

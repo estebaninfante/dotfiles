@@ -47,7 +47,7 @@ export function planBackfill(events) {
 			return {
 				turn: order,
 				title,
-				goal: text.length > title.length ? text.slice(0, 2000) : "",
+				goal: "",
 				closeReason: ends.get(order) ?? null,
 			};
 		});

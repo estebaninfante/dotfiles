@@ -74,7 +74,15 @@ window.__ModuleLoader__.load({
 			if (task.state === "resuelta") return { text: "resuelta", bad: false };
 			const status = task.status ?? null;
 			if (!status) return { text: "abierta", bad: false };
-			return { text: status, bad: !/^(en curso|cerró bien|abierta)$/.test(status) };
+			return { text: status, bad: status === "terminó con error" };
+		}
+
+		function closeWord(reason) {
+			if (reason === "completed") return "cerró bien";
+			if (reason === "interrupted") return "se interrumpió";
+			if (reason === "aborted") return "se abortó";
+			if (reason === "error") return "terminó con error";
+			return `cerró: ${reason}`;
 		}
 
 		function proofLine(evidence) {
@@ -82,7 +90,7 @@ window.__ModuleLoader__.load({
 			return [
 				stats.media ? `${stats.media} ${stats.media === 1 ? "prueba visual" : "pruebas visuales"}` : null,
 				stats.deliverables ? `${stats.deliverables} ${stats.deliverables === 1 ? "entregable" : "entregables"}` : null,
-				evidence.end ? (evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`) : null,
+				evidence.end ? closeWord(evidence.end.reason) : null,
 			]
 				.filter(Boolean)
 				.join(" · ");
@@ -338,10 +346,10 @@ window.__ModuleLoader__.load({
 					error ? h("p", { className: "tsk-error" }, error.message) : null,
 					phase === "loading" ? h("p", { className: "tsk-note" }, "Leyendo tareas…") : null,
 					cwd && abiertas.length
-						? h(React.Fragment, null, h("p", { className: "tsk-section" }, "Abiertas ", h("span", { className: "tsk-count" }, String(abiertas.length))), h("div", { className: "tsk-list" }, abiertas.map(row)))
+						? h(React.Fragment, null, h("p", { className: "tsk-section" }, "Abiertas · ", h("span", { className: "tsk-count" }, String(abiertas.length))), h("div", { className: "tsk-list" }, abiertas.map(row)))
 						: null,
 					cwd && resueltas.length
-						? h(React.Fragment, null, h("p", { className: "tsk-section" }, "Resueltas ", h("span", { className: "tsk-count" }, String(resueltas.length))), h("div", { className: "tsk-list" }, resueltas.map(row)))
+						? h(React.Fragment, null, h("p", { className: "tsk-section" }, "Resueltas · ", h("span", { className: "tsk-count" }, String(resueltas.length))), h("div", { className: "tsk-list" }, resueltas.map(row)))
 						: null,
 					cwd && !tasks.length && phase === "ready"
 						? h(

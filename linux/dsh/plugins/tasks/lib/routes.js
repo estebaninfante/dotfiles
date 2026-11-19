@@ -64,21 +64,30 @@ function absoluteWorkspace(value) {
 	return path && isAbsolute(path) ? path : "";
 }
 
+/** Motivo de cierre en palabras, no en jerga del log. */
+function closeText(reason) {
+	if (reason === "completed") return "cerró bien";
+	if (reason === "interrupted") return "se interrumpió";
+	if (reason === "aborted") return "se abortó";
+	if (reason === "error") return "terminó con error";
+	return `cerró: ${reason}`;
+}
+
 /** Estado en vivo de un pedido: el turno que lo originó sigue o ya cerró. */
 function liveStatus(live, task) {
-	if (task.closeReason) return task.closeReason === "completed" ? "cerró bien" : `cerró: ${task.closeReason}`;
+	if (task.closeReason) return closeText(task.closeReason);
 	if (!task.sessionId || !task.turn) return null;
 	const end = live.turnEnds.get(task.sessionId);
-	if (end && end.turn === task.turn) return end.reason === "completed" ? "cerró bien" : `cerró: ${end.reason}`;
+	if (end && end.turn === task.turn) return closeText(end.reason);
 	if (live.running.has(task.sessionId) && live.currentTurn.get(task.sessionId) === task.turn) return "en curso";
 	return null;
 }
 
 function turnStatus(task, evidence, end, turn, running) {
 	if (running) return "en curso";
-	if (task?.closeReason) return task.closeReason === "completed" ? "cerró bien" : `cerró: ${task.closeReason}`;
-	if (end && end.turn === turn) return end.reason === "completed" ? "cerró bien" : `cerró: ${end.reason}`;
-	if (evidence.end) return evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`;
+	if (task?.closeReason) return closeText(task.closeReason);
+	if (end && end.turn === turn) return closeText(end.reason);
+	if (evidence.end) return closeText(evidence.end.reason);
 	return null;
 }
 
