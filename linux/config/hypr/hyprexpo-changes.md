@@ -1,5 +1,45 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-19 — SUPER+N: el viaje vuela en UN solo movimiento
+
+**Motivo**: en la grilla plana, cambiar de espacio con `SUPER+<n>` se sentía lento y
+en dos tiempos: "primero activa la grilla y después caes". Medido: ~720 ms (apertura
+400 ms + espera fija 320 ms + caída 400 ms).
+
+**Causa**: `f52356b` (13/11) hizo que el modo plano también use el vuelo, pero
+`fly_open_and_go()` abría con `plugin.expo("on")` (grilla COMPLETA) y esperaba
+`EXPO_FLY_MS = 320` antes de commitear. La curva `expoOpen` es front-loaded, así que
+el tramo visible de la apertura termina mucho antes de los 320 ms: la grilla se
+asentaba, quedaba quieta ~200 ms y recién ahí el morph al tile. Dos movimientos.
+
+**Implementación** (`navigation.lua`, solo config; no toca el `.so`):
+
+- `fly_open_and_go()` abre con `plugin.peek(EXPO_PEEK_ZOOM)` (2.65) en vez de
+  `plugin.expo("on")`: la grilla entra un poco más grande que la pantalla (el
+  escritorio actual se aleja apenas) en vez de desplegarse entera.
+- `EXPO_FLY_MS`: 320 → 80 ms. El commit entra mientras la apertura va por la mitad y
+  el plugin re-apunta la MISMA animación de tamaño/posición (`applyCloseTarget`):
+  pull-back corto → paneo/zoom al tile → aterriza a pantalla completa, sin pausa.
+- Fallback a `plugin.expo("on")` si el `.so` no expone `peek`.
+
+**Verificado**:
+
+- `hyprctl reload` + `hyprctl configerrors` vacío.
+- Vuelo en vivo (6→7) grabado a 60 fps (`gpu-screen-recorder`) y medido frame a frame
+  con `magick compare`: movimiento continuo del frame 53 al 85 (~530 ms) con
+  desaceleración monótona (0.36 → 0.05 de RMSE por frame), sin tramo quieto entre
+  apertura y caída. El patrón de dos picos con pausa al medio ya no aparece.
+- `hyprctl eval "_G.expo_focus(n)"` cambia de espacio y el overview cierra limpio.
+
+**Aplicar**: `hyprctl reload` (ya hecho). El `.so` no cambia.
+
+**Afinar si todavía se siente lento**: `specialWorkspace` speed 4 = 400 ms por tramo
+(`speed * 100 ms`); bajarlo a 3 deja el vuelo en ~380 ms. `EXPO_PEEK_ZOOM` más cerca
+de 3 = menos pull-back (más "salto"); más cerca de 1 = más grilla visible.
+
+**Revertir**: `EXPO_FLY_MS = 320` y `plugin.expo("on")` en `fly_open_and_go`;
+`hyprctl reload`.
+
 ## Cambio 2026-11-13 — fondo por monitor en el overview y plugin al día en la laptop
 
 **Motivo**: (1) el usuario quiere un wallpaper distinto por pantalla (la vertical con
