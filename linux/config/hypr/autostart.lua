@@ -23,8 +23,8 @@ hl.on("hyprland.start", function()
 
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=Hyprland ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE HYPRLAND_INSTANCE_SIGNATURE")
     hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP ELECTRON_OZONE_PLATFORM_HINT GDK_SCALE HYPRLAND_INSTANCE_SIGNATURE && systemctl --user start omarchy-shell.service")
-    -- Suspensión por inactividad (10 min con batería, 30 min con corriente).
-    -- Omarchy maneja screensaver/lock; hypridle solo suspende. Ver hypridle.conf.
+    -- Suspensión por inactividad: 10 min solo con batería; con corriente no
+    -- suspende. Omarchy maneja screensaver/lock; hypridle solo suspende.
     hl.exec_cmd("systemctl --user start hypridle.service")
     -- Portapapeles compartido con el otro equipo (texto, capturas, videos).
     hl.exec_cmd("systemctl --user start clipboard-sync.service")
