@@ -11,7 +11,7 @@
 import { firstLine, rootSession, textOfMessage } from "./events.js";
 import { planTasks } from "./plan.js";
 import { registerRoutes } from "./routes.js";
-import { adoptTurn, createTask, findSessionTask, findTurnTask, findTurnTasks, updateTask } from "./store.js";
+import { adoptTurn, createTask, findSessionTask, findSessionTasks, findTurnTask, findTurnTasks, updateTask } from "./store.js";
 
 export const inject = ["webServer", "sessionQuery", "systemPrompt", "tools"];
 
@@ -72,18 +72,31 @@ export function apply(ctx) {
 									required: ["id", "title"],
 								},
 							},
+							pending: {
+								type: "array",
+								items: {
+									type: "object",
+									additionalProperties: false,
+									properties: { title: { type: "string" }, turn: { type: "number" }, outcome: { type: "string" }, state: { type: "string" } },
+									required: ["title", "turn", "state"],
+								},
+							},
 						},
-						required: ["tasks"],
+						required: ["tasks", "pending"],
 					},
-					render: (_args, value) => [{ type: "text", text: `Tareas del pedido: ${value.tasks.map((task) => task.title).join(" · ") || "(ninguna)"}` }],
+					render: (_args, value) => {
+						const names = value.tasks.map((task) => task.title).join(" · ") || "(ninguna)";
+						const pending = value.pending.map((task) => `${task.title} (turno ${task.turn}${task.outcome ? `, ${task.outcome}` : ""})`).join(" · ");
+						return [{ type: "text", text: `Tareas del pedido: ${names}${pending ? `\nPendientes de turnos anteriores: ${pending}` : ""}` }];
+					},
 				},
 				async execute(args, exec) {
 					const session = exec.agent?.session;
-					if (!session?.header?.cwd) return { tasks: [] };
+					if (!session?.header?.cwd) return { tasks: [], pending: [] };
 					const sessionId = session.id;
 					const turn = live.currentTurn.get(sessionId) ?? 1;
 					const plan = planTasks(args);
-					if (!plan.length) return { tasks: [] };
+					if (!plan.length) return { tasks: [], pending: [] };
 					const existing = await findTurnTasks(sessionId, turn);
 					const registered = [];
 					for (let index = 0; index < plan.length; index += 1) {
@@ -95,7 +108,10 @@ export function apply(ctx) {
 						registered.push({ id: task.id, title: task.title });
 					}
 					live.planned.set(sessionId, turn);
-					return { tasks: registered };
+					const pending = (await findSessionTasks(sessionId))
+						.filter((task) => task.turn !== turn && (task.state === "abierta" || task.outcome === "falló" || task.outcome === "parcial" || task.outcome === "abierta"))
+						.map((task) => ({ title: task.title, turn: task.turn ?? 0, outcome: task.outcome ?? "", state: task.state }));
+					return { tasks: registered, pending };
 				},
 			}),
 		"tasks: nombrar el pedido",

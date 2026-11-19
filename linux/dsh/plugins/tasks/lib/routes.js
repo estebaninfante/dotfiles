@@ -97,6 +97,20 @@ function routes(ctx, live) {
 			},
 		},
 		{
+			path: "/tasks/all",
+			method: "GET",
+			handler: async (req, res) => {
+				const tasks = await listTasks(undefined);
+				sendJson(res, 200, {
+					tasks: tasks.map((task) => ({
+						...task,
+						workspaceName: task.workspace.split("/").filter(Boolean).pop() ?? task.workspace,
+						status: liveStatus(live, task),
+					})),
+				});
+			},
+		},
+		{
 			path: "/tasks/create",
 			method: "POST",
 			handler: async (req, res) => {

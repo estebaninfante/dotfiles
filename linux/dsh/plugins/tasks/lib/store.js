@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 const DIR = join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "storages");
 const FILE = join(DIR, "local-tasks.json");
 const STATES = new Set(["abierta", "resuelta"]);
+const OUTCOMES = new Set(["ok", "parcial", "falló", "abierta"]);
 
 let chain = Promise.resolve();
 function serialized(work) {
@@ -80,6 +81,9 @@ export function createTask(input) {
 			resolvedAt: null,
 			closeReason: null,
 			closedAt: null,
+			outcome: null,
+			note: "",
+			reviewedAt: null,
 		};
 		if (!task.workspace || !task.title) throw new Error("workspace y título son obligatorios");
 		db.tasks.push(task);
@@ -101,6 +105,11 @@ export function updateTask(id, patch) {
 			task.closeReason = clean(patch.closeReason, 40);
 			task.closedAt = Number.isSafeInteger(patch.closedAt) ? patch.closedAt : Date.now();
 		}
+		if (OUTCOMES.has(patch.outcome)) {
+			task.outcome = patch.outcome;
+			task.reviewedAt = Number.isSafeInteger(patch.reviewedAt) ? patch.reviewedAt : Date.now();
+		}
+		if (typeof patch.note === "string") task.note = clean(patch.note, 400);
 		if (STATES.has(patch.state) && patch.state !== task.state) {
 			task.state = patch.state;
 			task.resolvedAt = patch.state === "resuelta" ? Date.now() : null;
@@ -115,6 +124,12 @@ export function updateTask(id, patch) {
 export async function findSessionTask(sessionId) {
 	const db = await readDb();
 	return db.tasks.find((task) => task.sessionId === sessionId) ?? null;
+}
+
+/** Todas las tareas de una conversación, en orden de turno. */
+export async function findSessionTasks(sessionId) {
+	const db = await readDb();
+	return db.tasks.filter((task) => task.sessionId === sessionId).sort((a, b) => (a.turn ?? 0) - (b.turn ?? 0));
 }
 
 /** Tarea de un pedido concreto: un turno de la conversación. */
