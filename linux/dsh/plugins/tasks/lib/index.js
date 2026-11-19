@@ -25,6 +25,7 @@ import { createReadStream, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { summarizeEvidence } from "./evidence.js";
+import { firstLine, rootSession, textOfMessage } from "./events.js";
 import { MAX_MEDIA_BYTES, enrichMedia, mediaInfo } from "./media.js";
 import { adoptTurn, createTask, deleteTask, findSessionTask, findTurnTask, listTasks, updateTask } from "./store.js";
 
@@ -71,30 +72,9 @@ function absoluteWorkspace(value) {
 	return path && isAbsolute(path) ? path : "";
 }
 
-function textOfMessage(message) {
-	if (!message || !Array.isArray(message.content)) return "";
-	return message.content
-		.filter((part) => part && part.type === "text" && typeof part.text === "string")
-		.map((part) => part.text)
-		.join("\n")
-		.trim();
-}
-
-function rootSession(session) {
-	const header = session?.header;
-	if (!header) return false;
-	if (header.origin === "subagent") return false;
-	if ((header.delegationDepth ?? 0) > 0) return false;
-	return typeof header.cwd === "string" && header.cwd.startsWith("/");
-}
-
-function firstLine(text) {
-	const line = String(text ?? "").split("\n").find((item) => item.trim() !== "") ?? "";
-	return line.trim().slice(0, 120);
-}
-
 /** Estado en vivo de un pedido: el turno que lo originó sigue o ya cerró. */
 function liveStatus(live, task) {
+	if (task.closeReason) return task.closeReason === "completed" ? "cerró bien" : `cerró: ${task.closeReason}`;
 	if (!task.sessionId || !task.turn) return null;
 	const end = live.turnEnds.get(task.sessionId);
 	if (end && end.turn === task.turn) return end.reason === "completed" ? "cerró bien" : `cerró: ${end.reason}`;
@@ -134,7 +114,21 @@ function routes(ctx, live) {
 					const turn = running ? (live.currentTurn.get(sessionId) ?? latest) : (end?.turn ?? latest);
 					const task = (turn ? await findTurnTask(sessionId, turn) : null) ?? (await findSessionTask(sessionId));
 					const evidence = await enrichMedia(summarizeEvidence(turn ? events.filter((event) => Number(event.data?.turn) === turn) : [], { cwd: snapshot.session?.cwd ?? null }));
-					const reason = running ? "en curso" : end && end.turn === turn ? (end.reason === "completed" ? "cerró bien" : `cerró: ${end.reason}`) : evidence.end ? (evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`) : null;
+					const reason = running
+						? "en curso"
+						: task?.closeReason
+							? task.closeReason === "completed"
+								? "cerró bien"
+								: `cerró: ${task.closeReason}`
+							: end && end.turn === turn
+								? end.reason === "completed"
+									? "cerró bien"
+									: `cerró: ${end.reason}`
+								: evidence.end
+									? evidence.end.reason === "completed"
+										? "cerró bien"
+										: `cerró: ${evidence.end.reason}`
+									: null;
 					sendJson(res, 200, { sessionId, turn, running, status: reason, task, evidence });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
@@ -343,7 +337,12 @@ export function apply(ctx) {
 			const turn = Number(event.data?.turn ?? 0);
 			const reason = String(event.data?.reason?.kind ?? "?");
 			live.running.delete(session.id);
-			if (Number.isSafeInteger(turn) && turn > 0) live.turnEnds.set(session.id, { turn, reason });
+			if (Number.isSafeInteger(turn) && turn > 0) {
+				live.turnEnds.set(session.id, { turn, reason });
+				findTurnTask(session.id, turn)
+					.then((task) => (task ? updateTask(task.id, { closeReason: reason, closedAt: Date.now() }) : null))
+					.catch(() => undefined);
+			}
 			return;
 		}
 		if (event.type !== "user/message") return;

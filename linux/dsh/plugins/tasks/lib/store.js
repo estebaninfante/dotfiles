@@ -74,6 +74,8 @@ export function createTask(input) {
 			createdAt: now,
 			updatedAt: now,
 			resolvedAt: null,
+			closeReason: null,
+			closedAt: null,
 		};
 		if (!task.workspace || !task.title) throw new Error("workspace y título son obligatorios");
 		db.tasks.push(task);
@@ -91,6 +93,10 @@ export function updateTask(id, patch) {
 		if (typeof patch.goal === "string") task.goal = clean(patch.goal, 2000);
 		if (typeof patch.sessionId === "string" && patch.sessionId.trim()) task.sessionId = clean(patch.sessionId, 120);
 		if (Number.isSafeInteger(patch.turn) && patch.turn > 0) task.turn = patch.turn;
+		if (typeof patch.closeReason === "string" && patch.closeReason.trim()) {
+			task.closeReason = clean(patch.closeReason, 40);
+			task.closedAt = Number.isSafeInteger(patch.closedAt) ? patch.closedAt : Date.now();
+		}
 		if (STATES.has(patch.state) && patch.state !== task.state) {
 			task.state = patch.state;
 			task.resolvedAt = patch.state === "resuelta" ? Date.now() : null;
