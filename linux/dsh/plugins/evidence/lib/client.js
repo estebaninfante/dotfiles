@@ -1,9 +1,11 @@
 /**
  * dsh-local-evidence — client half.
  *
- * Una línea sobre el compositor, al final de la conversación, con la evidencia
+ * Tarjeta sobre el compositor, al final de la conversación, con la evidencia
  * real de lo que hizo el agente: archivos, comandos, tests y entregables. Sale
  * del log de la sesión (lo sirve /tasks/evidence), no de lo que el agente dice.
+ * Copia el lenguaje de la tarjeta de To-dos del harness: mismo ancho, misma
+ * elevación, mismo header colapsable.
  */
 window.__ModuleLoader__.load({
 	id: "dsh-local-evidence",
@@ -19,20 +21,24 @@ window.__ModuleLoader__.load({
 		const STYLE_ID = "dsh-local-evidence-style";
 		const POLL_MS = 6000;
 		const CSS = [
-			".evd-root{padding:2px 0 6px}",
-			".evd-line{display:flex;align-items:center;gap:10px;min-height:22px}",
-			".evd-label{font:500 11px/1.4 ui-monospace,SFMono-Regular,monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap}",
-			".evd-summary{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-secondary,#b9b9c2)}",
-			".evd-btn{box-sizing:border-box;height:22px;padding:0 8px;margin-left:auto;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary,#9a9aa3);font:inherit;font-size:11px;line-height:1;cursor:pointer}",
-			".evd-btn:hover{background:var(--dsw-alias-bg-layer-3,#2a2d35);color:var(--dsw-alias-label-primary,#ececf1)}",
-			".evd-btn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
-			".evd-body{margin:6px 0 0;padding:10px 12px;max-height:270px;overflow:auto;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#1d2027)}",
-			".evd-group{margin:0 0 8px}",
-			".evd-group:last-child{margin-bottom:0}",
-			".evd-group-h{margin:0 0 4px;font:500 11px/1.3 ui-monospace,SFMono-Regular,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
-			".evd-item{margin:0;padding:1px 0;font:400 12px/1.5 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-secondary,#b9b9c2);overflow-wrap:anywhere}",
-			".evd-item b{font-weight:500;color:var(--dsw-alias-label-primary,#e9e9ee)}",
-			".evd-decl{margin:0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);white-space:pre-wrap}",
+			".evd-root{box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance,0px) - var(--dsh-composer-side-clearance,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px));max-width:calc(var(--dsh-composer-card-max-width,952px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px));border-radius:var(--dsw-radius-lg,16px);background:var(--dsw-specific-menu,#202226);box-shadow:var(--dsw-elevation-panel,0 10px 30px #0007);backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px));flex:none;margin:0 auto;overflow:hidden}",
+			".evd-body{display:flex;flex-direction:column;padding:6px 12px}",
+			".evd-head{display:flex;align-items:center;gap:10px;width:100%;padding:0;border:0;border-radius:6px;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}",
+			".evd-head:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:2px}",
+			".evd-lead{display:grid;place-items:center;flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-title{flex:none;font-size:13px;font-weight:500;line-height:24px;color:var(--dsw-alias-label-primary,#ececf1)}",
+			".evd-progress{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-chevron{display:grid;place-items:center;flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3);transition:transform .18s ease}",
+			".evd-chevron[data-open='true']{transform:rotate(180deg)}",
+			".evd-panel{max-height:264px;overflow-y:auto;margin-top:6px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2)}",
+			".evd-group{margin:0 0 10px}",
+			".evd-group:last-child{margin-bottom:2px}",
+			".evd-group-h{margin:0 0 3px;font-size:12px;font-weight:500;line-height:18px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-item{display:flex;align-items:baseline;gap:6px;margin:0;font-size:12.5px;line-height:19px;color:var(--dsw-alias-label-secondary,#b9b9c2)}",
+			".evd-flag{flex:none;font-weight:500;color:var(--dsw-alias-label-primary,#e9e9ee)}",
+			".evd-code{min-width:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;overflow-wrap:anywhere}",
+			".evd-decl{margin:0;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);white-space:pre-wrap}",
+			"@media (prefers-reduced-motion:reduce){.evd-chevron{transition:none}}",
 		].join("\n");
 
 		function useStyles() {
@@ -86,40 +92,42 @@ window.__ModuleLoader__.load({
 				"div",
 				{ className: "evd-group" },
 				h("p", { className: "evd-group-h" }, props.title),
-				props.items.map((item, index) => h("p", { className: "evd-item", key: index }, item)),
+				props.items.map((item, index) =>
+					h("p", { className: "evd-item", key: index }, h("span", { className: "evd-flag" }, item.flag), h("code", { className: "evd-code" }, item.code)),
+				),
 			);
 		}
 
-		function EvidenceBody(props) {
+		function EvidencePanel(props) {
 			const { evidence } = props;
 			return h(
 				"div",
-				{ className: "evd-body" },
-				h(Group, {
-					title: `Archivos · ${evidence.files.length}`,
-					items: evidence.files.slice(0, 16).map((file) => [h("b", { key: "k" }, file.action), ` ${file.path}`]),
-				}),
+				{ className: "evd-panel" },
+				h(Group, { title: `Archivos · ${evidence.files.length}`, items: evidence.files.slice(0, 16).map((file) => ({ flag: file.action, code: file.path })) }),
 				h(Group, {
 					title: `Comandos · ${evidence.commands.length}`,
-					items: evidence.commands.slice(-10).reverse().map((command) => [h("b", { key: "k" }, outcome(command.exitCode)), ` ${short(command.command, 110)}`]),
+					items: evidence.commands
+						.slice(-10)
+						.reverse()
+						.map((command) => ({ flag: outcome(command.exitCode), code: short(command.command, 110) })),
 				}),
 				h(Group, {
 					title: `Fallos · ${evidence.failures.length}`,
-					items: evidence.failures.slice(0, 8).map((failure) => [h("b", { key: "k" }, failure.kind), ` ${short(failure.detail, 130)}`]),
+					items: evidence.failures.slice(0, 8).map((failure) => ({ flag: failure.kind, code: short(failure.detail, 130) })),
 				}),
 				h(Group, {
 					title: `Entregables · ${evidence.deliverables.length}`,
-					items: evidence.deliverables.map((file) => [h("b", { key: "k" }, "presentó"), ` ${file.path}${file.description ? ` — ${file.description}` : ""}`]),
+					items: evidence.deliverables.map((file) => ({ flag: "presentó", code: `${file.path}${file.description ? ` — ${file.description}` : ""}` })),
 				}),
 				h(Group, {
 					title: "Lo que dijo el agente",
-					items: evidence.claims.map((claim) => [h("b", { key: "k" }, claim.verified ? "verificado" : "sin verificar"), ` ${claim.claim} — ${claim.note}`]),
+					items: evidence.claims.map((claim) => ({ flag: claim.verified ? "verificado" : "sin verificar", code: `${claim.claim} — ${claim.note}` })),
 				}),
 				evidence.declaration ? h("p", { className: "evd-decl" }, evidence.declaration.text) : null,
 			);
 		}
 
-		function EvidenceStrip(props) {
+		function EvidenceCard(props) {
 			useStyles();
 			const sessionId = props.sessionId;
 			const running = props.useSession((state) => state.running);
@@ -133,7 +141,7 @@ window.__ModuleLoader__.load({
 				`${stats.commands} ${stats.commands === 1 ? "comando" : "comandos"}`,
 				stats.testsOk || stats.testsFail ? `tests ${stats.testsOk} ok${stats.testsFail ? ` · ${stats.testsFail} fallaron` : ""}` : null,
 				stats.failures ? `${stats.failures} ${stats.failures === 1 ? "fallo" : "fallos"}` : null,
-				evidence.end ? (evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`) : null,
+				running ? "en curso" : evidence.end ? (evidence.end.reason === "completed" ? "cerró bien" : `cerró: ${evidence.end.reason}`) : null,
 			]
 				.filter(Boolean)
 				.join(" · ");
@@ -142,18 +150,40 @@ window.__ModuleLoader__.load({
 				{ className: "evd-root" },
 				h(
 					"div",
-					{ className: "evd-line" },
-					h("span", { className: "evd-label" }, running ? "Evidencia en curso" : "Evidencia"),
-					h("span", { className: "evd-summary" }, summary),
-					h("button", { type: "button", className: "evd-btn", onClick: () => setOpen((value) => !value) }, open ? "Ocultar" : "Ver"),
+					{ className: "evd-body" },
+					h(
+						"button",
+						{ type: "button", className: "evd-head", "aria-expanded": open, onClick: () => setOpen((value) => !value) },
+						h(
+							"span",
+							{ className: "evd-lead" },
+							h(
+								"svg",
+								{ width: 16, height: 16, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
+								h("rect", { x: 2, y: 2, width: 12, height: 12, rx: 3, stroke: "currentColor", strokeWidth: 1.3 }),
+								h("path", { d: "M5 8.2l2 2 4-4.2", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round" }),
+							),
+						),
+						h("span", { className: "evd-title" }, "Evidencia"),
+						h("span", { className: "evd-progress" }, summary),
+						h(
+							"span",
+							{ className: "evd-chevron", "data-open": open },
+							h(
+								"svg",
+								{ width: 14, height: 14, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
+								h("path", { d: "M4.5 6.5L8 10l3.5-3.5", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" }),
+							),
+						),
+					),
+					open ? h(EvidencePanel, { evidence }) : null,
 				),
-				open ? h(EvidenceBody, { evidence }) : null,
 			);
 		}
 
 		function apply(ctx) {
 			ctx.slots.inject("conversation.input.dock", () =>
-				ctx.slots.register({ name: "conversation.input.dock", id: "local-evidence", order: 40 }, EvidenceStrip),
+				ctx.slots.register({ name: "conversation.input.dock", id: "local-evidence", order: 40 }, EvidenceCard),
 			);
 		}
 
