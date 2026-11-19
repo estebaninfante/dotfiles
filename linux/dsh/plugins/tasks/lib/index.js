@@ -4,14 +4,15 @@
  * Tareas por proyecto (carpeta) y evidencia real de cada conversación tomada del
  * log de la sesión (`ctx.sessionQuery`), no de lo que el agente dice.
  *
- * Cada pedido del usuario se registra como tarea; el agente la nombra con
- * `task_plan` (uno o varios títulos si el pedido pide varias cosas) y un guard
- * le impide trabajar hasta que la nombró. Las rutas HTTP viven en routes.js.
+ * La tarea la nombra el agente con `task_plan`: un título elegido por él que
+ * describe el trabajo. El mensaje del usuario nunca es título. Un turno de
+ * continuación ("continue", "dale") no crea tarea: suma su evidencia a la
+ * tarea abierta. Las rutas HTTP viven en routes.js.
  */
-import { firstLine, rootSession, textOfMessage } from "./events.js";
-import { planTasks, shortTaskTitle } from "./plan.js";
+import { rootSession, textOfMessage } from "./events.js";
+import { isContinuation, planTasks } from "./plan.js";
 import { registerRoutes } from "./routes.js";
-import { adoptTurn, createTask, findSessionTask, findSessionTasks, findTurnTask, findTurnTasks, updateTask } from "./store.js";
+import { addTurn, adoptTurn, createTask, findOpenTask, findSessionTasks, findTurnTasks, updateTask } from "./store.js";
 
 export const inject = ["webServer", "sessionQuery", "systemPrompt", "tools"];
 
@@ -49,6 +50,7 @@ export function apply(ctx) {
 		denials: new Map(),
 		inflight: new Map(),
 		requestText: new Map(),
+		continuation: new Map(),
 	};
 	registerRoutes(ctx, live);
 
@@ -135,7 +137,7 @@ export function apply(ctx) {
 								additionalProperties: false,
 								properties: {
 									id: { type: "string", description: "id que devolvió task_plan." },
-									outcome: { type: "string", enum: ["ok", "parcial", "falló", "abierta"] },
+									outcome: { type: "string", enum: ["ok", "parcial", "falló", "abierta", "cancelada"] },
 									note: { type: "string", description: "Qué pasó con esta tarea, en una línea." },
 								},
 								required: ["id", "outcome"],
@@ -197,7 +199,7 @@ export function apply(ctx) {
 						outcome: task.outcome ?? "",
 						note: task.note ?? "",
 					}));
-					const open = shaped.filter((task) => task.state !== "resuelta" && (task.outcome === "" || task.outcome === "abierta" || task.outcome === "parcial")).length;
+					const open = shaped.filter((task) => task.state !== "resuelta" && task.state !== "cancelada" && (task.outcome === "" || task.outcome === "abierta" || task.outcome === "parcial")).length;
 					const failed = shaped.filter((task) => task.outcome === "falló").length;
 					return { tasks: shaped, open, failed };
 				},
@@ -205,27 +207,26 @@ export function apply(ctx) {
 		"tasks: revisar al cerrar",
 	);
 
-	// Un turno = un pedido. Solo cuentan los mensajes con source.kind "user":
-	// los recordatorios y el runtime context del harness también llegan como
-	// user/message y no son pedidos. El título provisorio es la primera línea.
+	// La tarea existe porque el agente la nombró. Un mensaje de continuación no
+	// crea tarea nueva: su evidencia suma a la tarea abierta de la conversación.
+	// El título nunca es el mensaje del usuario.
 	async function registerRequest(session) {
 		const sessionId = session.id;
 		const turn = live.currentTurn.get(sessionId);
 		const request = live.requestText.get(sessionId) ?? "";
 		if (!turn || !request) return;
-		if ((await findTurnTask(sessionId, turn)) !== null) return;
-		const linked = await findSessionTask(sessionId);
-		if (linked !== null && linked.turn == null) {
-			await adoptTurn(sessionId, turn);
+		if ((await findTurnTasks(sessionId, turn)).length) return;
+		if (isContinuation(request)) {
+			live.continuation.set(sessionId, turn);
+			const open = await findOpenTask(sessionId);
+			if (open) await addTurn(open.id, turn);
 			return;
 		}
-		await createTask({
-			workspace: session.header.cwd,
-			title: shortTaskTitle(request) || firstLine(request) || `Pedido del turno ${turn}`,
-			sessionId,
-			turn,
-			origin: "auto",
-		});
+		live.continuation.delete(sessionId);
+		// Tarea creada desde la UI que todavía no sabe de qué turno salió.
+		if (await adoptTurn(sessionId, turn)) return;
+		// Pedido nuevo: la tarea la nombra el agente con task_plan. Mientras tanto
+		// no se inventa título con el mensaje del usuario.
 	}
 	function scheduleRegister(session) {
 		const sessionId = session.id;
@@ -245,6 +246,7 @@ export function apply(ctx) {
 			live.currentTurn.set(session.id, turn);
 			live.running.add(session.id);
 			live.denials.delete(session.id);
+			live.continuation.delete(session.id);
 			if (live.requestText.has(session.id)) scheduleRegister(session);
 			return;
 		}
@@ -254,6 +256,8 @@ export function apply(ctx) {
 			live.running.delete(session.id);
 			if (Number.isSafeInteger(turn) && turn > 0) {
 				live.turnEnds.set(session.id, { turn, reason });
+				// El usuario detuvo el turno: la tarea queda cancelada, no "abierta".
+				const cancelled = reason === "interrupted" || reason === "aborted";
 				findTurnTasks(session.id, turn)
 					.then((tasks) =>
 						Promise.all(
@@ -261,13 +265,14 @@ export function apply(ctx) {
 								updateTask(task.id, {
 									closeReason: reason,
 									closedAt: Date.now(),
+									...(cancelled ? { state: "cancelada" } : {}),
 									// Cierre automático si el agente no llamó a task_review:
-									// completado = ok; error = falló; interrumpido = sigue abierta.
+									// completado = ok; error = falló; cancelada = cancelada.
 									...(task.outcome
 										? {}
 										: {
-												outcome: reason === "completed" ? "ok" : reason === "error" ? "falló" : "abierta",
-												note: "cierre automático (sin revisión del agente)",
+												outcome: cancelled ? "cancelada" : reason === "completed" ? "ok" : reason === "error" ? "falló" : "abierta",
+												note: cancelled ? "el usuario detuvo el turno" : "cierre automático (sin revisión del agente)",
 											}),
 								}),
 							),
@@ -292,6 +297,8 @@ export function apply(ctx) {
 				const turn = live.currentTurn.get(session.id);
 				if (!turn) return undefined;
 				if (live.planned.get(session.id) === turn) return undefined;
+				// Un "continue" no es una tarea nueva: sigue la que ya está abierta.
+				if (live.continuation.get(session.id) === turn) return undefined;
 				if (execution.name === "task_plan" || execution.name === "ask_user_question") return undefined;
 				const denials = live.denials.get(session.id) ?? 0;
 				if (denials >= 2) return undefined;

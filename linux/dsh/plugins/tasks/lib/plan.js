@@ -45,3 +45,58 @@ export function shortTaskTitle(text) {
 	const words = sentence.split(" ").filter(Boolean).slice(0, 10);
 	return words.join(" ").replace(/[.,;:]+$/, "").slice(0, 72);
 }
+
+// Mensajes que no piden trabajo nuevo: siguen la tarea que ya está abierta.
+const CONTINUATION_WORDS = new Set([
+	"continue",
+	"continua",
+	"continuá",
+	"continuar",
+	"segui",
+	"seguí",
+	"sigue",
+	"seguir",
+	"dale",
+	"ok",
+	"okay",
+	"oka",
+	"listo",
+	"gracias",
+	"perfecto",
+	"bien",
+	"vamos",
+	"adelante",
+	"procede",
+	"procedé",
+	"hacelo",
+	"hazlo",
+	"go",
+	"next",
+	"si",
+	"sí",
+	"yes",
+	"ahora",
+	"mira",
+	"y",
+]);
+
+/**
+ * ¿El mensaje es una continuación del trabajo en curso en vez de un pedido
+ * nuevo? Un "continue" no es una tarea: es el mismo trabajo que sigue.
+ */
+export function isContinuation(text) {
+	const plain = String(text ?? "")
+		.replace(/```[\s\S]*?```/g, " ")
+		.replace(/[`*_#>]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.toLowerCase();
+	if (!plain) return true;
+	const words = plain
+		.replace(/[.,;:!?¡¿"'()…]/g, " ")
+		.split(" ")
+		.filter(Boolean);
+	if (!words.length) return true;
+	if (words.every((word) => CONTINUATION_WORDS.has(word))) return true;
+	return words.length <= 3 && CONTINUATION_WORDS.has(words[0]);
+}

@@ -38,7 +38,11 @@ window.__ModuleLoader__.load({
 			".tsk-gallery{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 0}.tsk-thumb{display:block;width:118px;height:74px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c)}.tsk-thumb img{width:100%;height:100%;object-fit:cover;display:block}.tsk-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".tsk-video{width:198px;height:112px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
 			".tsk-icon{width:28px;height:28px;border:0;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);display:grid;place-items:center;cursor:pointer}.tsk-icon:hover{color:var(--dsw-alias-label-primary,#ececf1)}.tsk-icon[disabled]{opacity:.45;cursor:default}",
-			".tsk-deliv{margin:2px 0 0;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary,#b9b9c2);overflow-wrap:anywhere}.tsk-deliv a{color:var(--dsw-alias-label-primary,#e9e9ee);text-decoration:none;border-bottom:1px solid var(--dsw-alias-border-l2,#3b3e46)}",
+			".tsk-file{display:flex;align-items:center;gap:7px;margin:1px -6px;padding:5px 6px;border-radius:7px;text-decoration:none;color:var(--dsw-alias-label-primary,#e9e9ee)}.tsk-file:hover{background:var(--dsw-alias-bg-layer-2,#1d2027)}.tsk-file:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
+			".tsk-file-icon{flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".tsk-file-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12.5px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif}",
+			".tsk-file-desc{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".tsk-turn{font-size:11.5px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;margin-right:6px}",
 			".tsk-form{margin:6px 0 8px;padding:14px 0 16px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36)}",
 			".tsk-input{box-sizing:border-box;width:100%;margin:0 0 10px;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:7px;background:var(--dsw-specific-input-major,#202226);color:var(--dsw-alias-label-primary,#ececf1);font:inherit;font-size:13px}",
 			".tsk-note{margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}.tsk-error{margin:10px 0 0;font-size:12px;color:var(--dsw-alias-state-danger-primary,#f2777a)}",
@@ -69,6 +73,7 @@ window.__ModuleLoader__.load({
 		}
 
 		function statusOf(task) {
+			if (task.state === "cancelada" || task.outcome === "cancelada") return { text: "cancelada", bad: false };
 			if (task.state === "resuelta") return { text: "resuelta", bad: false };
 			if (task.outcome === "falló") return { text: "falló", bad: true };
 			if (task.outcome === "parcial") return { text: "parcial", bad: false };
@@ -76,6 +81,14 @@ window.__ModuleLoader__.load({
 			if (task.outcome === "abierta") return { text: "abierta", bad: false };
 			if (task.closeReason) return { text: "sin revisar", bad: false };
 			return { text: task.status ?? task.state ?? "abierta", bad: false };
+		}
+
+		/** Qué turno(s) de la conversación trabaja esta tarea. */
+		function turnLabel(task) {
+			const turns = Array.isArray(task.turns) && task.turns.length ? task.turns : task.turn ? [task.turn] : [];
+			if (!turns.length) return "";
+			if (turns.length === 1) return `turno ${turns[0]}`;
+			return `turnos ${turns[0]}–${turns[turns.length - 1]}`;
 		}
 
 		function Gallery(props) {
@@ -94,16 +107,39 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		/** El entregable se ve como archivo, con su nombre, no con su ruta. */
+		function fileName(file) {
+			const name = String(file?.name ?? "").trim();
+			if (name) return name;
+			const path = String(file?.path ?? "");
+			return path.split("/").filter(Boolean).pop() ?? "archivo";
+		}
+
+		function fileIcon() {
+			return h(
+				"svg",
+				{ width: 14, height: 14, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none", className: "tsk-file-icon" },
+				h("path", {
+					d: "M9 1.8H4.6A1.6 1.6 0 0 0 3 3.4v9.2a1.6 1.6 0 0 0 1.6 1.6h6.8a1.6 1.6 0 0 0 1.6-1.6V5.2L9 1.8Z",
+					stroke: "currentColor",
+					strokeWidth: 1.2,
+					strokeLinejoin: "round",
+				}),
+				h("path", { d: "M9 1.9v3.4h3.9", stroke: "currentColor", strokeWidth: 1.2, strokeLinejoin: "round" }),
+			);
+		}
+
 		function Deliverables(props) {
 			return h(
 				React.Fragment,
 				null,
 				(props.items ?? []).map((file) =>
 					h(
-						"p",
-						{ className: "tsk-deliv", key: file.path },
-						h("a", { href: `/api/file?path=${encodeURIComponent(file.path)}`, target: "_blank", rel: "noreferrer" }, file.label ?? file.path),
-						file.description ? ` — ${file.description}` : "",
+						"a",
+						{ className: "tsk-file", key: file.path, href: `/api/file?path=${encodeURIComponent(file.path)}`, target: "_blank", rel: "noreferrer" },
+						fileIcon(),
+						h("span", { className: "tsk-file-name" }, fileName(file)),
+						file.description ? h("span", { className: "tsk-file-desc" }, file.description) : null,
 					),
 				),
 			);
@@ -130,6 +166,7 @@ window.__ModuleLoader__.load({
 		function TaskCard(props) {
 			const { task, onChange, busy } = props;
 			const status = statusOf(task);
+			const turns = turnLabel(task);
 			return h(
 				"div",
 				{ className: "tsk-card" },
@@ -140,8 +177,9 @@ window.__ModuleLoader__.load({
 					h(
 						"div",
 						{ className: "tsk-side" },
+						turns ? h("span", { className: "tsk-turn" }, turns) : null,
 						h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined }, status.text),
-						task.state === "abierta"
+						task.state === "abierta" || task.state === "cancelada"
 							? h(Action, { icon: "check", label: "Resolver tarea", onClick: () => onChange(task, "resuelta"), disabled: busy })
 							: h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy }),
 					),

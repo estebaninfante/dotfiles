@@ -12,8 +12,17 @@ import { randomUUID } from "node:crypto";
 
 const DIR = join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "storages");
 const FILE = join(DIR, "local-tasks.json");
-const STATES = new Set(["abierta", "resuelta"]);
-const OUTCOMES = new Set(["ok", "parcial", "falló", "abierta"]);
+const STATES = new Set(["abierta", "resuelta", "cancelada"]);
+
+/**
+ * Turnos de una tarea. Una tarea no es un turno: el pedido que la abre y los
+ * mensajes de continuación que la siguen trabajando todos sobre lo mismo.
+ */
+export function taskTurns(task) {
+	if (Array.isArray(task?.turns) && task.turns.length) return task.turns;
+	return Number.isSafeInteger(task?.turn) && task.turn > 0 ? [task.turn] : [];
+}
+const OUTCOMES = new Set(["ok", "parcial", "falló", "abierta", "cancelada"]);
 
 let chain = Promise.resolve();
 function serialized(work) {
@@ -75,10 +84,12 @@ export function createTask(input) {
 			state: "abierta",
 			sessionId: clean(input.sessionId, 120) || null,
 			turn: Number.isSafeInteger(input.turn) && input.turn > 0 ? input.turn : null,
+			turns: Number.isSafeInteger(input.turn) && input.turn > 0 ? [input.turn] : [],
 			origin: typeof input.origin === "string" ? clean(input.origin, 20) : "ui",
 			createdAt: now,
 			updatedAt: now,
 			resolvedAt: null,
+			cancelledAt: null,
 			closeReason: null,
 			closedAt: null,
 			outcome: null,
@@ -112,7 +123,9 @@ export function updateTask(id, patch) {
 		if (typeof patch.note === "string") task.note = clean(patch.note, 400);
 		if (STATES.has(patch.state) && patch.state !== task.state) {
 			task.state = patch.state;
+			// Cancelada = el usuario detuvo el turno; no es un cierre exitoso.
 			task.resolvedAt = patch.state === "resuelta" ? Date.now() : null;
+			task.cancelledAt = patch.state === "cancelada" ? Date.now() : null;
 		}
 		task.updatedAt = Date.now();
 		await writeDb(db);
@@ -126,6 +139,15 @@ export async function findSessionTask(sessionId) {
 	return db.tasks.find((task) => task.sessionId === sessionId) ?? null;
 }
 
+/** Tarea abierta de la conversación que puede seguir trabajándose. */
+export async function findOpenTask(sessionId) {
+	const db = await readDb();
+	const open = db.tasks
+		.filter((task) => task.sessionId === sessionId && task.state === "abierta" && task.outcome !== "ok")
+		.sort((a, b) => (b.turn ?? 0) - (a.turn ?? 0));
+	return open[0] ?? null;
+}
+
 /** Todas las tareas de una conversación, en orden de turno. */
 export async function findSessionTasks(sessionId) {
 	const db = await readDb();
@@ -135,13 +157,26 @@ export async function findSessionTasks(sessionId) {
 /** Tarea de un pedido concreto: un turno de la conversación. */
 export async function findTurnTask(sessionId, turn) {
 	const db = await readDb();
-	return db.tasks.find((task) => task.sessionId === sessionId && task.turn === turn) ?? null;
+	return db.tasks.find((task) => task.sessionId === sessionId && taskTurns(task).includes(turn)) ?? null;
 }
 
 /** Todas las tareas de un pedido: un mismo pedido puede pedir varias cosas. */
 export async function findTurnTasks(sessionId, turn) {
 	const db = await readDb();
-	return db.tasks.filter((task) => task.sessionId === sessionId && task.turn === turn);
+	return db.tasks.filter((task) => task.sessionId === sessionId && taskTurns(task).includes(turn));
+}
+
+/** Suma un turno a una tarea abierta: la continuación trabaja la misma tarea. */
+export function addTurn(id, turn) {
+	return serialized(async () => {
+		const db = await readDb();
+		const task = db.tasks.find((item) => item.id === id);
+		if (!task) return null;
+		const turns = taskTurns(task);
+		if (!turns.includes(turn)) task.turns = [...turns, turn].sort((a, b) => a - b);
+		await writeDb(db);
+		return task;
+	});
 }
 
 /** Tarea recién creada desde la UI que todavía no sabe de qué turno salió. */

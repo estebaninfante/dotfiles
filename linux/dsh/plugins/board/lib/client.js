@@ -83,6 +83,7 @@ window.__ModuleLoader__.load({
 		}
 
 		function statusOf(task) {
+			if (task.state === "cancelada" || task.outcome === "cancelada") return { text: "cancelada", bad: false };
 			if (task.state === "resuelta") return { text: "resuelta", bad: false };
 			if (task.outcome) return { text: task.outcome, bad: task.outcome === "falló" };
 			if (task.closeReason) return { text: "sin revisar", bad: false };
@@ -90,9 +91,10 @@ window.__ModuleLoader__.load({
 			return { text: "abierta", bad: false };
 		}
 
+		/** El título lo elige el agente: no se reemplaza por el pedido crudo. */
 		function titleOf(task) {
 			const title = String(task.title ?? "").trim();
-			return title.length > 64 ? (task.turn ? `Pedido del turno ${task.turn}` : "Pedido sin nombre") : title;
+			return title || "Tarea sin título";
 		}
 
 		function BoardPanel(props) {
@@ -118,12 +120,14 @@ window.__ModuleLoader__.load({
 			}, [load]);
 
 			const tasks = data.tasks ?? [];
-			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok");
+			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok" && task.outcome !== "cancelada");
 			const fallos = tasks.filter((task) => task.outcome === "falló");
+			const canceladas = tasks.filter((task) => task.state === "cancelada" || task.outcome === "cancelada");
 			const cerradas = tasks.filter((task) => task.state === "resuelta" || task.outcome === "ok");
 			const filters = [
 				{ id: "abiertas", label: "Abiertas", count: abiertas.length, list: abiertas },
 				{ id: "fallos", label: "Fallos", count: fallos.length, list: fallos },
+				{ id: "canceladas", label: "Canceladas", count: canceladas.length, list: canceladas },
 				{ id: "cerradas", label: "Cerradas", count: cerradas.length, list: cerradas },
 				{ id: "todas", label: "Todas", count: tasks.length, list: tasks },
 			];
@@ -171,7 +175,7 @@ window.__ModuleLoader__.load({
 					"div",
 					{ className: "brd-wrap" },
 					h("div", { className: "brd-head" }, h("h1", { className: "brd-h1" }, "Tareas")),
-					h("p", { className: "brd-line" }, `${abiertas.length} abiertas · ${fallos.length} con fallos · ${cerradas.length} cerradas`),
+					h("p", { className: "brd-line" }, `${abiertas.length} abiertas · ${fallos.length} con fallos · ${canceladas.length} canceladas · ${cerradas.length} cerradas`),
 					h(
 						"div",
 						{ className: "brd-filters" },

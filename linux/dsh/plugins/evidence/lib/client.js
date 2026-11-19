@@ -35,8 +35,12 @@ window.__ModuleLoader__.load({
 			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px}.evd-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c);cursor:zoom-in}.evd-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
 			".evd-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}.evd-video{width:212px;height:120px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
 			".evd-group-h{margin:10px 0 4px;font-size:12px;font-weight:500;line-height:18px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
-			".evd-item{display:flex;align-items:baseline;gap:6px;margin:0;font:400 12px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-secondary,#b9b9c2);overflow-wrap:anywhere}",
-			".evd-item a{color:var(--dsw-alias-label-primary,#e9e9ee);text-decoration:none;border-bottom:1px solid var(--dsw-alias-border-l2,#3b3e46)}",
+			".evd-file{display:flex;align-items:center;gap:7px;margin:1px -6px;padding:5px 6px;border-radius:7px;text-decoration:none;color:var(--dsw-alias-label-primary,#e9e9ee)}",
+			".evd-file:hover{background:var(--dsw-alias-bg-layer-2,#1d2027)}",
+			".evd-file:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
+			".evd-file-icon{flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-file-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12.5px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif}",
+			".evd-file-desc{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 		].join("\n");
 
 		function useStyles() {
@@ -59,11 +63,32 @@ window.__ModuleLoader__.load({
 			return fetch(path, { headers: { accept: "application/json" } }).then((response) => (response.ok ? response.json() : null));
 		}
 
-		/** Título con nombre; si quedó el pedido crudo (tareas viejas), turno. */
+		/** El título lo elige el agente; si no lo nombró, se dice. */
 		function shortTitle(task) {
 			const title = String(task?.title ?? "").trim();
-			if (title && title.length <= 64) return title;
-			return task?.turn ? `Pedido del turno ${task.turn}` : "Pedido sin nombre";
+			return title || "Tarea sin título";
+		}
+
+		/** Nombre del archivo, sin la ruta: el entregable se ve como archivo. */
+		function fileName(file) {
+			const name = String(file?.name ?? "").trim();
+			if (name) return name;
+			const path = String(file?.path ?? "");
+			return path.split("/").filter(Boolean).pop() ?? "archivo";
+		}
+
+		function fileIcon() {
+			return h(
+				"svg",
+				{ width: 14, height: 14, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none", className: "evd-file-icon" },
+				h("path", {
+					d: "M9 1.8H4.6A1.6 1.6 0 0 0 3 3.4v9.2a1.6 1.6 0 0 0 1.6 1.6h6.8a1.6 1.6 0 0 0 1.6-1.6V5.2L9 1.8Z",
+					stroke: "currentColor",
+					strokeWidth: 1.2,
+					strokeLinejoin: "round",
+				}),
+				h("path", { d: "M9 1.9v3.4h3.9", stroke: "currentColor", strokeWidth: 1.2, strokeLinejoin: "round" }),
+			);
 		}
 
 		/** Estados: solo se muestran tal cual vienen del host. */
@@ -77,7 +102,7 @@ window.__ModuleLoader__.load({
 						? h("video", { key: item.path, className: "evd-video", controls: true, preload: "metadata", src: item.url })
 						: h(
 								"a",
-								{ key: item.path, className: "evd-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.path },
+								{ key: item.path, className: "evd-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.label },
 								h("img", { src: item.url, alt: item.label, loading: "lazy" }),
 							),
 				),
@@ -93,10 +118,11 @@ window.__ModuleLoader__.load({
 				h("p", { className: "evd-group-h" }, `Entregables · ${items.length}`),
 				items.map((file) =>
 					h(
-						"p",
-						{ className: "evd-item", key: file.path },
-						h("a", { href: fileUrl(file.path), target: "_blank", rel: "noreferrer" }, file.label ?? file.path),
-						file.description ? ` — ${file.description}` : "",
+						"a",
+						{ className: "evd-file", key: file.path, href: fileUrl(file.path), target: "_blank", rel: "noreferrer" },
+						fileIcon(),
+						h("span", { className: "evd-file-name" }, fileName(file)),
+						file.description ? h("span", { className: "evd-file-desc" }, file.description) : null,
 					),
 				),
 			);

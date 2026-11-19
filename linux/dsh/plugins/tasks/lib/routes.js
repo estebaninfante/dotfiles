@@ -19,11 +19,10 @@ import { createReadStream, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { planBackfill } from "./backfill.js";
-import { assistantSummary, firstLine, textOfMessage } from "./events.js";
+import { assistantSummary, textOfMessage } from "./events.js";
 import { summarizeEvidence } from "./evidence.js";
 import { MAX_MEDIA_BYTES, enrichMedia, mediaInfo } from "./media.js";
-import { shortTaskTitle } from "./plan.js";
-import { createTask, deleteTask, findSessionTask, findTurnTask, listTasks, updateTask } from "./store.js";
+import { createTask, deleteTask, findSessionTask, findTurnTask, listTasks, taskTurns, updateTask } from "./store.js";
 
 const MAX_BODY = 64 * 1024;
 const SESSION_ID = /^[A-Za-z0-9:._-]{8,160}$/;
@@ -69,19 +68,22 @@ function absoluteWorkspace(value) {
 /** Motivo de cierre en palabras, no en jerga del log. */
 function closeText(reason) {
 	if (reason === "completed") return "cerró bien";
-	if (reason === "interrupted") return "se interrumpió";
-	if (reason === "aborted") return "se abortó";
+	if (reason === "interrupted") return "cancelada por el usuario";
+	if (reason === "aborted") return "cancelada por el usuario";
 	if (reason === "error") return "terminó con error";
 	return `cerró: ${reason}`;
 }
 
 /** Estado en vivo de un pedido: el turno que lo originó sigue o ya cerró. */
 function liveStatus(live, task) {
+	if (task.state === "cancelada") return "cancelada";
 	if (task.closeReason) return closeText(task.closeReason);
-	if (!task.sessionId || !task.turn) return null;
+	const turns = taskTurns(task);
+	if (!task.sessionId || !turns.length) return null;
 	const end = live.turnEnds.get(task.sessionId);
-	if (end && end.turn === task.turn) return closeText(end.reason);
-	if (live.running.has(task.sessionId) && live.currentTurn.get(task.sessionId) === task.turn) return "en curso";
+	if (end && turns.includes(end.turn)) return closeText(end.reason);
+	const current = live.currentTurn.get(task.sessionId);
+	if (live.running.has(task.sessionId) && current && turns.includes(current)) return "en curso";
 	return null;
 }
 
@@ -246,18 +248,26 @@ function routes(ctx, live) {
 				const items = [];
 				let mediaTotal = 0;
 				let deliverablesTotal = 0;
-				const addItem = async (task, turn) => {
-					const bucket = turn ? (byTurn.get(turn) ?? []) : snapshot.events;
+				// Una tarea puede abarcar varios turnos: su evidencia es la de todos.
+				const addItem = async (task, turns) => {
+					const list = turns.length ? turns : [];
+					const bucket = list.length ? list.flatMap((turn) => byTurn.get(turn) ?? []) : snapshot.events;
 					const evidence = await enrichMedia(summarizeEvidence(bucket, { cwd: snapshot.session?.cwd ?? null }));
-					const reason = task?.closeReason ?? (turn ? ends.get(turn) : null) ?? null;
+					const first = list.length ? list[0] : 0;
+					const last = list.length ? list[list.length - 1] : 0;
+					const reason = task?.closeReason ?? (last ? ends.get(last) : null) ?? null;
 					mediaTotal += evidence.media.length;
 					deliverablesTotal += evidence.deliverables.length;
 					items.push({
-						id: task?.id ?? `turn-${turn}`,
-						title: task?.title ?? (shortTaskTitle(userText.get(turn) ?? "") || firstLine(userText.get(turn) ?? "") || ""),
-						turn,
+						id: task?.id ?? `turn-${first}`,
+						// El título lo elige el agente. Si no lo nombró, se dice, no se
+						// rellena con el mensaje del usuario.
+						title: task?.title ?? `Sin título · turno ${first}`,
+						turn: first,
+						turns: list,
+						request: userText.get(first) ?? "",
 						state: task?.state ?? "abierta",
-						status: reason ? closeText(reason) : turn === latest ? "en curso" : "sin cerrar",
+						status: reason ? closeText(reason) : list.includes(latest) ? "en curso" : "sin cerrar",
 						outcome: task?.outcome ?? "",
 						note: task?.note ?? "",
 						closeReason: task?.closeReason ?? null,
@@ -268,19 +278,20 @@ function routes(ctx, live) {
 				};
 				const withTask = new Set();
 				for (const task of tasks) {
-					if (!task.turn) continue;
-					withTask.add(task.turn);
-					await addItem(task, task.turn);
+					const turns = taskTurns(task);
+					if (!turns.length) continue;
+					for (const turn of turns) withTask.add(turn);
+					await addItem(task, turns);
 				}
 				// Turnos anteriores al registro automático: se muestran igual, con su
-				// pedido y su evidencia, para que la vista tenga toda la sesión.
+				// evidencia, para que la vista tenga toda la sesión.
 				for (const turn of [...byTurn.keys()].sort((a, b) => a - b)) {
 					if (withTask.has(turn) || !userText.has(turn)) continue;
-					await addItem(null, turn);
+					await addItem(null, [turn]);
 				}
 				for (const task of tasks) {
-					if (task.turn) continue;
-					await addItem(task, null);
+					if (taskTurns(task).length) continue;
+					await addItem(task, []);
 				}
 				items.sort((a, b) => (a.turn ?? 0) - (b.turn ?? 0));
 				sendJson(res, 200, {
