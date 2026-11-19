@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+# iphone-tether — el iPhone enchufado por USB (Punto de Acceso Personal) no
+# debe quedarse con la salida a internet por su cuenta.
+#
+#   iphone-tether              alterna (lo mismo que el ítem del menú)
+#   iphone-tether on|off       permite / impide que sea la ruta por defecto
+#   iphone-tether toggle       alterna
+#   iphone-tether status       estado legible
+#   iphone-tether is-allow     exit 0 si está permitido (lo usa el menú para el ✓)
+#   iphone-tether enforce <if> aplica el estado a una interfaz ya conectada
+#   iphone-tether setup        instala las piezas de sistema (sudo)
+#
+# El driver ipheth presenta el tethering del iPhone como una Ethernet más:
+# NetworkManager la activa sola con métrica 100 (el Wi-Fi va con 600) y le
+# entrega la ruta por defecto y el DNS. Resultado: el tráfico sale por los
+# datos del celular sin que nadie lo pida.
+#
+# Piezas (las pone `setup`):
+#   /etc/systemd/network/10-iphone-tether.link
+#       Driver=ipheth → Name=iphone0, así la interfaz tiene el mismo nombre en
+#       cualquier puerto USB y se puede atar un perfil fijo.
+#   /etc/NetworkManager/dispatcher.d/50-iphone-tether
+#       red de seguridad: si igual aparece una "Wired connection N" generada,
+#       la corrige al conectar.
+#   perfil "iPhone USB" (ifname iphone0) con never-default según el estado.
+#
+# Estado: ~/.local/state/iphone-tether/allow (existe = puede ser la salida).
+# El ítem del menú de Omarchy (Setup → Network) lo alterna y muestra el ✓.
+set -uo pipefail
+
+# El dispatcher de NetworkManager corre como root, donde $HOME es /root.
+if [[ ${EUID} -eq 0 ]]; then
+  HOME=$(getent passwd 1000 | cut -d: -f6)
+  export HOME
+fi
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/iphone-tether"
+ALLOW_FILE="$STATE_DIR/allow"
+PROFILE="iPhone USB"
+IFACE_NAME="iphone0"
+LINK_FILE="/etc/systemd/network/10-iphone-tether.link"
+DISPATCHER="/etc/NetworkManager/dispatcher.d/50-iphone-tether"
+CMD="${HOME}/.local/bin/iphone-tether"
+
+if [[ ${EUID} -eq 0 ]]; then
+  SUDO=()
+elif sudo -n true 2>/dev/null; then
+  SUDO=(sudo -n)
+else
+  SUDO=()
+fi
+nm() { "${SUDO[@]}" nmcli "$@"; }
+
+mkdir -p "$STATE_DIR" 2>/dev/null
+
+allowed() { [[ -e $ALLOW_FILE ]]; }
+
+wanted() {
+  if allowed; then
+    WANT_ND="no"
+    WANT_METRIC=100
+  else
+    WANT_ND="yes"
+    WANT_METRIC=1000
+  fi
+}
+wanted
+
+notify() {
+  [[ ${EUID} -eq 0 ]] && return 0
+  [[ -n ${WAYLAND_DISPLAY:-}${DISPLAY:-} ]] || return 0
+  notify-send -a "iPhone USB" -i phone -t 3000 -h string:x-canonical-private-synchronous:iphone-tether "$@" 2>/dev/null || true
+}
+
+ipheth_ifaces() {
+  local d
+  for d in /sys/class/net/*; do
+    [[ -e $d/device/driver ]] || continue
+    [[ $(basename "$(readlink -f "$d/device/driver")") == ipheth ]] || continue
+    basename "$d"
+  done
+}
+
+is_ipheth() {
+  [[ -e /sys/class/net/$1/device/driver ]] || return 1
+  [[ $(basename "$(readlink -f "/sys/class/net/$1/device/driver")") == ipheth ]]
+}
+
+profile_exists() { nm -t -f NAME connection show 2>/dev/null | grep -Fxq -- "$PROFILE"; }
+
+conn_of() {
+  local c
+  c=$(nm -g GENERAL.CONNECTION device show "$1" 2>/dev/null | head -1)
+  [[ -n $c && $c != "--" ]] && printf '%s\n' "$c"
+}
+
+# Deja el perfil con los valores del estado actual.
+apply_profile() {
+  profile_exists || return 0
+  nm connection modify "$PROFILE" \
+    ipv4.never-default "$WANT_ND" ipv6.never-default "$WANT_ND" \
+    ipv4.route-metric "$WANT_METRIC" ipv6.route-metric "$WANT_METRIC" >/dev/null 2>&1
+}
+
+has_default() { ip route show default 2>/dev/null | grep -q "dev $1 "; }
+
+# Aplica el estado a la conexión que esté viva en esa interfaz (si hay).
+apply_live() {
+  local iface=$1 conn cur_nd cur_metric
+  is_ipheth "$iface" || return 0
+  conn=$(conn_of "$iface") || return 0
+  [[ -n $conn ]] || return 0
+
+  cur_nd=$(nm -g ipv4.never-default connection show "$conn" 2>/dev/null)
+  cur_metric=$(nm -g ipv4.route-metric connection show "$conn" 2>/dev/null)
+  # Sin cambios de valores no se toca nada: el evento 'up' que dispara una
+  # reactivación no vuelve a entrar acá y no hay bucles.
+  [[ $cur_nd == "$WANT_ND" && $cur_metric == "$WANT_METRIC" ]] && return 0
+
+  nm connection modify "$conn" \
+    ipv4.never-default "$WANT_ND" ipv6.never-default "$WANT_ND" \
+    ipv4.route-metric "$WANT_METRIC" ipv6.route-metric "$WANT_METRIC" >/dev/null 2>&1
+  # Reaplicar recalcula rutas sin volver a pedir DHCP; si reapply no mueve la
+  # ruta por defecto, se reactiva una vez (ya con los valores correctos).
+  nm device reapply "$iface" >/dev/null 2>&1 || true
+  if [[ $WANT_ND == "yes" ]] && has_default "$iface"; then
+    nm connection up "$conn" >/dev/null 2>&1 || true
+  elif [[ $WANT_ND == "no" ]] && ! has_default "$iface"; then
+    nm connection up "$conn" >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
+sync_all() {
+  local i
+  apply_profile
+  for i in $(ipheth_ifaces); do apply_live "$i"; done
+}
+
+setup() {
+  echo "· enlace estable de nombre (driver ipheth → $IFACE_NAME)"
+  "${SUDO[@]}" tee "$LINK_FILE" >/dev/null <<'LINK'
+# iPhone USB tethering (driver ipheth) con nombre estable, sin importar en qué
+# puerto USB se enchufe. NetworkManager ata el perfil "iPhone USB" a ese
+# nombre en vez de generar una "Wired connection N" con ruta por defecto.
+[Match]
+Driver=ipheth
+
+[Link]
+Name=iphone0
+LINK
+
+  echo "· red de seguridad de NetworkManager"
+  "${SUDO[@]}" tee "$DISPATCHER" >/dev/null <<DISP
+#!/bin/sh
+# iPhone USB tethering: no se queda con la ruta por defecto salvo que el
+# usuario lo permita (menú: Setup → Network → Datos del iPhone por USB).
+[ "\$2" = "up" ] || exit 0
+[ -e "/sys/class/net/\$1/device/driver" ] || exit 0
+[ "\$(basename "\$(readlink -f "/sys/class/net/\$1/device/driver")")" = "ipheth" ] || exit 0
+setsid "$CMD" enforce "\$1" >/dev/null 2>&1 &
+exit 0
+DISP
+  "${SUDO[@]}" chmod 0755 "$DISPATCHER"
+  "${SUDO[@]}" udevadm control --reload >/dev/null 2>&1 || true
+
+  echo "· perfil \"$PROFILE\""
+  if ! profile_exists; then
+    nm connection add type ethernet con-name "$PROFILE" ifname "$IFACE_NAME" \
+      ipv4.method auto ipv6.method auto connection.autoconnect yes >/dev/null || return 1
+  fi
+  apply_profile
+  echo "listo"
+}
+
+case "${1:-toggle}" in
+  on)
+    mkdir -p "$STATE_DIR" && : >"$ALLOW_FILE"
+    wanted; sync_all
+    notify "Datos del iPhone permitidos" "El iPhone enchufado puede ser la salida a internet"
+    echo permitido
+    ;;
+  off)
+    rm -f "$ALLOW_FILE"
+    wanted; sync_all
+    notify "Datos del iPhone bloqueados" "La salida sigue por el Wi-Fi; el iPhone sólo comparte red"
+    echo bloqueado
+    ;;
+  toggle)
+    if allowed; then exec "$0" off; else exec "$0" on; fi
+    ;;
+  status)
+    if allowed; then echo "estado: permitido"; else echo "estado: bloqueado"; fi
+    echo "perfil: $PROFILE (ifname $IFACE_NAME) never-default=$WANT_ND metric=$WANT_METRIC"
+    found=0
+    for i in $(ipheth_ifaces); do
+      found=1
+      echo "iface: $i conexión: $(conn_of "$i" || echo '(sin conexión)')"
+    done
+    [[ $found -eq 0 ]] && echo "iface: (ningún iPhone por USB conectado)"
+    ;;
+  is-allow)
+    allowed
+    ;;
+  enforce)
+    [[ -n ${2:-} ]] || { echo "uso: $0 enforce <iface>" >&2; exit 2; }
+    wanted; apply_live "$2"
+    ;;
+  setup)
+    setup
+    ;;
+  -h | --help | help)
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    echo "uso: $0 [on|off|toggle|status|is-allow|enforce <iface>|setup]" >&2
+    exit 2
+    ;;
+esac

@@ -75,5 +75,12 @@
   // Los paneles que antes vivían como íconos sueltos en la barra viven acá.
   "voz.tts": {"icon":"󰂞","label":"Voz y avisos (TTS)","aliases":["tts","voz","pi tts","campana","avisos","buzon"],"description":"Panel de voz: prender/apagar la voz, volumen, velocidad, entrega (campana, silencio, al instante) y el registro de mensajes","action":"omarchy-shell -q shell toggle eztvn.pi-tts"},
   "voz.audio": {"icon":"󰕾","label":"Audio y micrófono","aliases":["audio","volumen","parlantes","mic","microfono","mezclador"],"description":"Volumen general, salida, entrada del micrófono y mezclador por aplicación","action":"omarchy-shell -q shell toggle eztvn.audio"},
-  "voz.omar": {"icon":"󰍬","label":"Omar (agente de voz)","aliases":["omar","agente de voz"],"description":"Estado del agente de voz: escuchando, pensando o actuando, con su configuración","action":"omarchy-shell -q shell toggle omar.status"}
+  "voz.omar": {"icon":"󰍬","label":"Omar (agente de voz)","aliases":["omar","agente de voz"],"description":"Estado del agente de voz: escuchando, pensando o actuando, con su configuración","action":"omarchy-shell -q shell toggle omar.status"},
+
+  // iPhone por USB (Punto de Acceso Personal): el driver ipheth lo presenta como
+  // una Ethernet más y NetworkManager se llevaba la ruta por defecto y el DNS,
+  // o sea el tráfico salía por los datos del celular. Bloqueado por defecto
+  // (iphone-tether: .link ipheth→iphone0, perfil "iPhone USB" sin default y
+  // dispatcher de NM como red de seguridad). Acá se permite cuando hace falta.
+  "setup.network.iphone-tether": {"icon":"","label":"Datos del iPhone por USB","aliases":["iphone","tethering","hotspot","datos iphone","usb ethernet"],"description":"Permitir que el iPhone enchufado con Punto de Acceso sea la salida a internet; apagado, la salida la sigue dando el Wi-Fi","when":"test -x ~/.local/bin/iphone-tether","checked":"~/.local/bin/iphone-tether is-allow","action":"~/.local/bin/iphone-tether toggle"}
 }
