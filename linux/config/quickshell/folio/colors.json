@@ -1,0 +1,15 @@
+{
+  "accent": "#e6e1d5",
+  "bg": "#0d0d0e",
+  "bg_alt": "#0a0a0b",
+  "blue": "#a39f95",
+  "cyan": "#bdb8ac",
+  "dim": "#8b877d",
+  "fg": "#e6e1d5",
+  "green": "#c9c4b8",
+  "magenta": "#b7b2a6",
+  "red": "#ff4a2b",
+  "surface": "#1c1b1a",
+  "surface_alt": "#343330",
+  "yellow": "#d9d4c7"
+}
