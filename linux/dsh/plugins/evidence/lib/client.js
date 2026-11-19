@@ -91,10 +91,11 @@ window.__ModuleLoader__.load({
 
 		/** El nombre de la tarea es su objetivo; el título corto solo si no hay objetivo. */
 		function nameOf(task) {
-			const goal = String(task?.goal ?? "").trim();
-			if (goal) return goal;
+			// El nombre es el título que eligió el agente; el detalle va de apoyo.
 			const title = String(task?.title ?? "").trim();
-			return title || "Tarea sin título";
+			if (title) return title;
+			const goal = String(task?.goal ?? "").trim();
+			return goal ? goal.slice(0, 72) : "Tarea sin título";
 		}
 
 		/** Un renglón de estado: lo que el host ya resolvió, sin inventar nada. */
@@ -354,7 +355,9 @@ window.__ModuleLoader__.load({
 								media.length ? h(Gallery, { media, max: 4 }) : null,
 								media.length > 4 ? h("p", { className: "evd-more" }, `+${media.length - 4} más en la pestaña Tareas`) : null,
 								deliverables.length ? h(Deliverables, { items: deliverables.slice(0, 3) }) : null,
-								!media.length && !deliverables.length ? h("p", { className: "evd-empty" }, "Este paso no dejó prueba visual todavía.") : null,
+								!media.length && !deliverables.length
+									? h("p", { className: "evd-empty" }, status === "en curso" ? "La tarea está en curso: la prueba visual aparece al terminar." : "Este paso no dejó prueba visual todavía.")
+									: null,
 							)
 						: null,
 				),
