@@ -47,6 +47,10 @@ function clean(value, max) {
 
 function order(a, b) {
 	if (a.state !== b.state) return a.state === "abierta" ? -1 : 1;
+	// Pedidos de una conversación: del más nuevo al más viejo. Lo demás por fecha.
+	const turnA = a.turn ?? 0;
+	const turnB = b.turn ?? 0;
+	if (turnA !== turnB) return turnB - turnA;
 	const left = a.state === "resuelta" ? (a.resolvedAt ?? a.updatedAt) : a.createdAt;
 	const right = b.state === "resuelta" ? (b.resolvedAt ?? b.updatedAt) : b.createdAt;
 	return right - left;
