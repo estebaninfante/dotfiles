@@ -1,11 +1,15 @@
 /**
  * dsh-local-hotkeys — client half.
  *
- * Ctrl+Alt+N (o Ctrl+Alt+T) crea una sesión nueva desde el teclado. En Brave
- * Ctrl+N y Ctrl+T nunca llegan a la página —el navegador los usa para ventana y
- * pestaña nueva—, así que el atajo suma Alt para poder existir dentro del tab.
- * El servicio shortcuts del harness rechaza esa combinación en web/Linux, por eso
- * el atajo se escucha acá y no se registra en el catálogo de atajos.
+ * Ctrl+Shift+. crea una sesión nueva desde el teclado dentro de cualquier
+ * navegador. Tres límites que fijan el combo:
+ *   - Ctrl+N y Ctrl+T los toma el navegador (ventana y pestaña nueva): nunca
+ *     llegan a la página.
+ *   - Con keyd, sostener Alt activa la capa numpad y se traga el modificador:
+ *     Ctrl+Alt+N llega como Ctrl+N. Por eso Alt no se usa.
+ *   - Ctrl+Shift+. es la combinación que el propio harness admite en web/Linux
+ *     (junto con Ctrl+/), así que ningún atajo del navegador la pisa.
+ * Ctrl+Alt+N y Ctrl+Alt+T quedan como alias para máquinas sin esa capa.
  */
 window.__ModuleLoader__.load({
 	id: "dsh-local-hotkeys",
@@ -14,10 +18,25 @@ window.__ModuleLoader__.load({
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 
-		/** Códigos físicos que crean la sesión. */
-		const CODES = ["KeyN", "KeyT"];
+		/** Combinaciones exactas: cualquier modificador de más no dispara. */
+		const TRIGGERS = [
+			{ code: "Period", ctrl: true, shift: true, alt: false },
+			{ code: "KeyN", ctrl: true, shift: false, alt: true },
+			{ code: "KeyT", ctrl: true, shift: false, alt: true },
+		];
 		/** Lo que ya está pidiendo teclas: diálogos, menús y el grabador de atajos. */
 		const FOREGROUND = '[role="dialog"][aria-modal="true"], [role="menu"]';
+
+		function matches(event) {
+			return TRIGGERS.some(
+				(trigger) =>
+					trigger.code === event.code &&
+					trigger.ctrl === event.ctrlKey &&
+					trigger.alt === event.altKey &&
+					trigger.shift === event.shiftKey &&
+					event.metaKey === false,
+			);
+		}
 
 		function apply(ctx) {
 			const get = (name) => (typeof ctx.get === "function" ? ctx.get(name) : ctx[name]);
@@ -31,8 +50,7 @@ window.__ModuleLoader__.load({
 
 			const onKeyDown = (event) => {
 				if (event.defaultPrevented || event.isComposing || event.repeat) return;
-				if (!event.ctrlKey || !event.altKey || event.shiftKey || event.metaKey) return;
-				if (!CODES.includes(event.code)) return;
+				if (!matches(event)) return;
 				if (document.querySelector(FOREGROUND) !== null) return;
 				if (!startSession()) return;
 				event.preventDefault();
