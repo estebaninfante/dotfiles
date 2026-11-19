@@ -163,6 +163,14 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		/** El nombre de la tarea es su objetivo; el título corto solo si no hay objetivo. */
+		function nameOf(task) {
+			const goal = String(task?.goal ?? "").trim();
+			if (goal) return goal;
+			const title = String(task?.title ?? "").trim();
+			return title || "Tarea sin título";
+		}
+
 		function TaskCard(props) {
 			const { task, onChange, busy } = props;
 			const status = statusOf(task);
@@ -173,7 +181,7 @@ window.__ModuleLoader__.load({
 				h(
 					"div",
 					{ className: "tsk-row" },
-					h("p", { className: "tsk-title", title: task.title }, task.title),
+					h("p", { className: "tsk-title", title: task.title && task.title !== nameOf(task) ? `${nameOf(task)} — ${task.title}` : nameOf(task) }, nameOf(task)),
 					h(
 						"div",
 						{ className: "tsk-side" },
@@ -202,7 +210,9 @@ window.__ModuleLoader__.load({
 
 			const load = React.useCallback(async () => {
 				try {
-					setData(await api(`/session?session=${encodeURIComponent(sessionId)}`));
+					const [session, all] = await Promise.all([api(`/session?session=${encodeURIComponent(sessionId)}`), api("/all")]);
+					const goals = new Map(((all && all.tasks) || []).map((task) => [task.id, String(task.goal ?? "")]));
+					setData({ ...session, tasks: (session.tasks ?? []).map((item) => ({ ...item, goal: goals.get(item.id) ?? "" })) });
 					setError(null);
 				} catch (cause) {
 					setError(cause);
@@ -329,7 +339,7 @@ window.__ModuleLoader__.load({
 				if (!created || created.ok !== true) throw new Error(created?.error?.message || "no se pudo crear la sesión");
 				const sessionId = created.value.sessionId;
 				await api("/update", { id: task.id, sessionId, state: "abierta" }).catch(() => {});
-				const text = `Tarea del proyecto: ${task.title}\nCarpeta: ${cwd}\n\nAl terminar, cerrá con la prueba visual real: captura de la app o video, rutas de archivos y resultado de los tests. Sin captura no hay evidencia visible.`;
+				const text = `Tarea del proyecto: ${nameOf(task)}\nCarpeta: ${cwd}\n\nAl terminar, cerrá con la prueba visual real: captura de la app o video, rutas de archivos y resultado de los tests. Sin captura no hay evidencia visible.`;
 				await sessions.using(sessionId, { source: "gateway" }, async (reference) => {
 					await reference.ready;
 					await reference.binding.session.prompt([{ type: "text", text }], "queue");

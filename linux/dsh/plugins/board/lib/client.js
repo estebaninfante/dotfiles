@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
 			".brd-section{margin:20px 0 2px;font:500 12px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".brd-list{display:flex;flex-direction:column;gap:8px;padding-top:8px}",
 			".brd-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 14px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:12px;background:var(--dsw-alias-bg-layer-2,#1d2027);transition:border-color .12s ease}.brd-row:hover{border-color:var(--dsw-alias-border-l2,#3b3e46)}",
-			".brd-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			".brd-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
 			".brd-where{margin:2px 0 0;font-size:12px;line-height:1.45;color:var(--dsw-alias-label-tertiary,#9a9aa3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 			".brd-actions{display:flex;align-items:center;gap:2px;justify-content:flex-end}",
 			".brd-state{font-size:11.5px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;margin-right:6px}.brd-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
@@ -91,9 +91,11 @@ window.__ModuleLoader__.load({
 			return { text: "abierta", bad: false };
 		}
 
-		/** El título lo elige el agente: no se reemplaza por el pedido crudo. */
-		function titleOf(task) {
-			const title = String(task.title ?? "").trim();
+		/** El nombre es el objetivo de la tarea; el título corto solo si no hay objetivo. */
+		function nameOf(task) {
+			const goal = String(task?.goal ?? "").trim();
+			if (goal) return goal;
+			const title = String(task?.title ?? "").trim();
 			return title || "Tarea sin título";
 		}
 
@@ -153,7 +155,7 @@ window.__ModuleLoader__.load({
 					h(
 						"div",
 						null,
-						h("p", { className: "brd-title", title: task.title }, titleOf(task)),
+						h("p", { className: "brd-title", title: `${nameOf(task)}${task.title && task.title !== nameOf(task) ? ` — ${task.title}` : ""}` }, nameOf(task)),
 						h("p", { className: "brd-where", title: task.note || task.workspace }, `${task.workspaceName}${task.note ? ` · ${task.note}` : ""}`),
 					),
 					h(
