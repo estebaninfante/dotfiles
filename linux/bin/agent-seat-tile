@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# agent-seat-tile — miniatura tipo tile de hyprexpo, armada desde el asiento.
+#
+# El overview real mezcla las ventanas del usuario con las del asiento, así que
+# una captura de pantalla completa no sirve como evidencia privada. Esto compone
+# el tile con la captura del asiento (broker) + la etiqueta que hyprexpo
+# mostraría ("▸ chromium · agente"): no toca la pantalla, no abre el overview y
+# no captura ninguna ventana del usuario.
+#
+# Uso:
+#   agent-seat-tile [<ventana>] [--salida <archivo.png>] [--ancho 1200]
+set -uo pipefail
+
+VENTANA=""
+SALIDA=""
+ANCHO="${AGENT_SEAT_TILE_ANCHO:-1200}"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --salida) SALIDA="${2:?--salida necesita archivo}"; shift 2 ;;
+    --ancho) ANCHO="${2:?}"; shift 2 ;;
+    --) shift; break ;;
+    *) VENTANA="$1"; shift ;;
+    esac
+done
+
+AGENTE="$(command -v agent-seat 2>/dev/null || echo "$HOME/.local/bin/agent-seat")"
+DIR_SALIDA="${EVIDENCIA_SALIDA:-$HOME/Imágenes/screenshots}"
+[ -n "$SALIDA" ] || SALIDA="$DIR_SALIDA/seat-tile-$(date +%H%M%S).png"
+mkdir -p "$(dirname "$SALIDA")"
+
+[ -n "$VENTANA" ] || VENTANA="$("$AGENTE" windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).window) else empty end' 2>/dev/null || true)"
+[ -n "$VENTANA" ] || { echo "no hay ventanas en el asiento" >&2; exit 1; }
+
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+
+( cd "$TMP" && "$AGENTE" screenshot "$VENTANA" --output win.png >/dev/null 2>&1 ) || {
+    echo "la captura del asiento falló" >&2; exit 1; }
+
+app="$("$AGENTE" windows 2>/dev/null | jq -r --argjson n "$VENTANA" '.[] | select(.window == $n) | .app_id // "app"' 2>/dev/null | head -1)"
+case "$("$AGENTE" state "$VENTANA" 2>/dev/null | sed -n 's/^  focus:[[:space:]]*//p' | head -1)" in
+*agent*) duenio="agente" ;;
+*user*) duenio="usuario" ;;
+*) duenio="quieto" ;;
+esac
+etiqueta="• ${app} · ${duenio}"
+
+ALTO=$((ANCHO * 10 / 16))
+BARRA=64
+LADO=$((ANCHO + 6))
+ALTO_TOTAL=$((ALTO + BARRA + 6))
+
+FUENTE=""
+for f in /usr/share/fonts/liberation/LiberationSans-Regular.ttf \
+         /usr/share/fonts/TTF/DejaVuSans.ttf; do
+    [ -f "$f" ] && { FUENTE="$f"; break; }
+done
+[ -n "$FUENTE" ] || { echo "falta una fuente para la etiqueta" >&2; exit 1; }
+
+# 1) ventana 16:10 con borde naranja (sin máscara: el borde alcanza y evita
+# que un DstIn mal compuesto deje el tile en naranja).
+magick "$TMP/win.png" -resize "${ANCHO}x${ALTO}^" -gravity center -extent "${ANCHO}x${ALTO}" \
+    -bordercolor '#ff8a00' -border 3 "$TMP/ventana.png" 2>/dev/null || {
+    echo "no pude componer la ventana" >&2; exit 1; }
+
+# 2) píldora dimensionada al texto.
+textw="$(magick -font "$FUENTE" -pointsize 26 label:"$etiqueta" -format '%w' info: 2>/dev/null)"
+textw="${textw:-280}"
+pill_w=$((textw + 36))
+
+# 3) lienzo oscuro, ventana arriba y etiqueta abajo.
+magick -size "${LADO}x${ALTO_TOTAL}" xc:'#0d0f13' \
+    "$TMP/ventana.png" -gravity northwest -geometry +0+0 -composite \
+    -gravity northwest -fill '#1b1f27' \
+    -draw "roundrectangle 16,$((ALTO + 12)) $((16 + pill_w)),$((ALTO + 48)) 10,10" \
+    -font "$FUENTE" -fill '#e8e8e8' -pointsize 26 \
+    -annotate +34+$((ALTO + 40)) "$etiqueta" \
+    "$SALIDA" 2>/dev/null || {
+    echo "no pude escribir $SALIDA" >&2; exit 1; }
+
+printf '%s\n' "$SALIDA"

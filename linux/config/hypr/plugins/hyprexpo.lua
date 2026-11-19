@@ -149,7 +149,9 @@ if hl.plugin.hyprexpo ~= nil then
         label_color_hover = 0xFFFFC78A,
         label_color_focus = 0xFFFF8A00,
         label_color_current = 0xFFFF8A00,
-        animate_entry = 1,
+        -- 0: sin fade escalonado de los tiles al abrir (se sentía como un
+        -- parpadeo). La animación de zoom/curva de apertura sigue igual.
+        animate_entry = 0,
         keynav_enable = 1,
     }
     -- Orden numpad (1 abajo a la izquierda) y curva de apertura: son del
