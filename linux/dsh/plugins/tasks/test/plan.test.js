@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planTasks } from "../lib/plan.js";
+import { isContinuation, planTasks } from "../lib/plan.js";
 
 test("limpia y deduplica los títulos que declara el agente", () => {
 	const plan = planTasks({
@@ -27,4 +27,16 @@ test("sin argumentos válidos no inventa tareas", () => {
 	assert.deepEqual(planTasks(undefined), []);
 	assert.deepEqual(planTasks({ tasks: "no" }), []);
 	assert.deepEqual(planTasks({ tasks: [{ title: "   " }] }), []);
+});
+
+test("un 'continue' no es una tarea nueva: sigue el trabajo abierto", () => {
+	for (const text of ["continue", "Continue.", "dale", "ok, dale", "seguí", "seguí con eso", "gracias", "  "]) {
+		assert.equal(isContinuation(text), true, `debería ser continuación: ${text}`);
+	}
+});
+
+test("un pedido concreto no es una continuación", () => {
+	for (const text of ["arreglá el login", "mira en learnharness, ajusta el gráfico", "por qué no aparece la tarjeta"]) {
+		assert.equal(isContinuation(text), false, `no debería ser continuación: ${text}`);
+	}
 });

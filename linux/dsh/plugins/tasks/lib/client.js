@@ -217,8 +217,9 @@ window.__ModuleLoader__.load({
 
 			const cwd = data?.workspace ?? (sessionId ? getCwd(sessionId) : "");
 			const tasks = data?.tasks ?? [];
-			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok").length;
+			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok" && task.outcome !== "cancelada").length;
 			const fallos = tasks.filter((task) => task.outcome === "falló").length;
+			const canceladas = tasks.filter((task) => task.state === "cancelada" || task.outcome === "cancelada").length;
 			const cerradas = tasks.filter((task) => task.state === "resuelta" || task.outcome === "ok").length;
 
 			const change = async (task, state) => {
@@ -275,7 +276,7 @@ window.__ModuleLoader__.load({
 							{ style: { minWidth: 0 } },
 							h("h1", { className: "tsk-h1" }, "Tareas"),
 							cwd ? h("button", { type: "button", className: "tsk-path", title: `Abrir ${cwd}`, onClick: () => openFolder(cwd) }, cwd) : null,
-							h("p", { className: "tsk-line" }, `${abiertas} abiertas · ${fallos} con fallos · ${cerradas} cerradas`),
+							h("p", { className: "tsk-line" }, `${abiertas} abiertas · ${fallos} con fallos · ${canceladas} canceladas · ${cerradas} cerradas`),
 						),
 						cwd ? h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: () => setFormOpen((open) => !open) }, "Nueva tarea") : null,
 					),

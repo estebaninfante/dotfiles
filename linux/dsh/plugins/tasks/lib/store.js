@@ -179,6 +179,30 @@ export function addTurn(id, turn) {
 	});
 }
 
+/** Une una tarea de continuación en la tarea que venía trabajando. */
+export function mergeTasks(intoId, fromId) {
+	return serialized(async () => {
+		const db = await readDb();
+		const into = db.tasks.find((item) => item.id === intoId);
+		const from = db.tasks.find((item) => item.id === fromId);
+		if (!into || !from || into.id === from.id) return null;
+		const turns = [...new Set([...taskTurns(into), ...taskTurns(from)])].sort((a, b) => a - b);
+		if (turns.length) {
+			into.turns = turns;
+			into.turn = turns[0];
+		}
+		if (!into.outcome && from.outcome) {
+			into.outcome = from.outcome;
+			into.note = from.note || into.note;
+			into.reviewedAt = from.reviewedAt ?? into.reviewedAt;
+		}
+		into.updatedAt = Date.now();
+		db.tasks = db.tasks.filter((item) => item.id !== fromId);
+		await writeDb(db);
+		return into;
+	});
+}
+
 /** Tarea recién creada desde la UI que todavía no sabe de qué turno salió. */
 export async function adoptTurn(sessionId, turn) {
 	return serialized(async () => {

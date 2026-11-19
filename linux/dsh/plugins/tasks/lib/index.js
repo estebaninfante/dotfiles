@@ -12,7 +12,7 @@
 import { rootSession, textOfMessage } from "./events.js";
 import { isContinuation, planTasks } from "./plan.js";
 import { registerRoutes } from "./routes.js";
-import { addTurn, adoptTurn, createTask, findOpenTask, findSessionTasks, findTurnTasks, updateTask } from "./store.js";
+import { addTurn, adoptTurn, createTask, findOpenTask, findSessionTasks, findTurnTasks, listTasks, mergeTasks, taskTurns, updateTask } from "./store.js";
 
 export const inject = ["webServer", "sessionQuery", "systemPrompt", "tools"];
 
@@ -53,6 +53,56 @@ export function apply(ctx) {
 		continuation: new Map(),
 	};
 	registerRoutes(ctx, live);
+
+	/**
+	 * Arregla tareas viejas al arrancar: una tarea que nació de un "continue" se
+	 * une a la que venía trabajando, y un turno que el usuario detuvo queda
+	 * cancelado en vez de abierto para siempre.
+	 */
+	async function reconcile() {
+		const tasks = (await listTasks(undefined)).filter((task) => task.sessionId);
+		const bySession = new Map();
+		for (const task of tasks) {
+			const list = bySession.get(task.sessionId) ?? [];
+			list.push(task);
+			bySession.set(task.sessionId, list);
+		}
+		for (const list of bySession.values()) {
+			const sorted = list.slice().sort((a, b) => (taskTurns(a)[0] ?? 0) - (taskTurns(b)[0] ?? 0));
+			const kept = [];
+			for (const task of sorted) {
+				const turns = taskTurns(task);
+				const prev = kept[kept.length - 1];
+				const prevTurns = prev ? taskTurns(prev) : [];
+				const adjacent = Boolean(prev) && turns.length === 1 && prevTurns.length > 0 && turns[0] === prevTurns[prevTurns.length - 1] + 1;
+				if (adjacent && isContinuation(task.title)) {
+					const merged = await mergeTasks(prev.id, task.id);
+					if (merged) {
+						prev.turns = taskTurns(merged);
+						continue;
+					}
+				}
+				kept.push(task);
+			}
+		}
+		for (const task of await listTasks(undefined)) {
+			if (task.state !== "abierta" || !task.sessionId) continue;
+			const turns = taskTurns(task);
+			const last = turns[turns.length - 1] ?? 0;
+			let stopped = task.closeReason === "interrupted" || task.closeReason === "aborted";
+			if (!stopped && last) {
+				// El turno que el usuario detuvo quedó en el log: la tarea se cancela.
+				const snapshot = await ctx.sessionQuery.readSession(task.sessionId).catch(() => null);
+				for (const event of snapshot?.events ?? []) {
+					if (event.type !== "turn/end" || Number(event.data?.turn) !== last) continue;
+					const kind = String(event.data?.reason?.kind ?? "");
+					if (kind === "interrupted" || kind === "aborted") stopped = true;
+				}
+			}
+			if (stopped) await updateTask(task.id, { state: "cancelada" });
+		}
+	}
+	reconcile().catch(() => undefined);
 
 	ctx.effect(
 		() =>
@@ -315,9 +365,10 @@ export function apply(ctx) {
 				order: 45,
 				text: [
 					"## Tareas y evidencia",
-					"Cada pedido del usuario se registra como una tarea del proyecto en la vista Tareas.",
-					"Al empezar cada turno llamá a `task_plan` con las tareas del pedido: un título corto y concreto (3 a 8 palabras) por cada cosa distinta que pidió. Si pidió una sola cosa, una sola entrada. Después trabajás; las herramientas están bloqueadas hasta que el pedido tenga nombre.",
-					"Al terminar el trabajo, antes de tu respuesta final, llamá a `task_review` con el resultado de cada tarea de esta conversación: `ok` si la terminaste con prueba, `parcial` si quedó a medias, `falló` si no salió y `abierta` si sigue pendiente, con una línea de qué pasó. Después decile al usuario qué quedó abierto o falló y qué sigue.",
+					"Una tarea no es un turno: es el trabajo. Un turno puede abrir varias tareas y una tarea puede abarcar varios turnos.",
+					"Al empezar cada turno llamá a `task_plan` con las tareas del pedido: un título corto y concreto (3 a 8 palabras) por cada cosa distinta que pidió. El título lo elegís vos y describe el trabajo; nunca es el mensaje del usuario ni una palabra suelta como “continue”. Si el pedido es una sola cosa, una sola entrada. Después trabajás; las herramientas están bloqueadas hasta que el pedido tenga nombre.",
+					"Si el mensaje es una continuación (“continue”, “dale”, “seguí”), no abras tarea nueva: seguí la tarea abierta y sumá ahí tu evidencia.",
+					"Al terminar el trabajo, antes de tu respuesta final, llamá a `task_review` con el resultado de cada tarea de esta conversación: `ok` si la terminaste con prueba, `parcial` si quedó a medias, `falló` si no salió, `abierta` si sigue pendiente y `cancelada` si el usuario detuvo el turno, con una línea de qué pasó. Después decile al usuario qué quedó abierto o falló y qué sigue.",
 					"Una tarea no está terminada porque se tocaron archivos: está terminada cuando hay prueba que se pueda VER.",
 					"- Si el cambio se ve en pantalla, capturá la app real (pantalla-agente montar y capturar, o grim) y guardá la imagen bajo el proyecto o /tmp.",
 					"- Si hay tests o build, corrélos y mostrá cómo terminaron.",
