@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# agent-seat-switch — alterna entre el asiento del agente y donde estabas.
+#
+# Si la ventana activa es del asiento, vuelve a la ventana (o workspace) que
+# tenías antes de saltar. Si no, guarda dónde estás y salta a la ventana más
+# nueva del asiento. Pensado para el botón de la barra.
+#
+# Resuelve la instancia viva de Hyprland: un proceso largo (harness, shell) puede
+# tener HYPRLAND_INSTANCE_SIGNATURE vieja después de reiniciar la sesión.
+set -uo pipefail
+
+RUTA="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-volver"
+AGENTE="$(command -v agent-seat 2>/dev/null || echo "$HOME/.local/bin/agent-seat")"
+
+instancia_viva() {
+    if hyprctl version >/dev/null 2>&1; then
+        printf '%s' "${HYPRLAND_INSTANCE_SIGNATURE:-}"
+        return
+    fi
+    local d
+    d="$(ls -dt "${XDG_RUNTIME_DIR:-/tmp}/hypr"/*/ 2>/dev/null | while read -r x; do
+        [ -S "$x/.socket.sock" ] && { printf '%s' "$x"; break; }
+    done)"
+    [ -n "$d" ] && basename "$d"
+}
+
+HIS="$(instancia_viva)"
+[ -n "$HIS" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HIS"
+
+hypr() { hyprctl "$@" 2>/dev/null; }
+
+activo="$(hypr activewindow -j)"
+addr="$(printf '%s' "$activo" | jq -r '.address // empty' 2>/dev/null || true)"
+clase="$(printf '%s' "$activo" | jq -r '.class // empty' 2>/dev/null || true)"
+ws="$(printf '%s' "$activo" | jq -r '.workspace.id // empty' 2>/dev/null || true)"
+
+case "$clase" in
+agent-*)
+    # Estamos en el asiento: volver a lo guardado.
+    [ -f "$RUTA" ] || { echo "no hay destino guardado" >&2; exit 1; }
+    win="$(sed -n 's/^WIN=//p' "$RUTA")"
+    wsv="$(sed -n 's/^WS=//p' "$RUTA")"
+    if [ -n "$win" ] && hypr clients -j | jq -e --arg a "$win" 'any(.[]; .address == $a)' >/dev/null 2>&1; then
+        hypr dispatch "hl.dsp.focus({ window = \"address:$win\" })" >/dev/null
+    elif [ -n "$wsv" ]; then
+        hypr dispatch "hl.dsp.focus({ workspace = \"$wsv\" })" >/dev/null
+    else
+        echo "el destino ya no existe" >&2
+        exit 1
+    fi
+    ;;
+*)
+    # Estamos fuera: guardar y saltar a la ventana más nueva del asiento.
+    [ -n "$addr" ] && printf 'WIN=%s\nWS=%s\n' "$addr" "$ws" >"$RUTA"
+    destino="$("$AGENTE" windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).address // empty) else empty end' 2>/dev/null || true)"
+    if [ -n "$destino" ]; then
+        hypr dispatch "hl.dsp.focus({ window = \"address:$destino\" })" >/dev/null
+    else
+        "$AGENTE" show >/dev/null 2>&1 || { echo "no hay ventanas en el asiento" >&2; exit 1; }
+    fi
+    ;;
+esac

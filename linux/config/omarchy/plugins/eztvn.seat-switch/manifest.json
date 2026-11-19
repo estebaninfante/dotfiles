@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.seat-switch",
+  "name": "Agent Seat Switch",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "description": "Boton que alterna entre el asiento del agente y la ventana donde estabas. Se oculta cuando no hay ventanas en el asiento.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Seat Switch",
+    "description": "Ir al asiento / volver a donde estabas, con un clic.",
+    "category": "System",
+    "aliases": ["seat", "volver", "asiento"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalMs": 2000
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalMs",
+        "type": "integer",
+        "label": "Refresh interval (ms)",
+        "description": "Cada cuanto se consulta el estado del asiento.",
+        "min": 500,
+        "max": 10000,
+        "step": 500,
+        "defaultValue": 2000
+      }
+    ]
+  }
+}

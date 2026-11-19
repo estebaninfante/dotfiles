@@ -97,6 +97,9 @@
         },
         {
           "id": "eztvn.seat"
+        },
+        {
+          "id": "eztvn.seat-switch"
         }
       ]
     },

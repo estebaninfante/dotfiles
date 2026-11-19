@@ -195,8 +195,8 @@ const SESSION_PATTERNS = [
 		"captura/grabación de las pantallas del usuario (usá `evidencia`)"],
 	[/\bhyprctl\s+(?:dispatch|keyword)\b[^\n]*\b(?:workspace|movetoworkspace|focusmonitor|focusworkspace|swapactiveworkspaces|renameworkspace)\b/,
 		"mover el workspace o el monitor del usuario"],
-	[/\bpantalla-agente\s+abrir\b/,
-		"abrir una app en la pantalla virtual (el app-id llega tarde y la ventana aparece un instante en las pantallas del usuario; usá `agent-seat run`)"],
+	[/\bpantalla-agente\b/,
+		"pantalla-agente está retirado: capturá con `agent-seat screenshot` o `evidencia`"],
 ];
 
 /**

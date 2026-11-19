@@ -36,25 +36,24 @@
 - Antes de decir "listo": `npx impeccable detect <url-o-dir>` y captura a 390 y 1440 px.
 - Lienzo Creativo (`~/Proyectos/lienzo-creativo`): `webapp-launch ~/Proyectos/lienzo-creativo`.
 
-## Agent Seat (interactuar con GUI)
+## Agent Seat (GUI y capturas)
 - Para abrir una app gráfica, clickear, tipear o scrollear: `agent-seat` (skill `agent-seat`). Corre sandboxeado, en su workspace (20), con puntero y teclado propios.
-- `pantalla-agente abrir` NO se usa para apps: si el app-id llega tarde, la ventana aparece un instante en las pantallas del usuario. El asiento es el único camino para GUI.
-- `pantalla-agente` queda sólo para capturas de pantalla completa sin abrir apps (`montar` + `capturar` + `desmontar`).
+- Capturas de una ventana: `agent-seat screenshot`; secuencias y pruebas: `evidencia` (skill `evidencia`).
+- `pantalla-agente` está retirado: no montes la salida virtual ni abras apps ahí.
 - Prohibido `ydotool`, `wtype`, `xdotool`, `grim` y `wf-recorder` sobre la sesión del usuario.
 - Login, captcha o 2FA: pedile al usuario que salte con `Super + Ctrl + Alt + X` y esperá.
 - Mientras el usuario escribe en una ventana del asiento, no toques esa ventana.
 
 ## Pruebas con ventanas
-- Las ventanas de prueba nunca van en las pantallas del usuario: van al asiento del agente.
-- Capturas de UI completas: `pantalla-agente montar`, `capturar`, `desmontar`; sin abrir apps ahí.
+- Las ventanas de prueba van al asiento del agente; nunca a las pantallas del usuario.
+- Evidencia de UI: `evidencia iniciar/paso/cerrar` o `evidencia grabar -- <comando>`.
 
 ## Evidencia
 - Para varios pasos usá `evidencia`: `evidencia iniciar`, `evidencia paso "…"` (silencioso), `evidencia cerrar` → imprime `gif=` y `hoja=`.
 - Leé **solo la hoja de contactos**, no cada captura: una imagen en vez de N.
 - Secuencia completa en una sola llamada: `evidencia grabar -- <comando>` → video + gif + hoja.
-- Pantalla montada en tiempo real: `evidencia grabar-vivo -- <comando>` (wf-recorder); en el asiento cae a frames.
 - Antes/después en una imagen: `evidencia comparar antes.png despues.png --etiquetas "antes,después"`.
-- Detecta solo el objetivo: la ventana del asiento más nueva o la pantalla montada.
+- Detecta solo el objetivo: la ventana del asiento más nueva.
 - Si la skill no cubría el caso: `evidencia skill "regla atómica"` y publicá dotfiles.
 
 ## Voz

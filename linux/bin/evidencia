@@ -5,21 +5,19 @@
 # rutas (GIF y hoja de contactos) y el agente lee UNA imagen en vez de N.
 #
 # Uso:
-#   evidencia iniciar [--nombre SLUG] [--asiento N] [--pantalla OUT]
+#   evidencia iniciar [--nombre SLUG] [--asiento N]
 #   evidencia paso [ETIQUETA...]         # captura un frame (silencioso si ok)
 #   evidencia foto [ARCHIVO]             # una captura; imprime la ruta
 #   evidencia cerrar [--borrar]          # GIF + hoja de contactos; imprime rutas
 #   evidencia grabar [--fps N] [--max S] -- COMANDO...   # video mientras corre
-#   evidencia grabar-vivo [--fps N] -- COMANDO...        # tiempo real (pantalla montada)
 #   evidencia comparar A.png B.png [--etiquetas "antes,despues"]
 #   evidencia skill "REGLA"              # automejora: agrega una regla atómica
 #   evidencia estado
 #   evidencia limpiar
 #
-# Objetivo (en orden): --asiento/--pantalla al iniciar, EVIDENCIA_ASIENTO,
-# EVIDENCIA_PANTALLA, la ventana del asiento más nueva, o la pantalla montada por
-# `pantalla-agente`. Con el asiento sólo hace falta `agent-seat run`; con
-# `pantalla-agente montar`, la salida AGENTE-1.
+# Objetivo: --asiento N al iniciar, EVIDENCIA_ASIENTO, o la ventana del asiento
+# más nueva. Todo pasa por el Agent Seat (`agent-seat run`); la captura del
+# asiento funciona aunque su workspace esté oculto.
 #
 # Variables: EVIDENCIA_FPS (4), EVIDENCIA_MAX (60), EVIDENCIA_ANCHO (900),
 #            EVIDENCIA_DELAY (90, centésimas por frame del GIF).
@@ -46,13 +44,6 @@ detectar() {
         n=$(agent-seat windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).window) else empty end' 2>/dev/null)
         [ -n "$n" ] && { printf 'asiento:%s' "$n"; return; }
     fi
-    # Sin tubería con grep -q: con pipefail, el `estado` puede morir por SIGPIPE
-    # si grep corta temprano y la detección fallaría de forma intermitente.
-    local est
-    est="$(pantalla-agente estado 2>/dev/null || true)"
-    case "$est" in
-        *montada*) printf 'pantalla:%s' "${PANTALLA_AGENTE_NOMBRE:-AGENTE-1}"; return ;;
-    esac
     printf ''
 }
 

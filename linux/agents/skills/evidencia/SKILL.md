@@ -18,7 +18,7 @@ hoja de contactos.
 ## Flujo
 
 ```bash
-evidencia iniciar --nombre mi-prueba     # detecta la ventana del asiento o AGENTE-1
+evidencia iniciar --nombre mi-prueba     # detecta la ventana del asiento
 evidencia paso "estado inicial"          # silencioso si sale bien
 evidencia paso "click en Guardar"
 evidencia cerrar                         # imprime gif= y hoja=
@@ -30,16 +30,11 @@ evidencia cerrar                         # imprime gif= y hoja=
 ## Grabar una secuencia
 
 ```bash
-# cualquier objetivo: muestrea frames mientras corre el comando
+# muestrea frames del asiento mientras corre el comando
 evidencia grabar --fps 4 --max 20 -- ./mi-script.sh
-
-# pantalla montada: tiempo real con wf-recorder
-pantalla-agente montar
-evidencia grabar-vivo --max 30 -- ./mi-script.sh
 ```
 
-- `grabar` sirve también para el asiento (ventana oculta): muestrea capturas.
-- `grabar-vivo` necesita una salida visible (la de `pantalla-agente`); en el asiento cae a `grabar`.
+- `grabar` sirve para el asiento (ventana oculta): muestrea capturas del asiento.
 
 ## Antes/después
 
@@ -51,8 +46,8 @@ Devuelve una sola imagen lado a lado, con etiquetas, para mostrar el cambio.
 
 ## Reglas
 
-- El objetivo se detecta solo: la ventana del asiento más nueva o la pantalla montada.
-- `--asiento N` o `--pantalla OUT` lo fijan a mano.
+- El objetivo se detecta solo: la ventana del asiento más nueva.
+- `--asiento N` lo fijan a mano.
 - `agent-seat screenshot` sólo escribe bajo el directorio actual; `evidencia` ya lo resuelve.
 - Salidas en `~/Imágenes/screenshots/` (`EVIDENCIA_SALIDA` para cambiarlo).
 - No leas capturas sueltas si podés leer la hoja: cuesta una imagen, no N.
