@@ -135,7 +135,7 @@ window.__ModuleLoader__.load({
 				h(
 					"div",
 					{ className: "tsk-main" },
-					h("p", { className: "tsk-title", title: task.title }, task.title),
+					h("p", { className: "tsk-title", title: task.title }, task.title.length > 64 ? (task.turn ? `Pedido del turno ${task.turn}` : "Pedido sin nombre") : task.title),
 					task.goal ? h("p", { className: "tsk-goal", title: task.goal }, task.goal) : null,
 				),
 				h(

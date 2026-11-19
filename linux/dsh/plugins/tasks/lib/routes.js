@@ -19,6 +19,7 @@ import { createReadStream, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { planBackfill } from "./backfill.js";
+import { assistantSummary, firstLine, textOfMessage } from "./events.js";
 import { summarizeEvidence } from "./evidence.js";
 import { MAX_MEDIA_BYTES, enrichMedia, mediaInfo } from "./media.js";
 import { createTask, deleteTask, findSessionTask, findTurnTask, listTasks, updateTask } from "./store.js";
@@ -188,8 +189,86 @@ function routes(ctx, live) {
 					latestTurn: latest,
 					running,
 					status: chosen ? closeText(chosen.reason) : null,
+					summary: chosen ? assistantSummary(byTurn.get(chosen.turn)) : "",
 					task,
 					evidence,
+				});
+			},
+		},
+		{
+			path: "/tasks/session",
+			method: "GET",
+			handler: async (req, res) => {
+				const url = new URL(req.url ?? "/", "http://127.0.0.1");
+				const sessionId = (url.searchParams.get("session") ?? "").trim();
+				if (!SESSION_ID.test(sessionId)) return sendJson(res, 400, { error: "missing-session" });
+				const snapshot = await ctx.sessionQuery.readSession(sessionId);
+				const byTurn = new Map();
+				const ends = new Map();
+				let latest = 0;
+				for (const event of snapshot.events) {
+					const turn = Number(event.data?.turn);
+					if (!Number.isSafeInteger(turn) || turn <= 0) continue;
+					if (turn > latest) latest = turn;
+					if (event.type === "turn/end") ends.set(turn, String(event.data?.reason?.kind ?? "?"));
+					const bucket = byTurn.get(turn) ?? [];
+					bucket.push(event);
+					byTurn.set(turn, bucket);
+				}
+				const workspace = absoluteWorkspace(snapshot.session?.cwd);
+				const tasks = workspace ? (await listTasks(workspace)).filter((task) => task.sessionId === sessionId) : [];
+				const userText = new Map();
+				let current = 0;
+				for (const event of snapshot.events) {
+					if (event.type === "turn/start") {
+						const turn = Number(event.data?.turn ?? 0);
+						if (Number.isSafeInteger(turn) && turn > 0) current = turn;
+					} else if (event.type === "user/message" && event.data?.source?.kind === "user") {
+						const text = textOfMessage(event.data);
+						if (text && current) userText.set(current, text);
+					}
+				}
+				const items = [];
+				let mediaTotal = 0;
+				let deliverablesTotal = 0;
+				const addItem = async (task, turn) => {
+					const bucket = turn ? (byTurn.get(turn) ?? []) : snapshot.events;
+					const evidence = await enrichMedia(summarizeEvidence(bucket, { cwd: snapshot.session?.cwd ?? null }));
+					const reason = task?.closeReason ?? (turn ? ends.get(turn) : null) ?? null;
+					mediaTotal += evidence.media.length;
+					deliverablesTotal += evidence.deliverables.length;
+					items.push({
+						id: task?.id ?? `turn-${turn}`,
+						title: task?.title ?? firstLine(userText.get(turn) ?? "") ?? "",
+						turn,
+						state: task?.state ?? "abierta",
+						status: reason ? closeText(reason) : turn === latest ? "en curso" : "sin cerrar",
+						summary: assistantSummary(bucket),
+						media: evidence.media,
+						deliverables: evidence.deliverables,
+					});
+				};
+				const withTask = new Set();
+				for (const task of tasks) {
+					if (!task.turn) continue;
+					withTask.add(task.turn);
+					await addItem(task, task.turn);
+				}
+				// Turnos anteriores al registro automático: se muestran igual, con su
+				// pedido y su evidencia, para que la vista tenga toda la sesión.
+				for (const turn of [...byTurn.keys()].sort((a, b) => a - b)) {
+					if (withTask.has(turn) || !userText.has(turn)) continue;
+					await addItem(null, turn);
+				}
+				for (const task of tasks) {
+					if (task.turn) continue;
+					await addItem(task, null);
+				}
+				items.sort((a, b) => (a.turn ?? 0) - (b.turn ?? 0));
+				sendJson(res, 200, {
+					sessionId,
+					tasks: items,
+					stats: { tasks: items.length, media: mediaTotal, deliverables: deliverablesTotal },
 				});
 			},
 		},
