@@ -179,6 +179,121 @@ hl.on("window.class", move_spotify)
 local function apply_window_rules()
 end
 
+-- Al desconectar la pantalla externa, Hyprland se trae sus espacios (28..36) a
+-- la interna. Esas ventanas quedan en espacios que ningún atajo de la laptop
+-- alcanza: la barra, el overview y los atajos sólo conocen 1..9. Por eso, en
+-- cuanto la externa desaparece, se mudan a 1..9 repartidas: mismo número si
+-- está libre; si no, el más cercano libre; si no hay libres, el que tenga menos
+-- ventanas. Nunca se apila todo en un solo espacio.
+
+local function internal_present()
+    for _, monitor in ipairs(hl.get_monitors()) do
+        if is_internal(monitor.name) then return true end
+    end
+    return false
+end
+
+-- Espacio 1..9 destino para un grupo de ventanas. Puro: recibe la carga actual
+-- de cada espacio para poder probarlo sin tocar ventanas.
+local function choose_target(index, loads)
+    loads = loads or {}
+    if (loads[index] or 0) == 0 then return index end
+    local best_distance, nearest
+    for candidate = 1, SET_SIZE do
+        if (loads[candidate] or 0) == 0 then
+            local distance = math.abs(candidate - index)
+            if best_distance == nil or distance < best_distance then
+                best_distance, nearest = distance, candidate
+            end
+        end
+    end
+    if nearest ~= nil then return nearest end
+    local least
+    for candidate = 1, SET_SIZE do
+        local load = loads[candidate] or 0
+        local distance = math.abs(candidate - index)
+        if least == nil or load < least.load
+            or (load == least.load and distance < least.distance) then
+            least = { load = load, distance = distance, index = candidate }
+        end
+    end
+    return least and least.index or index
+end
+
+-- Agrupa las ventanas de la externa por espacio y calcula adónde va cada grupo.
+local function plan_migration()
+    local loads, groups = {}, {}
+    for i = 1, SET_SIZE do loads[i] = 0 end
+    for _, window in ipairs(hl.get_windows({ mapped = true })) do
+        local workspace = window.workspace
+        local id = workspace and workspace.id
+        if type(id) == "number" and id > 0 then
+            local index = to_local(id)
+            if index ~= nil then
+                if id >= EXTERNAL_BASE then
+                    groups[index] = groups[index] or {}
+                    table.insert(groups[index], window.address)
+                else
+                    loads[index] = loads[index] + 1
+                end
+            end
+        end
+    end
+    local plan = {}
+    for index = 1, SET_SIZE do
+        local addresses = groups[index]
+        if addresses ~= nil then
+            local target = choose_target(index, loads)
+            loads[target] = loads[target] + #addresses
+            table.insert(plan, { from = index, to = target, addresses = addresses })
+        end
+    end
+    return plan
+end
+
+-- Mudanza real. Devuelve el plan como texto ("29->2 (3)") para poder probarlo
+-- con dry_run sin mover nada.
+local function migrate_external_windows(options)
+    options = options or {}
+    local report = {}
+    if real_monitor_count() >= 2 then return report end  -- la externa sigue: no hay nada que rescatar
+    if not internal_present() then return report end      -- clamshell: no hay interna donde mudarlas
+    for _, step in ipairs(plan_migration()) do
+        report[#report + 1] = string.format("%d->%d (%d)",
+            step.from + EXTERNAL_BASE - 1, step.to, #step.addresses)
+        if options.dry_run ~= true then
+            for _, address in ipairs(step.addresses) do
+                hl.dispatch(hl.dsp.window.move({
+                    workspace = tostring(step.to),
+                    window = "address:" .. address,
+                    follow = false,
+                }))
+            end
+        end
+    end
+    return report
+end
+
+-- Espera a que Hyprland termine de mover los espacios de la pantalla que se fue.
+local migration_pending = false
+local function schedule_migration()
+    if migration_pending then return end
+    migration_pending = true
+    hl.timer(function()
+        migration_pending = false
+        pcall(migrate_external_windows)
+    end, { timeout = 700, type = "oneshot" })
+end
+
+hl.on("monitor.removed", schedule_migration)
+hl.on("config.reloaded", schedule_migration)
+
+-- Para probar desde `hyprctl repl` sin editar la config.
+_G.omarchy = _G.omarchy or {}
+_G.omarchy.spaces_choose_target = choose_target
+_G.omarchy.spaces_plan = plan_migration
+_G.omarchy.spaces_migrate = migrate_external_windows
+
 return {
     PRIMARY_BASE = PRIMARY_BASE,
     EXTERNAL_BASE = EXTERNAL_BASE,
@@ -193,4 +308,8 @@ return {
     main_last = main_last,
     workspace_method = workspace_method,
     apply_window_rules = apply_window_rules,
+    choose_target = choose_target,
+    plan_migration = plan_migration,
+    migrate_external_windows = migrate_external_windows,
+    schedule_migration = schedule_migration,
 }
