@@ -22,7 +22,7 @@ import { planBackfill } from "./backfill.js";
 import { assistantSummary, textOfMessage } from "./events.js";
 import { summarizeEvidence } from "./evidence.js";
 import { MAX_MEDIA_BYTES, enrichMedia, mediaInfo } from "./media.js";
-import { createTask, deleteTask, findSessionTask, findTurnTask, listTasks, taskTurns, updateTask } from "./store.js";
+import { createTask, deleteTask, findLatestTask, findTurnTask, listTasks, taskTurns, updateTask } from "./store.js";
 
 const MAX_BODY = 64 * 1024;
 const SESSION_ID = /^[A-Za-z0-9:._-]{8,160}$/;
@@ -198,15 +198,24 @@ function routes(ctx, live) {
 						break;
 					}
 				}
-				const task = (chosen ? await findTurnTask(sessionId, chosen.turn) : null) ?? (await findSessionTask(sessionId));
-				const evidence = chosen?.evidence ?? (await enrichMedia(summarizeEvidence([], { cwd: snapshot.session?.cwd ?? null })));
+				// Sin prueba todavía: la tarjeta igual muestra la tarea en curso apenas
+				// el agente la nombra, con su estado y el resumen que haya.
+				const current = !chosen ? (await findLatestTask(sessionId)) : null;
+				const currentTurn = current ? (taskTurns(current).slice(-1)[0] ?? latest) : 0;
+				const task = chosen ? await findTurnTask(sessionId, chosen.turn) : current;
+				const evidence =
+					chosen?.evidence ??
+					(currentTurn
+						? await enrichMedia(summarizeEvidence(byTurn.get(currentTurn) ?? [], { cwd: snapshot.session?.cwd ?? null }))
+						: await enrichMedia(summarizeEvidence([], { cwd: snapshot.session?.cwd ?? null })));
+				const turnEnded = ends.get(currentTurn ?? 0);
 				sendJson(res, 200, {
 					sessionId,
-					turn: chosen?.turn ?? 0,
+					turn: chosen?.turn ?? currentTurn ?? 0,
 					latestTurn: latest,
 					running,
-					status: chosen ? closeText(chosen.reason) : null,
-					summary: chosen ? assistantSummary(byTurn.get(chosen.turn)) : "",
+					status: chosen ? closeText(chosen.reason) : turnEnded ? closeText(turnEnded) : running ? "en curso" : null,
+					summary: chosen ? assistantSummary(byTurn.get(chosen.turn)) : currentTurn ? assistantSummary(byTurn.get(currentTurn) ?? []) : "",
 					task,
 					evidence,
 				});

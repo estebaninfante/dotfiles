@@ -166,7 +166,7 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		/** El último pedido terminado con prueba visual; es lo que muestra la tarjeta sola. */
+		/** La tarea en curso de la sesión: aparece apenas el agente la nombra. */
 		function useTurnEvidence(sessionId) {
 			const [turn, setTurn] = useState(null);
 			useEffect(() => {
@@ -183,7 +183,7 @@ window.__ModuleLoader__.load({
 						.catch(() => {});
 				};
 				load();
-				const timer = setInterval(load, 15000);
+				const timer = setInterval(load, 4000);
 				return () => {
 					cancelled = true;
 					clearInterval(timer);
@@ -248,7 +248,9 @@ window.__ModuleLoader__.load({
 			const name = task ? nameOf(task) : "Esta sesión";
 
 			if (!proof && !picked) return null;
-			if (!picked && !media.length && !deliverables.length) return null;
+			// La tarjeta aparece apenas la tarea tiene nombre, aunque todavía no haya
+			// prueba visual: se ve qué se está trabajando y en qué estado está.
+			if (!picked && !media.length && !deliverables.length && !proof?.task) return null;
 
 			const counts = [
 				media.length ? `${media.length} ${media.length === 1 ? "prueba visual" : "pruebas visuales"}` : null,

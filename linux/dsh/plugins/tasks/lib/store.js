@@ -148,6 +148,15 @@ export async function findOpenTask(sessionId) {
 	return open[0] ?? null;
 }
 
+/** Última tarea de la conversación: la que se está trabajando ahora. */
+export async function findLatestTask(sessionId) {
+	const db = await readDb();
+	const tasks = db.tasks
+		.filter((task) => task.sessionId === sessionId)
+		.sort((a, b) => (taskTurns(b).slice(-1)[0] ?? 0) - (taskTurns(a).slice(-1)[0] ?? 0));
+	return tasks[0] ?? null;
+}
+
 /** Todas las tareas de una conversación, en orden de turno. */
 export async function findSessionTasks(sessionId) {
 	const db = await readDb();
