@@ -38,6 +38,7 @@ OUT="${PANTALLA_AGENTE_NOMBRE:-AGENTE-1}"
 TTL="${PANTALLA_AGENTE_TTL:-600}"
 PATRON="${PANTALLA_AGENTE_CLASE:-^agente-test-}"
 VIGILANCIA="${PANTALLA_AGENTE_VIGILANCIA:-3}"
+WORKSPACE="${PANTALLA_AGENTE_WORKSPACE:-12}"
 STAMP="$STATE/stamp"
 ENVF="$STATE/env"
 
@@ -161,8 +162,15 @@ cmd_montar() {
         sleep 0.3
     fi
 
-    WS="$(output_workspace)"
-    [ -n "$WS" ] || die "la salida $OUT no tiene espacio de trabajo"
+    # Workspace fijo del agente: la regla estática de windowrules.lua manda las
+    # ventanas `agente-test-*` acá, y este comando lo muestra en la salida
+    # virtual. Así la ventana nace oculta, sin carrera contra el mapeo.
+    WS="$WORKSPACE"
+    if hyprctl workspaces -j 2>/dev/null | jq -e --arg ws "$WS" 'any(.[]; (.id|tostring) == $ws and .windows > 0)' >/dev/null 2>&1; then
+        die "el workspace $WS ya tiene ventanas del usuario; elegí otro con PANTALLA_AGENTE_WORKSPACE"
+    fi
+    lua "hl.dispatch(hl.dsp.workspace.move({ workspace = [[$WS]], monitor = [[$OUT]] }))"
+    sleep 0.3
     MON="$mon_antes"
     WIN="$win_antes"
     printf 'OUT=%s\nWS=%s\nMON=%s\nWIN=%s\n' "$OUT" "$WS" "$MON" "$WIN" > "$ENVF"

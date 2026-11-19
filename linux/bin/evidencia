@@ -205,18 +205,112 @@ cmd_limpiar() {
     echo "limpio"
 }
 
+cmd_comparar() {
+    local etiquetas="" a b salida
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --etiquetas) etiquetas="${2:?}"; shift 2 ;;
+            --) shift; break ;;
+            *) break ;;
+        esac
+    done
+    a="${1:-}"; b="${2:-}"; salida="${3:-$SALIDA/comparar-$(sello).png}"
+    [ -f "$a" ] && [ -f "$b" ] || die "comparar: faltan dos imágenes existentes"
+    local ea="antes" eb="después"
+    [ -n "$etiquetas" ] && { ea="${etiquetas%%,*}"; eb="${etiquetas#*,}"; }
+    local fuente=""
+    for f in /usr/share/fonts/liberation/LiberationSans-Regular.ttf \
+             /usr/share/fonts/TTF/DejaVuSans.ttf; do
+        [ -f "$f" ] && { fuente="$f"; break; }
+    done
+    mkdir -p "$(dirname "$salida")"
+    local tmp; tmp=$(mktemp -d)
+    local tipos=("$a" "$b") ets=("$ea" "$eb") i
+    for i in 0 1; do
+        local extra=()
+        [ -n "$fuente" ] && extra=(-font "$fuente")
+        magick "${tipos[$i]}" -resize x760 -background '#111111' -gravity north \
+            -splice 0x44 "${extra[@]}" -pointsize 26 -fill white \
+            -annotate +0+8 "${ets[$i]}" "$tmp/$i.png" 2>/dev/null \
+            || die "comparar: no pude preparar ${tipos[$i]}"
+    done
+    magick "$tmp/0.png" "$tmp/1.png" -bordercolor '#111111' -border 8 +append "$salida" 2>/dev/null \
+        || die "comparar: falló el montaje"
+    rm -rf "$tmp"
+    printf '%s\n' "$salida"
+}
+
+# Grabar la pantalla montada en tiempo real. El asiento vive en una ventana
+# oculta (no es una salida), así que ahí cae al muestreo de frames de `grabar`.
+cmd_grabar_vivo() {
+    local obj tipo
+    obj="$(detectar)"; tipo="${obj%%:*}"
+    if [ "$tipo" != "pantalla" ]; then
+        printf 'modo=frames (el asiento no es una salida; se muestrean frames)\n' >&2
+        cmd_grabar "$@"
+        return
+    fi
+    command -v wf-recorder >/dev/null 2>&1 || die "falta wf-recorder (pacman -S wf-recorder)"
+    local nombre="vivo" max="$MAX"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --fps) shift 2 ;;                 # wf-recorder graba a la tasa del compositor
+            --max) max="${2:?}"; shift 2 ;;
+            --nombre) nombre=$(slug "$2"); shift 2 ;;
+            --) shift; break ;;
+            *) die "grabar-vivo: opción desconocida $1" ;;
+        esac
+    done
+    [ $# -gt 0 ] || die "grabar-vivo: falta el comando (usá --)"
+    local resto="${obj#*:}" mp4="$SALIDA/${nombre}-$(sello).mp4"
+    mkdir -p "$SALIDA"
+    setsid wf-recorder -o "$resto" -f "$mp4" >/dev/null 2>&1 &
+    local pid=$!
+    sleep 0.8
+    timeout "$max" "$@" >/dev/null 2>&1 || true
+    kill -INT "$pid" >/dev/null 2>&1 || true
+    local i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+    kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" >/dev/null 2>&1
+    [ -s "$mp4" ] || die "wf-recorder no grabó nada (¿la salida $resto está montada?)"
+
+    local gif="${mp4%.mp4}.gif" hoja="${mp4%.mp4}-pasos.png" tmp
+    tmp=$(mktemp -d)
+    ffmpeg -y -loglevel error -i "$mp4" -vf "fps=3,scale=${ANCHO}:-2" -loop 0 "$gif" 2>/dev/null || true
+    ffmpeg -y -loglevel error -i "$mp4" -vf "fps=1,scale=1240:-2" "$tmp/%02d.png" 2>/dev/null || true
+    local sel; sel=$(find "$tmp" -name '*.png' | sort | awk 'NR%2==1' | head -6)
+    [ -n "$sel" ] && montage $sel -tile 3x -geometry 620x372+8+8 -background '#111111' "$hoja" 2>/dev/null || true
+    rm -rf "$tmp"
+    printf 'video=%s\n' "$mp4"
+    [ -f "$gif" ] && printf 'gif=%s\n' "$gif"
+    [ -f "$hoja" ] && printf 'hoja=%s\n' "$hoja"
+}
+
+# Automejora de la skill: una regla atómica por línea, con fecha.
+cmd_skill() {
+    local regla="$*"
+    [ -n "$regla" ] || die "skill: falta la regla (una idea, sin explicar lo obvio)"
+    local f="$HOME/dotfiles/linux/agents/skills/evidencia/SKILL.md"
+    [ -f "$f" ] || die "no existe la skill en $f"
+    grep -q '^## Aprendido' "$f" || printf '\n## Aprendido\n' >>"$f"
+    printf -- '- %s — %s\n' "$(date +%F)" "$regla" >>"$f"
+    printf '%s\n' "$f"
+}
+
 main() {
-    [ $# -gt 0 ] || die "uso: evidencia iniciar|paso|foto|cerrar|grabar|estado|limpiar"
+    [ $# -gt 0 ] || die "uso: evidencia iniciar|paso|foto|cerrar|grabar|grabar-vivo|comparar|skill|estado|limpiar"
     local cmd="$1"; shift
     case "$cmd" in
-        iniciar) cmd_iniciar "$@" ;;
-        paso)    cmd_paso "$@" ;;
-        foto)    cmd_foto "$@" ;;
-        cerrar)  cmd_cerrar "$@" ;;
-        grabar)  cmd_grabar "$@" ;;
-        estado)  cmd_estado ;;
-        limpiar) cmd_limpiar ;;
-        *) die "uso: evidencia iniciar|paso|foto|cerrar|grabar|estado|limpiar" ;;
+        iniciar)     cmd_iniciar "$@" ;;
+        paso)        cmd_paso "$@" ;;
+        foto)        cmd_foto "$@" ;;
+        cerrar)      cmd_cerrar "$@" ;;
+        grabar)      cmd_grabar "$@" ;;
+        grabar-vivo) cmd_grabar_vivo "$@" ;;
+        comparar)    cmd_comparar "$@" ;;
+        skill)       cmd_skill "$@" ;;
+        estado)      cmd_estado ;;
+        limpiar)     cmd_limpiar ;;
+        *) die "uso: evidencia iniciar|paso|foto|cerrar|grabar|grabar-vivo|comparar|skill|estado|limpiar" ;;
     esac
 }
 

@@ -45,7 +45,10 @@
 - Para varios pasos usá `evidencia`: `evidencia iniciar`, `evidencia paso "…"` (silencioso), `evidencia cerrar` → imprime `gif=` y `hoja=`.
 - Leé **solo la hoja de contactos**, no cada captura: una imagen en vez de N.
 - Secuencia completa en una sola llamada: `evidencia grabar -- <comando>` → video + gif + hoja.
+- Pantalla montada en tiempo real: `evidencia grabar-vivo -- <comando>` (wf-recorder); en el asiento cae a frames.
+- Antes/después en una imagen: `evidencia comparar antes.png despues.png --etiquetas "antes,después"`.
 - Detecta solo el objetivo: la ventana del asiento más nueva o la pantalla montada.
+- Si la skill no cubría el caso: `evidencia skill "regla atómica"` y publicá dotfiles.
 
 ## Voz
 - Español simple, acción primero, un solo paso al final.
