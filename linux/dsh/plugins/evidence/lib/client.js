@@ -50,7 +50,6 @@ window.__ModuleLoader__.load({
 			".evd-task{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-secondary,#b9b9c2)}",
 			".evd-progress{flex:1 1 auto;min-width:0;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-size:12px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-panel{max-height:320px;overflow-y:auto;margin-top:6px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2)}",
-			".evd-objective{margin:0 0 6px;font-size:12.5px;line-height:1.5;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty}",
 			".evd-summary{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
 			".evd-more{margin:6px 0 0;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-empty{margin:0;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
@@ -346,7 +345,6 @@ window.__ModuleLoader__.load({
 						? h(
 								"div",
 								{ className: "evd-panel" },
-								shown ? h("p", { className: "evd-objective" }, name) : null,
 								summary ? h("p", { className: "evd-summary" }, summary) : null,
 								media.length ? h(Gallery, { media, max: 4 }) : null,
 								media.length > 4 ? h("p", { className: "evd-more" }, `+${media.length - 4} más en la pestaña Tareas`) : null,

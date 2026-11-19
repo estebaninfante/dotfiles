@@ -321,6 +321,14 @@ push() { # [--force]
   local force=0 attempt mime rc=0
   [[ ${1:-} == --force ]] && force=1
 
+  # `wl-paste --watch` ejecuta este comando con el contenido del portapapeles
+  # en stdin y espera a que termine. Si no lo leemos, el pipe se llena a los
+  # 64 KiB y el DUEÑO del portapapeles queda bloqueado escribiendo: cualquier
+  # otra app que pegue en ese momento (Brave incluido) se cuelga hasta que
+  # termine este push. El contenido se descarta: abajo se relee para elegir
+  # bien el MIME.
+  [[ -p /dev/stdin ]] && cat >/dev/null
+
   ensure_wayland || { log "push: sin sesión Wayland"; return 1; }
 
   # Un solo envío a la vez: si un video está viajando, el cambio siguiente se
@@ -334,9 +342,9 @@ push() { # [--force]
     local tmp err rc_read try
     tmp=$(mktemp "${STATE}/payload.XXXXXX") || return 1
     err="${STATE}/wl-paste.err"
-    # El plugin de historial de Omarchy también lee cada imagen; con una imagen
-    # grande dos lectores a la vez hacen que wl-paste se cuelgue (rc=124). Se
-    # reintenta con una pausa en vez de perder la copia.
+    # El dueño del portapapeles puede estar ocupado sirviendo otro lector (el
+    # plugin de historial de Omarchy lee cada imagen) y wl-paste corta con
+    # rc=124. Se reintenta con una pausa en vez de perder la copia.
     for try in 1 2 3; do
       timeout 8 wl-paste --no-newline --type "${mime}" >"${tmp}" 2>"${err}"
       rc_read=$?
