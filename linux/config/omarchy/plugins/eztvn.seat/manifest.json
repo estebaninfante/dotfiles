@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.seat",
+  "name": "Agent Seat",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "description": "Muestra cuando un agente tiene ventanas abiertas en el Agent Seat, con la cantidad. Clic: salta a la ventana del asiento.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Seat",
+    "description": "Indicador de actividad del asiento del agente (0 ventanas = oculto).",
+    "category": "System",
+    "aliases": ["seat", "agente", "asiento"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalMs": 2000
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalMs",
+        "type": "integer",
+        "label": "Refresh interval (ms)",
+        "description": "Cada cuanto se consulta el estado del asiento.",
+        "min": 500,
+        "max": 10000,
+        "step": 500,
+        "defaultValue": 2000
+      }
+    ]
+  }
+}
