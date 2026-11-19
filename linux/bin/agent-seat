@@ -40,11 +40,27 @@ arrancar_vigia() {
     printf '%s\n' "$!" > "$ruta"
 }
 
+# Cada sandbox tiene hostname propio, así que chromium deja SingletonLock de
+# "otra máquina" y el próximo lanzamiento falla con "Profile error occurred".
+# Si el asiento no tiene ventanas, esos locks son de corridas muertas.
+limpiar_locks() {
+    local base="$HOME/.local/state/omarchy/agent-seat/home/.config"
+    [ -d "$base" ] || return 0
+    if omarchy-agent-seat-windows 2>/dev/null | grep -q '"window"'; then
+        return 0
+    fi
+    rm -f "$base"/chromium/Singleton* 2>/dev/null
+    rm -f "$base"/google-chrome/Singleton* 2>/dev/null
+    rm -f "$base"/BraveSoftware/*/Singleton* 2>/dev/null
+    return 0
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
     run)
         arrancar_vigia
+        limpiar_locks
         exec "omarchy-agent-seat-run" "$@" ;;
     state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
         exec "omarchy-agent-seat-$cmd" "$@" ;;

@@ -3,14 +3,22 @@
 #
 # Si la ventana activa es del asiento, vuelve a la ventana (o workspace) que
 # tenías antes de saltar. Si no, guarda dónde estás y salta a la ventana más
-# nueva del asiento. Pensado para el botón de la barra.
+# nueva del asiento; si no hay ninguna, abre chromium ahí y salta.
 #
-# Resuelve la instancia viva de Hyprland: un proceso largo (harness, shell) puede
-# tener HYPRLAND_INSTANCE_SIGNATURE vieja después de reiniciar la sesión.
+# Robusto a propósito:
+#  - resuelve la instancia viva de Hyprland (el proceso puede tener la firma vieja),
+#  - espera a que la ventana esté mapeada antes de enfocarla y reintenta,
+#  - no abre más de un chromium por clic (cooldown) y avisa si falla.
 set -uo pipefail
 
 RUTA="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-volver"
+COOLDOWN="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-switch.open"
 AGENTE="$(command -v agent-seat 2>/dev/null || echo "$HOME/.local/bin/agent-seat")"
+
+aviso() {
+    omarchy-notification-send -u normal "$*" >/dev/null 2>&1 \
+        || notify-send "$*" >/dev/null 2>&1 || true
+}
 
 instancia_viva() {
     if hyprctl version >/dev/null 2>&1; then
@@ -28,6 +36,19 @@ HIS="$(instancia_viva)"
 [ -n "$HIS" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HIS"
 
 hypr() { hyprctl "$@" 2>/dev/null; }
+clase_activa() { hypr activewindow -j | jq -r '.class // empty' 2>/dev/null; }
+ventana_asiento() {
+    "$AGENTE" windows 2>/dev/null \
+        | jq -r 'if type == "array" and length > 0 then (max_by(.window).address // empty) else empty end' 2>/dev/null || true
+}
+mapeada() { # <address>
+    [ -n "${1:-}" ] || return 1
+    hypr clients -j | jq -e --arg a "$1" 'any(.[]; .address == $a and .mapped)' >/dev/null 2>&1
+}
+enfocar() { # <address>
+    [ -n "${1:-}" ] || return 1
+    hypr dispatch "hl.dsp.focus({ window = \"address:$1\" })" >/dev/null
+}
 
 activo="$(hypr activewindow -j)"
 addr="$(printf '%s' "$activo" | jq -r '.address // empty' 2>/dev/null || true)"
@@ -37,7 +58,7 @@ ws="$(printf '%s' "$activo" | jq -r '.workspace.id // empty' 2>/dev/null || true
 case "$clase" in
 agent-*)
     # Estamos en el asiento: volver a lo guardado.
-    [ -f "$RUTA" ] || { echo "no hay destino guardado" >&2; exit 1; }
+    [ -f "$RUTA" ] || { aviso "Agent Seat: no hay destino guardado para volver"; exit 1; }
     win="$(sed -n 's/^WIN=//p' "$RUTA")"
     wsv="$(sed -n 's/^WS=//p' "$RUTA")"
     if [ -n "$win" ] && hypr clients -j | jq -e --arg a "$win" 'any(.[]; .address == $a)' >/dev/null 2>&1; then
@@ -45,35 +66,46 @@ agent-*)
     elif [ -n "$wsv" ]; then
         hypr dispatch "hl.dsp.focus({ workspace = \"$wsv\" })" >/dev/null
     else
-        echo "el destino ya no existe" >&2
+        aviso "Agent Seat: la ventana de vuelta ya no existe"
         exit 1
     fi
     ;;
 *)
-    # Estamos fuera: guardar y saltar a la ventana más nueva del asiento.
+    # Estamos fuera: guardar y saltar al asiento.
     [ -n "$addr" ] && printf 'WIN=%s\nWS=%s\n' "$addr" "$ws" >"$RUTA"
-    destino="$("$AGENTE" windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).address // empty) else empty end' 2>/dev/null || true)"
-    if [ -n "$destino" ]; then
-        hypr dispatch "hl.dsp.focus({ window = \"address:$destino\" })" >/dev/null
-    else
-        # Asiento vacío: abrir chromium ahí y saltar (mismo gesto que el botón).
-        # Reintenta una vez: justo después de `stop`, el broker viejo puede
-        # seguir con el socket y el primer `run` falla.
-        for intento in 1 2; do
-            timeout 30 "$AGENTE" run chromium about:blank >/dev/null 2>&1 && break
-            sleep 2
-        done
-        for _ in 1 2 3 4 5 6; do
-            destino="$("$AGENTE" windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).address // empty) else empty end' 2>/dev/null || true)"
-            [ -n "$destino" ] && break
-            sleep 0.5
-        done
-        if [ -n "$destino" ]; then
-            hypr dispatch "hl.dsp.focus({ window = \"address:$destino\" })" >/dev/null
-        else
-            echo "no pude abrir nada en el asiento" >&2
-            exit 1
+    destino="$(ventana_asiento)"
+
+    if [ -z "$destino" ]; then
+        # Cooldown: un clic = como mucho un chromium cada 10 s.
+        agora=$(date +%s)
+        ultimo=$(cat "$COOLDOWN" 2>/dev/null || echo 0)
+        if [ $((agora - ultimo)) -lt 10 ]; then
+            aviso "Agent Seat: se está abriendo, esperá un segundo"
+            exit 0
         fi
+        printf '%s\n' "$agora" >"$COOLDOWN"
+        timeout 30 "$AGENTE" run chromium about:blank >/dev/null 2>&1 || true
+
+        # Esperar a que Hyprland la tenga mapeada (el broker la lista antes).
+        for _ in $(seq 1 20); do
+            destino="$(ventana_asiento)"
+            mapeada "$destino" && break
+            sleep 0.3
+        done
     fi
+
+    if [ -z "$destino" ]; then
+        aviso "Agent Seat: no pude abrir ninguna ventana"
+        exit 1
+    fi
+
+    # Enfocar con reintento hasta que la ventana activa sea la del asiento.
+    for _ in $(seq 1 10); do
+        enfocar "$destino"
+        sleep 0.25
+        case "$(clase_activa)" in agent-*) exit 0 ;; esac
+    done
+    aviso "Agent Seat: la ventana no tomó el foco (${destino:-sin dirección})"
+    exit 1
     ;;
 esac

@@ -21,6 +21,8 @@ window.__ModuleLoader__.load({
 		/** Combinaciones exactas: cualquier modificador de más no dispara. */
 		const TRIGGERS = [
 			{ code: "Period", ctrl: true, shift: true, alt: false },
+			// En Dvorak la tecla marcada N es la posición física L: el mismo gesto.
+			{ code: "KeyL", ctrl: true, shift: true, alt: false },
 			{ code: "KeyN", ctrl: true, shift: false, alt: true },
 			{ code: "KeyT", ctrl: true, shift: false, alt: true },
 		];
