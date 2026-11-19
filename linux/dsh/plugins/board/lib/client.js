@@ -117,9 +117,9 @@ window.__ModuleLoader__.load({
 			}, [load]);
 
 			const tasks = data.tasks ?? [];
-			const abiertas = tasks.filter((task) => task.state === "abierta");
+			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok");
 			const fallos = tasks.filter((task) => task.outcome === "falló");
-			const cerradas = tasks.filter((task) => task.state === "resuelta");
+			const cerradas = tasks.filter((task) => task.state === "resuelta" || task.outcome === "ok");
 			const filters = [
 				{ id: "abiertas", label: "Abiertas", count: abiertas.length, list: abiertas },
 				{ id: "fallos", label: "Fallos", count: fallos.length, list: fallos },

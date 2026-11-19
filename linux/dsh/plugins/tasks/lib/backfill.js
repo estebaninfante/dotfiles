@@ -5,6 +5,7 @@
  * tareas solo.
  */
 import { firstLine, textOfMessage } from "./events.js";
+import { shortTaskTitle } from "./plan.js";
 
 /**
  * @param events - log completo de la sesión.
@@ -43,7 +44,7 @@ export function planBackfill(events) {
 	return [...requests.entries()]
 		.sort((a, b) => a[0] - b[0])
 		.map(([order, text]) => {
-			const title = firstLine(text) || `Pedido del turno ${order}`;
+			const title = shortTaskTitle(text) || firstLine(text) || `Pedido del turno ${order}`;
 			return {
 				turn: order,
 				title,

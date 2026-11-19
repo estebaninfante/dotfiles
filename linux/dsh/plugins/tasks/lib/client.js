@@ -178,9 +178,9 @@ window.__ModuleLoader__.load({
 
 			const cwd = data?.workspace ?? (sessionId ? getCwd(sessionId) : "");
 			const tasks = data?.tasks ?? [];
-			const abiertas = tasks.filter((task) => task.state === "abierta").length;
+			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok").length;
 			const fallos = tasks.filter((task) => task.outcome === "falló").length;
-			const cerradas = tasks.filter((task) => task.state === "resuelta").length;
+			const cerradas = tasks.filter((task) => task.state === "resuelta" || task.outcome === "ok").length;
 
 			const change = async (task, state) => {
 				setBusy(true);

@@ -28,7 +28,7 @@ test("arma un pedido por turno con el texto que escribió el usuario", () => {
 	]);
 	assert.equal(plan.length, 2);
 	assert.equal(plan[0].turn, 1);
-	assert.equal(plan[0].title, "Arreglá el login");
+	assert.equal(plan[0].title, "Arreglá el login que no guarda la sesión");
 	assert.equal(plan[0].goal, "");
 	assert.equal(plan[0].closeReason, "completed");
 	assert.equal(plan[1].turn, 2);
