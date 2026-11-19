@@ -7,6 +7,8 @@ Type=simple
 ExecStart=%h/.local/bin/kokoro-server
 Restart=on-failure
 RestartSec=5
+# El modelo ya está en la caché: sin preguntar a Hugging Face al arrancar.
+Environment=HF_HUB_OFFLINE=1
 # Se queda caliente a propósito: Orión contesta por voz. Para que suelte el
 # modelo tras un rato sin uso, descomentá con los minutos que quieras.
 #Environment=KOKORO_IDLE_S=900

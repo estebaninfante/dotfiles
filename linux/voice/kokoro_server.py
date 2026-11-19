@@ -43,6 +43,11 @@ import warnings
 warnings.filterwarnings("ignore")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
+# Este archivo vive al lado de linux/voice/kokoro.py, que tapa al paquete
+# `kokoro` instalado: el directorio del script no debe estar en sys.path.
+_here = os.path.dirname(os.path.abspath(__file__))
+sys.path = [p for p in sys.path if os.path.abspath(p or "") != _here]
+
 import numpy as np
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/kokoro-{os.getuid()}"
@@ -210,7 +215,9 @@ def volume_of(pet: dict) -> float:
 
 
 def _pcm(audio, volume: float) -> bytes:
-    samples = np.asarray(getattr(audio, "numpy", lambda: audio)(), dtype=np.float32)
+    if hasattr(audio, "cpu"):  # tensor en GPU: el PCM se arma en CPU
+        audio = audio.cpu()
+    samples = np.asarray(audio.numpy() if hasattr(audio, "numpy") else audio, dtype=np.float32)
     if volume != 1.0:
         samples = samples * volume
     return (np.clip(samples, -1.0, 1.0) * 32767.0).astype(np.int16).tobytes()
