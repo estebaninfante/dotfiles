@@ -1,0 +1,18 @@
+{
+  "name": "dsh-local-tasks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tareas por proyecto (carpeta) y evidencia real de cada conversación: archivos, comandos, tests y entregables tomados del transcript.",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  }
+}
