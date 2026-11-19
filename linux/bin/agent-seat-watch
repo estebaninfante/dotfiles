@@ -11,12 +11,15 @@ set -uo pipefail
 
 INTERVALO="${AGENT_SEAT_WATCH_INTERVALO:-2}"
 IDLE="${AGENT_SEAT_WATCH_IDLE:-900}"
+GRACIA="${AGENT_SEAT_WATCH_GRACIA:-60}"
 VERBOSO=0
 [ "${1:-}" = "-v" ] && VERBOSO=1
 
 RUTA="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-watch.pid"
 ULTIMO=-1
 SIN_VENTANAS=0
+VIO_CORRER=0
+ESPERANDO=0
 
 aviso() {
     omarchy-notification-send -u normal "$*" >/dev/null 2>&1 \
@@ -28,12 +31,27 @@ decir "vigía del asiento: arrancando"
 while :; do
     estado="$(agent-seat status 2>/dev/null || true)"
     case "$estado" in
-        *running*) ;;
+        *running*)
+            VIO_CORRER=1
+            ESPERANDO=0
+            ;;
         *)
-            rm -f "$RUTA"
-            [ "$ULTIMO" -gt 0 ] && aviso "Agent Seat cerrado (las apps del agente terminaron)"
-            decir "vigía: broker detenido, salgo"
-            exit 0
+            # Al arrancar desde `agent-seat run`, el broker todavía no está: se
+            # espera un rato. Si ya lo vimos correr, se cerró de verdad.
+            if [ "$VIO_CORRER" = 1 ]; then
+                rm -f "$RUTA"
+                [ "$ULTIMO" -gt 0 ] && aviso "Agent Seat cerrado (las apps del agente terminaron)"
+                decir "vigía: broker detenido, salgo"
+                exit 0
+            fi
+            ESPERANDO=$((ESPERANDO + INTERVALO))
+            if [ "$ESPERANDO" -ge "$GRACIA" ]; then
+                rm -f "$RUTA"
+                decir "vigía: el broker no arrancó en ${GRACIA}s, salgo"
+                exit 0
+            fi
+            sleep "$INTERVALO"
+            continue
             ;;
     esac
 
