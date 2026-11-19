@@ -92,11 +92,19 @@ export function apply(ctx) {
 			let stopped = task.closeReason === "interrupted" || task.closeReason === "aborted";
 			if (!stopped && last) {
 				// El turno que el usuario detuvo quedó en el log: la tarea se cancela.
+				// El turno más nuevo no se toca: puede estar corriendo ahora mismo.
 				const snapshot = await ctx.sessionQuery.readSession(task.sessionId).catch(() => null);
+				let latest = 0;
 				for (const event of snapshot?.events ?? []) {
-					if (event.type !== "turn/end" || Number(event.data?.turn) !== last) continue;
-					const kind = String(event.data?.reason?.kind ?? "");
-					if (kind === "interrupted" || kind === "aborted") stopped = true;
+					const turn = Number(event.data?.turn);
+					if (Number.isSafeInteger(turn) && turn > latest) latest = turn;
+				}
+				if (last !== latest) {
+					for (const event of snapshot?.events ?? []) {
+						if (event.type !== "turn/end" || Number(event.data?.turn) !== last) continue;
+						const kind = String(event.data?.reason?.kind ?? "");
+						if (kind === "interrupted" || kind === "aborted") stopped = true;
+					}
 				}
 			}
 			if (stopped) await updateTask(task.id, { state: "cancelada" });
