@@ -51,7 +51,7 @@ window.__ModuleLoader__.load({
 			".evd-progress{flex:1 1 auto;min-width:0;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-size:12px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-panel{max-height:320px;overflow-y:auto;margin-top:6px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2)}",
 			".evd-summary{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
-			".evd-more{margin:6px 0 0;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-more{margin:6px 0 0;padding:0;border:0;background:transparent;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3);cursor:pointer;text-align:left}.evd-more:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".evd-empty{margin:0;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-flash{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:6px;border-radius:10px}",
 			".evd-steps{margin:0 0 8px;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
@@ -96,6 +96,12 @@ window.__ModuleLoader__.load({
 
 		function getJson(path) {
 			return fetch(path, { headers: { accept: "application/json" } }).then((response) => (response.ok ? response.json() : null));
+		}
+
+		/** Abre la pestaña Tareas, donde está toda la evidencia de la sesión. */
+		function openTasksTab() {
+			const tab = [...document.querySelectorAll("[role=tab]")].find((item) => item.innerText.trim() === "Tareas");
+			if (tab) tab.click();
 		}
 
 		/**
@@ -479,8 +485,17 @@ window.__ModuleLoader__.load({
 								task?.steps?.length
 									? h("ul", { className: "evd-steps" }, task.steps.map((step) => h("li", { key: step }, step)))
 									: null,
-								media.length ? h(Gallery, { media, max: 4 }) : null,
-								media.length > 4 ? h("p", { className: "evd-more" }, `+${media.length - 4} más en la pestaña Tareas`) : null,
+								media.length ? h(Gallery, { media, max: 12 }) : null,
+								media.length > 12
+									? h(
+											"button",
+											{ type: "button", className: "evd-more", onClick: () => openTasksTab() },
+											`+${media.length - 12} más en la pestaña Tareas`,
+										)
+									: null,
+								media.length || deliverables.length
+									? h("button", { type: "button", className: "evd-more", onClick: () => openTasksTab() }, "Ver todas en Tareas")
+									: null,
 								deliverables.length ? h(Deliverables, { items: deliverables.slice(0, 3) }) : null,
 								!media.length && !deliverables.length
 									? h("p", { className: "evd-empty" }, status === "en curso" ? "La tarea está en curso: la prueba visual aparece al terminar." : "Este paso no dejó prueba visual todavía.")

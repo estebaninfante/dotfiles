@@ -66,10 +66,17 @@ function absoluteWorkspace(value) {
 }
 
 /**
- * Los cinco estados de una tarea. Todo lo demás (motivo de cierre, resultado,
+ * Los seis estados de una tarea. Todo lo demás (motivo de cierre, resultado,
  * si el turno sigue) se traduce a uno de estos; la UI no inventa variantes.
  */
-const STATE_TEXT = { abierta: "abierta", en_curso: "en curso", cerrada: "cerrada", fallada: "fallada", cancelada: "cancelada" };
+const STATE_TEXT = {
+	abierta: "abierta",
+	en_curso: "en curso",
+	por_cerrar: "por cerrar",
+	cerrada: "cerrada",
+	fallada: "fallada",
+	cancelada: "cancelada",
+};
 
 /** Motivo de cierre en palabras, para el detalle: no es el estado. */
 function closeText(reason) {
@@ -81,9 +88,10 @@ function closeText(reason) {
 }
 
 /**
- * Estado de una tarea: cerrada si el agente la cerró bien, fallada si falló,
- * cancelada si el usuario detuvo el turno, en curso si se está trabajando ahora,
- * y abierta en cualquier otro caso.
+ * Estado de una tarea: en curso si se trabaja ahora, cerrada si el agente la dio
+ * por terminada, fallada si falló, cancelada si el usuario detuvo el turno,
+ * por cerrar cuando el turno terminó y todavía nadie la revisó, y abierta si
+ * falta trabajo.
  */
 function taskState(task, live = {}) {
 	if (task?.state === "cancelada" || task?.outcome === "cancelada") return STATE_TEXT.cancelada;
@@ -92,6 +100,8 @@ function taskState(task, live = {}) {
 	if (live.running && live.current && turns.includes(live.current)) return STATE_TEXT.en_curso;
 	if (task?.outcome === "falló") return STATE_TEXT.fallada;
 	if (task?.state === "resuelta" || task?.outcome === "ok") return STATE_TEXT.cerrada;
+	// El turno terminó (con evidencia o no) y la tarea quedó sin revisar.
+	if (task?.outcome === "parcial" || live.ended) return STATE_TEXT.por_cerrar;
 	return STATE_TEXT.abierta;
 }
 
@@ -100,6 +110,7 @@ function liveStatus(live, task) {
 	const state = taskState(task, {
 		running: Boolean(task.sessionId && live.running.has(task.sessionId)),
 		current: task.sessionId ? live.currentTurn.get(task.sessionId) : null,
+		ended: Boolean(task.closeReason),
 	});
 	return state;
 }
@@ -121,10 +132,12 @@ function routes(ctx, live) {
 			method: "GET",
 			handler: async (req, res) => {
 				const tasks = await listTasks(undefined);
+				const now = Date.now();
 				sendJson(res, 200, {
 					tasks: tasks.map((task) => ({
 						...task,
 						workspaceName: task.workspace.split("/").filter(Boolean).pop() ?? task.workspace,
+						openMs: Math.max(0, now - Number(task.createdAt ?? now)),
 						status: liveStatus(live, task),
 					})),
 				});
@@ -237,7 +250,7 @@ function routes(ctx, live) {
 					latestTurn: latest,
 					running,
 					status: task
-						? taskState(task, { running, current: running ? latest : null })
+						? taskState(task, { running, current: running ? latest : null, ended: Boolean(turnEnded) })
 						: turnEnded
 							? "abierta"
 							: running
@@ -260,12 +273,20 @@ function routes(ctx, live) {
 				const snapshot = await ctx.sessionQuery.readSession(sessionId);
 				const byTurn = new Map();
 				const ends = new Map();
+				// Tiempos por turno: cuándo arrancó y cuándo cerró, para medir el trabajo.
+				const times = new Map();
 				let latest = 0;
 				for (const event of snapshot.events) {
 					const turn = Number(event.data?.turn);
 					if (!Number.isSafeInteger(turn) || turn <= 0) continue;
 					if (turn > latest) latest = turn;
+					const stamp = Number(event.time ?? 0);
+					const slot = times.get(turn) ?? {};
+					if (event.type === "turn/start") slot.start = slot.start ?? stamp;
+					else if (event.type === "turn/end") slot.end = stamp;
+					else if (!slot.start && Number.isSafeInteger(stamp) && stamp > 0) slot.start = stamp;
 					if (event.type === "turn/end") ends.set(turn, String(event.data?.reason?.kind ?? "?"));
+					times.set(turn, slot);
 					const bucket = byTurn.get(turn) ?? [];
 					bucket.push(event);
 					byTurn.set(turn, bucket);
@@ -294,6 +315,17 @@ function routes(ctx, live) {
 					const first = list.length ? list[0] : 0;
 					const last = list.length ? list[list.length - 1] : 0;
 					const reason = task?.closeReason ?? (last ? ends.get(last) : null) ?? null;
+					const now = Date.now();
+					// Cuánto se trabajó: los turnos de la tarea, de que arrancaron a que cerraron.
+					let workedMs = 0;
+					for (const turn of list) {
+						const slot = times.get(turn) ?? {};
+						const start = Number(slot.start ?? 0);
+						if (!start) continue;
+						const end = Number(slot.end ?? 0) || (turn === latest ? now : start);
+						workedMs += Math.max(0, end - start);
+					}
+					const openedAt = Number(times.get(first)?.start ?? 0) || Number(task?.createdAt ?? 0) || now;
 					mediaTotal += evidence.media.length;
 					deliverablesTotal += evidence.deliverables.length;
 					items.push({
@@ -306,7 +338,13 @@ function routes(ctx, live) {
 						turns: list,
 						request: userText.get(first) ?? "",
 						state: task?.state ?? "abierta",
-						status: taskState(task, { running: list.includes(latest) && !ends.has(latest), current: latest }),
+						status: taskState(task, {
+							running: list.includes(latest) && !ends.has(latest),
+							current: latest,
+							ended: Boolean(reason),
+						}),
+						openMs: Math.max(0, now - openedAt),
+						workedMs,
 						outcome: task?.outcome ?? "",
 						note: task?.note ?? "",
 						closeReason: reason ? closeText(reason) : null,

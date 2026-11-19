@@ -34,6 +34,7 @@ window.__ModuleLoader__.load({
 			".tsk-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty}",
 			".tsk-side{display:flex;align-items:center;gap:2px;flex:none}",
 			".tsk-state{font-size:12px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;margin-right:6px}.tsk-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
+			".tsk-time{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-steps{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
 			".tsk-steps li{position:relative;padding-left:13px;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-steps li::before{content:'·';position:absolute;left:3px}",
@@ -98,6 +99,31 @@ window.__ModuleLoader__.load({
 			if (!turns.length) return "";
 			if (turns.length === 1) return `turno ${turns[0]}`;
 			return `turnos ${turns[0]}–${turns[turns.length - 1]}`;
+		}
+
+		/** Duración en palabras: 3 min, 2 h 15 min, 3 d. */
+		function took(ms) {
+			const value = Number(ms);
+			if (!Number.isFinite(value) || value <= 0) return "";
+			const minutes = Math.round(value / 60000);
+			if (minutes < 1) return "menos de 1 min";
+			if (minutes < 60) return `${minutes} min`;
+			const hours = Math.floor(minutes / 60);
+			if (hours < 24) return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+			const days = Math.floor(hours / 24);
+			return `${days} d ${hours % 24} h`;
+		}
+
+		/** Cuánto lleva abierta y cuánto se trabajó en ella. */
+		function timeLabel(task, status = "") {
+			const worked = took(task.workedMs);
+			const open = took(task.openMs);
+			// Una tarea terminada no "lleva abierta": se informa solo lo trabajado.
+			const closed = status === "cerrada" || status === "fallada" || status === "cancelada";
+			const parts = [];
+			if (!closed && open) parts.push(`abierta hace ${open}`);
+			if (worked) parts.push(`trabajada ${worked}`);
+			return parts.join(" · ");
 		}
 
 		/**
@@ -321,6 +347,7 @@ window.__ModuleLoader__.load({
 							: h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy }),
 					),
 				),
+				timeLabel(task, status.text) ? h("p", { className: "tsk-time" }, timeLabel(task, status.text)) : null,
 				task.summary ? h("p", { className: "tsk-summary" }, task.summary) : null,
 				task.steps?.length ? h("ul", { className: "tsk-steps" }, task.steps.map((step) => h("li", { key: step }, step))) : null,
 				task.note ? h("p", { className: "tsk-note" }, task.note) : null,

@@ -83,6 +83,18 @@ window.__ModuleLoader__.load({
 		}
 
 		/** Los cinco estados vienen resueltos del servidor. */
+		/** Duración en palabras: 3 min, 2 h 15 min, 3 d. */
+		function took(ms) {
+			const value = Number(ms);
+			if (!Number.isFinite(value) || value <= 0) return "";
+			const minutes = Math.round(value / 60000);
+			if (minutes < 1) return "menos de 1 min";
+			if (minutes < 60) return `${minutes} min`;
+			const hours = Math.floor(minutes / 60);
+			if (hours < 24) return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+			return `${Math.floor(hours / 24)} d ${hours % 24} h`;
+		}
+
 		function statusOf(task) {
 			const text = String(task?.status ?? "").trim();
 			const bad = text === "fallada" || task?.outcome === "falló";
@@ -124,12 +136,15 @@ window.__ModuleLoader__.load({
 			}, [load]);
 
 			const tasks = data.tasks ?? [];
-			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok" && task.outcome !== "cancelada");
-			const fallos = tasks.filter((task) => task.outcome === "falló");
-			const canceladas = tasks.filter((task) => task.state === "cancelada" || task.outcome === "cancelada");
-			const cerradas = tasks.filter((task) => task.state === "resuelta" || task.outcome === "ok");
+			const byState = (label) => tasks.filter((task) => statusOf(task).text === label);
+			const abiertas = byState("abierta");
+			const porCerrar = byState("por cerrar");
+			const fallos = byState("fallada");
+			const canceladas = byState("cancelada");
+			const cerradas = byState("cerrada");
 			const filters = [
 				{ id: "abiertas", label: "Abiertas", count: abiertas.length, list: abiertas },
+				{ id: "por-cerrar", label: "Por cerrar", count: porCerrar.length, list: porCerrar },
 				{ id: "fallos", label: "Fallos", count: fallos.length, list: fallos },
 				{ id: "canceladas", label: "Canceladas", count: canceladas.length, list: canceladas },
 				{ id: "cerradas", label: "Cerradas", count: cerradas.length, list: cerradas },
@@ -158,7 +173,7 @@ window.__ModuleLoader__.load({
 						"div",
 						null,
 						h("p", { className: "brd-title", title: `${nameOf(task)}${task.title && task.title !== nameOf(task) ? ` — ${task.title}` : ""}` }, nameOf(task)),
-						h("p", { className: "brd-where", title: task.note || task.workspace }, `${task.workspaceName}${task.note ? ` · ${task.note}` : ""}`),
+						h("p", { className: "brd-where", title: task.note || task.workspace }, `${task.workspaceName}${task.openMs ? ` · abierta hace ${took(task.openMs)}` : ""}${task.note ? ` · ${task.note}` : ""}`),
 					),
 					h(
 						"div",
@@ -179,7 +194,7 @@ window.__ModuleLoader__.load({
 					"div",
 					{ className: "brd-wrap" },
 					h("div", { className: "brd-head" }, h("h1", { className: "brd-h1" }, "Tareas")),
-					h("p", { className: "brd-line" }, `${abiertas.length} abiertas · ${fallos.length} con fallos · ${canceladas.length} canceladas · ${cerradas.length} cerradas`),
+					h("p", { className: "brd-line" }, `${abiertas.length} abiertas · ${porCerrar.length} por cerrar · ${fallos.length} con fallos · ${canceladas.length} canceladas · ${cerradas.length} cerradas`),
 					h(
 						"div",
 						{ className: "brd-filters" },
