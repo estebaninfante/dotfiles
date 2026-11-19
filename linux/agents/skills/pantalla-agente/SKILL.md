@@ -32,3 +32,19 @@ pantalla-agente desmontar
 - Al terminar, `desmontar`. Si te olvidás, el watchdog la descuelga a los 10 min sin uso (`PANTALLA_AGENTE_TTL`).
 - Si `estado` dice "no montada", montá de nuevo: la salida virtual no sobrevive un `hyprctl reload`.
 - `desmontar` cierra las ventanas que quedaron en el espacio propio para que no salten a las pantallas del usuario; `--conservar` las deja (solo si el usuario quiere verlas).
+
+## Evidencia (capturas, GIF, video)
+
+`evidencia` junta varios pasos en un GIF y una hoja de contactos, para no leer N imágenes:
+
+```bash
+evidencia iniciar --nombre mi-prueba     # sesión; detecta la ventana del asiento o AGENTE-1
+evidencia paso "estado inicial"          # silencioso si sale bien
+evidencia paso "click en Guardar"
+evidencia cerrar                         # imprime gif= y hoja=
+evidencia grabar --fps 4 -- <comando>    # video + gif + hoja en una sola llamada
+```
+
+- Leé **sólo la hoja de contactos** que imprime `cerrar`; el GIF es para que lo mire el usuario.
+- `--asiento N` o `--pantalla OUT` fijan el objetivo a mano; por defecto elige la ventana del asiento más nueva.
+- `agent-seat screenshot` sólo escribe en su runtime o bajo el directorio actual: `evidencia` ya lo resuelve.

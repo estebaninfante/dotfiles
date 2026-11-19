@@ -119,6 +119,12 @@ export async function findTurnTask(sessionId, turn) {
 	return db.tasks.find((task) => task.sessionId === sessionId && task.turn === turn) ?? null;
 }
 
+/** Todas las tareas de un pedido: un mismo pedido puede pedir varias cosas. */
+export async function findTurnTasks(sessionId, turn) {
+	const db = await readDb();
+	return db.tasks.filter((task) => task.sessionId === sessionId && task.turn === turn);
+}
+
 /** Tarea recién creada desde la UI que todavía no sabe de qué turno salió. */
 export async function adoptTurn(sessionId, turn) {
 	return serialized(async () => {

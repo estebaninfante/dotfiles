@@ -4,31 +4,106 @@
  * Tareas por proyecto (carpeta) y evidencia real de cada conversación tomada del
  * log de la sesión (`ctx.sessionQuery`), no de lo que el agente dice.
  *
- * Cada pedido del usuario queda registrado como tarea: al llegar su mensaje
- * dentro de un turno se crea la tarea del proyecto, y un guard impide que el
- * agente actúe mientras esa tarea no exista. Las rutas HTTP viven en routes.js.
+ * Cada pedido del usuario se registra como tarea; el agente la nombra con
+ * `task_plan` (uno o varios títulos si el pedido pide varias cosas) y un guard
+ * le impide trabajar hasta que la nombró. Las rutas HTTP viven en routes.js.
  */
 import { firstLine, rootSession, textOfMessage } from "./events.js";
+import { planTasks } from "./plan.js";
 import { registerRoutes } from "./routes.js";
-import { adoptTurn, createTask, findSessionTask, findTurnTask, updateTask } from "./store.js";
+import { adoptTurn, createTask, findSessionTask, findTurnTask, findTurnTasks, updateTask } from "./store.js";
 
 export const inject = ["webServer", "sessionQuery", "systemPrompt", "tools"];
 
+const TASK_PLAN_DESCRIPTION =
+	"Nombrá las tareas de este pedido antes de trabajar. Una entrada por cada cosa distinta que pidió el usuario, con un título corto y concreto (3 a 8 palabras, en el idioma del usuario).";
+
+const TASK_PLAN_PARAMETERS = {
+	type: "object",
+	additionalProperties: false,
+	properties: {
+		tasks: {
+			type: "array",
+			description: "Tareas del pedido, en el orden en que conviene hacerlas.",
+			items: {
+				type: "object",
+				additionalProperties: false,
+				properties: {
+					title: { type: "string", description: "Nombre corto y concreto de la tarea." },
+					detail: { type: "string", description: "Qué incluye esta tarea, en una línea (opcional)." },
+				},
+				required: ["title"],
+			},
+		},
+	},
+	required: ["tasks"],
+};
+
 export function apply(ctx) {
-	// Estado en vivo de los pedidos: turno actual, cierre y registro en curso.
+	// Estado en vivo de los pedidos: turno actual, cierre, nombrado y registro.
 	const live = {
 		currentTurn: new Map(),
 		turnEnds: new Map(),
 		running: new Set(),
-		registering: new Map(),
+		planned: new Map(),
+		denials: new Map(),
 		inflight: new Map(),
 		requestText: new Map(),
 	};
 	registerRoutes(ctx, live);
 
-	// Un turno = una tarea. Solo cuentan los mensajes con source.kind "user":
+	ctx.effect(
+		() =>
+			ctx.tools.register({
+				name: "task_plan",
+				description: `${TASK_PLAN_DESCRIPTION} Si el pedido tiene una sola tarea, una sola entrada.`,
+				parameters: TASK_PLAN_PARAMETERS,
+				output: {
+					schema: {
+						type: "object",
+						additionalProperties: false,
+						properties: {
+							tasks: {
+								type: "array",
+								items: {
+									type: "object",
+									additionalProperties: false,
+									properties: { id: { type: "string" }, title: { type: "string" } },
+									required: ["id", "title"],
+								},
+							},
+						},
+						required: ["tasks"],
+					},
+					render: (_args, value) => [{ type: "text", text: `Tareas del pedido: ${value.tasks.map((task) => task.title).join(" · ") || "(ninguna)"}` }],
+				},
+				async execute(args, exec) {
+					const session = exec.agent?.session;
+					if (!session?.header?.cwd) return { tasks: [] };
+					const sessionId = session.id;
+					const turn = live.currentTurn.get(sessionId) ?? 1;
+					const plan = planTasks(args);
+					if (!plan.length) return { tasks: [] };
+					const existing = await findTurnTasks(sessionId, turn);
+					const registered = [];
+					for (let index = 0; index < plan.length; index += 1) {
+						const item = plan[index];
+						const task =
+							index === 0 && existing[0]
+								? await updateTask(existing[0].id, { title: item.title, goal: item.detail })
+								: await createTask({ workspace: session.header.cwd, title: item.title, goal: item.detail, sessionId, turn, origin: "auto" });
+						registered.push({ id: task.id, title: task.title });
+					}
+					live.planned.set(sessionId, turn);
+					return { tasks: registered };
+				},
+			}),
+		"tasks: nombrar el pedido",
+	);
+
+	// Un turno = un pedido. Solo cuentan los mensajes con source.kind "user":
 	// los recordatorios y el runtime context del harness también llegan como
-	// user/message y no son pedidos.
+	// user/message y no son pedidos. El título provisorio es la primera línea.
 	async function registerRequest(session) {
 		const sessionId = session.id;
 		const turn = live.currentTurn.get(sessionId);
@@ -40,10 +115,9 @@ export function apply(ctx) {
 			await adoptTurn(sessionId, turn);
 			return;
 		}
-		const title = firstLine(request) || `Pedido del turno ${turn}`;
 		await createTask({
 			workspace: session.header.cwd,
-			title,
+			title: firstLine(request) || `Pedido del turno ${turn}`,
 			sessionId,
 			turn,
 			origin: "auto",
@@ -52,15 +126,12 @@ export function apply(ctx) {
 	function scheduleRegister(session) {
 		const sessionId = session.id;
 		if (live.inflight.has(sessionId)) return;
-		live.registering.set(sessionId, { at: Date.now() });
-		const job = registerRequest(session)
-			.catch(() => undefined)
-			.finally(() => {
-				live.inflight.delete(sessionId);
-				live.registering.delete(sessionId);
-				live.requestText.delete(sessionId);
-			});
+		const job = registerRequest(session).catch(() => undefined);
 		live.inflight.set(sessionId, job);
+		job.finally(() => {
+			live.inflight.delete(sessionId);
+			live.requestText.delete(sessionId);
+		});
 	}
 	ctx.on("session/event", (session, event) => {
 		if (!rootSession(session)) return;
@@ -69,6 +140,7 @@ export function apply(ctx) {
 			if (!Number.isSafeInteger(turn) || turn <= 0) return;
 			live.currentTurn.set(session.id, turn);
 			live.running.add(session.id);
+			live.denials.delete(session.id);
 			if (live.requestText.has(session.id)) scheduleRegister(session);
 			return;
 		}
@@ -78,8 +150,8 @@ export function apply(ctx) {
 			live.running.delete(session.id);
 			if (Number.isSafeInteger(turn) && turn > 0) {
 				live.turnEnds.set(session.id, { turn, reason });
-				findTurnTask(session.id, turn)
-					.then((task) => (task ? updateTask(task.id, { closeReason: reason, closedAt: Date.now() }) : null))
+				findTurnTasks(session.id, turn)
+					.then((tasks) => Promise.all(tasks.map((task) => updateTask(task.id, { closeReason: reason, closedAt: Date.now() }))))
 					.catch(() => undefined);
 			}
 			return;
@@ -94,15 +166,18 @@ export function apply(ctx) {
 	ctx.effect(
 		() =>
 			ctx.tools.guard((execution) => {
-				const sessionId = execution?.agent?.id;
-				if (!sessionId) return undefined;
-				const state = live.registering.get(sessionId);
-				if (!state) return undefined;
-				if (Date.now() - state.at > 8000) return undefined;
-				if (execution.name === "ask_user_question") return undefined;
-				return "El harness está registrando este pedido como tarea del proyecto. Reintentá la misma llamada en un instante.";
+				const session = execution?.agent?.session;
+				if (!session || !rootSession(session)) return undefined;
+				const turn = live.currentTurn.get(session.id);
+				if (!turn) return undefined;
+				if (live.planned.get(session.id) === turn) return undefined;
+				if (execution.name === "task_plan" || execution.name === "ask_user_question") return undefined;
+				const denials = live.denials.get(session.id) ?? 0;
+				if (denials >= 2) return undefined;
+				live.denials.set(session.id, denials + 1);
+				return "Primero nombrá este pedido: llamá a task_plan con un título corto por cada cosa distinta que pidió el usuario.";
 			}),
-		"tasks: cada pedido necesita tarea",
+		"tasks: cada pedido se nombra antes de trabajar",
 	);
 
 	ctx.effect(
@@ -112,7 +187,8 @@ export function apply(ctx) {
 				order: 45,
 				text: [
 					"## Tareas y evidencia",
-					"Cada pedido del usuario queda registrado como una tarea del proyecto en la vista Tareas; no hace falta crearla a mano.",
+					"Cada pedido del usuario se registra como una tarea del proyecto en la vista Tareas.",
+					"Al empezar cada turno llamá a `task_plan` con las tareas del pedido: un título corto y concreto (3 a 8 palabras) por cada cosa distinta que pidió. Si pidió una sola cosa, una sola entrada. Después trabajás; las herramientas están bloqueadas hasta que el pedido tenga nombre.",
 					"Una tarea no está terminada porque se tocaron archivos: está terminada cuando hay prueba que se pueda VER.",
 					"- Si el cambio se ve en pantalla, capturá la app real (pantalla-agente montar y capturar, o grim) y guardá la imagen bajo el proyecto o /tmp.",
 					"- Si hay tests o build, corrélos y mostrá cómo terminaron.",

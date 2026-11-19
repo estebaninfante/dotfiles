@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# evidencia — evidencia visual para agentes: fotos, pasos, GIF, video.
+#
+# Pensada para gastar pocos tokens: `paso` no imprime nada, `cerrar` imprime dos
+# rutas (GIF y hoja de contactos) y el agente lee UNA imagen en vez de N.
+#
+# Uso:
+#   evidencia iniciar [--nombre SLUG] [--asiento N] [--pantalla OUT]
+#   evidencia paso [ETIQUETA...]         # captura un frame (silencioso si ok)
+#   evidencia foto [ARCHIVO]             # una captura; imprime la ruta
+#   evidencia cerrar [--borrar]          # GIF + hoja de contactos; imprime rutas
+#   evidencia grabar [--fps N] [--max S] -- COMANDO...   # video mientras corre
+#   evidencia estado
+#   evidencia limpiar
+#
+# Objetivo (en orden): --asiento/--pantalla al iniciar, EVIDENCIA_ASIENTO,
+# EVIDENCIA_PANTALLA, la ventana del asiento más nueva, o la pantalla montada por
+# `pantalla-agente`. Con el asiento sólo hace falta `agent-seat run`; con
+# `pantalla-agente montar`, la salida AGENTE-1.
+#
+# Variables: EVIDENCIA_FPS (4), EVIDENCIA_MAX (60), EVIDENCIA_ANCHO (900),
+#            EVIDENCIA_DELAY (90, centésimas por frame del GIF).
+set -uo pipefail
+
+BASE="${XDG_RUNTIME_DIR:-/tmp}/evidencia"
+ACTUAL="$BASE/actual"
+SALIDA="${EVIDENCIA_SALIDA:-$HOME/Imágenes/screenshots}"
+FPS="${EVIDENCIA_FPS:-4}"
+MAX="${EVIDENCIA_MAX:-60}"
+ANCHO="${EVIDENCIA_ANCHO:-900}"
+DELAY="${EVIDENCIA_DELAY:-90}"
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+
+# --- objetivo -----------------------------------------------------------------
+
+detectar() {
+    if [ -n "${OBJETIVO:-}" ]; then printf '%s' "$OBJETIVO"; return; fi
+    local n
+    n=$(agent-seat windows 2>/dev/null | jq -r 'if type == "array" and length > 0 then (max_by(.window).window) else empty end' 2>/dev/null)
+    if [ -n "$n" ]; then printf 'asiento:%s' "$n"; return; fi
+    if pantalla-agente estado 2>/dev/null | grep -q 'montada'; then
+        printf 'pantalla:%s' "${PANTALLA_AGENTE_NOMBRE:-AGENTE-1}"; return
+    fi
+    printf ''
+}
+
+capturar() {
+    local destino="$1" obj tipo resto carpeta base
+    obj="$(detectar)"
+    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento (agent-seat run …) o montá pantalla-agente"
+    tipo="${obj%%:*}"
+    resto="${obj#*:}"
+    carpeta="$(dirname "$destino")"
+    base="$(basename "$destino")"
+    mkdir -p "$carpeta"
+    # `agent-seat screenshot` sólo escribe en su runtime o bajo el directorio
+    # actual: se captura desde la carpeta destino con un nombre relativo.
+    case "$tipo" in
+        asiento)  ( cd "$carpeta" && agent-seat screenshot "$resto" --output "$base" ) >/dev/null 2>&1 ;;
+        pantalla) ( cd "$carpeta" && grim -o "$resto" "$base" ) 2>/dev/null ;;
+        *) die "objetivo desconocido: $obj" ;;
+    esac
+    [ -s "$destino" ] || die "la captura falló: $obj"
+}
+
+slug() {
+    iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null <<<"$*" \
+        | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-' | tr -s '-' | sed 's/^-//;s/-$//' \
+        | cut -c1-40
+}
+
+sello() { date +%Y%m%d-%H%M%S; }
+
+# --- comandos -----------------------------------------------------------------
+
+cmd_iniciar() {
+    local nombre="evidencia" obj=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --nombre) nombre=$(slug "${2:?}"); shift 2 ;;
+            --asiento) OBJETIVO="asiento:$2"; shift 2 ;;
+            --pantalla) OBJETIVO="pantalla:$2"; shift 2 ;;
+            *) die "iniciar: opción desconocida $1" ;;
+        esac
+    done
+    obj="$(detectar)"
+    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento o montá pantalla-agente"
+
+    local dir="$BASE/${nombre:-evidencia}-$(sello)"
+    mkdir -p "$dir/frames" || die "no pude crear $dir"
+    printf 'OBJETIVO=%s\nNOMBRE=%s\n' "$obj" "${nombre:-evidencia}" > "$dir/meta"
+    mkdir -p "$BASE"; printf '%s\n' "$dir" > "$ACTUAL"
+    printf '%s\n' "$dir"
+}
+
+cmd_paso() {
+    local dir etiqueta n
+    [ -f "$ACTUAL" ] || die "no hay sesión: evidencia iniciar"
+    dir="$(cat "$ACTUAL")"
+    etiqueta=$(slug "$*")
+    n=$(find "$dir/frames" -name '*.png' 2>/dev/null | wc -l)
+    n=$((n + 1))
+    local archivo
+    archivo=$(printf '%s/frames/%03d%s.png' "$dir" "$n" "${etiqueta:+-$etiqueta}")
+    capturar "$archivo"
+    printf '%s\n' "$archivo" >> "$dir/frames/orden.txt"
+}
+
+cmd_foto() {
+    local archivo="${1:-$SALIDA/evidencia-$(sello).png}"
+    mkdir -p "$(dirname "$archivo")"
+    capturar "$archivo"
+    printf '%s\n' "$archivo"
+}
+
+cmd_cerrar() {
+    local borrar=0
+    [ "${1:-}" = "--borrar" ] && borrar=1
+    [ -f "$ACTUAL" ] || die "no hay sesión: evidencia iniciar"
+    local dir; dir="$(cat "$ACTUAL")"
+    local frames; frames=$(find "$dir/frames" -name '*.png' | sort)
+    [ -n "$frames" ] || die "no hay pasos: evidencia paso"
+
+    local nombre; nombre=$(sed -n 's/^NOMBRE=//p' "$dir/meta")
+    local ts; ts=$(basename "$dir" | sed 's/.*-\([0-9]\{8\}-[0-9]\{6\}\)$/\1/')
+    local gif="$SALIDA/${nombre}-${ts}.gif" hoja="$SALIDA/${nombre}-${ts}-pasos.png"
+    mkdir -p "$SALIDA"
+
+    # GIF animado
+    magick -delay "$DELAY" -loop 0 $frames -resize "${ANCHO}x" -colors 128 "$gif" 2>/dev/null \
+        || die "falló el GIF"
+    # Hoja de contactos: la única imagen que el agente necesita leer
+    local seleccion
+    seleccion=$(printf '%s\n' $frames | awk 'NR==1 || NR%2==1' | head -6)
+    montage $seleccion -tile 3x -geometry 620x372+8+8 -background '#111111' "$hoja" 2>/dev/null \
+        || die "falló la hoja de contactos"
+
+    [ "$borrar" = 1 ] && rm -rf "$dir" && rm -f "$ACTUAL"
+    printf 'gif=%s\nhoja=%s\n' "$gif" "$hoja"
+}
+
+cmd_grabar() {
+    local fps="$FPS" max="$MAX" nombre="grabacion"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --fps) fps="${2:?}"; shift 2 ;;
+            --max) max="${2:?}"; shift 2 ;;
+            --nombre) nombre=$(slug "$2"); shift 2 ;;
+            --) shift; break ;;
+            *) die "grabar: opción desconocida $1" ;;
+        esac
+    done
+    [ $# -gt 0 ] || die "grabar: falta el comando (usá --)"
+    local dir="$BASE/${nombre}-$(sello)"
+    mkdir -p "$dir/frames" || die "no pude crear $dir"
+    local obj; obj="$(detectar)"
+    [ -n "$obj" ] || die "no hay objetivo: levantá el asiento o montá pantalla-agente"
+    printf 'OBJETIVO=%s\nNOMBRE=%s\n' "$obj" "$nombre" > "$dir/meta"
+
+    setsid "$@" >/dev/null 2>&1 </dev/null &
+    local pid=$!
+    local n=0 inicio fin
+    inicio=$(date +%s); fin=$((inicio + max))
+    while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$fin" ]; do
+        n=$((n + 1))
+        capturar "$(printf '%s/frames/%05d.png' "$dir" "$n")" 2>/dev/null || true
+        sleep "$(awk -v f="$fps" 'BEGIN{printf "%.3f", 1/f}')"
+    done
+    kill "$pid" >/dev/null 2>&1 || true
+    [ "$n" -gt 0 ] || die "no se capturó ningún frame"
+
+    local mp4="$SALIDA/${nombre}-$(basename "$dir" | sed 's/.*-\([0-9]\{8\}-[0-9]\{6\}\)$/\1/').mp4"
+    ffmpeg -y -loglevel error -framerate "$fps" -i "$dir/frames/%05d.png" \
+        -pix_fmt yuv420p -vf "scale=${ANCHO}:-2" "$mp4" 2>/dev/null || die "falló el video"
+
+    # GIF y hoja a partir de una muestra (para no procesar 60 frames)
+    local muestra="$dir/muestra"; mkdir -p "$muestra"
+    local k=0; for f in "$dir"/frames/*.png; do
+        k=$((k + 1)); [ $((k % 3)) -eq 0 ] && cp "$f" "$muestra/" 2>/dev/null
+    done
+    local gif="${mp4%.mp4}.gif" hoja="${mp4%.mp4}-pasos.png"
+    magick -delay "$DELAY" -loop 0 "$muestra"/*.png -resize "${ANCHO}x" -colors 128 "$gif" 2>/dev/null || true
+    local sel; sel=$(find "$dir/frames" -name '*.png' | sort | awk 'NR==1 || NR%4==0' | head -6)
+    montage $sel -tile 3x -geometry 620x372+8+8 -background '#111111' "$hoja" 2>/dev/null || true
+
+    rm -rf "$dir"
+    printf 'video=%s\n' "$mp4"
+    [ -f "$gif" ] && printf 'gif=%s\n' "$gif"
+    [ -f "$hoja" ] && printf 'hoja=%s\n' "$hoja"
+}
+
+cmd_estado() {
+    [ -f "$ACTUAL" ] || { echo "sin sesión"; return 0; }
+    local dir; dir="$(cat "$ACTUAL")"
+    printf 'sesión=%s\nframes=%s\n' "$dir" "$(find "$dir/frames" -name '*.png' | wc -l)"
+    sed 's/^/  /' "$dir/meta"
+}
+
+cmd_limpiar() {
+    if [ -f "$ACTUAL" ]; then rm -rf "$(cat "$ACTUAL")" && rm -f "$ACTUAL"; fi
+    echo "limpio"
+}
+
+main() {
+    [ $# -gt 0 ] || die "uso: evidencia iniciar|paso|foto|cerrar|grabar|estado|limpiar"
+    local cmd="$1"; shift
+    case "$cmd" in
+        iniciar) cmd_iniciar "$@" ;;
+        paso)    cmd_paso "$@" ;;
+        foto)    cmd_foto "$@" ;;
+        cerrar)  cmd_cerrar "$@" ;;
+        grabar)  cmd_grabar "$@" ;;
+        estado)  cmd_estado ;;
+        limpiar) cmd_limpiar ;;
+        *) die "uso: evidencia iniciar|paso|foto|cerrar|grabar|estado|limpiar" ;;
+    esac
+}
+
+main "$@"

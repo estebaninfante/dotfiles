@@ -41,5 +41,11 @@
 - Las ventanas de prueba nunca van en las pantallas del usuario. Capturá con `pantalla-agente capturar`.
 - Desmontá al terminar: `pantalla-agente desmontar`. El watchdog la descuelga sola a los 10 min sin uso.
 
+## Evidencia
+- Para varios pasos usá `evidencia`: `evidencia iniciar`, `evidencia paso "…"` (silencioso), `evidencia cerrar` → imprime `gif=` y `hoja=`.
+- Leé **solo la hoja de contactos**, no cada captura: una imagen en vez de N.
+- Secuencia completa en una sola llamada: `evidencia grabar -- <comando>` → video + gif + hoja.
+- Detecta solo el objetivo: la ventana del asiento más nueva o la pantalla montada.
+
 ## Voz
 - Español simple, acción primero, un solo paso al final.
