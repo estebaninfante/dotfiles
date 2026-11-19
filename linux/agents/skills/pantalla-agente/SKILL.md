@@ -16,23 +16,20 @@ nativas, diálogos. Nunca en las pantallas del usuario, ni "un segundo".
 ## Flujo
 
 ```bash
-pantalla-agente montar --tamano 1440x900      # salida AGENTE-1, invisible, en el espacio 12
-pantalla-agente abrir --clase agente-test-ui -- foot -a agente-test-ui sh -c '…'
-pantalla-agente capturar /tmp/shot.png       # PNG de la pantalla completa
-pantalla-agente cerrar                       # cierra las ventanas de prueba
+pantalla-agente montar --tamano 1440x900      # salida AGENTE-1, invisible
+pantalla-agente capturar /tmp/shot.png        # PNG de la pantalla completa (sin apps)
 pantalla-agente desmontar
 ```
 
 ## Reglas
 
+- Sólo para **capturas de pantalla completa**, no para abrir apps.
+- Para abrir, clickear o tipear en una app usá `agent-seat` (skill `agent-seat`): esas ventanas no aparecen nunca en las pantallas del usuario.
+- `pantalla-agente abrir` está bloqueado por `bash-guard`: si el app-id llega tarde, la ventana aparece un instante en las pantallas del usuario.
 - `montar` sin `--tamano` da 1440x900. Poné el del caso: `--tamano 390x844` para mobile, `--transform 3` para vertical.
-- El espacio es **fijo (12)** y `montar` lo muestra en la salida virtual; la regla estática de `windowrules.lua` manda ahí las clases `agente-test-*`, así la ventana nace oculta sin carrera.
-- Por eso la clase tiene que empezar con `agente-test-`: `foot -a agente-test-ui …`, `chromium --class=agente-test-web …`, `kitty --class=agente-test-tui …`.
+- El espacio es **fijo (12)** y `montar` lo muestra en la salida virtual.
 - `capturar` saca la salida entera. La barra de Omarchy ocupa 24 px arriba: recortá si el test es de contenido.
-- Ventanas ya abiertas: `mover class:<clase>` (o `title:<regex>`, `address:0x…`). Nunca mover ventanas del usuario.
 - Al terminar, `desmontar`. Si te olvidás, el watchdog la descuelga a los 10 min sin uso (`PANTALLA_AGENTE_TTL`).
-- Si `estado` dice "no montada", montá de nuevo: la salida virtual no sobrevive un `hyprctl reload`.
-- `desmontar` cierra las ventanas que quedaron en el espacio propio para que no salten a las pantallas del usuario; `--conservar` las deja (solo si el usuario quiere verlas).
 
 ## Evidencia (capturas, GIF, video)
 
