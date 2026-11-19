@@ -442,7 +442,7 @@ window.__ModuleLoader__.load({
 									h("path", { d: "M5 8.2l2 2 4-4.2", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round" }),
 								),
 							),
-							h("span", { className: "evd-title" }, "Evidencia"),
+							h("span", { className: "evd-title" }, "Tareas"),
 							h(
 								"span",
 								{ className: "evd-chevron", "data-open": open },

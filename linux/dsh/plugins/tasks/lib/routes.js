@@ -316,14 +316,16 @@ function routes(ctx, live) {
 					const last = list.length ? list[list.length - 1] : 0;
 					const reason = task?.closeReason ?? (last ? ends.get(last) : null) ?? null;
 					const now = Date.now();
-					// Cuánto se trabajó: los turnos de la tarea, de que arrancaron a que cerraron.
+					// Cuánto se trabajó y cuándo fue la última vez: los turnos de la tarea.
 					let workedMs = 0;
+					let lastWorkedAt = 0;
 					for (const turn of list) {
 						const slot = times.get(turn) ?? {};
 						const start = Number(slot.start ?? 0);
 						if (!start) continue;
 						const end = Number(slot.end ?? 0) || (turn === latest ? now : start);
 						workedMs += Math.max(0, end - start);
+						if (end > lastWorkedAt) lastWorkedAt = end;
 					}
 					const openedAt = Number(times.get(first)?.start ?? 0) || Number(task?.createdAt ?? 0) || now;
 					mediaTotal += evidence.media.length;
@@ -345,6 +347,7 @@ function routes(ctx, live) {
 						}),
 						openMs: Math.max(0, now - openedAt),
 						workedMs,
+						lastWorkedMs: lastWorkedAt ? Math.max(0, now - lastWorkedAt) : null,
 						outcome: task?.outcome ?? "",
 						note: task?.note ?? "",
 						closeReason: reason ? closeText(reason) : null,

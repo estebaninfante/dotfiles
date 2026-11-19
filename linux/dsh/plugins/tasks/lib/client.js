@@ -28,12 +28,16 @@ window.__ModuleLoader__.load({
 			".tsk-btn{box-sizing:border-box;height:26px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);font:inherit;font-size:12px;line-height:1;cursor:pointer;white-space:nowrap}",
 			".tsk-btn:hover{color:var(--dsw-alias-label-primary,#ececf1);border-color:var(--dsw-alias-border-l2,#3b3e46)}.tsk-btn[disabled]{opacity:.5;cursor:default}.tsk-btn--primary{border-color:transparent;background:var(--dsw-alias-state-business-primary,#6ea8fe);color:#0e1116;font-weight:600}",
 			".tsk-line{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".tsk-tools{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:12px}",
+			".tsk-tools-label{margin-right:2px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".tsk-btn[data-active='true']{color:var(--dsw-alias-label-primary,#ececf1);border-color:var(--dsw-alias-border-l2,#3b3e46)}",
 			".tsk-list{display:flex;flex-direction:column;gap:8px;padding-top:10px}",
 			".tsk-card{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:12px;background:var(--dsw-alias-bg-layer-2,#1d2027);transition:border-color .12s ease}.tsk-card:hover{border-color:var(--dsw-alias-border-l2,#3b3e46)}",
 			".tsk-row{display:flex;align-items:center;gap:14px;justify-content:space-between}",
 			".tsk-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty}",
 			".tsk-side{display:flex;align-items:center;gap:2px;flex:none}",
 			".tsk-state{font-size:12px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;margin-right:6px}.tsk-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
+			".tsk-chevron{display:grid;place-items:center;color:var(--dsw-alias-label-tertiary,#9a9aa3);transition:transform .18s ease}.tsk-chevron[data-closed='false']{transform:rotate(180deg)}.tsk-toggle:hover .tsk-chevron{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".tsk-time{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-steps{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
 			".tsk-steps li{position:relative;padding-left:13px;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
@@ -326,7 +330,7 @@ window.__ModuleLoader__.load({
 		}
 
 		function TaskCard(props) {
-			const { task, onChange, busy } = props;
+			const { task, onChange, busy, collapsed, onToggle } = props;
 			const status = statusOf(task);
 			const turns = turnLabel(task);
 			return h(
@@ -335,7 +339,7 @@ window.__ModuleLoader__.load({
 				h(
 					"div",
 					{ className: "tsk-row" },
-					h("p", { className: "tsk-title", title: task.title && task.title !== nameOf(task) ? `${nameOf(task)} — ${task.title}` : nameOf(task) }, nameOf(task)),
+					h("span", { className: "tsk-title", title: nameOf(task) }, nameOf(task)),
 					h(
 						"div",
 						{ className: "tsk-side" },
@@ -345,14 +349,33 @@ window.__ModuleLoader__.load({
 						task.state === "abierta" || task.state === "cancelada"
 							? h(Action, { icon: "check", label: "Resolver tarea", onClick: () => onChange(task, "resuelta"), disabled: busy })
 							: h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy }),
+						h(
+							"button",
+							{ type: "button", className: "tsk-icon tsk-toggle", "aria-expanded": collapsed ? "false" : "true", title: collapsed ? "Expandir tarea" : "Colapsar tarea", onClick: onToggle },
+							h(
+								"span",
+								{ className: "tsk-chevron", "data-closed": collapsed ? "true" : "false" },
+								h(
+									"svg",
+									{ width: 14, height: 14, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
+									h("path", { d: "M4.5 6.5L8 10l3.5-3.5", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" }),
+								),
+							),
+						),
 					),
 				),
-				timeLabel(task, status.text) ? h("p", { className: "tsk-time" }, timeLabel(task, status.text)) : null,
-				task.summary ? h("p", { className: "tsk-summary" }, task.summary) : null,
-				task.steps?.length ? h("ul", { className: "tsk-steps" }, task.steps.map((step) => h("li", { key: step }, step))) : null,
-				task.note ? h("p", { className: "tsk-note" }, task.note) : null,
-				task.media?.length ? h(Gallery, { items: task.media }) : null,
-				h(Deliverables, { items: task.deliverables ?? [] }),
+				collapsed
+					? null
+					: h(
+							React.Fragment,
+							null,
+							timeLabel(task, status.text) ? h("p", { className: "tsk-time" }, timeLabel(task, status.text)) : null,
+							task.summary ? h("p", { className: "tsk-summary" }, task.summary) : null,
+							task.steps?.length ? h("ul", { className: "tsk-steps" }, task.steps.map((step) => h("li", { key: step }, step))) : null,
+							task.note ? h("p", { className: "tsk-note" }, task.note) : null,
+							task.media?.length ? h(Gallery, { items: task.media }) : null,
+							h(Deliverables, { items: task.deliverables ?? [] }),
+						),
 			);
 		}
 
@@ -364,6 +387,9 @@ window.__ModuleLoader__.load({
 			const [busy, setBusy] = useState(false);
 			const [formOpen, setFormOpen] = useState(false);
 			const [draft, setDraft] = useState("");
+			const [collapsed, setCollapsed] = useState(() => new Set());
+			const [order, setOrder] = useState("nuevas");
+			const [grouped, setGrouped] = useState(false);
 
 			const load = React.useCallback(async () => {
 				try {
@@ -384,10 +410,22 @@ window.__ModuleLoader__.load({
 
 			const cwd = data?.workspace ?? (sessionId ? getCwd(sessionId) : "");
 			const tasks = data?.tasks ?? [];
-			const abiertas = tasks.filter((task) => task.state === "abierta" && task.outcome !== "ok" && task.outcome !== "cancelada").length;
-			const fallos = tasks.filter((task) => task.outcome === "falló").length;
-			const canceladas = tasks.filter((task) => task.state === "cancelada" || task.outcome === "cancelada").length;
-			const cerradas = tasks.filter((task) => task.state === "resuelta" || task.outcome === "ok").length;
+			const count = (label) => tasks.filter((task) => statusOf(task).text === label).length;
+			const abiertas = count("abierta");
+			const fallos = count("fallada");
+			const canceladas = count("cancelada");
+			const cerradas = count("cerrada");
+			const porCerrar = count("por cerrar");
+			// Orden y agrupado elegidos por el usuario, como en la lista de sesiones.
+			const sorted = tasks.slice().sort((a, b) => {
+				if (grouped) {
+					const rank = (task) => ["en curso", "por cerrar", "abierta", "fallada", "cancelada", "cerrada"].indexOf(statusOf(task).text);
+					if (rank(a) !== rank(b)) return rank(a) - rank(b);
+				}
+				if (order === "viejas") return (a.turn ?? 0) - (b.turn ?? 0);
+				if (order === "trabajo") return (b.workedMs ?? 0) - (a.workedMs ?? 0);
+				return (b.turn ?? 0) - (a.turn ?? 0);
+			});
 
 			const change = async (task, state) => {
 				setBusy(true);
@@ -443,9 +481,34 @@ window.__ModuleLoader__.load({
 							{ style: { minWidth: 0 } },
 							h("h1", { className: "tsk-h1" }, "Tareas"),
 							cwd ? h("button", { type: "button", className: "tsk-path", title: `Abrir ${cwd}`, onClick: () => openFolder(cwd) }, cwd) : null,
-							h("p", { className: "tsk-line" }, `${abiertas} abiertas · ${fallos} con fallos · ${canceladas} canceladas · ${cerradas} cerradas`),
+							h("p", { className: "tsk-line" }, `${abiertas} abiertas · ${porCerrar} por cerrar · ${fallos} con fallos · ${canceladas} canceladas · ${cerradas} cerradas`),
 						),
 						cwd ? h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: () => setFormOpen((open) => !open) }, "Nueva tarea") : null,
+					),
+					h(
+						"div",
+						{ className: "tsk-tools" },
+						h("span", { className: "tsk-tools-label" }, "Ordenar"),
+						...[
+							["nuevas", "Recientes"],
+							["viejas", "Viejas"],
+							["trabajo", "Trabajo"],
+						].map(([id, label]) =>
+							h("button", {
+								type: "button",
+								key: id,
+								className: "tsk-btn",
+								"data-active": String(order === id),
+								onClick: () => setOrder(id),
+							}, label),
+						),
+						h("button", {
+							type: "button",
+							className: "tsk-btn",
+							"data-active": String(grouped),
+							title: "Agrupar por estado",
+							onClick: () => setGrouped((value) => !value),
+						}, grouped ? "Agrupadas" : "Agrupar"),
 					),
 					cwd && formOpen
 						? h(
@@ -468,7 +531,27 @@ window.__ModuleLoader__.load({
 							)
 						: null,
 					error ? h("p", { className: "tsk-error" }, error.message) : null,
-					tasks.length ? h("div", { className: "tsk-list" }, tasks.map((task) => h(TaskCard, { key: task.id, task, onChange: change, busy }))) : null,
+					tasks.length
+						? h(
+								"div",
+								{ className: "tsk-list" },
+								sorted.map((task) =>
+									h(TaskCard, {
+										key: task.id,
+										task,
+										onChange: change,
+										busy,
+										collapsed: collapsed.has(task.id),
+										onToggle: () => setCollapsed((prev) => {
+											const next = new Set(prev);
+											if (next.has(task.id)) next.delete(task.id);
+											else next.add(task.id);
+											return next;
+										}),
+									}),
+								),
+							)
+						: null,
 					!tasks.length && data ? h("p", { className: "tsk-note" }, "Todavía no hay tareas en esta conversación. Los pedidos nuevos se registran solos.") : null,
 					!tasks.length && data && sessionId ? h("button", { type: "button", className: "tsk-btn", style: { marginTop: 10 }, onClick: backfill, disabled: busy }, "Traer los pedidos de esta conversación") : null,
 				),
