@@ -435,6 +435,17 @@ function routes(ctx, live) {
 				sendJson(res, 200, { ok: true });
 			},
 		},
+		{
+			// Reinicia el harness desde la UI. Se programa con --restart-later para
+			// que la respuesta llegue antes de que el servidor se caiga.
+			path: "/tasks/restart",
+			method: "POST",
+			handler: async (_req, res) => {
+				const child = spawn("dsh-web", ["--restart-later", "2"], { detached: true, stdio: "ignore" });
+				child.unref();
+				sendJson(res, 200, { ok: true, message: "El harness se reinicia en 2 segundos: recargá cuando vuelva." });
+			},
+		},
 	];
 }
 

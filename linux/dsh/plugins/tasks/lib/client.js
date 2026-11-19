@@ -31,6 +31,9 @@ window.__ModuleLoader__.load({
 			".tsk-tools{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:12px}",
 			".tsk-tools-label{margin-right:2px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-btn[data-active='true']{color:var(--dsw-alias-label-primary,#ececf1);border-color:var(--dsw-alias-border-l2,#3b3e46)}",
+			".tsk-restart{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36)}",
+			".tsk-restart-title{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary,#ececf1)}",
+			".tsk-restart-hint{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-list{display:flex;flex-direction:column;gap:8px;padding-top:10px}",
 			".tsk-card{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:12px;background:var(--dsw-alias-bg-layer-2,#1d2027);transition:border-color .12s ease}.tsk-card:hover{border-color:var(--dsw-alias-border-l2,#3b3e46)}",
 			".tsk-row{display:flex;align-items:center;gap:14px;justify-content:space-between}",
@@ -379,6 +382,44 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		/** Ajustes → reiniciar el harness. El servidor tarda unos segundos en volver. */
+		function RestartRow() {
+			useStyles();
+			const [state, setState] = useState("idle");
+			const restart = async () => {
+				setState("busy");
+				try {
+					await api("/restart", {});
+					setState("done");
+					setTimeout(() => setState("idle"), 6000);
+				} catch (cause) {
+					setState("error");
+					setTimeout(() => setState("idle"), 5000);
+				}
+			};
+			const hint =
+				state === "done"
+					? "Reiniciando: cuando vuelva, recargá la página."
+					: state === "error"
+						? "No se pudo reiniciar desde acá. Usá `dsh-web --restart` en la terminal."
+						: "Aplica cambios del host sin abrir la terminal.";
+			return h(
+				"div",
+				{ className: "tsk-restart" },
+				h(
+					"div",
+					{ className: "tsk-restart-text" },
+					h("p", { className: "tsk-restart-title" }, "Reiniciar el harness"),
+					h("p", { className: "tsk-restart-hint" }, hint),
+				),
+				h(
+					"button",
+					{ type: "button", className: "tsk-btn", onClick: restart, disabled: state === "busy" },
+					state === "busy" ? "Reiniciando…" : "Reiniciar",
+				),
+			);
+		}
+
 		function TasksView(props) {
 			useStyles();
 			const { sessionId, getCwd, openFolder, createConversation, navigate } = props;
@@ -591,6 +632,10 @@ window.__ModuleLoader__.load({
 					{ name: "conversation.view", id: "tasks", order: 30, label: () => "Tareas", inject: () => ({ getCwd, openFolder, createConversation, navigate }) },
 					TasksView,
 				),
+			);
+			// Ajustes: reiniciar el harness sin salir a la terminal.
+			ctx.slots.inject("settings.general.item", () =>
+				ctx.slots.register({ name: "settings.general.item", id: "local-restart", order: 80 }, RestartRow),
 			);
 		}
 

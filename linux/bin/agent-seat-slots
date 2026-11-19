@@ -54,6 +54,22 @@ duenio() { # <ventana> -> agente|usuario|quieto
 }
 
 decir "slots del asiento: arrancando (slots ${PRIMER}..$((PRIMER + CANT - 1)))"
+
+# Deja los slots libres con su nombre numérico: si el usuario reusa el ws 11 más
+# adelante, no arrastra la etiqueta del asiento.
+limpiar_slots() {
+    local s actual ventanas
+    for ((s = PRIMER; s < PRIMER + CANT; s++)); do
+        actual="$(hypr workspaces -j | jq -r --argjson s "$s" '.[] | select(.id == $s) | .name' 2>/dev/null | head -1)"
+        ventanas="$(hypr workspaces -j | jq -r --argjson s "$s" '.[] | select(.id == $s) | .windows' 2>/dev/null | head -1)"
+        [ -n "$actual" ] || continue
+        [ "${ventanas:-0}" -gt 0 ] && continue
+        case "$actual" in
+        "▸"*) hypr dispatch "hl.dsp.workspace.rename({ workspace = [[$s]], name = [[$s]] })" >/dev/null ;;
+        esac
+    done
+}
+
 while :; do
     estado="$("$AGENTE" status 2>/dev/null || true)"
     case "$estado" in
@@ -65,6 +81,7 @@ while :; do
         # Al arrancar desde `agent-seat run`, el broker todavía no está.
         if [ "$VIO_CORRER" = 1 ]; then
             decir "slots: el asiento se cerró, salgo"
+            limpiar_slots
             rm -f "$RUTA"
             exit 0
         fi
@@ -112,5 +129,6 @@ while :; do
         i=$((i + 1))
     done
 
+    limpiar_slots
     sleep "$INTERVALO"
 done
