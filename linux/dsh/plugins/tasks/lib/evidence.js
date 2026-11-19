@@ -52,8 +52,8 @@ function fileLike(token) {
 	return last.includes(".") && !last.endsWith(".");
 }
 
-/** Cruza las rutas que el agente nombró al cerrar contra los archivos que tocó de verdad. */
-function checkClaims(declaration, files) {
+/** Cruza las rutas que el agente nombró al cerrar contra lo que hizo de verdad. */
+function checkClaims(declaration, touched) {
 	const claims = [];
 	if (!declaration) return claims;
 	const seen = new Set();
@@ -64,11 +64,15 @@ function checkClaims(declaration, files) {
 		seen.add(token);
 		if (claims.length >= 12) break;
 		const base = token.split("/").pop();
-		const match = files.find((file) => file.path === token || file.path.endsWith(token) || file.path.endsWith(`/${base}`));
+		const match = touched.find((item) => item.path === token || item.path.endsWith(token) || item.path.endsWith(`/${base}`));
 		claims.push(
 			match
-				? { claim: token, verified: true, note: match.path === token ? "tocado en esta conversación" : `coincide con ${match.path}` }
-				: { claim: token, verified: false, note: "nombrado, pero no aparece en las herramientas de archivos" },
+				? {
+						claim: token,
+						verified: true,
+						note: match.via === "entregable" ? "presentado como entregable" : match.path === token ? "tocado en esta conversación" : `coincide con ${match.path}`,
+					}
+				: { claim: token, verified: false, note: "nombrado, pero no aparece en las herramientas de archivos ni en los entregables" },
 		);
 	}
 	return claims;
@@ -120,7 +124,7 @@ export function summarizeEvidence(events, options = {}) {
 			if (call.name === "bash" && typeof call.args.command === "string") {
 				const command = short(call.args.command, 300);
 				commands.push({ command, description: short(call.args.description ?? "", 120), exitCode, turn });
-				if (exitCode !== null && exitCode !== 0) failures.push({ kind: "comando", detail: command, code: exitCode, turn });
+				if (exitCode !== 0) failures.push({ kind: "comando", detail: command, code: exitCode, turn });
 			}
 			if (call.name === "present" && Array.isArray(call.args.files)) {
 				for (const file of call.args.files) {
@@ -164,7 +168,7 @@ export function summarizeEvidence(events, options = {}) {
 			files: fileList.length,
 			commands: commands.length,
 			testsOk: commands.filter((item) => TEST_CMD.test(item.command) && item.exitCode === 0).length,
-			testsFail: commands.filter((item) => TEST_CMD.test(item.command) && item.exitCode !== null && item.exitCode !== 0).length,
+			testsFail: commands.filter((item) => TEST_CMD.test(item.command) && item.exitCode !== 0).length,
 			deliverables: deliverables.length,
 			failures: failures.length,
 		},
@@ -176,7 +180,10 @@ export function summarizeEvidence(events, options = {}) {
 		failures: failures.slice(0, MAX_FAILURES),
 		todos,
 		declaration: declaration ? { turn: lastTurn, text: declaration } : null,
-		claims: checkClaims(declaration, fileList),
+		claims: checkClaims(declaration, [
+			...fileList.map((file) => ({ path: file.path, via: "archivo" })),
+			...deliverables.map((file) => ({ path: file.path, via: "entregable" })),
+		]),
 		cwd: options.cwd ?? null,
 	};
 }

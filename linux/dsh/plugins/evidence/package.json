@@ -1,0 +1,18 @@
+{
+  "name": "dsh-local-evidence",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Evidencia al final de cada conversación: archivos, comandos, tests y entregables tomados del transcript real (lo sirve dsh-local-tasks).",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  }
+}
