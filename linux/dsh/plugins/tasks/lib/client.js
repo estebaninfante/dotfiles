@@ -2,8 +2,8 @@
  * dsh-local-tasks — client half.
  *
  * Vista "Tareas" al lado de Chat y Trajectory: cada pedido del usuario queda
- * como tarea del proyecto (el host la registra al abrir el turno) y cada tarea
- * muestra su prueba visual: capturas y videos levantados del log de la sesión.
+ * como tarea del proyecto (el host la registra al llegar el mensaje) y cada
+ * tarea muestra su prueba visual levantada del log de la sesión.
  */
 window.__ModuleLoader__.load({
 	id: "dsh-local-tasks",
@@ -20,28 +20,31 @@ window.__ModuleLoader__.load({
 		const CSS = [
 			".tsk-root{height:100%;overflow:auto;box-sizing:border-box}",
 			".tsk-wrap{max-width:820px;margin:0 auto;padding:30px 32px 80px}",
-			".tsk-head{display:flex;align-items:flex-start;gap:16px;justify-content:space-between;padding-bottom:14px}",
-			".tsk-eyebrow{margin:0 0 7px;font:500 11px/1.2 ui-monospace,SFMono-Regular,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
-			".tsk-h1{margin:0;font-size:18px;font-weight:550;letter-spacing:-.01em;color:var(--dsw-alias-label-primary,#ececf1)}",
-			".tsk-path{margin:5px 0 0;padding:0;border:0;background:transparent;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1.5 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-secondary,#b9b9c2);cursor:pointer;text-align:left}.tsk-path:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
-			".tsk-path:focus-visible,.tsk-btn:focus-visible,.tsk-input:focus-visible,.tsk-area:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
-			".tsk-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
-			".tsk-btn{box-sizing:border-box;height:28px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:7px;background:transparent;color:var(--dsw-alias-label-primary,#e9e9ee);font:inherit;font-size:12px;line-height:1;cursor:pointer}.tsk-btn:hover{background:var(--dsw-alias-bg-layer-3,#2a2d35)}.tsk-btn[disabled]{opacity:.5;cursor:default}",
+			".tsk-head{display:flex;align-items:flex-start;gap:16px;justify-content:space-between;padding-bottom:12px}",
+			".tsk-h1{margin:0;font-size:18px;font-weight:550;letter-spacing:-.01em;color:var(--dsw-alias-label-primary,#ececf1)}.tsk-path{margin:4px 0 0;padding:0;border:0;background:transparent;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1.5 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-tertiary,#9a9aa3);cursor:pointer;text-align:left}",
+			".tsk-path:hover{color:var(--dsw-alias-label-secondary,#b9b9c2)}.tsk-path:focus-visible,.tsk-btn:focus-visible,.tsk-input:focus-visible,.tsk-area:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
+			".tsk-btn{box-sizing:border-box;height:26px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:7px;background:transparent;color:var(--dsw-alias-label-primary,#e9e9ee);font:inherit;font-size:12px;line-height:1;cursor:pointer;white-space:nowrap}",
+			".tsk-btn:hover{background:var(--dsw-alias-bg-layer-3,#2a2d35)}.tsk-btn[disabled]{opacity:.5;cursor:default}",
 			".tsk-btn--quiet{border-color:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2)}.tsk-btn--primary{border-color:transparent;background:var(--dsw-alias-state-business-primary,#6ea8fe);color:#0e1116;font-weight:600}",
-			".tsk-section{display:flex;align-items:baseline;gap:8px;margin:24px 0 4px;font:500 11px/1.2 ui-monospace,SFMono-Regular,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}.tsk-list{border-top:1px solid var(--dsw-alias-border-l1,#2c2f36)}",
-			".tsk-row{display:flex;align-items:flex-start;gap:12px;padding:12px 2px;border-bottom:1px solid var(--dsw-alias-border-l1,#2c2f36)}.tsk-rowmain{flex:1 1 auto;min-width:0}",
-			".tsk-title{margin:0;font-size:13.5px;font-weight:500;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere}.tsk-goal{margin:3px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3);overflow-wrap:anywhere}",
-			".tsk-meta{margin:6px 0 0;display:flex;gap:12px;flex-wrap:wrap;font:400 12px/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-tertiary,#9a9aa3)}.tsk-state{margin-left:auto;padding-left:12px;font:500 11px/1.7 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap}",
-			".tsk-form{margin:6px 0 8px;padding:16px 0 18px;border-top:1px solid var(--dsw-alias-border-l2,#3b3e46)}",
-			".tsk-label{display:block;margin:0 0 5px;font:500 11px/1.3 ui-monospace,SFMono-Regular,monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
-			".tsk-input,.tsk-area{box-sizing:border-box;width:100%;margin:0 0 12px;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:7px;background:var(--dsw-specific-input-major,#202226);color:var(--dsw-alias-label-primary,#ececf1);font:inherit;font-size:13px}.tsk-area{min-height:62px;resize:vertical;line-height:1.5}",
+			".tsk-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end}",
+			".tsk-section{display:flex;align-items:baseline;gap:8px;margin:22px 0 2px;font:500 12px/1.4 ui-monospace,SFMono-Regular,monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".tsk-count{font-weight:400;color:var(--dsw-alias-label-quaternary,#7f838c)}.tsk-list{border-top:1px solid var(--dsw-alias-border-l1,#2c2f36)}",
+			".tsk-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:center;padding:12px 2px;border-bottom:1px solid var(--dsw-alias-border-l1,#2c2f36)}",
+			".tsk-main{min-width:0}",
+			".tsk-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			".tsk-goal{margin:2px 0 0;font-size:12px;line-height:1.45;color:var(--dsw-alias-label-tertiary,#9a9aa3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			".tsk-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px}",
+			".tsk-state{font:400 11px/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap}",
+			".tsk-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
+			".tsk-form{margin:4px 0 8px;padding:14px 0 16px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36)}",
+			".tsk-label{display:block;margin:0 0 4px;font:500 11px/1.3 ui-monospace,SFMono-Regular,monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".tsk-input,.tsk-area{box-sizing:border-box;width:100%;margin:0 0 10px;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:7px;background:var(--dsw-specific-input-major,#202226);color:var(--dsw-alias-label-primary,#ececf1);font:inherit;font-size:13px}.tsk-area{min-height:58px;resize:vertical;line-height:1.5}",
 			".tsk-note{margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}.tsk-error{margin:10px 0 0;font-size:12px;color:var(--dsw-alias-state-danger-primary,#f2777a)}",
-			".tsk-proof{margin:10px 0 2px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#1d2027)}",
+			".tsk-proof{grid-column:1 / -1;margin:8px 0 2px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#1d2027)}",
 			".tsk-evline{margin:0;font:400 12px/1.6 ui-monospace,SFMono-Regular,monospace;color:var(--dsw-alias-label-secondary,#b9b9c2);text-wrap:balance}.tsk-evline a{color:var(--dsw-alias-label-primary,#e9e9ee);text-decoration:none;border-bottom:1px solid var(--dsw-alias-border-l2,#3b3e46)}.tsk-evline a:hover{border-bottom-color:currentColor}",
-			".tsk-gallery{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}.tsk-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-3,#2a2d35)}.tsk-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
-			".tsk-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}.tsk-video{width:212px;height:120px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
-			".tsk-deliverables{margin:10px 0 0}",
-			"@media (max-width:640px){.tsk-wrap{padding:20px 18px 88px}.tsk-head{flex-direction:column;gap:10px}.tsk-row{flex-wrap:wrap}.tsk-state{margin-left:0;padding-left:0}}",
+			".tsk-gallery{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}.tsk-thumb{display:block;width:124px;height:78px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-3,#2a2d35)}.tsk-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
+			".tsk-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}.tsk-video{width:200px;height:114px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
+			"@media (max-width:640px){.tsk-wrap{padding:20px 18px 88px}.tsk-head{flex-direction:column;gap:10px}.tsk-row{grid-template-columns:minmax(0,1fr)}.tsk-side{align-items:flex-start;flex-direction:row;gap:8px;flex-wrap:wrap}.tsk-actions{justify-content:flex-start}}",
 		].join("\n");
 
 		async function api(path, body) {
@@ -67,15 +70,11 @@ window.__ModuleLoader__.load({
 			}, []);
 		}
 
-		function ageLabel(time) {
-			if (!time) return "";
-			const minutes = Math.round((Date.now() - time) / 60000);
-			if (minutes < 1) return "recién";
-			if (minutes < 60) return `hace ${minutes} min`;
-			const hours = Math.round(minutes / 60);
-			if (hours < 24) return `hace ${hours} h`;
-			const days = Math.round(hours / 24);
-			return days === 1 ? "ayer" : `hace ${days} d`;
+		function statusOf(task) {
+			if (task.state === "resuelta") return { text: "resuelta", bad: false };
+			const status = task.status ?? null;
+			if (!status) return { text: "abierta", bad: false };
+			return { text: status, bad: !/^(en curso|cerró bien|abierta)$/.test(status) };
 		}
 
 		function proofLine(evidence) {
@@ -89,32 +88,34 @@ window.__ModuleLoader__.load({
 				.join(" · ");
 		}
 
-		function Media(props) {
-			const items = props.items ?? [];
-			if (!items.length) return h("p", { className: "tsk-note" }, "Sin captura ni video en este pedido: no hay prueba que se pueda ver.");
+		function Proof(props) {
+			const { proof } = props;
+			if (proof.phase === "loading") return h("p", { className: "tsk-note" }, "Leyendo la prueba del pedido…");
+			if (proof.phase === "error") return h("p", { className: "tsk-error" }, proof.error.message);
+			const evidence = proof.evidence;
+			const media = evidence.media ?? [];
+			const deliverables = evidence.deliverables ?? [];
 			return h(
 				"div",
-				{ className: "tsk-gallery" },
-				items.map((item) =>
-					item.kind === "video"
-						? h("video", { key: item.path, className: "tsk-video", controls: true, preload: "metadata", src: item.url })
-						: h(
-								"a",
-								{ key: item.path, className: "tsk-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.path },
-								h("img", { src: item.url, alt: item.label, loading: "lazy" }),
+				{ className: "tsk-proof" },
+				h("p", { className: "tsk-evline" }, proofLine(evidence) || "Sin prueba visual"),
+				media.length
+					? h(
+							"div",
+							{ className: "tsk-gallery" },
+							media.map((item) =>
+								item.kind === "video"
+									? h("video", { key: item.path, className: "tsk-video", controls: true, preload: "metadata", src: item.url })
+									: h(
+											"a",
+											{ key: item.path, className: "tsk-thumb", href: item.url, target: "_blank", rel: "noreferrer", title: item.path },
+											h("img", { src: item.url, alt: item.label, loading: "lazy" }),
+										),
 							),
-				),
-			);
-		}
-
-		function Deliverables(props) {
-			const items = props.items ?? [];
-			if (!items.length) return null;
-			return h(
-				"div",
-				{ className: "tsk-deliverables" },
-				h("p", { className: "tsk-label" }, `Entregables · ${items.length}`),
-				items.map((file) =>
+						)
+					: null,
+				!media.length && !deliverables.length ? h("p", { className: "tsk-note" }, "Cerró sin captura ni video: no hay prueba que se pueda ver.") : null,
+				deliverables.map((file) =>
 					h(
 						"p",
 						{ className: "tsk-evline", key: file.path },
@@ -125,51 +126,33 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		function Proof(props) {
-			const { proof } = props;
-			if (proof.phase === "loading") return h("p", { className: "tsk-note" }, "Leyendo la prueba del pedido…");
-			if (proof.phase === "error") return h("p", { className: "tsk-error" }, proof.error.message);
-			const evidence = proof.evidence;
-			const empty = !evidence.media.length && !evidence.deliverables.length;
-			return h(
-				"div",
-				{ className: "tsk-proof" },
-				h("p", { className: "tsk-evline" }, proofLine(evidence)),
-				empty ? h("p", { className: "tsk-note" }, "Sin prueba visual: el agente cerró sin captura ni video.") : null,
-				empty ? null : h(Media, { items: evidence.media }),
-				h(Deliverables, { items: evidence.deliverables ?? [] }),
-			);
-		}
-
 		function TaskRow(props) {
 			const { task, onOpen, onResolve, onReopen, onProof, proof, proofOpen, busy } = props;
+			const status = statusOf(task);
 			return h(
 				"div",
 				{ className: "tsk-row" },
 				h(
 					"div",
-					{ className: "tsk-rowmain" },
-					h("p", { className: "tsk-title" }, task.title),
-					task.goal ? h("p", { className: "tsk-goal" }, task.goal) : null,
-					h(
-						"p",
-						{ className: "tsk-meta" },
-						h("span", null, `creada ${ageLabel(task.createdAt)}`),
-						task.turn ? h("span", null, `turno ${task.turn}`) : null,
-						h("span", null, task.sessionId ? "conversación ligada" : "sin conversación"),
-					),
-					proofOpen ? h(Proof, { proof }) : null,
+					{ className: "tsk-main" },
+					h("p", { className: "tsk-title", title: task.title }, task.title),
+					task.goal ? h("p", { className: "tsk-goal", title: task.goal }, task.goal) : null,
+				),
+				h(
+					"div",
+					{ className: "tsk-side" },
+					h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined, title: task.turn ? `turno ${task.turn}` : undefined }, status.text),
 					h(
 						"div",
-						{ className: "tsk-actions", style: { marginTop: 9 } },
-						h("button", { type: "button", className: task.sessionId ? "tsk-btn tsk-btn--quiet" : "tsk-btn", onClick: () => onOpen(task), disabled: busy }, task.sessionId ? "Ver conversación" : "Abrir conversación"),
-						task.sessionId ? h("button", { type: "button", className: "tsk-btn tsk-btn--quiet", onClick: () => onProof(task), disabled: !task.sessionId }, proofOpen ? "Ocultar prueba" : "Prueba") : null,
+						{ className: "tsk-actions" },
+						h("button", { type: "button", className: "tsk-btn tsk-btn--quiet", onClick: () => onOpen(task), disabled: busy }, task.sessionId ? "Abrir" : "Empezar"),
+						task.sessionId ? h("button", { type: "button", className: "tsk-btn tsk-btn--quiet", onClick: () => onProof(task), disabled: busy }, proofOpen ? "Ocultar" : "Prueba") : null,
 						task.state === "abierta"
 							? h("button", { type: "button", className: "tsk-btn tsk-btn--quiet", onClick: () => onResolve(task), disabled: busy }, "Resolver")
 							: h("button", { type: "button", className: "tsk-btn tsk-btn--quiet", onClick: () => onReopen(task), disabled: busy }, "Reabrir"),
 					),
 				),
-				h("span", { className: "tsk-state" }, task.status ?? task.state),
+				proofOpen ? h(Proof, { proof }) : null,
 			);
 		}
 
@@ -261,6 +244,19 @@ window.__ModuleLoader__.load({
 				}
 			};
 
+			const importRequests = async () => {
+				if (!props.sessionId) return;
+				setBusy(true);
+				try {
+					await api("/backfill", { session: props.sessionId });
+					await load();
+				} catch (cause) {
+					setError(cause);
+				} finally {
+					setBusy(false);
+				}
+			};
+
 			const showProof = async (task) => {
 				if (proof?.id === task.id) {
 					setProof(null);
@@ -304,13 +300,12 @@ window.__ModuleLoader__.load({
 						h(
 							"div",
 							{ style: { minWidth: 0 } },
-							h("p", { className: "tsk-eyebrow" }, "Proyecto"),
 							h("h1", { className: "tsk-h1" }, "Tareas"),
 							cwd ? h("button", { type: "button", className: "tsk-path", title: `Abrir ${cwd}`, onClick: () => openFolder(cwd) }, cwd) : null,
 						),
 						cwd ? h("div", { className: "tsk-actions" }, h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: () => setFormOpen(true) }, "Nueva tarea")) : null,
 					),
-					!cwd ? h("p", { className: "tsk-note" }, "Esta sesión no tiene carpeta. Abrí un workspace (una carpeta) y volvé: las tareas se guardan por carpeta.") : null,
+					!cwd ? h("p", { className: "tsk-note" }, "Esta sesión no tiene carpeta. Abrí un workspace y volvé: las tareas se guardan por carpeta.") : null,
 					cwd && formOpen
 						? h(
 								"div",
@@ -334,8 +329,8 @@ window.__ModuleLoader__.load({
 								}),
 								h(
 									"div",
-									{ className: "tsk-actions" },
-									h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: create, disabled: busy || !draft.title.trim() }, "Guardar tarea"),
+									{ className: "tsk-actions", style: { justifyContent: "flex-start" } },
+									h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: create, disabled: busy || !draft.title.trim() }, "Guardar"),
 									h("button", { type: "button", className: "tsk-btn", onClick: () => { setFormOpen(false); setDraft({ title: "", goal: "" }); } }, "Cancelar"),
 								),
 							)
@@ -343,13 +338,18 @@ window.__ModuleLoader__.load({
 					error ? h("p", { className: "tsk-error" }, error.message) : null,
 					phase === "loading" ? h("p", { className: "tsk-note" }, "Leyendo tareas…") : null,
 					cwd && abiertas.length
-						? h(React.Fragment, null, h("p", { className: "tsk-section" }, `Abiertas · ${abiertas.length}`), h("div", { className: "tsk-list" }, abiertas.map(row)))
+						? h(React.Fragment, null, h("p", { className: "tsk-section" }, "Abiertas ", h("span", { className: "tsk-count" }, String(abiertas.length))), h("div", { className: "tsk-list" }, abiertas.map(row)))
 						: null,
 					cwd && resueltas.length
-						? h(React.Fragment, null, h("p", { className: "tsk-section" }, `Resueltas · ${resueltas.length}`), h("div", { className: "tsk-list" }, resueltas.map(row)))
+						? h(React.Fragment, null, h("p", { className: "tsk-section" }, "Resueltas ", h("span", { className: "tsk-count" }, String(resueltas.length))), h("div", { className: "tsk-list" }, resueltas.map(row)))
 						: null,
 					cwd && !tasks.length && phase === "ready"
-						? h("p", { className: "tsk-note" }, "Todavía no hay tareas en esta carpeta. Cada pedido que hagas en el chat queda registrado acá solo.")
+						? h(
+								React.Fragment,
+								null,
+								h("p", { className: "tsk-note" }, "Cada pedido del chat queda acá solo."),
+								props.sessionId ? h("button", { type: "button", className: "tsk-btn", style: { marginTop: 10 }, onClick: importRequests, disabled: busy }, "Traer los pedidos de esta conversación") : null,
+							)
 						: null,
 				),
 			);

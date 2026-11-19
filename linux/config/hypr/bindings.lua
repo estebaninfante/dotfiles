@@ -180,4 +180,10 @@ hl.bind(main_mod .. " + SHIFT + J", hl.dsp.exec_cmd("~/.local/bin/clipboard-sync
 hl.bind(main_mod .. " + SHIFT + P", hl.dsp.exec_cmd("~/.local/bin/ohm"), { description = "Ohm" })
 hl.bind(main_mod .. " + SHIFT + Y", hl.dsp.exec_cmd("~/.local/bin/ohm https://youtube.com/"), { description = "Ohm: YouTube" })
 
+-- Agent Seat (PR #15087): saltar a la ventana que maneja el agente, sin que el
+-- agente tenga que tocar tu foco. Si el asiento está vacío, `show-or-start` abre
+-- chromium ahí, sandboxeado, en el workspace del asiento (el navegador por
+-- defecto de esta máquina está roto, así que no se usa `show --start`).
+hl.bind(main_mod .. " + CTRL + ALT + X", hl.dsp.exec_cmd("agent-seat show-or-start"), { description = "Agent Seat" })
+
 return true

@@ -16,8 +16,12 @@ local AGENT_CLASS = "agent-[0-9]+(\\..*)?"
 
 agent_workspaces.place("agent-seat-apps", { class = AGENT_CLASS }, true)
 
-o.window(AGENT_CLASS, { tag = "+agent-seat" })
-o.window({ tag = "agent-seat" }, {
+-- `o.window(match, rules)` de Omarchy sólo fusiona el match y llama a
+-- hl.window_rule; acá se usa directo porque este archivo se carga al final de
+-- hyprland.lua, cuando `o` ya no está en alcance.
+hl.window_rule({ match = { class = AGENT_CLASS }, tag = "+agent-seat" })
+hl.window_rule({
+  match = { tag = "agent-seat" },
   render_unfocused = true,
   no_initial_focus = true,
   no_dim = true,

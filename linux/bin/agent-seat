@@ -36,7 +36,16 @@ shift || true
 case "$cmd" in
     run|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
         exec "omarchy-agent-seat-$cmd" "$@" ;;
+    show-or-start)
+        # Salta al asiento si ya hay ventanas; si está vacío, abre chromium ahí.
+        # El navegador por defecto de esta máquina está roto (/usr/bin/brave ->
+        # /opt/brave-bin, que no existe), así que no se usa `show --start`.
+        if omarchy-agent-seat-windows 2>/dev/null | grep -q '"window"'; then
+            exec omarchy-agent-seat-show "$@"
+        fi
+        omarchy-agent-seat-run chromium about:blank >/dev/null || exit 1
+        exec omarchy-agent-seat-show ;;
     *)
-        echo "uso: agent-seat run|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show" >&2
+        echo "uso: agent-seat run|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show|show-or-start" >&2
         exit 1 ;;
 esac

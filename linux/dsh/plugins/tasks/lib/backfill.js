@@ -14,10 +14,17 @@ export function planBackfill(events) {
 	const requests = new Map();
 	const ends = new Map();
 	let turn = 0;
+	let pending = "";
 	for (const event of Array.isArray(events) ? events : []) {
 		if (event.type === "turn/start") {
 			const value = Number(event.data?.turn ?? 0);
-			if (Number.isSafeInteger(value) && value > 0) turn = value;
+			if (Number.isSafeInteger(value) && value > 0) {
+				turn = value;
+				if (pending && !requests.has(turn)) {
+					requests.set(turn, pending);
+					pending = "";
+				}
+			}
 			continue;
 		}
 		if (event.type === "turn/end") {
@@ -29,8 +36,9 @@ export function planBackfill(events) {
 		if (event.type !== "user/message") continue;
 		if (event.data?.source?.kind !== "user") continue;
 		const text = textOfMessage(event.data);
-		if (!text || !turn || requests.has(turn)) continue;
-		requests.set(turn, text);
+		if (!text) continue;
+		if (!turn) pending = text;
+		else if (!requests.has(turn)) requests.set(turn, text);
 	}
 	return [...requests.entries()]
 		.sort((a, b) => a[0] - b[0])
