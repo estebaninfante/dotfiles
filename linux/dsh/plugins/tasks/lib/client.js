@@ -49,10 +49,11 @@ window.__ModuleLoader__.load({
 			".tsk-input:focus-visible,.tsk-area:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:0}",
 			".tsk-note{margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-error{margin:10px 0 0;font-size:12px;color:var(--dsw-alias-state-danger-primary,#f2777a)}",
-			".tsk-folder{display:inline-flex;align-items:center;gap:6px;max-width:260px;height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary,#9a9aa3);font:inherit;font-size:11.5px;cursor:pointer}",
-			".tsk-folder:hover{background:var(--dsw-alias-bg-layer-3,#2a2d35);color:var(--dsw-alias-label-secondary,#b9b9c2)}",
+			".tsk-folder{display:inline-flex;align-items:center;gap:6px;max-width:280px;height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);font:inherit;font-size:12px;cursor:pointer}",
+			".tsk-folder:hover{background:var(--dsw-alias-bg-layer-3,#2a2d35);color:var(--dsw-alias-label-primary,#ececf1)}",
 			".tsk-folder:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".tsk-foldername{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+			"@media (max-width:640px){.tsk-wrap{padding:20px 18px 88px}.tsk-head{flex-direction:column;gap:10px}.tsk-row{flex-wrap:wrap}.tsk-state{margin-left:0;padding-left:0}}",
 		].join("\n");
 
 		async function api(path, body) {
@@ -322,7 +323,7 @@ window.__ModuleLoader__.load({
 			const cwd = useCwd(props.getCwd, props.sessionId);
 			if (!cwd) return null;
 			const home = cwd.replace(/^\/home\/[^/]+/, "~");
-			const name = cwd.split("/").filter(Boolean).pop() ?? cwd;
+			const shown = home.length > 38 ? `…/${home.split("/").slice(-2).join("/")}` : home;
 			return h(
 				"button",
 				{ type: "button", className: "tsk-folder", title: `Abrir ${cwd}`, onClick: () => props.openFolder(cwd) },
@@ -335,7 +336,7 @@ window.__ModuleLoader__.load({
 						strokeWidth: 1.2,
 					}),
 				),
-				h("span", { className: "tsk-foldername" }, home === cwd ? name : home),
+				h("span", { className: "tsk-foldername" }, shown),
 			);
 		}
 

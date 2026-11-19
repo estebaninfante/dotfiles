@@ -209,7 +209,11 @@ end
 
 local EXPO_MODE = "release"
 local EXPO_POLL_MS = 25
-local EXPO_FLY_MS = 320
+-- Cuánto se deja correr la apertura antes de commitear el tile elegido. Chico a
+-- propósito: el commit retargetea la animación en vuelo, así el viaje es UN
+-- movimiento (antes 320 ms = la grilla se desplegaba, quedaba quieta y recién
+-- después caía: dos movimientos y ~720 ms de espera).
+local EXPO_FLY_MS = 80
 local EXPO_PEEK_ZOOM = 2.65
 local EXPO_IDLE_MS = 1200
 local EXPO_CLOSE_TICKS = 17
@@ -299,7 +303,14 @@ end
 
 fly_open_and_go = function(n)
     local cur = spaces.local_of(hl.get_active_workspace())
-    plugin.expo("on")
+    -- Vuelo en UN solo movimiento: abrir en "peek" (la grilla entra un poco más
+    -- grande que la pantalla, o sea el escritorio actual se aleja apenas) y a los
+    -- EXPO_FLY_MS commitear el tile elegido. El plugin re-apunta la MISMA
+    -- animación de tamaño/posición (`applyCloseTarget`), así que no hay pausa
+    -- entre "se despliega la grilla" y "cae al espacio". Con `expo("on")` la
+    -- grilla se abría entera y recién después caía (dos movimientos).
+    local peeked = plugin.peek and pcall(plugin.peek, EXPO_PEEK_ZOOM)
+    if not peeked then plugin.expo("on") end
     expo_fly.open = true
     expo_fly.sel  = cur and ws_grid_index(cur) or nil
     expo_fly.want = n
