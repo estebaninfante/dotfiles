@@ -11,12 +11,39 @@ Controles (también via kokoro-ctl):
   señales:  SIGUSR1 pausa/continuar | SIGUSR2 siguiente | SIGURG anterior | SIGTERM salir
   teclado (si corre en una terminal): espacio = pausa, n = siguiente, b = anterior, q = salir
 """
-import argparse, os, queue, re, signal, subprocess, sys, threading, warnings
+import argparse, json, os, queue, re, signal, socket, struct, subprocess, sys, threading, warnings
 warnings.filterwarnings("ignore")
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 CONFIG = os.path.expanduser("~/.config/kokoro-reader/voice")
+# El Kokoro del sistema (kokoro-tts.service): acá no se carga ningún modelo.
+SOCKET = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/kokoro-{os.getuid()}",
+                      "kokoro-tts.sock")
+
+
+def _recv(sock, n):
+    buf = b""
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise OSError("el servidor cerró la conexión")
+        buf += chunk
+    return buf
+
+
+def synth_pcm(text: str, voice: str, speed: float) -> bytes:
+    """Pide el fragmento al servidor y devuelve PCM s16le 24 kHz mono."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(120)
+        sock.connect(SOCKET)
+        sock.sendall((json.dumps({"text": text, "voice": voice, "speed": speed}) + "\n").encode())
+        parts = []
+        while True:
+            largo = struct.unpack(">I", _recv(sock, 4))[0]
+            if largo == 0:
+                return b"".join(parts)
+            parts.append(_recv(sock, largo))
+
 
 def log(*a):
     print(*a, file=sys.stderr, flush=True)
@@ -162,25 +189,14 @@ def main():
     n = len(chunks)
     log(f"📄 {n} fragmentos | voz: {voice} | velocidad: {args.speed}")
 
-    from kokoro import KPipeline
-    import numpy as np
-    pipe = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-
     player = Player()
     q = queue.Queue(maxsize=3)
     state = {"next": 0, "gen": 0, "quit": False, "cur": 0}
 
     def synth(i):
-        parts = []
-        for _gs, _ps, audio in pipe(chunks[i], voice=voice, speed=args.speed):
-            if state["quit"]:
-                return None
-            a = np.asarray(getattr(audio, "numpy", lambda: audio)(), dtype=np.float32)
-            parts.append(a)
-        if not parts:
-            return b""
-        a = np.concatenate(parts)
-        return (np.clip(a, -1, 1) * 32767).astype(np.int16).tobytes()
+        if state["quit"]:
+            return None
+        return synth_pcm(chunks[i], voice, args.speed)
 
     def producer():
         while not state["quit"]:

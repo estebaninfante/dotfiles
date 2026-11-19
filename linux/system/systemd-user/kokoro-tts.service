@@ -1,5 +1,5 @@
 [Unit]
-Description=Kokoro TTS local para Read Aloud (Zotero)
+Description=Kokoro TTS del sistema (un solo modelo: Orión, Zotero Read Aloud y LearnHarness)
 After=pipewire.service
 
 [Service]
@@ -7,6 +7,9 @@ Type=simple
 ExecStart=%h/.local/bin/kokoro-server
 Restart=on-failure
 RestartSec=5
+# Se queda caliente a propósito: Orión contesta por voz. Para que suelte el
+# modelo tras un rato sin uso, descomentá con los minutos que quieras.
+#Environment=KOKORO_IDLE_S=900
 
 [Install]
 WantedBy=default.target

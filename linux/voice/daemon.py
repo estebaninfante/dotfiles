@@ -26,11 +26,13 @@ import select
 import shutil
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import wave
 
 from engine import (
     CACHE_DIR,
@@ -79,8 +81,6 @@ _stop = False
 _play_epoch = 0
 _chatterbox_proc: subprocess.Popen | None = None
 _chatterbox_lock = threading.Lock()
-_kokoro_proc: subprocess.Popen | None = None
-_kokoro_lock = threading.Lock()
 # Proceso de playback en curso: así el stop corta EXACTAMENTE ese pw-play, sin
 # `pkill -f` (que también mataba otros pw-play, earcons e incluso un shell cuyo
 # comando mencionara el patrón).
@@ -157,59 +157,62 @@ def _ensure_chatterbox_server() -> subprocess.Popen | None:
         return None
 
 
-def _ensure_kokoro_server() -> subprocess.Popen | None:
-    """Start or restart the persistent kokoro server. Returns the Popen."""
-    global _kokoro_proc
+# ── El Kokoro del sistema ────────────────────────────────────────────────
+# Un solo proceso y un solo modelo para todos (kokoro-tts.service, en
+# linux/voice/kokoro_server.py). Este daemon ya no arranca ningún Kokoro: le
+# pide el audio por el socket. Si no responde, la cadena sigue con piper.
+KOKORO_SOCKET = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/kokoro-{os.getuid()}", "kokoro-tts.sock"
+)
 
-    if _kokoro_proc is not None:
-        rc = _kokoro_proc.poll()
-        if rc is None:
-            return _kokoro_proc
-        log(f"kokoro server died (rc={rc}), restarting")
-        _kokoro_proc = None
 
-    venv_python = os.path.expanduser("~/.local/share/tts/venv-kokoro/bin/python")
-    if not os.path.exists(venv_python):
-        log("kokoro: venv python no encontrado")
-        return None
+def _recv_exact(sock: socket.socket, n: int) -> bytes | None:
+    buf = b""
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            return None
+        buf += chunk
+    return buf
 
-    script = os.path.join(os.path.dirname(__file__), "kokoro_server.py")
-    if not os.path.exists(script):
-        log(f"kokoro: server script no encontrado: {script}")
-        return None
 
-    log("kokoro server starting...")
+def _kokoro_say(text: str, voice: str, wav: str, timeout: float = 120) -> bool:
+    """Pide la frase al Kokoro del sistema y la escribe como WAV 24 kHz mono."""
+    started = time.time()
     try:
-        proc = subprocess.Popen(
-            [venv_python, script],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
-        _kokoro_proc = proc
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            sock.connect(KOKORO_SOCKET)
+            sock.sendall((json.dumps({"text": text, "voice": voice}) + "\n").encode())
+            parts = []
+            while True:
+                head = _recv_exact(sock, 4)
+                if head is None:
+                    return False
+                largo = struct.unpack(">I", head)[0]
+                if largo == 0:
+                    break
+                pcm = _recv_exact(sock, largo)
+                if pcm is None:
+                    return False
+                parts.append(pcm)
+    except OSError as exc:
+        log(f"kokoro: el servicio del sistema no responde ({exc})")
+        return False
 
-        def _read_stderr():
-            for line in proc.stderr:
-                line = line.rstrip()
-                if line:
-                    log(f"kokoro: {line}")
-        threading.Thread(target=_read_stderr, daemon=True).start()
-
-        time.sleep(2)
-        resp = _server_request({"ping": True}, timeout=90, proc=proc)
-        if resp and resp.get("pong"):
-            log("kokoro server ready")
-            return proc
-        log("kokoro server failed to respond to ping")
-        proc.terminate()
-        _kokoro_proc = None
-        return None
-    except Exception as e:
-        log(f"kokoro server start failed: {e}")
-        _kokoro_proc = None
-        return None
+    pcm = b"".join(parts)
+    if not pcm:
+        return False
+    with wave.open(wav, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(24000)
+        out.writeframes(pcm)
+    duration = len(pcm) / 2 / 24000
+    synth_time = time.time() - started
+    log(f"kokoro: {synth_time:.2f}s synth, {duration:.2f}s audio, "
+        f"RTF={synth_time / duration if duration else 0:.2f}")
+    return True
 
 
 def _server_request(req: dict, timeout: float = 120,
@@ -250,23 +253,6 @@ def _shutdown_chatterbox_server():
         except Exception:
             pass
     _chatterbox_proc = None
-
-
-def _shutdown_kokoro_server():
-    """Gracefully shut down the kokoro server."""
-    global _kokoro_proc
-    if _kokoro_proc is None:
-        return
-    try:
-        _kokoro_proc.stdin.write(json.dumps({"shutdown": True}) + "\n")
-        _kokoro_proc.stdin.flush()
-        _kokoro_proc.wait(timeout=5)
-    except Exception:
-        try:
-            _kokoro_proc.terminate()
-        except Exception:
-            pass
-    _kokoro_proc = None
 
 
 # ── Sintesis + reproduccion ─────────────────────────────────────────────
@@ -423,26 +409,8 @@ def _synth(engine: str, voice: str, lang: str, text: str, wav: str) -> bool:
         rate = _piper_sample_rate(model + ".json")
         return _run(["piper", "--model", model, "--output_file", wav], text)
     if engine == "kokoro":
-        with _kokoro_lock:
-            proc = _ensure_kokoro_server()
-            if proc is not None:
-                resp = _server_request(
-                    {"text": text, "output": wav, "lang": lang, "voice": voice},
-                    timeout=120, proc=proc)
-                if resp and resp.get("ok"):
-                    stats = resp.get("stats", {})
-                    log(f"kokoro: {stats.get('synth_time', '?')}s synth, "
-                        f"{stats.get('duration', '?')}s audio, RTF={stats.get('rtf', '?')}")
-                    return True
-                err = resp.get("error", "unknown") if resp else "no response"
-                log(f"kokoro server synth fail: {err}")
-                return False
-        kokoro = shutil.which("voice-kokoro")
-        if not kokoro:
-            log("kokoro: wrapper voice-kokoro no disponible")
-            return False
-        langc = "en" if lang == "en" else "es"
-        return _run([kokoro, "-o", wav, "-l", langc, "-t", text, "-v", voice], None)
+        # El modelo ya está cargado en el Kokoro del sistema: acá solo se pide.
+        return _kokoro_say(text, voice, wav)
     # espeak (final)
     return _run(["espeak-ng", "-v", lang, "-s", "160", "-p", "50", "-w", wav, text], None)
 
@@ -1028,7 +996,6 @@ def main() -> None:
     def _term(_s, _f):
         log("SIGTERM — saliendo")
         _shutdown_chatterbox_server()
-        _shutdown_kokoro_server()
         try:
             if os.path.exists(SYNTH_SOCK):
                 os.remove(SYNTH_SOCK)

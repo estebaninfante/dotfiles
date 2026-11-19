@@ -4,8 +4,10 @@
 # Idempotente. Instala/actualiza:
 #   1. Paquetes: speech-dispatcher, espeak-ng, alsa-utils, poppler, sox y
 #      zotero-bin (AUR, si falta).
-#   2. venv ~/.local/share/kokoro-venv (uv + Python 3.12): torch CPU, kokoro,
-#      misaki[en], soundfile y el modelo spaCy en_core_web_sm.
+#   2. El único venv de Kokoro: ~/.local/share/tts/venv-kokoro (uv + Python
+#      3.12): torch, kokoro, misaki y el modelo spaCy en_core_web_sm. Es el
+#      mismo entorno que usan Orión y el daemon de voz, y el servidor corre en
+#      GPU cuando la hay: un solo modelo para todos.
 #   3. Módulo /etc/speech-dispatcher/modules/kokoro.conf (desde el template del
 #      repo, con el home real) + AddModule en speechd.conf.
 #   4. Unit de usuario kokoro-tts.service (enable --now).
@@ -14,7 +16,7 @@
 set -uo pipefail
 
 REPO="${HOME}/dotfiles"
-VENV="${HOME}/.local/share/kokoro-venv"
+VENV="${HOME}/.local/share/tts/venv-kokoro"
 PY="${VENV}/bin/python"
 MODULE_SRC="${REPO}/linux/system/speech-dispatcher/kokoro.conf"
 MODULE_DST="/etc/speech-dispatcher/modules/kokoro.conf"
@@ -62,18 +64,18 @@ if ! command -v zotero &>/dev/null; then
     fi
 fi
 
-# 3) venv + dependencias
+# 3) venv + dependencias (uno solo para todo el sistema)
 if [[ ! -x "$PY" ]]; then
     command -v uv >/dev/null || die "falta uv (linux/bin/uv; corré link-dotfiles.sh)"
-    log "creando venv (~/.local/share/kokoro-venv, Python 3.12)"
+    log "creando venv (~/.local/share/tts/venv-kokoro, Python 3.12)"
     uv venv --python 3.12 "$VENV" || die "uv venv falló"
 fi
 
-if ! "$PY" -c 'import torch, kokoro, misaki, soundfile' 2>/dev/null; then
-    log "instalando torch CPU (puede tardar)"
-    uv pip install --python "$PY" torch --index-url https://download.pytorch.org/whl/cpu || die "torch falló"
-    log "instalando kokoro + misaki[en] + soundfile"
-    uv pip install --python "$PY" kokoro 'misaki[en]' soundfile || die "dependencias de Kokoro fallaron"
+if ! "$PY" -c 'import torch, kokoro, misaki' 2>/dev/null; then
+    log "instalando torch CUDA (puede tardar; sin GPU cae a CPU solo)"
+    uv pip install --python "$PY" torch --index-url https://download.pytorch.org/whl/cu130 || die "torch falló"
+    log "instalando kokoro + misaki[en]"
+    uv pip install --python "$PY" kokoro 'misaki[en]' || die "dependencias de Kokoro fallaron"
 fi
 
 if ! "$PY" -c 'import spacy; spacy.load("en_core_web_sm")' 2>/dev/null; then

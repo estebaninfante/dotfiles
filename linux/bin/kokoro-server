@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# kokoro-server — daemon de síntesis Kokoro (carga el modelo al primer pedido
-# y lo libera tras inactividad) para speech-dispatcher y el lector standalone.
-# Lo mantiene kokoro-tts.service.
+# kokoro-server — el Kokoro del sistema (un proceso, un modelo) para Orión,
+# Read Aloud de Zotero y LearnHarness. Lo mantiene kokoro-tts.service.
 set -euo pipefail
 
-PY="${HOME}/.local/share/kokoro-venv/bin/python"
-SRC="${HOME}/dotfiles/linux/voice/reader/kokoro_server.py"
+PY="${HOME}/.local/share/tts/venv-kokoro/bin/python"
+SRC="${HOME}/dotfiles/linux/voice/kokoro_server.py"
 
 if [[ ! -x "$PY" ]]; then
-    echo "kokoro-server: falta el entorno (~/.local/share/kokoro-venv)" >&2
+    echo "kokoro-server: falta el entorno (~/.local/share/tts/venv-kokoro)" >&2
     echo "               corré: ~/dotfiles/scripts/setup-kokoro-reader.sh" >&2
     exit 1
 fi
