@@ -51,8 +51,20 @@ hl.window_rule({ match = { class = "^foldertinder$" }, workspace = "special:ft s
 -- usuario. Nacen en un espacio especial oculto, sin foco y con borde naranja;
 -- `pantalla-agente` las pasa a su salida headless sólo para capturar. La clase la
 -- pone quien lanza: `foot -a agente-test-tui …`, `chromium --class=agente-test-web …`.
+-- Ventanas de prueba de agentes (pantalla-agente): no aparecen en las pantallas
+-- del usuario ni le roban el foco. La clase la pone quien lanza la prueba:
+-- `foot -a agente-test-tui …`, `chromium --class=agente-test-web …`.
 hl.window_rule({
     match = { class = "^agente-test-" },
+    workspace = "special:agente silent",
+    no_initial_focus = 1,
+    focus_on_activate = false,
+    render_unfocused = 1,
+    no_anim = true,
+    border_color = "rgba(ff8800ee)",
+})
+hl.window_rule({
+    match = { initial_class = "^agente-test-" },
     workspace = "special:agente silent",
     no_initial_focus = 1,
     focus_on_activate = false,

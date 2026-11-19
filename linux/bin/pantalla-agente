@@ -183,23 +183,29 @@ cmd_montar() {
 cmd_desmontar() {
     local conservar=0
     [ "${1:-}" = "--conservar" ] && conservar=1
-    local mon="" win=""
+    local mon="" win="" win_ahora="" cerrradas=" "
     if [ -f "$ENVF" ]; then
         cargar_env
         mon="${MON:-}"; win="${WIN:-}"
         reglas_apagar
+        win_ahora="$(focused_window)"
         if [ "$conservar" = 0 ] && [ -n "${WS:-}" ]; then
             # Las ventanas de prueba no deben saltar a las pantallas del usuario
             # cuando desaparece la salida: se cierran.
             local addr
             for addr in $(hyprctl clients -j 2>/dev/null | jq -r --arg ws "$WS" '.[] | select((.workspace.id|tostring) == $ws) | .address'); do
                 lua "hl.dispatch(hl.dsp.window.close({ window = [[address:$addr]] }))"
+                cerrradas="$cerradas$addr "
             done
             sleep 0.3
         fi
     fi
     mounted && hyprctl output remove "$OUT" >/dev/null 2>&1
-    MON="$mon"; WIN="$win"; restaurar_foco
+    # Sólo devolvemos el foco si se lo había llevado una de las ventanas que
+    # acabamos de cerrar; si el usuario ya está en otra cosa, no se toca.
+    case "$cerradas" in
+        *" $win_ahora "*) MON="$mon"; WIN="$win"; restaurar_foco ;;
+    esac
     limpiar_estado
     printf 'pantalla-agente: desmontada %s\n' "$OUT"
 }
@@ -272,8 +278,13 @@ cmd_abrir() {
         sleep 0.1
     done
 
-    # Lo último: el foco nunca queda en la ventana de prueba.
-    restaurar_foco
+    # Sólo si el foco quedó en una ventana nueva del test se devuelve al usuario;
+    # si ya está en otra cosa, no se le toca el foco.
+    local ahora; ahora="$(focused_window)"
+    case "$antes" in
+        *" $ahora "*) ;;
+        *) [ -n "$ahora" ] && restaurar_foco ;;
+    esac
     stamped
     printf 'pantalla-agente: lancé %s (pid %s) en el espacio %s\n' "$1" "$pid" "$WS"
 }
