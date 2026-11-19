@@ -147,7 +147,7 @@ function routes(ctx, live) {
 				const body = await readJsonBody(req);
 				const id = typeof body?.id === "string" ? body.id.trim() : "";
 				if (!id) return sendJson(res, 400, { error: "missing-id" });
-				const patch = { state: body?.state, title: body?.title, goal: body?.goal, steps: body?.steps, sessionId: body?.sessionId, turn: body?.turn };
+				const patch = { state: body?.state, title: body?.title, goal: body?.goal, steps: body?.steps, outcome: body?.outcome, note: body?.note, sessionId: body?.sessionId, turn: body?.turn };
 				sendJson(res, 200, { task: await updateTask(id, patch) });
 			},
 		},
