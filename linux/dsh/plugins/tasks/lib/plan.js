@@ -31,6 +31,8 @@ export function planTask(args) {
 	}
 	const title = clean(args?.title, MAX_TITLE);
 	if (!title) return null;
+	// Un título hecho solo de relleno no nombra nada: se trata como sin título.
+	if (title.length < 4 || CONTINUATION_WORDS.has(title.toLowerCase())) return null;
 	return { title, detail: clean(args?.detail, MAX_DETAIL), steps: list };
 }
 

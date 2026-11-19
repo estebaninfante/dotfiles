@@ -62,10 +62,17 @@ export function apply(ctx) {
 	 */
 	async function reconcile() {
 		// Una tarea por pedido: las tareas sueltas del mismo turno se juntan en una
-		// y sus títulos pasan a ser pasos. La que manda es la primera que se creó,
-		// que es la que nombró el pedido.
+		// y sus títulos pasan a ser pasos. Manda la que nombró el pedido: la primera
+		// que no repite el título de otra tarea de la sesión (las viejas copiaban
+		// pendientes de turnos anteriores y esas no nombran este pedido).
+		const all = (await listTasks(undefined)).filter((item) => item.sessionId);
+		const titleCount = new Map();
+		for (const task of all) {
+			const key = `${task.sessionId}:${String(task.title ?? "").trim().toLowerCase()}`;
+			titleCount.set(key, (titleCount.get(key) ?? 0) + 1);
+		}
 		const byTurn = new Map();
-		for (const task of (await listTasks(undefined)).filter((item) => item.sessionId)) {
+		for (const task of all) {
 			const turns = taskTurns(task);
 			if (turns.length !== 1) continue;
 			const key = `${task.sessionId}:${turns[0]}`;
@@ -75,7 +82,12 @@ export function apply(ctx) {
 		}
 		for (const list of byTurn.values()) {
 			if (list.length < 2) continue;
-			const ordered = list.slice().sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+			const ordered = list.slice().sort((a, b) => {
+				const repeatedA = (titleCount.get(`${a.sessionId}:${String(a.title ?? "").trim().toLowerCase()}`) ?? 1) > 1;
+				const repeatedB = (titleCount.get(`${b.sessionId}:${String(b.title ?? "").trim().toLowerCase()}`) ?? 1) > 1;
+				if (repeatedA !== repeatedB) return repeatedA ? 1 : -1;
+				return (a.createdAt ?? 0) - (b.createdAt ?? 0);
+			});
 			const first = ordered[0];
 			const steps = (first.steps ?? []).filter((step) => step && step !== first.title);
 			for (const extra of ordered.slice(1)) {
@@ -183,7 +195,13 @@ export function apply(ctx) {
 					const sessionId = session.id;
 					const turn = live.currentTurn.get(sessionId) ?? 1;
 					const plan = planTasks(args);
-					if (!plan.length) return { tasks: [], pending: [] };
+					// Sin título no hay tarea y el turno sigue sin nombre: se falla fuerte
+					// para que el agente lo note. El proveedor no siempre exige `required`.
+					if (!plan.length) {
+						throw new Error(
+							"task_plan necesita `title`: un título corto (3 a 8 palabras) que diga qué pidió el usuario. Los pasos van en `steps`.",
+						);
+					}
 					const item = plan[0];
 					// Un pedido = una tarea. Si el turno ya tenía tareas (planes viejos con
 					// varias entradas), la primera las absorbe y los títulos pasan a pasos.

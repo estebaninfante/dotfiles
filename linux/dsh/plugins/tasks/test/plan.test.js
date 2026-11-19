@@ -39,6 +39,17 @@ test("sin argumentos válidos no inventa tareas", () => {
 	assert.deepEqual(planTasks({ steps: [{ title: "Paso sin título de tarea" }] }), []);
 });
 
+test("un plan sin título no vale, aunque traiga detalle y pasos", () => {
+	assert.deepEqual(planTasks({ detail: "Encontrar el modal de llamada", steps: [{ title: "Ver el código" }] }), []);
+	assert.deepEqual(planTasks({ title: "   ", steps: [{ title: "Ver el código" }] }), []);
+});
+
+test("un título de relleno no nombra la tarea", () => {
+	assert.deepEqual(planTasks({ title: "continue" }), []);
+	assert.deepEqual(planTasks({ title: "ok" }), []);
+	assert.deepEqual(planTasks({ title: "dale" }), []);
+});
+
 test("un 'continue' no es una tarea nueva: sigue el trabajo abierto", () => {
 	for (const text of ["continue", "Continue.", "dale", "ok, dale", "seguí", "seguí con eso", "gracias", "  "]) {
 		assert.equal(isContinuation(text), true, `debería ser continuación: ${text}`);
