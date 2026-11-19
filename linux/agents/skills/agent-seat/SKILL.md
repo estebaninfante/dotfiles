@@ -42,3 +42,5 @@ agent-seat stop                                     # cierra broker y sandboxes
 - Nunca `ydotool`, `wtype`, `xdotool`, `grim` ni `wf-recorder` sobre la sesión del usuario.
 - Login, captcha o 2FA: pedile al usuario que salte al asiento y lo haga él; esperá que termine.
 - Los sandboxes comparten la red local (`--share-net`); no hay GPU; los logins persisten en `~/.local/state/omarchy/agent-seat/home`.
+- Para mostrar cómo se ve el tile en la grilla sin capturar la pantalla del usuario ni abrir el overview: `agent-seat-tile [<ventana>]`. Compone la miniatura (borde naranja + etiqueta `• app · agente|usuario|quieto`) desde la captura del asiento.
+- El usuario ve las ventanas como tiles en el overview (slots 11..16, nombre `▸ app · dueño`): un tile por ventana, grilla dinámica.
