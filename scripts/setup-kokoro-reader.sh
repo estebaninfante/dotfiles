@@ -106,14 +106,20 @@ systemctl --user enable kokoro-tts.service >/dev/null 2>&1 || true
 systemctl --user restart kokoro-tts.service || die "no pude arrancar kokoro-tts.service"
 
 # 6) Reiniciar speech-dispatcher y verificar voces
-systemctl --user restart speech-dispatcher 2>/dev/null || true
+# speech-dispatcher a veces arranca sin cargar el módulo (carrera al
+# reiniciar): si la primera pasada no lo ve, se lo reinicia y se reintenta una
+# vez más. Los dos Kokoro del sistema no se tocan.
 found=0
-for _ in $(seq 1 40); do
-    if timeout 5 spd-say -L 2>/dev/null | grep -q 'Kokoro Liam'; then
-        found=1
-        break
-    fi
-    sleep 0.5
+for _round in 1 2; do
+    systemctl --user restart speech-dispatcher 2>/dev/null || true
+    for _ in $(seq 1 40); do
+        if timeout 5 spd-say -L 2>/dev/null | grep -q 'Kokoro Liam'; then
+            found=1
+            break
+        fi
+        sleep 0.5
+    done
+    (( found == 1 )) && break
 done
 (( found == 1 )) || die "las voces Kokoro no aparecen en speech-dispatcher"
 
