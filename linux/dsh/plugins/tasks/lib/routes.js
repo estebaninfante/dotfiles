@@ -87,10 +87,11 @@ function closeText(reason) {
  */
 function taskState(task, live = {}) {
 	if (task?.state === "cancelada" || task?.outcome === "cancelada") return STATE_TEXT.cancelada;
+	const turns = taskTurns(task);
+	// Si el turno está corriendo, la tarea está en curso aunque antes se cerrara.
+	if (live.running && live.current && turns.includes(live.current)) return STATE_TEXT.en_curso;
 	if (task?.outcome === "falló") return STATE_TEXT.fallada;
 	if (task?.state === "resuelta" || task?.outcome === "ok") return STATE_TEXT.cerrada;
-	const turns = taskTurns(task);
-	if (live.running && live.current && turns.includes(live.current)) return STATE_TEXT.en_curso;
 	return STATE_TEXT.abierta;
 }
 
@@ -203,21 +204,26 @@ function routes(ctx, live) {
 					byTurn.set(turn, bucket);
 				}
 				const running = latest > 0 && !ends.has(latest);
+				// Mientras el turno corre, la tarjeta es la tarea de ESE turno: lo que se
+				// está trabajando ahora, no la prueba del pedido anterior.
+				const runningTask = running ? await findTurnTask(sessionId, latest) : null;
 				// La tarjeta muestra la evidencia del último pedido terminado que dejó
 				// prueba visual: un turno nuevo sin terminar no la esconde.
 				let chosen = null;
-				for (const turn of [...byTurn.keys()].sort((a, b) => b - a)) {
-					if (!ends.has(turn)) continue;
-					const evidence = await enrichMedia(summarizeEvidence(byTurn.get(turn), { cwd: snapshot.session?.cwd ?? null }));
-					if (evidence.media.length || evidence.deliverables.length) {
-						chosen = { turn, evidence, reason: ends.get(turn) };
-						break;
+				if (!runningTask) {
+					for (const turn of [...byTurn.keys()].sort((a, b) => b - a)) {
+						if (!ends.has(turn)) continue;
+						const evidence = await enrichMedia(summarizeEvidence(byTurn.get(turn), { cwd: snapshot.session?.cwd ?? null }));
+						if (evidence.media.length || evidence.deliverables.length) {
+							chosen = { turn, evidence, reason: ends.get(turn) };
+							break;
+						}
 					}
 				}
 				// Sin prueba todavía: la tarjeta igual muestra la tarea en curso apenas
 				// el agente la nombra, con su estado y el resumen que haya.
-				const current = !chosen ? (await findLatestTask(sessionId)) : null;
-				const currentTurn = current ? (taskTurns(current).slice(-1)[0] ?? latest) : 0;
+				const current = runningTask ?? (!chosen ? await findLatestTask(sessionId) : null);
+				const currentTurn = runningTask ? latest : current ? (taskTurns(current).slice(-1)[0] ?? latest) : 0;
 				const task = chosen ? await findTurnTask(sessionId, chosen.turn) : current;
 				const evidence =
 					chosen?.evidence ??

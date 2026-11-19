@@ -53,6 +53,7 @@ window.__ModuleLoader__.load({
 			".evd-summary{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
 			".evd-more{margin:6px 0 0;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-empty{margin:0;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-flash{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:6px;border-radius:10px}",
 			".evd-steps{margin:0 0 8px;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
 			".evd-steps li{position:relative;padding-left:13px;font:400 12px/1.55 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-steps li::before{content:'·';position:absolute;left:3px}",
@@ -95,6 +96,44 @@ window.__ModuleLoader__.load({
 
 		function getJson(path) {
 			return fetch(path, { headers: { accept: "application/json" } }).then((response) => (response.ok ? response.json() : null));
+		}
+
+		/**
+		 * Lleva al mensaje que originó la tarea: abre Chat y, si hace falta, va
+		 * cargando los mensajes viejos hasta encontrar ese turno.
+		 */
+		function jumpToTurn(turn) {
+			const target = Number(turn);
+			if (!Number.isSafeInteger(target) || target <= 0) return;
+			const chatTab = [...document.querySelectorAll("[role=tab]")].find((tab) => tab.innerText.trim() === "Chat");
+			if (chatTab && chatTab.getAttribute("aria-selected") !== "true") chatTab.click();
+			const scroller = () => {
+				let node = document.querySelector("[data-chat-turn]");
+				while (node) {
+					const style = getComputedStyle(node);
+					if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 40) return node;
+					node = node.parentElement;
+				}
+				return null;
+			};
+			let tries = 0;
+			const step = () => {
+				tries += 1;
+				const found = document.querySelector(`[data-chat-turn="${target}"]`);
+				if (found) {
+					found.scrollIntoView({ block: "center", behavior: "smooth" });
+					found.classList.add("evd-flash");
+					setTimeout(() => found.classList.remove("evd-flash"), 1800);
+					return;
+				}
+				const earlier = [...document.querySelectorAll("button")].find((button) => /load earlier|cargar anteriores/i.test(button.innerText));
+				const box = scroller();
+				if (!earlier || !box || tries > 30) return;
+				box.scrollTop = 0;
+				earlier.click();
+				setTimeout(step, 700);
+			};
+			setTimeout(step, 120);
 		}
 
 		/** El nombre de la tarea es su objetivo; el título corto solo si no hay objetivo. */
@@ -413,6 +452,9 @@ window.__ModuleLoader__.load({
 										setPickedId(id);
 										setMenuOpen(false);
 										setOpen(true);
+										// Cambiar de tarea te lleva al mensaje que la originó.
+										const chosen = tasks.find((item) => item.id === id);
+										if (chosen?.turn) jumpToTurn(chosen.turn);
 									},
 									onClose: () => setMenuOpen(false),
 								})

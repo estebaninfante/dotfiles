@@ -42,6 +42,7 @@ window.__ModuleLoader__.load({
 			".tsk-lightbox-close{position:fixed;top:16px;right:18px;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);cursor:pointer}.tsk-lightbox-close:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".tsk-lightbox-close:focus-visible,.tsk-lightbox-more:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:2px}",
 			".tsk-lightbox-more{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);border:0;border-radius:7px;padding:6px 10px;background:transparent;color:var(--dsw-alias-label-tertiary,#9a9aa3);font:inherit;font-size:12px;cursor:pointer}.tsk-lightbox-more:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
+			".tsk-flash{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:6px;border-radius:10px}",
 			".tsk-summary{margin:0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
 			".tsk-gallery{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 0}.tsk-thumb{display:block;width:118px;height:74px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c)}.tsk-thumb img{width:100%;height:100%;object-fit:cover;display:block}.tsk-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".tsk-video{width:198px;height:112px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
@@ -222,21 +223,61 @@ window.__ModuleLoader__.load({
 		}
 
 		function Action(props) {
+			const path =
+				props.icon === "check"
+					? "M3.5 8.2l3 3 6-6.4"
+					: props.icon === "jump"
+						? "M4.5 11.5l7-7M6.5 4.5h5v5"
+						: "M4 8a4 4 0 1 0 1.2-2.9M4 3.2v2.6h2.6";
 			return h(
 				"button",
 				{ type: "button", className: "tsk-icon", title: props.label, "aria-label": props.label, onClick: props.onClick, disabled: props.disabled },
-				h(
-					"svg",
-					{ width: 15, height: 15, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
-					h("path", {
-						d: props.icon === "check" ? "M3.5 8.2l3 3 6-6.4" : "M4 8a4 4 0 1 0 1.2-2.9M4 3.2v2.6h2.6",
-						stroke: "currentColor",
-						strokeWidth: 1.4,
-						strokeLinecap: "round",
-						strokeLinejoin: "round",
-					}),
-				),
+				h("svg", { width: 15, height: 15, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" }, h("path", {
+					d: path,
+					stroke: "currentColor",
+					strokeWidth: 1.4,
+					strokeLinecap: "round",
+					strokeLinejoin: "round",
+				})),
 			);
+		}
+
+		/**
+		 * Lleva al mensaje que originó la tarea: abre Chat y, si hace falta, va
+		 * cargando los mensajes viejos hasta encontrar ese turno.
+		 */
+		function jumpToTurn(turn) {
+			const target = Number(turn);
+			if (!Number.isSafeInteger(target) || target <= 0) return;
+			const chatTab = [...document.querySelectorAll("[role=tab]")].find((tab) => tab.innerText.trim() === "Chat");
+			if (chatTab && chatTab.getAttribute("aria-selected") !== "true") chatTab.click();
+			const scroller = () => {
+				let node = document.querySelector("[data-chat-turn]");
+				while (node) {
+					const style = getComputedStyle(node);
+					if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 40) return node;
+					node = node.parentElement;
+				}
+				return null;
+			};
+			let tries = 0;
+			const step = () => {
+				tries += 1;
+				const found = document.querySelector(`[data-chat-turn="${target}"]`);
+				if (found) {
+					found.scrollIntoView({ block: "center", behavior: "smooth" });
+					found.classList.add("tsk-flash");
+					setTimeout(() => found.classList.remove("tsk-flash"), 1800);
+					return;
+				}
+				const earlier = [...document.querySelectorAll("button")].find((button) => /load earlier|cargar anteriores/i.test(button.innerText));
+				const box = scroller();
+				if (!earlier || !box || tries > 30) return;
+				box.scrollTop = 0;
+				earlier.click();
+				setTimeout(step, 700);
+			};
+			setTimeout(step, 120);
 		}
 
 		/** El nombre de la tarea es el título que eligió el agente. */
@@ -263,6 +304,7 @@ window.__ModuleLoader__.load({
 						{ className: "tsk-side" },
 						turns ? h("span", { className: "tsk-turn" }, turns) : null,
 						h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined }, status.text),
+						task.turn ? h(Action, { icon: "jump", label: "Ir al mensaje que originó la tarea", onClick: () => jumpToTurn(task.turn) }) : null,
 						task.state === "abierta" || task.state === "cancelada"
 							? h(Action, { icon: "check", label: "Resolver tarea", onClick: () => onChange(task, "resuelta"), disabled: busy })
 							: h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy }),
