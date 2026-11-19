@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# agent-seat — lanzar y manejar apps en el Agent Seat.
+#
+# El Agent Seat es el PR omacom/omarchy#15087: apps que maneja un agente corren en
+# un sandbox (bubblewrap) contra un broker Wayland propio, con puntero y teclado
+# del agente, en su propio workspace (acá el 20) y con borde naranja. No te roba
+# el foco, no te cambia de workspace y no te mueve el cursor.
+#
+# Instalado desde la rama `agent-seat` de KewkLW/omarchy-fork en
+# ~/.local/share/agent-seat (el PR todavía no está mergeado).
+#
+# Uso (como el `omarchy agent seat` del PR):
+#   agent-seat run --cdp chromium https://example.com   # app sandboxeada, imprime N
+#   agent-seat state N                                  # tamaño, foco, popups, workspace
+#   agent-seat ui N                                     # controles por rol y nombre
+#   agent-seat click-ui N "link:Manual"                 # click por nombre, puntero del agente
+#   agent-seat type N "hola" --key enter                # teclea en tu layout
+#   agent-seat screenshot N --output /tmp/x.png         # PNG, popups incluidos
+#   agent-seat windows                                  # ventanas del asiento
+#   agent-seat status                                   # ¿corriendo?
+#   agent-seat stop                                      # mata broker y sandboxes
+set -uo pipefail
+
+RAIZ="${AGENT_SEAT_HOME:-$HOME/.local/share/agent-seat}"
+
+if [ ! -x "$RAIZ/bin/omarchy-agent-seat-run" ]; then
+    echo "falta el checkout del Agent Seat en $RAIZ" >&2
+    exit 1
+fi
+
+export OMARCHY_PATH="$RAIZ"
+export PATH="$RAIZ/bin:$PATH"
+
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+    run|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
+        exec "omarchy-agent-seat-$cmd" "$@" ;;
+    *)
+        echo "uso: agent-seat run|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show" >&2
+        exit 1 ;;
+esac

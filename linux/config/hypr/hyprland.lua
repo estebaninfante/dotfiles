@@ -27,3 +27,7 @@ require("tira")
 -- Después de TODOS los binds: el submap "dictado" replaysa los globales para
 -- que la transcripción no desactive los atajos.
 require("dictado-submap")
+
+-- Agent Seat (PR #15087): reglas de las ventanas que maneja un agente. Va al
+-- final a propósito: las reglas del asiento tienen que ganarle a las de apps.
+require("agent-seat")
