@@ -245,6 +245,18 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
                 || warn "no pude instalar dsh-local-${plugin} (correr: dsh plugin --profile web add link:~/.dsh/plugins/${plugin})"
         fi
     done
+
+    # Atajos propios: Ctrl+Alt+N crea una sesión nueva aunque dsh corra en el
+    # navegador, donde Ctrl+N y Ctrl+T los toma Brave antes de que lleguen a la página.
+    if [ -f "$PATCH" ] && ! grep -q "local-hotkeys" "$PATCH"; then
+        printf '\n# Ctrl+Alt+N: sesión nueva desde el teclado, también dentro de Brave.\n- insert:\n    - id: local-hotkeys\n      name: dsh-local-hotkeys\n' >> "$PATCH"
+        ok "patch del perfil web: + local-hotkeys"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-hotkeys" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "link:${HOME}/.dsh/plugins/hotkeys" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-hotkeys instalado" \
+            || warn "no pude instalar dsh-local-hotkeys (correr: dsh plugin --profile web add link:~/.dsh/plugins/hotkeys)"
+    fi
 fi
 if [ -d "${REPO}/linux/agents/skills" ]; then
     mkdir -p "${HOME}/.agents/skills"
