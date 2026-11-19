@@ -55,11 +55,21 @@ limpiar_locks() {
     return 0
 }
 
+# Cada ventana del asiento en su propio workspace (slot) con nombre, para que
+# hyprexpo la muestre como tile con etiqueta en la grilla dinámica.
+arrancar_slots() {
+    local ruta="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-slots.pid"
+    if [ -f "$ruta" ] && kill -0 "$(cat "$ruta" 2>/dev/null)" 2>/dev/null; then return 0; fi
+    setsid agent-seat-slots >/dev/null 2>&1 </dev/null &
+    printf '%s\n' "$!" > "$ruta"
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
     run)
         arrancar_vigia
+        arrancar_slots
         limpiar_locks
         exec "omarchy-agent-seat-run" "$@" ;;
     state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# agent-seat-slots — cada ventana del asiento, en su propio workspace con nombre.
+#
+# hyprexpo en modo dinámico muestra los workspaces que tienen ventanas y usa el
+# NOMBRE del workspace como etiqueta del tile. Este vigía, mientras corre el
+# asiento:
+#   - mueve cada ventana `agent-*` a un slot propio (11..16, los primeros libres),
+#   - renombra el slot con la app y quién actuó último ("▸ chromium · agente"),
+#   - deja que el tile desaparezca solo cuando la ventana se cierra.
+#
+# Sin esto, las ventanas del asiento viven todas en el ws 20 (un solo tile).
+# Uso: agent-seat-slots [-v]   (-v imprime cada cambio, para probar)
+set -uo pipefail
+
+PRIMER="${AGENT_SEAT_SLOT_MIN:-11}"
+CANT="${AGENT_SEAT_SLOT_COUNT:-6}"
+INTERVALO="${AGENT_SEAT_SLOTS_INTERVALO:-1}"
+GRACIA="${AGENT_SEAT_SLOTS_GRACIA:-45}"
+VERBOSO=0
+[ "${1:-}" = "-v" ] && VERBOSO=1
+
+RUTA="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-slots.pid"
+AGENTE="$(command -v agent-seat 2>/dev/null || echo "$HOME/.local/bin/agent-seat")"
+VIO_CORRER=0
+ESPERANDO=0
+
+decir() { [ "$VERBOSO" = 1 ] && echo "$*"; return 0; }
+
+instancia_viva() {
+    if hyprctl version >/dev/null 2>&1; then
+        printf '%s' "${HYPRLAND_INSTANCE_SIGNATURE:-}"
+        return
+    fi
+    local d
+    d="$(ls -dt "${XDG_RUNTIME_DIR:-/tmp}/hypr"/*/ 2>/dev/null | while read -r x; do
+        [ -S "$x/.socket.sock" ] && { printf '%s' "$x"; break; }
+    done)"
+    [ -n "$d" ] && basename "$d"
+}
+
+HIS="$(instancia_viva)"
+[ -n "$HIS" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HIS"
+
+hypr() { hyprctl "$@" 2>/dev/null; }
+
+duenio() { # <ventana> -> agente|usuario|quieto
+    local out
+    out="$("$AGENTE" state "$1" 2>/dev/null | sed -n 's/^  focus:[[:space:]]*//p' | head -1)"
+    case "$out" in
+    *agent*) printf 'agente' ;;
+    *user*) printf 'usuario' ;;
+    *) printf 'quieto' ;;
+    esac
+}
+
+decir "slots del asiento: arrancando (slots ${PRIMER}..$((PRIMER + CANT - 1)))"
+while :; do
+    estado="$("$AGENTE" status 2>/dev/null || true)"
+    case "$estado" in
+    *running*)
+        VIO_CORRER=1
+        ESPERANDO=0
+        ;;
+    *)
+        # Al arrancar desde `agent-seat run`, el broker todavía no está.
+        if [ "$VIO_CORRER" = 1 ]; then
+            decir "slots: el asiento se cerró, salgo"
+            rm -f "$RUTA"
+            exit 0
+        fi
+        ESPERANDO=$((ESPERANDO + INTERVALO))
+        if [ "$ESPERANDO" -ge "$GRACIA" ]; then
+            decir "slots: el broker no arrancó en ${GRACIA}s, salgo"
+            rm -f "$RUTA"
+            exit 0
+        fi
+        sleep "$INTERVALO"
+        continue
+        ;;
+    esac
+
+    VENTANAS="$("$AGENTE" windows 2>/dev/null || true)"
+    total="$(printf '%s' "$VENTANAS" | jq -r 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)"
+
+    # Dirección -> workspace actual (según Hyprland).
+    CLIENTES="$(hypr clients -j)"
+
+    i=0
+    while [ "$i" -lt "$total" ]; do
+        num="$(printf '%s' "$VENTANAS" | jq -r ".[$i].window" 2>/dev/null)"
+        app="$(printf '%s' "$VENTANAS" | jq -r ".[$i].app_id // \"app\"" 2>/dev/null)"
+        dir="$(printf '%s' "$VENTANAS" | jq -r ".[$i].address // empty" 2>/dev/null)"
+        [ -n "$dir" ] || { i=$((i + 1)); continue; }
+
+        ws_actual="$(printf '%s' "$CLIENTES" | jq -r --arg a "$dir" '.[] | select(.address == $a) | .workspace.id' 2>/dev/null | head -1)"
+
+        slot=$((PRIMER + i))
+        if [ "$i" -ge "$CANT" ]; then slot=$((PRIMER + CANT - 1)); fi
+
+        if [ -n "$dir" ] && [ "$ws_actual" != "$slot" ]; then
+            hypr dispatch "hl.dsp.window.move({ workspace = [[$slot]], window = [[address:$dir]], follow = false })" >/dev/null
+            decir "slots: ventana $num ($app) → ws $slot"
+        fi
+
+        nombre="▸ ${app} · $(duenio "$num")"
+        actual="$(hypr workspaces -j | jq -r --argjson s "$slot" '.[] | select(.id == $s) | .name' 2>/dev/null | head -1)"
+        if [ "$actual" != "$nombre" ]; then
+            hypr dispatch "hl.dsp.workspace.rename({ workspace = [[$slot]], name = [[$nombre]] })" >/dev/null
+            decir "slots: ws $slot → «$nombre»"
+        fi
+
+        i=$((i + 1))
+    done
+
+    sleep "$INTERVALO"
+done

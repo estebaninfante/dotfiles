@@ -111,7 +111,11 @@ if hl.plugin.hyprexpo ~= nil then
     local config = {
         columns = 3,
         rows = 3,
-        dynamic_grid = 0,
+        -- Grilla ADAPTATIVA: sólo workspaces con ventanas; la forma la calcula
+        -- el plugin (ceil(sqrt(n))). Así entran las ventanas del asiento (slots
+        -- 11..16, ver agent-seat-slots) sin fijar un 4x4 ni mover reglas.
+        dynamic_grid = 1,
+        fill_gaps = 0,
         skip_empty = 0,
         max_workspace = 36,
         gaps_in = style.gaps_in,
@@ -128,8 +132,24 @@ if hl.plugin.hyprexpo ~= nil then
         -- interna, 28 en la externa cuando hay dos). max_workspace es el tope
         -- global: 36 = 28 + 8, si no la grilla de la externa se vacía.
         workspace_method = spaces.workspace_method(),
-        label_enable = 0,
+        -- Etiquetas: en modo dinámico hyprexpo usa el NOMBRE del workspace, así
+        -- que los slots del asiento se ven como "󰚩 chromium · agente" (los
+        -- workspaces sin nombre muestran su número).
+        label_enable = 1,
+        label_show = "always",
+        label_text_mode = "name",
+        show_workspace_names = 1,
         show_workspace_numbers = 0,
+        label_font_size = 13,
+        label_padding = 8,
+        label_bg_enable = 1,
+        label_bg_color = 0xCC0D0F13,
+        label_bg_rounding = 9,
+        label_color_default = 0xFFE8E8E8,
+        label_color_hover = 0xFFFFC78A,
+        label_color_focus = 0xFFFF8A00,
+        label_color_current = 0xFFFF8A00,
+        animate_entry = 1,
         keynav_enable = 1,
     }
     -- Orden numpad (1 abajo a la izquierda) y curva de apertura: son del

@@ -25,6 +25,10 @@ window.__ModuleLoader__.load({
 			{ code: "KeyL", ctrl: true, shift: true, alt: false },
 			{ code: "KeyN", ctrl: true, shift: false, alt: true },
 			{ code: "KeyT", ctrl: true, shift: false, alt: true },
+			// Ctrl+N y Ctrl+T pelados: el navegador se los queda, así que solo
+			// llegan en la app de escritorio, donde no hay ventanas ni pestañas.
+			{ code: "KeyN", ctrl: true, shift: false, alt: false },
+			{ code: "KeyT", ctrl: true, shift: false, alt: false },
 		];
 		/** Lo que ya está pidiendo teclas: diálogos, menús y el grabador de atajos. */
 		const FOREGROUND = '[role="dialog"][aria-modal="true"], [role="menu"]';
