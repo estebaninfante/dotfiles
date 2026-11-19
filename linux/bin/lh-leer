@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 # lh-leer — dice en voz alta lo que el tutor de LearnHarness responde.
 #
-# LearnHarness no puede hablar por sí solo: usa pi como LIBRERÍA dentro de su
+# RETIRADO (2026-11-18). LearnHarness ya tiene lector propio: lee desde el DOM
+# mientras la respuesta se escribe, resalta el bloque que suena, tiene controles
+# (pausa, velocidad, saltar) y convierte las fórmulas a palabras. Este puente
+# leía el chat recién al cerrar el turno (el archivo no existe antes), no podía
+# resaltar nada, y su limpieza dejaba el LaTeX en crudo ("dólar", \frac, ...).
+# Se deshabilita lh-leer.service y no va más en enabled-laptop.txt. El archivo
+# queda solo como registro de por qué existió: no habilitar de nuevo.
+#
+# LearnHarness no podía hablar por sí solo: usa pi como LIBRERÍA dentro de su
 # propio servidor (pi-ai + pi-agent-core), no el CLI, así que las extensiones de
 # pi no existen ahí adentro y la app no tiene salida de voz. Lo que sí hace es
 # guardar el chat completo en disco (~/.config/LearnHarness/data/chats/*.json),

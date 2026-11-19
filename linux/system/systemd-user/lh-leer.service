@@ -1,9 +1,15 @@
 [Unit]
-Description=Lee en voz alta las respuestas del tutor de LearnHarness
+Description=RETIRADO — lee en voz alta las respuestas del tutor de LearnHarness (la app ya lo hace sola)
 Documentation=https://github.com/amosblomqvist/learnharness
 After=graphical-session.target voice-daemon.service
 Wants=voice-daemon.service
 PartOf=graphical-session.target
+
+# RETIRADO el 2026-11-18: LearnHarness tiene lector propio (lee desde el DOM
+# mientras escribe, resalta el bloque, controles de pausa/velocidad/salto y dice
+# las fórmulas en palabras). Este puente leía el chat recién al cerrar el turno,
+# sin resaltado ni menú, y con el LaTeX en crudo. No habilitar de nuevo; queda
+# el archivo solo como registro histórico.
 
 [Service]
 Type=simple

@@ -10,8 +10,10 @@ dsh-web.service
 dsh-web-guard.service
 dsh-web-guard.timer
 
-# Lee en voz alta las respuestas del tutor de LearnHarness (audífonos, manos
-# libres). Se apaga con `leer off`. Unit: lh-leer.service
+# lh-leer.service RETIRADO (2026-11-18): la app ya lee sola, desde el DOM y
+# mientras escribe (resalta el bloque, controles, fórmulas en palabras).
+# El puente leía el archivo del chat recién al cerrar el turno, no resaltaba
+# nada y dejaba las fórmulas en crudo ("dólar"). No habilitar de nuevo.
 
 # ~/books entra solo a la biblioteca de LearnHarness y al Kindle (lh-books).
 # El cable del Kindle lo dispara el dispatcher NM 92-kindle-books.
@@ -23,7 +25,6 @@ lh-books.path
 # (La página http://127.0.0.1:9932 es la de omni-web.)
 # omni-oido.service
 # omni-web.service
-lh-leer.service
 
 # Cerebro de voz (puente Ollama -> Hermes). Vive con la sesión gráfica:
 # si queda fuera del repo, la copia viva drifta y el cerebro muere en silencio.
