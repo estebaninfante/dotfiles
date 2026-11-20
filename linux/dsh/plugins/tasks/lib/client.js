@@ -114,14 +114,16 @@ window.__ModuleLoader__.load({
 			}, []);
 		}
 
-		/** Los cinco estados vienen resueltos del servidor: abierta, en curso, cerrada, fallada, cancelada. */
+		/** Los estados vienen resueltos del servidor: abierta, en curso, por revisar, cerrada, fallada, cancelada. */
 		function statusOf(task) {
 			const text = String(task?.status ?? "").trim();
 			const bad = text === "fallada" || task?.outcome === "falló";
 			if (text) return { text, bad };
 			if (task?.state === "cancelada") return { text: "cancelada", bad: false };
 			if (task?.outcome === "falló") return { text: "fallada", bad: true };
-			if (task?.state === "resuelta" || task?.outcome === "ok") return { text: "cerrada", bad: false };
+			// Terminó el agente: queda por revisar. Solo el usuario la cierra.
+			if (task?.state === "cerrada" || task?.state === "resuelta") return { text: "cerrada", bad: false };
+			if (task?.state === "por_revisar" || task?.outcome === "ok") return { text: "por revisar", bad: false };
 			return { text: "abierta", bad: false };
 		}
 
@@ -374,9 +376,9 @@ window.__ModuleLoader__.load({
 						turns ? h("span", { className: "tsk-turn" }, turns) : null,
 						h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined }, status.text),
 						task.turn ? h(Action, { icon: "jump", label: "Ir al mensaje que originó la tarea", onClick: () => jumpToTurn(task.turn, task.request) }) : null,
-						task.state === "abierta" || task.state === "cancelada"
-							? h(Action, { icon: "check", label: "Resolver tarea", onClick: () => onChange(task, "resuelta"), disabled: busy })
-							: h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy }),
+						task.state === "cerrada" || task.state === "cancelada"
+							? h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy })
+							: h(Action, { icon: "check", label: "Cerrar tarea", onClick: () => onChange(task, "cerrada"), disabled: busy }),
 						h(
 							"button",
 							{ type: "button", className: "tsk-icon tsk-toggle", "aria-expanded": collapsed ? "false" : "true", title: collapsed ? "Expandir tarea" : "Colapsar tarea", onClick: onToggle },
@@ -497,11 +499,11 @@ window.__ModuleLoader__.load({
 			const fallos = count("fallada");
 			const canceladas = count("cancelada");
 			const cerradas = count("cerrada");
-			const porCerrar = count("por cerrar");
+			const porRevisar = count("por revisar");
 			// Orden y agrupado elegidos por el usuario, como en la lista de sesiones.
 			const sorted = tasks.slice().sort((a, b) => {
 				if (grouped) {
-					const rank = (task) => ["en curso", "por cerrar", "abierta", "fallada", "cancelada", "cerrada"].indexOf(statusOf(task).text);
+					const rank = (task) => ["en curso", "por revisar", "abierta", "fallada", "cancelada", "cerrada"].indexOf(statusOf(task).text);
 					if (rank(a) !== rank(b)) return rank(a) - rank(b);
 				}
 				if (order === "viejas") return (a.turn ?? 0) - (b.turn ?? 0);
@@ -570,7 +572,7 @@ window.__ModuleLoader__.load({
 							{ style: { minWidth: 0 } },
 							h("h1", { className: "tsk-h1" }, "Tareas"),
 							cwd ? h("button", { type: "button", className: "tsk-path", title: `Abrir ${cwd}`, onClick: () => openFolder(cwd) }, cwd) : null,
-							h("p", { className: "tsk-line" }, `${abiertas} abiertas · ${porCerrar} por cerrar · ${fallos} con fallos · ${canceladas} canceladas · ${cerradas} cerradas`),
+							h("p", { className: "tsk-line" }, `${abiertas} abiertas · ${porRevisar} por revisar · ${fallos} con fallos · ${canceladas} canceladas · ${cerradas} cerradas`),
 						),
 						cwd ? h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: () => setFormOpen((open) => !open) }, "Nueva tarea") : null,
 						h(
