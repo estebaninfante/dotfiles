@@ -33,6 +33,12 @@ aviso() {
 }
 decir() { [ "$VERBOSO" = 1 ] && echo "$*"; return 0; }
 
+# Uno solo por sesión: `agent-seat run` lo arranca en cada lanzamiento y el pid
+# de `setsid ... &` no sirve para saber si ya corre (setsid hace fork).
+exec 9>"$RUTA.lock"
+flock -n 9 || { decir "ya hay uno corriendo, salgo"; exit 0; }
+printf '%s\n' "$$" > "$RUTA"
+
 BASURA='^(Profile error occurred)$'
 REGISTRO="${XDG_STATE_HOME:-$HOME/.local/state}/agent-seat/limpieza.log"
 

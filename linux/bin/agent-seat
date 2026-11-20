@@ -11,6 +11,9 @@
 #
 # Uso (como el `omarchy agent seat` del PR):
 #   agent-seat run --cdp chromium https://example.com   # app sandboxeada, imprime N
+#   agent-seat run --tarea "probar el login" chromium URL  # la tarea sale en la pestaña
+#   agent-seat tarea N "revisar el checkout"            # cambia la tarea de la ventana N
+#   agent-seat etiqueta N                               # texto de la pestaña del overview
 #   agent-seat state N                                  # tamaño, foco, popups, workspace
 #   agent-seat ui N                                     # controles por rol y nombre
 #   agent-seat click-ui N "link:Manual"                 # click por nombre, puntero del agente
@@ -34,10 +37,8 @@ export PATH="$RAIZ/bin:$PATH"
 # Aviso visible para el usuario: el asiento vive en un workspace oculto, así que
 # al lanzar la primera app arrancamos un vigía que notifica aperturas y cierres.
 arrancar_vigia() {
-    local ruta="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-watch.pid"
-    if [ -f "$ruta" ] && kill -0 "$(cat "$ruta" 2>/dev/null)" 2>/dev/null; then return 0; fi
-    setsid agent-seat-watch >/dev/null 2>&1 </dev/null &
-    printf '%s\n' "$!" > "$ruta"
+    # Si ya corre uno, el nuevo sale solo (flock en el script).
+    setsid -f agent-seat-watch >/dev/null 2>&1 </dev/null
 }
 
 # Cada sandbox tiene hostname propio, así que chromium deja SingletonLock de
@@ -58,10 +59,8 @@ limpiar_locks() {
 # Cada ventana del asiento en su propio workspace (slot) con nombre, para que
 # hyprexpo la muestre como tile con etiqueta en la grilla dinámica.
 arrancar_slots() {
-    local ruta="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-slots.pid"
-    if [ -f "$ruta" ] && kill -0 "$(cat "$ruta" 2>/dev/null)" 2>/dev/null; then return 0; fi
-    setsid agent-seat-slots >/dev/null 2>&1 </dev/null &
-    printf '%s\n' "$!" > "$ruta"
+    # Si ya corre uno, el nuevo sale solo (flock en el script).
+    setsid -f agent-seat-slots >/dev/null 2>&1 </dev/null
 }
 
 # Imprime el programa de un `run` (lo que va después de las opciones del seat).
@@ -141,12 +140,92 @@ reusar_navegador() {
     return 1
 }
 
+# Quién y qué, por ventana, para la pestaña del overview (agent-seat-slots la
+# arma con `agent-seat etiqueta N`). Vive en el runtime: se borra con la sesión
+# y agent-seat-slots lo vacía cuando el asiento se cierra.
+META="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-meta"
+
+# Nombre del agente que llama: AGENT_SEAT_AGENTE si lo fija, si no el primer
+# agente conocido entre los procesos padre (dsh corre sus comandos vía
+# systemd-run, pero el runner lleva @deepseek-ai/dsh en la línea de comando).
+quien_llama() {
+    if [ -n "${AGENT_SEAT_AGENTE:-}" ]; then printf '%s\n' "$AGENT_SEAT_AGENTE"; return; fi
+    local pid=$PPID linea st
+    while [ "${pid:-0}" -gt 1 ]; do
+        linea=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || break
+        case "$linea" in
+            *@deepseek-ai/dsh*|*/bin/dsh\ *|dsh\ *) echo dsh; return ;;
+            *opencode*) echo opencode; return ;;
+            *codex*) echo codex; return ;;
+            *hermes*) echo hermes; return ;;
+            *kimi*) echo kimi; return ;;
+            *gemini*) echo gemini; return ;;
+            *grok*) echo grok; return ;;
+            *cursor-agent*) echo cursor; return ;;
+            */claude/*/claude*|claude\ *|*/bin/claude*) echo claude; return ;;
+        esac
+        st=$(cat "/proc/$pid/status" 2>/dev/null) || break
+        pid=$(printf '%s\n' "$st" | awk '/^PPid:/{print $2}')
+    done
+    [ -n "${CLAUDECODE:-}" ] && { echo claude; return; }
+    echo agente
+}
+
+# meta_poner <ventana> <clave> <valor>: una línea clave=valor por dato.
+meta_poner() {
+    local n=$1 k=$2 v=$3 f
+    case "$n" in ''|*[!0-9]*) return 0 ;; esac
+    mkdir -p "$META"
+    f="$META/$n"
+    v=$(printf '%s' "$v" | tr '\n\t' '  ' | tr -d '[]')
+    { grep -v "^$k=" "$f" 2>/dev/null; printf '%s=%s\n' "$k" "$v"; } >"$f.tmp" && mv "$f.tmp" "$f"
+}
+
+meta_leer() { sed -n "s/^$2=//p" "$META/$1" 2>/dev/null | tail -1; }
+
+# Anota quién actuó y qué hizo sobre una ventana. Con "lectura" (ui,
+# screenshot) solo cuenta si es el mismo agente: mirar no le quita la pestaña
+# al que trabaja ahí.
+anotar() {
+    local yo dueno
+    yo=$(quien_llama)
+    if [ "${3:-}" = lectura ]; then
+        dueno=$(meta_leer "$1" agente)
+        [ -z "$dueno" ] || [ "$dueno" = "$yo" ] || return 0
+    fi
+    meta_poner "$1" agente "$yo"
+    meta_poner "$1" accion "$2"
+}
+
+# Texto de la pestaña: "▸ <agente> · <tarea | última acción | app>".
+etiqueta() {
+    local n=$1 agente tarea accion app texto
+    agente=$(meta_leer "$n" agente)
+    tarea=$(meta_leer "$n" tarea)
+    accion=$(meta_leer "$n" accion)
+    app=$(omarchy-agent-seat-windows 2>/dev/null | jq -r --argjson n "$n" '.[]? | select(.window == $n) | .app_id // empty' 2>/dev/null | head -1)
+    texto="${tarea:-${accion:-${app:-ventana $n}}}"
+    [ ${#texto} -gt 48 ] && texto="${texto:0:47}…"
+    printf '▸ %s · %s\n' "${agente:-agente}" "$texto"
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
     run)
         arrancar_vigia
         arrancar_slots
+        # --tarea "…": lo que el agente viene a hacer, para la pestaña.
+        tarea=""
+        args=()
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --tarea) tarea="${2:-}"; shift 2 ;;
+                --tarea=*) tarea="${1#--tarea=}"; shift ;;
+                *) args+=("$1"); shift ;;
+            esac
+        done
+        set -- "${args[@]}"
         # Un lanzamiento a la vez: si dos agentes piden navegador juntos, el
         # segundo tiene que ver al primero para reusarlo. El candado se suelta
         # cuando omarchy-agent-seat-run termina (ya apareció la ventana).
@@ -156,11 +235,50 @@ case "$cmd" in
         if prog=$(programa_de "$@") && es_navegador "$prog"; then
             case " $* " in *" --cdp "*) ;; *) set -- --cdp "$@" ;; esac
         fi
-        reusar_navegador "$@" && exit 0
-        limpiar_locks
-        omarchy-agent-seat-run "$@"
-        exit $? ;;
-    state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
+        if ventana=$(reusar_navegador "$@"); then
+            estado=0
+        else
+            limpiar_locks
+            ventana=$(omarchy-agent-seat-run "$@")
+            estado=$?
+        fi
+        if [ "$estado" = 0 ]; then
+            ventana=$(printf '%s\n' "$ventana" | tail -1)
+            destino=$(printf '%s\n' "${@: -1}")
+            case "$destino" in
+                http*://*) destino=${destino#*://}; destino=${destino%%/*} ;;
+                *) destino=$(programa_de "$@"); destino=${destino##*/} ;;
+            esac
+            anotar "$ventana" "abrió $destino"
+            meta_poner "$ventana" tarea "$tarea"
+            printf '%s\n' "$ventana"
+        fi
+        exit "$estado" ;;
+    tarea)
+        # agent-seat tarea N "texto": fija o cambia la tarea de la ventana N.
+        [ -n "${1:-}" ] || { echo "uso: agent-seat tarea <ventana> \"texto\"" >&2; exit 1; }
+        meta_poner "$1" agente "$(quien_llama)"
+        meta_poner "$1" tarea "${2:-}"
+        exit 0 ;;
+    etiqueta)
+        etiqueta "${1:?uso: agent-seat etiqueta <ventana>}"
+        exit 0 ;;
+    click-ui)
+        anotar "${1:-}" "clic en «${2#*:}»"
+        exec omarchy-agent-seat-click-ui "$@" ;;
+    type)
+        anotar "${1:-}" "escribiendo"
+        exec omarchy-agent-seat-type "$@" ;;
+    ui)
+        anotar "${1:-}" "leyendo la página" lectura
+        exec omarchy-agent-seat-ui "$@" ;;
+    screenshot)
+        anotar "${1:-}" "mirando la pantalla" lectura
+        exec omarchy-agent-seat-screenshot "$@" ;;
+    pointer)
+        anotar "${1:-}" "moviendo el puntero"
+        exec omarchy-agent-seat-pointer "$@" ;;
+    state|windows|status|stop|show)
         exec "omarchy-agent-seat-$cmd" "$@" ;;
     show-or-start)
         # Salta al asiento si ya hay ventanas; si está vacío, abre chromium ahí.
@@ -172,6 +290,6 @@ case "$cmd" in
         omarchy-agent-seat-run chromium about:blank >/dev/null || exit 1
         exec omarchy-agent-seat-show ;;
     *)
-        echo "uso: agent-seat run|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show|show-or-start" >&2
+        echo "uso: agent-seat run [--tarea \"…\"]|tarea|etiqueta|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show|show-or-start" >&2
         exit 1 ;;
 esac

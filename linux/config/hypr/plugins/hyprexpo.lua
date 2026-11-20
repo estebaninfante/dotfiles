@@ -140,6 +140,13 @@ if hl.plugin.hyprexpo ~= nil then
         label_text_mode = "name",
         show_workspace_names = 1,
         show_workspace_numbers = 0,
+        -- Pestaña arriba a la izquierda, ajustada al texto. El default del
+        -- plugin (círculo al centro) tapaba la ventana y cortaba nombres largos
+        -- como "▸ dsh · clic en «Llamada»".
+        label_position = "top-left",
+        label_bg_shape = "rounded",
+        label_offset_x = 10,
+        label_offset_y = 10,
         label_font_size = 13,
         label_padding = 8,
         label_bg_enable = 1,

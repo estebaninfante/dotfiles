@@ -4,7 +4,7 @@
 # El overview real mezcla las ventanas del usuario con las del asiento, así que
 # una captura de pantalla completa no sirve como evidencia privada. Esto compone
 # el tile con la captura del asiento (broker) + la etiqueta que hyprexpo
-# mostraría ("▸ chromium · agente"): no toca la pantalla, no abre el overview y
+# mostraría ("▸ dsh · clic en «Llamada»"): no toca la pantalla, no abre el overview y
 # no captura ninguna ventana del usuario.
 #
 # Uso:
@@ -38,12 +38,8 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
     echo "la captura del asiento falló" >&2; exit 1; }
 
 app="$("$AGENTE" windows 2>/dev/null | jq -r --argjson n "$VENTANA" '.[] | select(.window == $n) | .app_id // "app"' 2>/dev/null | head -1)"
-case "$("$AGENTE" state "$VENTANA" 2>/dev/null | sed -n 's/^  focus:[[:space:]]*//p' | head -1)" in
-*agent*) duenio="agente" ;;
-*user*) duenio="usuario" ;;
-*) duenio="quieto" ;;
-esac
-etiqueta="• ${app} · ${duenio}"
+etiqueta="$("$AGENTE" etiqueta "$VENTANA" 2>/dev/null)"
+[ -n "$etiqueta" ] || etiqueta="▸ ${app}"
 
 ALTO=$((ANCHO * 10 / 16))
 BARRA=64

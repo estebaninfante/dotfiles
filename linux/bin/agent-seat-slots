@@ -5,7 +5,8 @@
 # NOMBRE del workspace como etiqueta del tile. Este vigía, mientras corre el
 # asiento:
 #   - mueve cada ventana `agent-*` a un slot propio (11..16, los primeros libres),
-#   - renombra el slot con la app y quién actuó último ("▸ chromium · agente"),
+#   - renombra el slot con el agente y su tarea o última acción
+#     ("▸ dsh · clic en «Llamada»", de `agent-seat etiqueta N`),
 #   - deja que el tile desaparezca solo cuando la ventana se cierra.
 #
 # Sin esto, las ventanas del asiento viven todas en el ws 20 (un solo tile).
@@ -26,6 +27,12 @@ ESPERANDO=0
 
 decir() { [ "$VERBOSO" = 1 ] && echo "$*"; return 0; }
 
+# Uno solo por sesión: `agent-seat run` lo arranca en cada lanzamiento y el pid
+# de `setsid ... &` no sirve para saber si ya corre (setsid hace fork).
+exec 9>"$RUTA.lock"
+flock -n 9 || { decir "ya hay uno corriendo, salgo"; exit 0; }
+printf '%s\n' "$$" > "$RUTA"
+
 instancia_viva() {
     if hyprctl version >/dev/null 2>&1; then
         printf '%s' "${HYPRLAND_INSTANCE_SIGNATURE:-}"
@@ -42,16 +49,6 @@ HIS="$(instancia_viva)"
 [ -n "$HIS" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HIS"
 
 hypr() { hyprctl "$@" 2>/dev/null; }
-
-duenio() { # <ventana> -> agente|usuario|quieto
-    local out
-    out="$("$AGENTE" state "$1" 2>/dev/null | sed -n 's/^  focus:[[:space:]]*//p' | head -1)"
-    case "$out" in
-    *agent*) printf 'agente' ;;
-    *user*) printf 'usuario' ;;
-    *) printf 'quieto' ;;
-    esac
-}
 
 decir "slots del asiento: arrancando (slots ${PRIMER}..$((PRIMER + CANT - 1)))"
 
@@ -82,6 +79,7 @@ while :; do
         if [ "$VIO_CORRER" = 1 ]; then
             decir "slots: el asiento se cerró, salgo"
             limpiar_slots
+            rm -rf "${XDG_RUNTIME_DIR:-/tmp}/agent-seat-meta"
             rm -f "$RUTA"
             exit 0
         fi
@@ -119,7 +117,8 @@ while :; do
             decir "slots: ventana $num ($app) → ws $slot"
         fi
 
-        nombre="▸ ${app} · $(duenio "$num")"
+        nombre="$("$AGENTE" etiqueta "$num" 2>/dev/null)"
+        [ -n "$nombre" ] || nombre="▸ ${app}"
         actual="$(hypr workspaces -j | jq -r --argjson s "$slot" '.[] | select(.id == $s) | .name' 2>/dev/null | head -1)"
         if [ "$actual" != "$nombre" ]; then
             hypr dispatch "hl.dsp.workspace.rename({ workspace = [[$slot]], name = [[$nombre]] })" >/dev/null
