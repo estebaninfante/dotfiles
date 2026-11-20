@@ -26,6 +26,9 @@ window.__ModuleLoader__.load({
 			primitives = null;
 		}
 		const Menu = primitives && typeof primitives.Menu === "function" ? primitives.Menu : null;
+		/** Lo que el usuario puede declarar; el estado lo aplica /tasks/update. */
+		const STATES = ["abierta", "por_revisar", "cerrada", "fallada", "cancelada"].map((id) => ({ id, label: id.replace("_", " ") }));
+		const stateId = (task) => (STATES.some((item) => item.id === task?.state) ? task.state : task?.state === "resuelta" ? "cerrada" : "abierta");
 
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -49,6 +52,7 @@ window.__ModuleLoader__.load({
 			".evd-caret{display:grid;place-items:center;flex:none;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-task{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-secondary,#b9b9c2)}",
 			".evd-progress{flex:1 1 auto;min-width:0;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-size:12px;font-weight:400;line-height:20px;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
+			".evd-state{flex:none;height:22px;padding:0 6px 0 8px;display:inline-flex;align-items:center;gap:4px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary,#9a9aa3);font:inherit;font-size:12px;line-height:1;cursor:pointer;white-space:nowrap}.evd-state:hover{color:var(--dsw-alias-label-primary,#ececf1);border-color:var(--dsw-alias-border-l2,#3b3e46)}.evd-state:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}",
 			".evd-panel{max-height:320px;overflow-y:auto;margin-top:6px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1,#2c2f36);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2)}",
 			".evd-summary{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-secondary,#b9b9c2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
 			".evd-more{margin:6px 0 0;padding:0;border:0;background:transparent;font:400 12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3);cursor:pointer;text-align:left}.evd-more:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
@@ -356,6 +360,8 @@ window.__ModuleLoader__.load({
 			const [open, setOpen] = useState(false);
 			const [menuOpen, setMenuOpen] = useState(false);
 			const [pickedId, setPickedId] = useState("auto");
+			const [stateOpen, setStateOpen] = useState(false);
+			const [localState, setLocalState] = useState(null);
 
 			// Otra conversación = otra lista de tareas: el selector vuelve al último paso.
 			useEffect(() => {
@@ -371,8 +377,10 @@ window.__ModuleLoader__.load({
 			const media = picked ? picked.media ?? [] : proof?.evidence?.media ?? [];
 			const deliverables = picked ? picked.deliverables ?? [] : proof?.evidence?.deliverables ?? [];
 			const summary = picked ? String(picked.summary ?? "").trim() : String(proof?.summary ?? "").trim();
-			const status = picked ? stateOf(picked) : proof?.status ?? null;
 			const task = picked ?? proof?.task ?? null;
+			const remote = picked ? stateOf(picked) : proof?.status ?? null;
+			// El cambio se ve al instante; el poll de 15 s confirma lo que guardó el host.
+			const status = localState && task?.id === localState.id ? localState.text : remote;
 			const name = task ? nameOf(task) : "Esta sesión";
 
 			if (!proof && !picked) return null;
@@ -383,7 +391,6 @@ window.__ModuleLoader__.load({
 			const counts = [
 				media.length ? `${media.length} ${media.length === 1 ? "prueba visual" : "pruebas visuales"}` : null,
 				deliverables.length ? `${deliverables.length} ${deliverables.length === 1 ? "entregable" : "entregables"}` : null,
-				status,
 			].filter(Boolean);
 
 			const items = tasks.map((item) => ({
@@ -476,6 +483,41 @@ window.__ModuleLoader__.load({
 								})
 							: h("span", { className: "evd-task", title: name }, name),
 						counts.length ? h("span", { className: "evd-progress" }, counts.join(" · ")) : null,
+						task && status
+							? h(Menu, {
+									open: stateOpen,
+									anchor: h(
+										"button",
+										{
+											type: "button", className: "evd-state", "aria-haspopup": "menu", "aria-expanded": stateOpen,
+											title: "Cambiar el estado de la tarea", onClick: () => setStateOpen((value) => !value),
+										},
+										h("span", null, status),
+										h(
+											"svg",
+											{ width: 12, height: 12, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
+											h("path", { d: "M4.5 6.5L8 10l3.5-3.5", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" }),
+										),
+									),
+									items: STATES,
+									selectedId: stateId(task),
+									side: "top",
+									align: "end",
+									dense: true,
+									portal: true,
+									listClassName: "evd-menu",
+									onClose: () => setStateOpen(false),
+									onSelect: (id) => {
+										setStateOpen(false);
+										setLocalState({ id: task.id, text: id.replace("_", " ") });
+										fetch("/tasks/update", {
+											method: "POST",
+											headers: { "content-type": "application/json", "x-dsh-tasks": "1" },
+											body: JSON.stringify({ id: task.id, state: id }),
+										}).catch(() => {});
+									},
+								})
+							: status ? h("span", { className: "evd-state" }, status) : null,
 					),
 					open
 						? h(

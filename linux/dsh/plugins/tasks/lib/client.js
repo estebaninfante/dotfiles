@@ -12,6 +12,16 @@ window.__ModuleLoader__.load({
 		const React = require("react");
 		const h = React.createElement;
 		const { useEffect, useState } = React;
+		/** El menú real del harness da el estilo; sin él, la tarjeta cae al texto. */
+		let primitives = null;
+		try {
+			primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+		} catch (error) {
+			primitives = null;
+		}
+		const Menu = primitives && typeof primitives.Menu === "function" ? primitives.Menu : null;
+		/** Lo que el usuario puede declarar. "en curso" lo pone el servidor. */
+		const STATES = ["abierta", "por_revisar", "cerrada", "fallada", "cancelada"].map((id) => ({ id, label: id.replace("_", " ") }));
 
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -39,7 +49,7 @@ window.__ModuleLoader__.load({
 			".tsk-row{display:flex;align-items:center;gap:14px;justify-content:space-between}",
 			".tsk-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty}",
 			".tsk-side{display:flex;align-items:center;gap:2px;flex:none}",
-			".tsk-state{font-size:12px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;margin-right:6px}.tsk-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
+			".tsk-state{display:inline-flex;align-items:center;gap:4px;margin-right:6px;padding:2px 5px;border:1px solid transparent;border-radius:6px;background:transparent;font:inherit;font-size:12px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;cursor:pointer}.tsk-state:hover{color:var(--dsw-alias-label-primary,#ececf1);border-color:var(--dsw-alias-border-l2,#3b3e46)}.tsk-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
 			".tsk-chevron{display:grid;place-items:center;color:var(--dsw-alias-label-tertiary,#9a9aa3);transition:transform .18s ease}.tsk-chevron[data-closed='false']{transform:rotate(180deg)}.tsk-toggle:hover .tsk-chevron{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".tsk-time{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".tsk-steps{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
@@ -363,6 +373,7 @@ window.__ModuleLoader__.load({
 			const { task, onChange, busy, collapsed, onToggle } = props;
 			const status = statusOf(task);
 			const turns = turnLabel(task);
+			const [stateOpen, setStateOpen] = useState(false);
 			return h(
 				"div",
 				{ className: "tsk-card" },
@@ -374,11 +385,36 @@ window.__ModuleLoader__.load({
 						"div",
 						{ className: "tsk-side" },
 						turns ? h("span", { className: "tsk-turn" }, turns) : null,
-						h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined }, status.text),
+						Menu
+							? h(Menu, {
+									open: stateOpen,
+									anchor: h(
+										"button",
+										{
+											type: "button", className: "tsk-state", "data-tone": status.bad ? "bad" : undefined,
+											"aria-haspopup": "menu", "aria-expanded": stateOpen, title: "Cambiar el estado de la tarea",
+											onClick: () => setStateOpen((value) => !value),
+										},
+										h("span", null, status.text),
+										h(
+											"svg",
+											{ width: 12, height: 12, viewBox: "0 0 16 16", "aria-hidden": "true", fill: "none" },
+											h("path", { d: "M4.5 6.5L8 10l3.5-3.5", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" }),
+										),
+									),
+									items: STATES,
+									selectedId: STATES.some((item) => item.id === task.state) ? task.state : task.state === "resuelta" ? "cerrada" : "abierta",
+									dense: true,
+									align: "end",
+									portal: true,
+									onClose: () => setStateOpen(false),
+									onSelect: (id) => {
+										setStateOpen(false);
+										onChange(task, id);
+									},
+								})
+							: h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined }, status.text),
 						task.turn ? h(Action, { icon: "jump", label: "Ir al mensaje que originó la tarea", onClick: () => jumpToTurn(task.turn, task.request) }) : null,
-						task.state === "cerrada" || task.state === "cancelada"
-							? h(Action, { icon: "undo", label: "Reabrir tarea", onClick: () => onChange(task, "abierta"), disabled: busy })
-							: h(Action, { icon: "check", label: "Cerrar tarea", onClick: () => onChange(task, "cerrada"), disabled: busy }),
 						h(
 							"button",
 							{ type: "button", className: "tsk-icon tsk-toggle", "aria-expanded": collapsed ? "false" : "true", title: collapsed ? "Expandir tarea" : "Colapsar tarea", onClick: onToggle },
