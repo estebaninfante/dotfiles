@@ -267,6 +267,18 @@ fly_goto = function(target)
     expo_fly.sel = t
 end
 
+-- Log del vuelo al overview: sólo con HYPR_EXPO_DEBUG=1 (mismo criterio que
+-- POCO_F3_DEBUG en poco-f3.lua). Sirve para ver por qué un salto no aterrizó.
+local EXPO_DEBUG = true -- TEMPORAL: depurando (volver a os.getenv("HYPR_EXPO_DEBUG") == "1")
+local function expo_log(msg)
+    if not EXPO_DEBUG then return end
+    local handle = io.open("/tmp/expo-debug.log", "a")
+    if handle then
+        handle:write(os.date("%H:%M:%S "), msg, "\n")
+        handle:close()
+    end
+end
+
 fly_commit_now = function()
     if not expo_fly.open then return end
     if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
@@ -277,9 +289,17 @@ fly_commit_now = function()
     -- peek aplicado (ventanas ~1.3x y colgando afuera). expo_commit cierra a
     -- mano y salta derecho. Bug visto el 2026-11-20 en el video del space vacío.
     local destino = expo_fly.want and (spaces.to_global(expo_fly.want) or expo_fly.want) or nil
-    expo_commit.commit(plugin, destino, function(workspace)
-        hl.dispatch(hl.dsp.focus({ workspace = tostring(workspace) }))
-    end)
+    expo_log("commit destino=" .. tostring(destino))
+    expo_commit.commit(plugin, destino, {
+        focus_workspace = function(workspace)
+            hl.dispatch(hl.dsp.focus({ workspace = tostring(workspace) }))
+        end,
+        later = function(ms, fn)
+            hl.timer(fn, { timeout = ms, type = "oneshot" })
+        end,
+        retries = { 0, 120, 260, 420 },
+        log = expo_log,
+    })
     expo_fly.open       = false
     expo_fly.sel        = nil
     expo_fly.busy       = EXPO_CLOSE_TICKS
