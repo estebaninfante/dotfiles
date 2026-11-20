@@ -230,7 +230,6 @@ window.__ModuleLoader__.load({
 					setError(cause);
 				}
 			}, []);
-
 			useEffect(() => {
 				load();
 				const timer = setInterval(load, 8000);
@@ -383,15 +382,12 @@ window.__ModuleLoader__.load({
 						chosen.length ? h("button", { type: "button", className: "brd-btn", onClick: launchLot, disabled: busy, title: "Un orquestador por workspace decide cuántos agentes abrir" }, busy ? "Lanzando…" : `Lanzar lote (${chosen.length})`) : null),
 					error ? h("p", { className: "brd-error" }, error.message) : null,
 					active.list.length ? h("div", { className: "brd-list" }, active.list.slice(0, 200).map(row)) : null,
-					!active.list.length && !error
-						? h("p", { className: "brd-note" }, filter === "sin-lanzar" ? "No hay tareas guardadas: creá una con Nueva tarea y queda esperando." : "No hay tareas en esta vista.")
-						: null));
+					!active.list.length && !error ? h("p", { className: "brd-note" }, filter === "sin-lanzar" ? "No hay tareas guardadas: creá una con Nueva tarea y queda esperando." : "No hay tareas en esta vista.") : null));
 		}
 
-		const BoardIcon = (props) =>
-			h("svg", { width: props?.size ?? 16, height: props?.size ?? 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
-				h("rect", { x: 1.8, y: 1.8, width: 12.4, height: 12.4, rx: 3, stroke: "currentColor", strokeWidth: 1.3 }),
-				h("path", { d: "M4.6 8.1l2 2 4.2-4.4", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round" }));
+		const BoardIcon = (props) => h("svg", { width: props?.size ?? 16, height: props?.size ?? 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true" },
+			h("rect", { x: 1.8, y: 1.8, width: 12.4, height: 12.4, rx: 3, stroke: "currentColor", strokeWidth: 1.3 }),
+			h("path", { d: "M4.6 8.1l2 2 4.2-4.4", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round" }));
 
 		function apply(ctx) {
 			const get = (name) => (typeof ctx.get === "function" ? ctx.get(name) : ctx[name]);
@@ -401,10 +397,8 @@ window.__ModuleLoader__.load({
 				const uiWorkspace = get("uiWorkspace");
 				if (uiWorkspace && typeof uiWorkspace.openSession === "function") uiWorkspace.openSession(sessionId);
 			};
-			ctx.slots.inject("sidebar.panellist", () =>
-				ctx.slots.register({ name: "sidebar.panellist", id: PANEL_ID, order: 20, label: () => "Tareas" }, BoardIcon));
-			ctx.slots.inject("main", () =>
-				ctx.slots.register({ name: "main", key: PANEL_ID, inject: () => ({ get, openSession }) }, BoardPanel));
+			ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL_ID, order: 20, label: () => "Tareas" }, BoardIcon));
+			ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL_ID, inject: () => ({ get, openSession }) }, BoardPanel));
 		}
 
 		exports.apply = apply;

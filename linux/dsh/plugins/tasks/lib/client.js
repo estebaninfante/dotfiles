@@ -468,6 +468,7 @@ window.__ModuleLoader__.load({
 			const [draft, setDraft] = useState("");
 			const [titleDraft, setTitleDraft] = useState("");
 			const [files, setFiles] = useState([]);
+			const [justSaved, setJustSaved] = useState("");
 			const [collapsed, setCollapsed] = useState(() => new Set());
 			const [order, setOrder] = useState("nuevas");
 			const [grouped, setGrouped] = useState(false);
@@ -531,7 +532,10 @@ window.__ModuleLoader__.load({
 					setFiles([]);
 					setFormOpen(false);
 					if (thenLaunch) navigate(await createConversation(created.task, cwd));
-					else await load();
+					else {
+						setJustSaved(`Guardada sin lanzar: la vas a encontrar en Tareas (sidebar) para lanzarla cuando quieras.`);
+						await load();
+					}
 				} catch (cause) {
 					setError(cause);
 				} finally {
@@ -660,6 +664,7 @@ window.__ModuleLoader__.load({
 								),
 							)
 						: null,
+					justSaved ? h("p", { className: "tsk-line", style: { marginTop: 10 } }, justSaved) : null,
 					error ? h("p", { className: "tsk-error" }, error.message) : null,
 					tasks.length
 						? h(
@@ -708,8 +713,13 @@ window.__ModuleLoader__.load({
 				const created = await sessions.create(cwd ? { cwd } : {});
 				if (!created || created.ok !== true) throw new Error(created?.error?.message || "no se pudo crear la sesión");
 				const sessionId = created.value.sessionId;
-				await api("/update", { id: task.id, sessionId, state: "abierta" }).catch(() => {});
-				const text = `Tarea del proyecto: ${nameOf(task)}\nCarpeta: ${cwd}\n\nAl terminar, cerrá con la prueba visual real: captura de la app o video, rutas de archivos y resultado de los tests. Sin captura no hay evidencia visible.`;
+				await api("/update", { id: task.id, sessionId, state: "abierta", launchedAt: Date.now() }).catch(() => {});
+				const lines = [`Tarea: ${nameOf(task)}`, `Carpeta: ${cwd}`];
+				if (task.request) lines.push("", task.request);
+				const attached = task.attachments ?? [];
+				if (attached.length) lines.push("", "Archivos del pedido:", ...attached.map((file) => `- ${file.path} (${file.name})`));
+				lines.push("", "Al terminar, cerrá con la prueba visual real: captura de la app o video, rutas de archivos y resultado de los tests. Sin captura no hay evidencia visible.");
+				const text = lines.join("\n");
 				await sessions.using(sessionId, { source: "gateway" }, async (reference) => {
 					await reference.ready;
 					await reference.binding.session.prompt([{ type: "text", text }], "queue");
