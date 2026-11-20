@@ -22,7 +22,8 @@ de UI usá `evidencia` (skill `evidencia`).
 ## Flujo
 
 ```bash
-agent-seat run --cdp chromium https://example.com   # imprime el número de ventana
+agent-seat run --tarea "probar el login" chromium https://example.com   # imprime N
+agent-seat tarea 1 "revisar el checkout"            # cambiar la tarea cuando cambie
 agent-seat state 1                                  # ¿dibujó? ¿popups? ¿quién actuó último?
 agent-seat ui 1                                     # controles por rol y nombre
 agent-seat click-ui 1 "button:Guardar"              # click por nombre, con tu puntero
@@ -36,11 +37,12 @@ agent-seat stop                                     # cierra broker y sandboxes
 - Leé `ui` antes de capturar: nombre, rol y posición cuestan cero imágenes.
 - Después de actuar, releé `ui` y verificá el valor o estado; eso es la prueba.
 - Capturá sólo si `ui` sale 2 (sin árbol), falta un control o hay que confirmar algo visual.
-- Chromium/Electron: `run --cdp`, así `ui` lee la página por DevTools.
+- Siempre `--tarea "…"` (3-6 palabras, qué venís a hacer): el usuario ve en el overview una pestaña `▸ <agente> · <tarea>` y sin tarea sólo ve tu última acción. Si la tarea cambia, `agent-seat tarea N "…"`.
+- Navegadores: si ya hay uno abierto en el asiento, `run` abre tu URL como pestaña nueva ahí y devuelve esa ventana (no se lanza un segundo navegador: chocarían por el perfil). `--cdp` se agrega solo.
 - El asiento es del agente, no del usuario: si él está escribiendo en una ventana del asiento, no toques esa ventana.
 - El workspace del asiento es **20**; el atajo del usuario para saltar es `Super + Ctrl + Alt + X`.
 - Nunca `ydotool`, `wtype`, `xdotool`, `grim` ni `wf-recorder` sobre la sesión del usuario.
 - Login, captcha o 2FA: pedile al usuario que salte al asiento y lo haga él; esperá que termine.
 - Los sandboxes comparten la red local (`--share-net`); no hay GPU; los logins persisten en `~/.local/state/omarchy/agent-seat/home`.
-- Para mostrar cómo se ve el tile en la grilla sin capturar la pantalla del usuario ni abrir el overview: `agent-seat-tile [<ventana>]`. Compone la miniatura (borde naranja + etiqueta `• app · agente|usuario|quieto`) desde la captura del asiento.
-- El usuario ve las ventanas como tiles en el overview (slots 11..16, nombre `▸ app · dueño`): un tile por ventana, grilla dinámica.
+- Para mostrar cómo se ve el tile en la grilla sin capturar la pantalla del usuario ni abrir el overview: `agent-seat-tile [<ventana>]`. Compone la miniatura (borde naranja + la misma pestaña del overview) desde la captura del asiento.
+- El usuario ve las ventanas como tiles en el overview (slots 11..16, pestaña arriba a la izquierda `▸ <agente> · <tarea o última acción>`): un tile por ventana, grilla dinámica.
