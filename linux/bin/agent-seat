@@ -64,12 +64,75 @@ arrancar_slots() {
     printf '%s\n' "$!" > "$ruta"
 }
 
+# Todos los navegadores del asiento comparten un home, así que un segundo
+# chromium choca con el perfil del primero ("Profile error occurred" en
+# cascada). Si ya hay uno vivo con CDP, las URLs se abren como pestañas en él y
+# se devuelve su ventana. Imprime el número de ventana si reusó.
+reusar_navegador() {
+    local -a flags=()
+    while [ "${1:-}" != "${1#--}" ]; do
+        case "$1" in
+            --share|--share-ro) return 1 ;;   # otro sandbox: no se puede reusar
+            *) flags+=("$1") ;;
+        esac
+        shift
+    done
+    local prog="${1:-}"
+    case "${prog##*/}" in
+        chromium|chromium-browser|google-chrome*|chrome|brave|brave-browser*) ;;
+        *) return 1 ;;
+    esac
+    shift
+    local a
+    for a in "$@"; do
+        case "$a" in --user-data-dir*|--profile-directory*) return 1 ;; esac
+    done
+
+    local dir="${XDG_RUNTIME_DIR:-/tmp}/omarchy/agent-seat/sandboxes"
+    local estado
+    estado=$(timeout 10 omarchy-agent-seat-broker call '{"command":"state"}' 2>/dev/null) || return 1
+    local rec sup puerto cmdline
+    for rec in "$dir"/sandbox.*; do
+        [ -f "$rec" ] || continue
+        read -r sup _ _ _ _ <"$rec" 2>/dev/null || continue
+        [ -r "/proc/$sup/cmdline" ] || continue
+        # El comando del sandbox va después del último "--" del supervisor.
+        cmdline=$(tr '\0' '\n' <"/proc/$sup/cmdline" | awk 'f{print; exit} $0=="--"{f=1}')
+        [ "${cmdline##*/}" = "${prog##*/}" ] || continue
+        puerto=$(cat "$dir/${rec##*.}.d/cdp-port" 2>/dev/null) || continue
+        curl -sf -m 2 "http://127.0.0.1:$puerto/json/version" >/dev/null || continue
+
+        # Ventana del asiento cuyo proceso desciende de este supervisor.
+        local ventana="" w pid p st
+        while read -r w pid; do
+            p=$pid
+            while [ "${p:-0}" -gt 1 ]; do
+                [ "$p" = "$sup" ] && { ventana=$w; break 2; }
+                st=$(cat "/proc/$p/status" 2>/dev/null) || break
+                p=$(printf '%s\n' "$st" | awk '/^PPid:/{print $2}')
+            done
+        done < <(printf '%s' "$estado" | jq -r '.windows | sort_by(.window)[] | "\(.window) \(.pid // 0)"')
+        [ -n "$ventana" ] || continue
+
+        for a in "$@"; do
+            case "$a" in -*) continue ;; esac
+            curl -sf -m 5 -X PUT "http://127.0.0.1:$puerto/json/new?$a" >/dev/null ||
+                echo "agent-seat: no pude abrir $a en la ventana $ventana" >&2
+        done
+        echo "agent-seat: reusando el navegador de la ventana $ventana (pestaña nueva)" >&2
+        echo "$ventana"
+        return 0
+    done
+    return 1
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
     run)
         arrancar_vigia
         arrancar_slots
+        reusar_navegador "$@" && exit 0
         limpiar_locks
         exec "omarchy-agent-seat-run" "$@" ;;
     state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
