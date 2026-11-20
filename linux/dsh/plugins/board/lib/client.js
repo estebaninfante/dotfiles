@@ -31,8 +31,7 @@ window.__ModuleLoader__.load({
 			".brd-filter{height:26px;padding:0 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);font:inherit;font-size:12px;cursor:pointer}",
 			".brd-filter:hover{color:var(--dsw-alias-label-primary,#ececf1)}.brd-filter[data-active='true']{border-color:var(--dsw-alias-border-l2,#3b3e46);color:var(--dsw-alias-label-primary,#ececf1)}",
 			".brd-form{margin:14px 0 4px;padding:14px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:12px;background:var(--dsw-alias-bg-layer-2,#1d2027)}.brd-field{margin:0 0 12px}",
-			".brd-select,.brd-input,.brd-area{box-sizing:border-box;width:100%;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:7px;background:var(--dsw-specific-input-major,#202226);color:var(--dsw-alias-label-primary,#ececf1);font:inherit;font-size:13px}",
-			".brd-area{min-height:104px;resize:vertical;line-height:1.55}",
+			".brd-select,.brd-input,.brd-area{box-sizing:border-box;width:100%;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:7px;background:var(--dsw-specific-input-major,#202226);color:var(--dsw-alias-label-primary,#ececf1);font:inherit;font-size:13px}.brd-area{min-height:104px;resize:vertical;line-height:1.55}",
 			".brd-drop{margin:0 0 12px;padding:14px;border:1px solid var(--dsw-alias-border-l2,#3b3e46);border-radius:9px;background:transparent;color:var(--dsw-alias-label-tertiary,#9a9aa3);font:inherit;font-size:12px;text-align:center;cursor:pointer;width:100%}",
 			".brd-drop:hover{color:var(--dsw-alias-label-primary,#ececf1)}.brd-drop[data-over='true']{border-color:var(--dsw-alias-state-business-primary,#6ea8fe);color:var(--dsw-alias-label-primary,#ececf1)}",
 			".brd-files{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}",
@@ -69,28 +68,23 @@ window.__ModuleLoader__.load({
 		const Icon = (props) =>
 			h("button", { type: "button", className: "brd-icon", title: props.label, "aria-label": props.label, onClick: props.onClick, disabled: props.disabled }, glyph(props.icon));
 
-		function useStyles() {
-			useEffect(() => {
-				let style = document.getElementById(STYLE_ID);
-				if (!style) {
-					style = document.createElement("style");
-					style.id = STYLE_ID;
-					document.head.appendChild(style);
-				}
-				if (style.textContent !== CSS) style.textContent = CSS;
-			}, []);
-		}
-
-		async function api(path, body) {
-			const init = body
-				? { method: "POST", headers: { "content-type": "application/json", "x-dsh-tasks": "1", accept: "application/json" }, body: JSON.stringify(body) }
-				: { headers: { accept: "application/json" } };
+		const useStyles = () => useEffect(() => {
+			let style = document.getElementById(STYLE_ID);
+			if (!style) {
+				style = document.createElement("style");
+				style.id = STYLE_ID;
+				document.head.appendChild(style);
+			}
+			if (style.textContent !== CSS) style.textContent = CSS;
+		}, []);
+		const api = async (path, body) => {
+			const init = body ? { method: "POST", headers: { "content-type": "application/json", "x-dsh-tasks": "1" }, body: JSON.stringify(body) } : {};
 			const response = await fetch(`/tasks${path}`, init);
 			const payload = await response.json().catch(() => ({}));
 			if (response.status === 404) throw new Error("El servidor todavía no tiene las tareas cargadas. Reiniciá el harness: dsh-web --restart.");
 			if (!response.ok) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
 			return payload;
-		}
+		};
 
 		/** Sube el archivo tal cual: el cuerpo es el archivo, no un JSON. */
 		async function upload(taskId, file) {
@@ -103,23 +97,24 @@ window.__ModuleLoader__.load({
 
 		const fileUrl = (path, download) => `/tasks/file?path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`;
 
-		function size(bytes) {
+		const size = (bytes) => {
 			const value = Number(bytes);
 			if (!Number.isFinite(value) || value <= 0) return "";
 			if (value < 1024) return `${value} B`;
 			if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
 			return `${(value / 1024 / 1024).toFixed(value < 10 * 1024 * 1024 ? 1 : 0)} MB`;
-		}
+		};
 
-		function took(ms) {
+		const took = (ms) => {
 			const minutes = Math.round(Number(ms) / 60000);
 			if (!Number.isFinite(minutes) || minutes < 1) return "";
 			if (minutes < 60) return `${minutes} min`;
 			const hours = Math.floor(minutes / 60);
 			if (hours < 24) return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
 			return `${Math.floor(hours / 24)} d ${hours % 24} h`;
-		}
+		};
 
+		/** Los cinco estados los resuelve el servidor; acá solo se leen. */
 		function statusOf(task) {
 			const text = String(task?.status ?? "").trim();
 			if (text) return { text, bad: text === "fallada" || task?.outcome === "falló" };
@@ -132,6 +127,7 @@ window.__ModuleLoader__.load({
 		/** Tarea guardada que todavía no trabajó ningún agente. */
 		const parked = (task) => !task?.sessionId && !task?.orchestratorSessionId && task?.state === "abierta";
 
+		/** El nombre es el título; si no hay, la primera línea del pedido. */
 		function nameOf(task) {
 			const title = String(task?.title ?? "").trim();
 			if (title) return title;
@@ -144,13 +140,11 @@ window.__ModuleLoader__.load({
 			const files = props.files ?? [];
 			const shown = files.slice(0, props.max ?? 4);
 			return h("div", { className: "brd-thumbs" },
-				shown.map((file) =>
-					file.kind === "image"
-						? h("a", { key: file.path, className: "brd-thumb-link", href: fileUrl(file.path), target: "_blank", rel: "noreferrer", title: file.name },
-								h("img", { className: "brd-thumb", src: fileUrl(file.path), alt: file.name, loading: "lazy" }))
-						: h("a", { key: file.path, className: "brd-thumb-link brd-file-chip", href: fileUrl(file.path, true), title: `${file.name} · ${size(file.size)}` },
-								h("span", { className: "brd-file-name", style: { maxWidth: 130, fontSize: 11.5 } }, file.name)),
-				),
+				shown.map((file) => file.kind === "image"
+					? h("a", { key: file.path, className: "brd-thumb-link", href: fileUrl(file.path), target: "_blank", rel: "noreferrer", title: file.name },
+							h("img", { className: "brd-thumb", src: fileUrl(file.path), alt: file.name, loading: "lazy" }))
+					: h("a", { key: file.path, className: "brd-thumb-link brd-file-chip", href: fileUrl(file.path, true), title: `${file.name} · ${size(file.size)}` },
+							h("span", { className: "brd-file-name", style: { maxWidth: 130, fontSize: 11.5 } }, file.name))),
 				files.length > shown.length ? h("span", { className: "brd-more" }, `+${files.length - shown.length}`) : null);
 		}
 
@@ -161,14 +155,12 @@ window.__ModuleLoader__.load({
 				if (!value || typeof value.create !== "function") throw new Error("el harness no expone `sessions`");
 				return value;
 			};
+			/** Lo que se le manda al agente: el pedido guardado, su carpeta y sus archivos. */
 			const prompt = (task) => {
 				const lines = [`Tarea: ${nameOf(task)}`, `Carpeta: ${task.workspace}`];
 				if (task.request) lines.push("", task.request);
 				const files = task.attachments ?? [];
-				if (files.length) {
-					lines.push("", "Archivos del pedido:");
-					for (const file of files) lines.push(`- ${file.path} (${file.name}${file.kind === "image" ? ", imagen" : file.kind === "video" ? ", video" : ""})`);
-				}
+				if (files.length) lines.push("", "Archivos del pedido:", ...files.map((file) => `- ${file.path} (${file.name}${file.kind === "image" ? ", imagen" : file.kind === "video" ? ", video" : ""})`));
 				lines.push("", "Al terminar, cerrá con la prueba visual real: captura de la app o video, rutas de archivos y resultado de los tests. Sin captura no hay evidencia visible.");
 				return lines.join("\n");
 			};
@@ -187,6 +179,7 @@ window.__ModuleLoader__.load({
 				await api("/update", { id: task.id, sessionId, launchedAt: Date.now() }).catch(() => null);
 				return sessionId;
 			};
+			/** Un orquestador por workspace: cada uno decide cuántos agentes abrir. */
 			const lot = async (tasks) => {
 				const groups = new Map();
 				for (const task of tasks) groups.set(task.workspace, [...(groups.get(task.workspace) ?? []), task]);
@@ -260,8 +253,7 @@ window.__ModuleLoader__.load({
 
 			const addFiles = (list) => {
 				const incoming = [...list].filter(Boolean);
-				const next = incoming
-					.filter((file) => file.size <= 512 * 1024 * 1024)
+				const next = incoming.filter((file) => file.size <= 512 * 1024 * 1024)
 					.map((file) => ({ key: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`, file, preview: /^image\//.test(file.type) ? URL.createObjectURL(file) : "" }));
 				setFiles((current) => [...current, ...next].slice(0, 40));
 				if (next.length < incoming.length) setError(new Error("Se saltearon archivos de más de 512 MB."));
@@ -304,23 +296,19 @@ window.__ModuleLoader__.load({
 			})();
 			const change = (task, state) => act(() => api("/update", { id: task.id, state }))();
 			const remove = (task) => act(() => api("/delete", { id: task.id }))();
+			const togglePick = (task) => (event) => setPicked((current) => {
+				const next = new Set(current);
+				if (event.target.checked) next.add(task.id);
+				else next.delete(task.id);
+				return next;
+			});
 
 			const row = (task) => {
 				const status = parked(task) ? "sin lanzar" : statusOf(task).text;
 				const target = task.sessionId ?? task.orchestratorSessionId;
 				return h("div", { className: "brd-row", key: task.id },
 					h("div", { style: { display: "flex", gap: 9, minWidth: 0 } },
-						parked(task)
-							? h("input", {
-									type: "checkbox", className: "brd-check", checked: picked.has(task.id), "aria-label": `Elegir ${nameOf(task)}`,
-									onChange: (event) => setPicked((current) => {
-										const next = new Set(current);
-										if (event.target.checked) next.add(task.id);
-										else next.delete(task.id);
-										return next;
-									}),
-								})
-							: null,
+						parked(task) ? h("input", { type: "checkbox", className: "brd-check", checked: picked.has(task.id), "aria-label": `Elegir ${nameOf(task)}`, onChange: togglePick(task) }) : null,
 						h("div", { style: { minWidth: 0 } },
 							h("p", { className: "brd-title" }, nameOf(task)),
 							h("p", { className: "brd-where", title: task.workspace },
@@ -347,24 +335,21 @@ window.__ModuleLoader__.load({
 				setOver(false);
 				if (event.dataTransfer?.files?.length) addFiles(event.dataTransfer.files);
 			};
+			const openPicker = () => document.getElementById("brd-file-input")?.click();
 
 			const form = h("div", { className: "brd-form" },
-				field("Workspace",
-					h("select", { className: "brd-select", value: workspace, onChange: (event) => setWorkspace(event.target.value) },
-						data.workspaces.map((item) => h("option", { key: item.path, value: item.path }, item.title ? `${item.title} — ${item.path}` : item.path)))),
-				field("Mensaje para el agente",
-					h("textarea", { className: "brd-area", value: request, placeholder: "Qué hay que resolver, con el contexto que haga falta. Esto se le manda al agente cuando la lances.", onChange: (event) => setRequest(event.target.value) })),
-				field("Título corto (opcional)",
-					h("input", { className: "brd-input", value: title, placeholder: "Si no ponés uno, se usa la primera línea del mensaje", onChange: (event) => setTitle(event.target.value) })),
+				field("Workspace", h("select", { className: "brd-select", value: workspace, onChange: (event) => setWorkspace(event.target.value) },
+					data.workspaces.map((item) => h("option", { key: item.path, value: item.path }, item.title ? `${item.title} — ${item.path}` : item.path)))),
+				field("Mensaje para el agente", h("textarea", { className: "brd-area", value: request, placeholder: "Qué hay que resolver, con el contexto que haga falta. Esto se le manda al agente cuando la lances.", onChange: (event) => setRequest(event.target.value) })),
+				field("Título corto (opcional)", h("input", { className: "brd-input", value: title, placeholder: "Si no ponés uno, se usa la primera línea del mensaje", onChange: (event) => setTitle(event.target.value) })),
 				h("div", { className: "brd-field" },
 					h("span", { className: "brd-label" }, "Archivos (imágenes, videos, PDFs, logs)"),
 					h("div", {
-						className: "brd-drop", role: "button", tabIndex: 0, "data-over": String(over),
-						onClick: () => document.getElementById("brd-file-input")?.click(),
+						className: "brd-drop", role: "button", tabIndex: 0, "data-over": String(over), onClick: openPicker,
 						onKeyDown: (event) => {
 							if (event.key !== "Enter" && event.key !== " ") return;
 							event.preventDefault();
-							document.getElementById("brd-file-input")?.click();
+							openPicker();
 						},
 						onDragOver: (event) => {
 							event.preventDefault();
@@ -374,15 +359,13 @@ window.__ModuleLoader__.load({
 						onDrop: drop,
 					}, over ? "Soltá los archivos acá" : "Arrastrá archivos acá o hacé clic para elegirlos"),
 					h("input", { id: "brd-file-input", type: "file", multiple: true, style: { display: "none" }, onChange: pickFiles })),
-				files.length
-					? h("div", { className: "brd-files" },
-							files.map((item) => h("div", { className: "brd-file", key: item.key },
-								item.preview ? h("img", { className: "brd-file-img", src: item.preview, alt: item.file.name }) : null,
-								h("div", { className: "brd-file-body" },
-									h("span", { className: "brd-file-name", title: item.file.name }, item.file.name),
-									h("span", { className: "brd-file-size" }, size(item.file.size))),
-								h("button", { type: "button", className: "brd-icon", title: "Quitar archivo", "aria-label": `Quitar ${item.file.name}`, onClick: () => setFiles((current) => current.filter((entry) => entry.key !== item.key)) }, glyph("close", 13)))))
-					: null,
+				files.length ? h("div", { className: "brd-files" },
+					files.map((item) => h("div", { className: "brd-file", key: item.key },
+						item.preview ? h("img", { className: "brd-file-img", src: item.preview, alt: item.file.name }) : null,
+						h("div", { className: "brd-file-body" },
+							h("span", { className: "brd-file-name", title: item.file.name }, item.file.name),
+							h("span", { className: "brd-file-size" }, size(item.file.size))),
+						h("button", { type: "button", className: "brd-icon", title: "Quitar archivo", "aria-label": `Quitar ${item.file.name}`, onClick: () => setFiles((current) => current.filter((entry) => entry.key !== item.key)) }, glyph("close", 13))))) : null,
 				h("div", { style: { display: "flex", gap: 8, marginTop: 4 } },
 					h("button", { type: "button", className: "brd-btn brd-btn--primary", onClick: create, disabled: busy || !request.trim() || !workspace }, busy ? "Guardando…" : "Guardar tarea"),
 					h("button", { type: "button", className: "brd-btn", onClick: () => { setFormOpen(false); setRequest(""); setTitle(""); setFiles([]); } }, "Cancelar")));
@@ -397,9 +380,7 @@ window.__ModuleLoader__.load({
 					formOpen ? form : null,
 					h("div", { className: "brd-filters" },
 						filters.map((item) => h("button", { type: "button", key: item.id, className: "brd-filter", "data-active": String(item.id === filter), onClick: () => setFilter(item.id) }, `${item.label} (${item.list.length})`)),
-						chosen.length
-							? h("button", { type: "button", className: "brd-btn", onClick: launchLot, disabled: busy, title: "Un orquestador por workspace decide cuántos agentes abrir" }, busy ? "Lanzando…" : `Lanzar lote (${chosen.length})`)
-							: null),
+						chosen.length ? h("button", { type: "button", className: "brd-btn", onClick: launchLot, disabled: busy, title: "Un orquestador por workspace decide cuántos agentes abrir" }, busy ? "Lanzando…" : `Lanzar lote (${chosen.length})`) : null),
 					error ? h("p", { className: "brd-error" }, error.message) : null,
 					active.list.length ? h("div", { className: "brd-list" }, active.list.slice(0, 200).map(row)) : null,
 					!active.list.length && !error
