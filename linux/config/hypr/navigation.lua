@@ -6,7 +6,7 @@ local hyprexpo = require("plugins.hyprexpo")
 local spaces = require("base.workspaces")
 -- Aterrizar el tile del overview, con caída a mano si el workspace no tiene
 -- tile (grilla dinámica: sólo espacios con ventanas). Ver el archivo.
-local expo_commit = require("base.expo-commit")
+local expo_tile = require("base.expo-tile")
 
 local main_mod = variables.main_mod
 local ws_keys = variables.workspace_keys
@@ -267,39 +267,28 @@ fly_goto = function(target)
     expo_fly.sel = t
 end
 
--- Log del vuelo al overview: sólo con HYPR_EXPO_DEBUG=1 (mismo criterio que
--- POCO_F3_DEBUG en poco-f3.lua). Sirve para ver por qué un salto no aterrizó.
-local EXPO_DEBUG = true -- TEMPORAL: depurando (volver a os.getenv("HYPR_EXPO_DEBUG") == "1")
-local function expo_log(msg)
-    if not EXPO_DEBUG then return end
-    local handle = io.open("/tmp/expo-debug.log", "a")
-    if handle then
-        handle:write(os.date("%H:%M:%S "), msg, "\n")
-        handle:close()
-    end
-end
-
 fly_commit_now = function()
     if not expo_fly.open then return end
     if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
     -- Por NÚMERO de workspace (id real), no por índice visible: con
-    -- `dynamic_grid = 1` la grilla sólo tiene espacios CON ventanas, así que la
-    -- posición visible no coincide con el número. Y si el destino está vacío no
-    -- hay tile: ahí el plugin falla y no cierra la grilla, dejando el zoom del
-    -- peek aplicado (ventanas ~1.3x y colgando afuera). expo_commit cierra a
-    -- mano y salta derecho. Bug visto el 2026-11-20 en el video del space vacío.
+    -- `dynamic_grid = 1` la grilla sólo tiene los espacios CON ventanas, así que
+    -- la posición visible no coincide con el número (antes kb_selecti elegía otro
+    -- tile o fallaba en silencio).
     local destino = expo_fly.want and (spaces.to_global(expo_fly.want) or expo_fly.want) or nil
-    expo_log("commit destino=" .. tostring(destino))
-    expo_commit.commit(plugin, destino, {
-        focus_workspace = function(workspace)
-            hl.dispatch(hl.dsp.focus({ workspace = tostring(workspace) }))
-        end,
-        later = function(ms, fn)
-            hl.timer(fn, { timeout = ms, type = "oneshot" })
-        end,
-        retries = { 0, 120, 260, 420 },
-        log = expo_log,
-    })
+    local aterrizo
+    if destino ~= nil then
+        aterrizo = pcall(plugin.kb_selectn, destino)
+    else
+        aterrizo = pcall(plugin.kb_confirm)
+    end
+    if not aterrizo then
+        -- El plugin falló: cerrar la grilla a mano o el zoom del peek queda
+        -- aplicado (las ventanas se ven ~1.3x y colgando fuera de la pantalla).
+        pcall(plugin.expo, "cancel")
+        if destino ~= nil then
+            hl.dispatch(hl.dsp.focus({ workspace = tostring(destino) }))
+        end
+    end
     expo_fly.open       = false
     expo_fly.sel        = nil
     expo_fly.busy       = EXPO_CLOSE_TICKS
