@@ -22,6 +22,7 @@
 - Capturá con nombre: `machine idea --title "…"`. A proyecto: `machine promote`.
 - Preguntá en el modal (`ask_user_question`), nunca en texto.
 - Las tareas las dice el usuario: pasos grandes ("construir la app"), no funcionalidades.
+- El número de tareas sale del contenido, no de la numeración del usuario: una falla o resultado verificable por tarea.
 - Prohibido: estimar tiempo, resumen de 4 puntos, inventar tareas.
 - Una tarea por vez. Cerrá con qué quedó y qué sigue.
 
