@@ -185,6 +185,7 @@ window.__ModuleLoader__.load({
 		function Row(props) {
 			const { task, busy, onLaunch, onOpen, onDelete, onState, chosen } = props;
 			const [open, setOpen] = useState(false);
+			const [confirming, setConfirming] = useState(false);
 			const target = task.sessionId ?? task.orchestratorSessionId;
 			const current = STATES.find((item) => item.id === task.state) ?? STATES[0];
 			const trigger = h("button", {
@@ -206,7 +207,10 @@ window.__ModuleLoader__.load({
 						: trigger,
 					parked(task) ? h("button", { type: "button", className: "brd-btn", onClick: onLaunch, disabled: busy, title: `Lanzar en ${task.workspace}` }, "Lanzar") : null,
 					target ? h(Icon, { icon: "open", label: "Abrir conversación", onClick: () => onOpen(target) }) : null,
-					h(Icon, { icon: "trash", label: "Borrar tarea", onClick: onDelete, disabled: busy })));
+					h(Icon, {
+						icon: "trash", label: confirming ? "Confirmar borrado" : `Borrar ${nameOf(task)}`, disabled: busy,
+						onClick: () => { if (confirming) { onDelete(); return; } setConfirming(true); setTimeout(() => setConfirming(false), 4000); },
+					})));
 		}
 
 		function BoardPanel(props) {
@@ -295,14 +299,15 @@ window.__ModuleLoader__.load({
 				setBusy(true); setError(null);
 				try { await work(); await load(); } catch (cause) { setError(cause); } finally { setBusy(false); }
 			};
-			const launch = (task) => act(async () => props.openSession?.(await launcher.one(task)))();
+			/** Toda acción devuelve una función: nada se ejecuta al pintar la fila. */
+			const launch = (task) => act(async () => props.openSession?.(await launcher.one(task)));
 			const launchLot = () => act(async () => {
 				const opened = await launcher.lot(chosen);
 				setPicked(new Set());
 				if (opened.length) props.openSession?.(opened[0]);
-			})();
-			const change = (task, state) => act(() => api("/update", { id: task.id, state }))();
-			const remove = (task) => act(() => api("/delete", { id: task.id }))();
+			});
+			const change = (task, state) => act(() => api("/update", { id: task.id, state }));
+			const remove = (task) => act(() => api("/delete", { id: task.id }));
 			const togglePick = (task) => (event) => setPicked((current) => {
 				const next = new Set(current);
 				if (event.target.checked) next.add(task.id); else next.delete(task.id);
@@ -374,7 +379,7 @@ window.__ModuleLoader__.load({
 						section.name ? h("h2", { className: "brd-group-h" }, `${section.name} (${section.list.length})`) : null,
 						h("div", { className: "brd-list" }, section.list.map((task) => h(Row, {
 							key: task.id, task, busy, chosen: picked.has(task.id), onPick: togglePick(task),
-							onLaunch: launch(task), onOpen: (id) => props.openSession?.(id), onDelete: remove(task), onState: (state) => change(task, state),
+							onLaunch: () => launch(task), onOpen: (id) => props.openSession?.(id), onDelete: () => remove(task), onState: (state) => change(task, state),
 						})))))));
 		}
 

@@ -4,6 +4,9 @@ local hyprexpo = require("plugins.hyprexpo")
 -- 9 espacios por pantalla: acá todo se razona con el índice LOCAL 1..9 y
 -- base.workspaces lo traduce al id real de la pantalla con foco. Ver ese archivo.
 local spaces = require("base.workspaces")
+-- Aterrizar el tile del overview, con caída a mano si el workspace no tiene
+-- tile (grilla dinámica: sólo espacios con ventanas). Ver el archivo.
+local expo_commit = require("base.expo-commit")
 
 local main_mod = variables.main_mod
 local ws_keys = variables.workspace_keys
@@ -267,11 +270,16 @@ end
 fly_commit_now = function()
     if not expo_fly.open then return end
     if expo_fly.commit then expo_fly.commit:set_enabled(false); expo_fly.commit = nil end
-    if expo_fly.want then
-        plugin.kb_selecti(expo_fly.want)
-    else
-        plugin.kb_confirm()
-    end
+    -- Por NÚMERO de workspace (id real), no por índice visible: con
+    -- `dynamic_grid = 1` la grilla sólo tiene espacios CON ventanas, así que la
+    -- posición visible no coincide con el número. Y si el destino está vacío no
+    -- hay tile: ahí el plugin falla y no cierra la grilla, dejando el zoom del
+    -- peek aplicado (ventanas ~1.3x y colgando afuera). expo_commit cierra a
+    -- mano y salta derecho. Bug visto el 2026-11-20 en el video del space vacío.
+    local destino = expo_fly.want and (spaces.to_global(expo_fly.want) or expo_fly.want) or nil
+    expo_commit.commit(plugin, destino, function(workspace)
+        hl.dispatch(hl.dsp.focus({ workspace = tostring(workspace) }))
+    end)
     expo_fly.open       = false
     expo_fly.sel        = nil
     expo_fly.busy       = EXPO_CLOSE_TICKS
