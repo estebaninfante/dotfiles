@@ -448,6 +448,7 @@ function routes(ctx, live) {
 						note: task?.note ?? "",
 						closeReason: reason ? closeText(reason) : null,
 						summary: assistantSummary(bucket),
+						attachments: task?.attachments ?? [],
 						media: evidence.media,
 						deliverables: evidence.deliverables,
 					});

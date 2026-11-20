@@ -77,6 +77,31 @@ window.__ModuleLoader__.load({
 			return payload;
 		}
 
+		/** Sube el archivo en crudo y lo ata a la tarea. */
+		async function uploadFile(taskId, file) {
+			const query = `task=${encodeURIComponent(taskId)}&name=${encodeURIComponent(file.name)}`;
+			const response = await fetch(`/tasks/upload?${query}`, {
+				method: "POST",
+				headers: { "x-dsh-tasks": "1", "content-type": file.type || "application/octet-stream" },
+				body: file,
+			});
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok) throw new Error(payload?.message || payload?.error || `No se pudo subir ${file.name}`);
+			return payload.attachment;
+		}
+
+		function fileUrl(path, download) {
+			return `/tasks/file?path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`;
+		}
+
+		function sizeText(bytes) {
+			const value = Number(bytes);
+			if (!Number.isFinite(value) || value <= 0) return "";
+			if (value < 1024) return `${value} B`;
+			if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+			return `${(value / 1024 / 1024).toFixed(value < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+		}
+
 		function useStyles() {
 			useEffect(() => {
 				let style = document.getElementById(STYLE_ID);
@@ -376,6 +401,19 @@ window.__ModuleLoader__.load({
 							task.summary ? h("p", { className: "tsk-summary" }, task.summary) : null,
 							task.steps?.length ? h("ul", { className: "tsk-steps" }, task.steps.map((step) => h("li", { key: step }, step))) : null,
 							task.note ? h("p", { className: "tsk-note" }, task.note) : null,
+							task.attachments?.length
+								? h(
+										"div",
+										{ className: "tsk-gallery" },
+										task.attachments.map((file) =>
+											file.kind === "image"
+												? h("a", { key: file.path, className: "tsk-thumb", href: fileUrl(file.path), target: "_blank", rel: "noreferrer", title: file.name },
+														h("img", { src: fileUrl(file.path), alt: file.name, loading: "lazy" }))
+												: h("a", { key: file.path, className: "tsk-file", href: fileUrl(file.path, true), title: `${file.name} · ${sizeText(file.size)}` },
+														fileIcon(), h("span", { className: "tsk-file-name" }, file.name)),
+										),
+									)
+								: null,
 							task.media?.length ? h(Gallery, { items: task.media }) : null,
 							h(Deliverables, { items: task.deliverables ?? [] }),
 						),
@@ -428,6 +466,8 @@ window.__ModuleLoader__.load({
 			const [busy, setBusy] = useState(false);
 			const [formOpen, setFormOpen] = useState(false);
 			const [draft, setDraft] = useState("");
+			const [titleDraft, setTitleDraft] = useState("");
+			const [files, setFiles] = useState([]);
 			const [collapsed, setCollapsed] = useState(() => new Set());
 			const [order, setOrder] = useState("nuevas");
 			const [grouped, setGrouped] = useState(false);
@@ -480,14 +520,18 @@ window.__ModuleLoader__.load({
 				}
 			};
 
-			const create = async () => {
+			const create = async (thenLaunch) => {
 				if (!cwd || !draft.trim()) return;
 				setBusy(true);
 				try {
-					const created = await api("/create", { workspace: cwd, title: draft });
+					const created = await api("/create", { workspace: cwd, title: titleDraft.trim(), request: draft });
+					for (const item of files) await uploadFile(created.task.id, item.file);
 					setDraft("");
+					setTitleDraft("");
+					setFiles([]);
 					setFormOpen(false);
-					navigate(await createConversation(created.task, cwd));
+					if (thenLaunch) navigate(await createConversation(created.task, cwd));
+					else await load();
 				} catch (cause) {
 					setError(cause);
 				} finally {
@@ -572,19 +616,47 @@ window.__ModuleLoader__.load({
 						? h(
 								"div",
 								{ className: "tsk-form" },
-								h("input", {
+								h("textarea", {
 									className: "tsk-input",
+									style: { minHeight: 96, resize: "vertical", lineHeight: 1.55 },
 									value: draft,
 									autoFocus: true,
-									placeholder: "Qué hay que resolver",
+									placeholder: "Qué hay que resolver, con el contexto que haga falta",
 									onChange: (event) => setDraft(event.target.value),
-									onKeyDown: (event) => {
-										if (event.key === "Enter") create();
-									},
 								}),
+								h("input", {
+									className: "tsk-input",
+									value: titleDraft,
+									placeholder: "Título corto (opcional)",
+									onChange: (event) => setTitleDraft(event.target.value),
+								}),
+								h("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" } },
+									h("button", { type: "button", className: "tsk-btn", onClick: () => document.getElementById("tsk-file-input")?.click() }, "Adjuntar archivos"),
+									h("input", {
+										id: "tsk-file-input",
+										type: "file",
+										multiple: true,
+										style: { display: "none" },
+										onChange: (event) => {
+											const list = [...(event.target.files ?? [])].filter((file) => file.size <= 512 * 1024 * 1024);
+											setFiles((current) => [...current, ...list.map((file) => ({ key: `${file.name}-${file.size}-${Math.random()}`, file }))].slice(0, 40));
+											event.target.value = "";
+										},
+									}),
+									h("span", { className: "tsk-line", style: { margin: 0 } }, files.length ? `${files.length} archivo${files.length === 1 ? "" : "s"}` : "imágenes, videos, PDFs, logs"),
+								),
+								files.length
+									? h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 } },
+											files.map((item) =>
+												h("span", { key: item.key, style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 6px", border: "1px solid var(--dsw-alias-border-l1,#2c2f36)", borderRadius: 6, fontSize: 12, color: "var(--dsw-alias-label-secondary,#b9b9c2)" } },
+													h("span", { style: { maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.file.name),
+													h("span", { className: "tsk-line", style: { margin: 0 } }, sizeText(item.file.size)),
+													h("button", { type: "button", className: "tsk-icon", title: "Quitar archivo", onClick: () => setFiles((current) => current.filter((entry) => entry.key !== item.key)) }, "×"))))
+									: null,
 								h("div", { style: { display: "flex", gap: 8 } },
-									h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: create, disabled: busy || !draft.trim() }, "Crear y abrir"),
-									h("button", { type: "button", className: "tsk-btn", onClick: () => { setFormOpen(false); setDraft(""); } }, "Cancelar"),
+									h("button", { type: "button", className: "tsk-btn tsk-btn--primary", onClick: () => create(false), disabled: busy || !draft.trim() }, "Guardar"),
+									h("button", { type: "button", className: "tsk-btn", onClick: () => create(true), disabled: busy || !draft.trim() }, "Guardar y lanzar"),
+									h("button", { type: "button", className: "tsk-btn", onClick: () => { setFormOpen(false); setDraft(""); setTitleDraft(""); setFiles([]); } }, "Cancelar"),
 								),
 							)
 						: null,
