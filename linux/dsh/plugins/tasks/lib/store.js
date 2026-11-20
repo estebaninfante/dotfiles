@@ -9,6 +9,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { removeTaskFiles } from "./attach.js";
 
 const DIR = join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "storages");
 const FILE = join(DIR, "local-tasks.json");
@@ -83,6 +84,27 @@ function cleanSteps(value) {
 	return steps;
 }
 
+/** Archivos adjuntos de la tarea: nombre, ruta dentro de ~/.dsh/tasks y tipo. */
+function cleanAttachments(value) {
+	if (!Array.isArray(value)) return null;
+	const files = [];
+	const seen = new Set();
+	for (const item of value) {
+		const path = typeof item?.path === "string" ? item.path.trim() : "";
+		if (!path.startsWith("/") || seen.has(path)) continue;
+		seen.add(path);
+		files.push({
+			name: clean(item?.name, 160) || path.split("/").pop(),
+			path,
+			size: Number.isFinite(item?.size) ? Math.max(0, Math.trunc(item.size)) : 0,
+			mime: clean(item?.mime, 120) || "application/octet-stream",
+			kind: clean(item?.kind, 20) || "file",
+		});
+		if (files.length >= 40) break;
+	}
+	return files;
+}
+
 export function createTask(input) {
 	return serialized(async () => {
 		const db = await readDb();
@@ -92,13 +114,19 @@ export function createTask(input) {
 			workspace: clean(input.workspace, 1024),
 			title: clean(input.title, 200),
 			goal: clean(input.goal, 2000),
+			// El pedido guardado: el mensaje que el usuario dejó para después.
+			request: clean(input.request, 8000),
+			attachments: cleanAttachments(input.attachments) ?? [],
 			// Los pasos son lo que hay que hacer dentro de la tarea, no tareas aparte.
 			steps: cleanSteps(input.steps) ?? [],
 			state: "abierta",
 			sessionId: clean(input.sessionId, 120) || null,
+			// Conversación orquestadora que tomó esta tarea, si se lanzó en lote.
+			orchestratorSessionId: null,
 			turn: Number.isSafeInteger(input.turn) && input.turn > 0 ? input.turn : null,
 			turns: Number.isSafeInteger(input.turn) && input.turn > 0 ? [input.turn] : [],
 			origin: typeof input.origin === "string" ? clean(input.origin, 20) : "ui",
+			launchedAt: null,
 			createdAt: now,
 			updatedAt: now,
 			resolvedAt: null,
@@ -136,6 +164,11 @@ export function updateTask(id, patch) {
 			task.reviewedAt = Number.isSafeInteger(patch.reviewedAt) ? patch.reviewedAt : Date.now();
 		}
 		if (typeof patch.note === "string") task.note = clean(patch.note, 400);
+		if (typeof patch.request === "string") task.request = clean(patch.request, 8000);
+		const files = cleanAttachments(patch.attachments);
+		if (files) task.attachments = files;
+		if (Number.isSafeInteger(patch.launchedAt) && patch.launchedAt > 0) task.launchedAt = patch.launchedAt;
+		if (typeof patch.orchestratorSessionId === "string" && patch.orchestratorSessionId.trim()) task.orchestratorSessionId = clean(patch.orchestratorSessionId, 120);
 		if (STATES.has(patch.state) && patch.state !== task.state) {
 			task.state = patch.state;
 			// Cancelada = el usuario detuvo el turno; no es un cierre exitoso.
@@ -146,6 +179,12 @@ export function updateTask(id, patch) {
 		await writeDb(db);
 		return task;
 	});
+}
+
+/** Una tarea por id, para las rutas que la necesitan antes de escribir. */
+export async function getTask(id) {
+	const db = await readDb();
+	return db.tasks.find((item) => item.id === id) ?? null;
 }
 
 /** Tarea ligada a una conversación, para saber si el turno ya tiene tarea. */
@@ -240,6 +279,33 @@ export async function adoptTurn(sessionId, turn) {
 	});
 }
 
+/** Archivo subido a una tarea: se suma a su lista de adjuntos. */
+export function attachFile(id, attachment) {
+	return serialized(async () => {
+		const db = await readDb();
+		const task = db.tasks.find((item) => item.id === id);
+		if (!task) throw new Error("tarea no encontrada");
+		const files = cleanAttachments([...(task.attachments ?? []), attachment]) ?? [];
+		task.attachments = files;
+		task.updatedAt = Date.now();
+		await writeDb(db);
+		return task;
+	});
+}
+
+/** Quita un adjunto de la tarea (el archivo del disco lo borra la ruta). */
+export function detachFile(id, path) {
+	return serialized(async () => {
+		const db = await readDb();
+		const task = db.tasks.find((item) => item.id === id);
+		if (!task) throw new Error("tarea no encontrada");
+		task.attachments = (task.attachments ?? []).filter((file) => file.path !== path);
+		task.updatedAt = Date.now();
+		await writeDb(db);
+		return task;
+	});
+}
+
 export function deleteTask(id) {
 	return serialized(async () => {
 		const db = await readDb();
@@ -247,6 +313,7 @@ export function deleteTask(id) {
 		db.tasks = db.tasks.filter((item) => item.id !== id);
 		if (db.tasks.length === before) throw new Error("tarea no encontrada");
 		await writeDb(db);
+		await removeTaskFiles(id);
 		return { ok: true };
 	});
 }

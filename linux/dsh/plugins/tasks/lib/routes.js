@@ -2,9 +2,13 @@
  * Rutas HTTP del plugin de tareas (loopback, servidas por webServer):
  *
  *   GET  /tasks/list?workspace=/abs/path          tareas de esa carpeta, con estado en vivo
- *   POST /tasks/create                            { workspace, title, goal }
- *   POST /tasks/update                            { id, state?, title?, goal?, sessionId? }
+ *   POST /tasks/create                            { workspace, title, goal, request }
+ *   POST /tasks/update                            { id, state?, title?, goal?, request? }
  *   POST /tasks/delete                            { id }
+ *   POST /tasks/upload?task=<id>&name=<archivo>   cuerpo crudo del archivo (hasta 512 MB)
+ *   POST /tasks/detach                            { id, path }
+ *   GET  /tasks/file?path=/abs/file[&download=1]  un adjunto de la tarea, tal cual
+ *   GET  /tasks/workspaces                        carpetas de trabajo conocidas
  *   POST /tasks/backfill                          { session }  trae los pedidos de una conversación
  *   GET  /tasks/turn?session=<id>                 pedido actual con su prueba visual
  *   GET  /tasks/evidence?session=<id>[&turn=N]    evidencia verificable de un turno
@@ -16,13 +20,15 @@
  */
 import { spawn } from "node:child_process";
 import { createReadStream, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { attachmentInfo, removeAttachment, saveUpload } from "./attach.js";
 import { planBackfill } from "./backfill.js";
 import { assistantSummary, textOfMessage } from "./events.js";
 import { summarizeEvidence } from "./evidence.js";
 import { MAX_MEDIA_BYTES, enrichMedia, mediaInfo } from "./media.js";
-import { createTask, deleteTask, findLatestTask, findTurnTask, listTasks, taskTurns, updateTask } from "./store.js";
+import { attachFile, createTask, deleteTask, detachFile, findLatestTask, findTurnTask, getTask, listTasks, taskTurns, updateTask } from "./store.js";
 
 const MAX_BODY = 64 * 1024;
 const SESSION_ID = /^[A-Za-z0-9:._-]{8,160}$/;
@@ -150,8 +156,98 @@ function routes(ctx, live) {
 				const body = await readJsonBody(req);
 				const workspace = absoluteWorkspace(body?.workspace);
 				if (!workspace) return sendJson(res, 400, { error: "missing-workspace" });
-				if (typeof body?.title !== "string" || !body.title.trim()) return sendJson(res, 400, { error: "missing-title" });
-				sendJson(res, 200, { task: await createTask({ workspace, title: body.title, goal: body.goal, sessionId: body?.sessionId, turn: body?.turn, origin: "ui" }) });
+				// El título puede salir del pedido: una tarea es el mensaje guardado.
+				const request = typeof body?.request === "string" ? body.request.trim() : "";
+				const title = typeof body?.title === "string" && body.title.trim() ? body.title.trim() : request.split("\n")[0].slice(0, 120);
+				if (!title) return sendJson(res, 400, { error: "missing-title" });
+				sendJson(res, 200, {
+					task: await createTask({ workspace, title, goal: body.goal, request, sessionId: body?.sessionId, turn: body?.turn, origin: "ui" }),
+				});
+			},
+		},
+		{
+			// El archivo llega en crudo: nada de base64 ni JSON de 64 KB.
+			path: "/tasks/upload",
+			method: "POST",
+			handler: async (req, res) => {
+				const url = new URL(req.url ?? "/", "http://127.0.0.1");
+				const id = (url.searchParams.get("task") ?? "").trim();
+				const name = url.searchParams.get("name") ?? "";
+				if (!id) return sendJson(res, 400, { error: "missing-task" });
+				if (!(await getTask(id))) return sendJson(res, 404, { error: "task-not-found" });
+				let attachment;
+				try {
+					attachment = await saveUpload(id, name, req);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return sendJson(res, /demasiado grande/.test(message) ? 413 : 500, { error: "upload-failed", message });
+				}
+				sendJson(res, 200, { attachment, task: await attachFile(id, attachment) });
+			},
+		},
+		{
+			path: "/tasks/detach",
+			method: "POST",
+			handler: async (req, res) => {
+				const body = await readJsonBody(req);
+				const id = typeof body?.id === "string" ? body.id.trim() : "";
+				const path = typeof body?.path === "string" ? body.path.trim() : "";
+				if (!id || !path) return sendJson(res, 400, { error: "missing-id-or-path" });
+				await removeAttachment(path).catch(() => null);
+				sendJson(res, 200, { task: await detachFile(id, path) });
+			},
+		},
+		{
+			// Un adjunto tal cual: imagen, video, PDF o zip de la tarea.
+			path: "/tasks/file",
+			method: "GET",
+			handler: async (req, res) => {
+				const url = new URL(req.url ?? "/", "http://127.0.0.1");
+				const info = attachmentInfo(url.searchParams.get("path") ?? "");
+				if (!info) return sendJson(res, 400, { error: "outside-tasks" });
+				let details;
+				try {
+					details = statSync(info.path);
+				} catch {
+					return sendJson(res, 404, { error: "missing" });
+				}
+				if (!details.isFile()) return sendJson(res, 403, { error: "not-a-file" });
+				const download = url.searchParams.get("download") === "1";
+				const headers = {
+					"content-type": info.mime,
+					"content-length": details.size,
+					"cache-control": "private, max-age=300",
+					"x-content-type-options": "nosniff",
+				};
+				if (download) headers["content-disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(info.name)}`;
+				res.writeHead(200, headers);
+				const stream = createReadStream(info.path);
+				stream.on("error", () => res.destroy());
+				stream.pipe(res);
+			},
+		},
+		{
+			// Carpetas de trabajo para elegir al crear una tarea: el registro del
+			// harness más las que ya usaron otras tareas.
+			path: "/tasks/workspaces",
+			method: "GET",
+			handler: async (_req, res) => {
+				const found = new Map();
+				const home = homedir();
+				try {
+					const raw = await readFile(join(process.env.DSH_HOME ?? join(home, ".dsh"), "storages", "workspace.json"), "utf8");
+					const workspaces = JSON.parse(raw)?.tables?.workspaces ?? {};
+					for (const item of Object.values(workspaces)) {
+						if (typeof item?.path === "string" && isAbsolute(item.path)) found.set(item.path, { path: item.path, title: String(item.title ?? "") });
+					}
+				} catch {
+					// Sin registro: quedan las carpetas de las tareas.
+				}
+				for (const task of await listTasks(undefined)) {
+					if (task.workspace && !found.has(task.workspace)) found.set(task.workspace, { path: task.workspace, title: "" });
+				}
+				const list = [...found.values()].sort((a, b) => (a.path === home ? -1 : b.path === home ? 1 : a.path.localeCompare(b.path)));
+				sendJson(res, 200, { workspaces: list, home });
 			},
 		},
 		{
@@ -161,7 +257,7 @@ function routes(ctx, live) {
 				const body = await readJsonBody(req);
 				const id = typeof body?.id === "string" ? body.id.trim() : "";
 				if (!id) return sendJson(res, 400, { error: "missing-id" });
-				const patch = { state: body?.state, title: body?.title, goal: body?.goal, steps: body?.steps, outcome: body?.outcome, note: body?.note, sessionId: body?.sessionId, turn: body?.turn };
+				const patch = { state: body?.state, title: body?.title, goal: body?.goal, request: body?.request, steps: body?.steps, attachments: body?.attachments, outcome: body?.outcome, note: body?.note, sessionId: body?.sessionId, turn: body?.turn, launchedAt: body?.launchedAt, orchestratorSessionId: body?.orchestratorSessionId };
 				sendJson(res, 200, { task: await updateTask(id, patch) });
 			},
 		},

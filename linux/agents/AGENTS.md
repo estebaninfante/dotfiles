@@ -23,6 +23,9 @@
 - Preguntá en el modal (`ask_user_question`), nunca en texto.
 - Las tareas las dice el usuario: pasos grandes ("construir la app"), no funcionalidades.
 - El número de tareas sale del contenido, no de la numeración del usuario: una falla o resultado verificable por tarea.
+- Antes de planear, reescribí el pedido como resultados verificables; si la prueba de uno no prueba el otro, son dos tareas.
+- Dos quejas que se arreglan con el mismo cambio van en una sola tarea.
+- Un pedido que llega a mitad del turno con otra falla abre tarea nueva, no se cuela en la abierta.
 - Prohibido: estimar tiempo, resumen de 4 puntos, inventar tareas.
 - Una tarea por vez. Cerrá con qué quedó y qué sigue.
 
