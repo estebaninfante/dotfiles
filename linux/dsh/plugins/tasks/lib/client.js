@@ -47,7 +47,7 @@ window.__ModuleLoader__.load({
 			".tsk-list{display:flex;flex-direction:column;gap:8px;padding-top:10px}",
 			".tsk-card{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);border-radius:12px;background:var(--dsw-alias-bg-layer-2,#1d2027);transition:border-color .12s ease}.tsk-card:hover{border-color:var(--dsw-alias-border-l2,#3b3e46)}",
 			".tsk-row{display:flex;align-items:center;gap:14px;justify-content:space-between}",
-			".tsk-title{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty}",
+			".tsk-title{margin:0;padding:0;border:0;background:transparent;text-align:left;font:inherit;font-size:13.5px;font-weight:500;line-height:1.45;color:var(--dsw-alias-label-primary,#ececf1);overflow-wrap:anywhere;text-wrap:pretty;cursor:pointer}.tsk-title:hover{text-decoration:underline;text-underline-offset:2px}",
 			".tsk-side{display:flex;align-items:center;gap:2px;flex:none}",
 			".tsk-state{display:inline-flex;align-items:center;gap:4px;margin-right:6px;padding:2px 5px;border:1px solid transparent;border-radius:6px;background:transparent;font:inherit;font-size:12px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#9a9aa3);white-space:nowrap;cursor:pointer}.tsk-state:hover{color:var(--dsw-alias-label-primary,#ececf1);border-color:var(--dsw-alias-border-l2,#3b3e46)}.tsk-state[data-tone='bad']{color:var(--dsw-alias-state-danger-primary,#f2777a)}",
 			".tsk-chevron{display:grid;place-items:center;color:var(--dsw-alias-label-tertiary,#9a9aa3);transition:transform .18s ease}.tsk-chevron[data-closed='false']{transform:rotate(180deg)}.tsk-toggle:hover .tsk-chevron{color:var(--dsw-alias-label-primary,#ececf1)}",
@@ -135,6 +135,17 @@ window.__ModuleLoader__.load({
 			if (task?.state === "cerrada" || task?.state === "resuelta") return { text: "cerrada", bad: false };
 			if (task?.state === "por_revisar" || task?.outcome === "ok") return { text: "por revisar", bad: false };
 			return { text: "abierta", bad: false };
+		}
+
+		/**
+		 * El tilde del menú sigue al rótulo: si la fila dice "por revisar", el menú
+		 * tilda "por revisar" aunque el estado guardado sea otro.
+		 */
+		function stateKey(text, stored) {
+			const label = String(text ?? "").trim();
+			if (label === "por revisar" || label === "por cerrar") return "por_revisar";
+			if (label === "abierta" || label === "cerrada" || label === "fallada" || label === "cancelada") return label;
+			return STATES.some((item) => item.id === stored) ? stored : "abierta";
 		}
 
 		/** Qué turno(s) de la conversación trabaja esta tarea. */
@@ -380,7 +391,18 @@ window.__ModuleLoader__.load({
 				h(
 					"div",
 					{ className: "tsk-row" },
-					h("span", { className: "tsk-title", title: nameOf(task) }, nameOf(task)),
+					h(
+						"button",
+						{
+							type: "button", className: "tsk-title",
+							title: task.turn ? `Ir al mensaje que creó la tarea: ${nameOf(task)}` : nameOf(task),
+							onClick: () => {
+								// Cambiar de tarea te lleva al mensaje que la originó.
+								if (task.turn) jumpToTurn(task.turn, task.request);
+							},
+						},
+						nameOf(task),
+					),
 					h(
 						"div",
 						{ className: "tsk-side" },
@@ -403,7 +425,7 @@ window.__ModuleLoader__.load({
 										),
 									),
 									items: STATES,
-									selectedId: STATES.some((item) => item.id === task.state) ? task.state : task.state === "resuelta" ? "cerrada" : "abierta",
+									selectedId: stateKey(status.text, task.state),
 									dense: true,
 									align: "end",
 									portal: true,
@@ -414,7 +436,6 @@ window.__ModuleLoader__.load({
 									},
 								})
 							: h("span", { className: "tsk-state", "data-tone": status.bad ? "bad" : undefined }, status.text),
-						task.turn ? h(Action, { icon: "jump", label: "Ir al mensaje que originó la tarea", onClick: () => jumpToTurn(task.turn, task.request) }) : null,
 						h(
 							"button",
 							{ type: "button", className: "tsk-icon tsk-toggle", "aria-expanded": collapsed ? "false" : "true", title: collapsed ? "Expandir tarea" : "Colapsar tarea", onClick: onToggle },

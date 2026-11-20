@@ -29,6 +29,13 @@ window.__ModuleLoader__.load({
 		/** Lo que el usuario puede declarar; el estado lo aplica /tasks/update. */
 		const STATES = ["abierta", "por_revisar", "cerrada", "fallada", "cancelada"].map((id) => ({ id, label: id.replace("_", " ") }));
 		const stateId = (task) => (STATES.some((item) => item.id === task?.state) ? task.state : task?.state === "resuelta" ? "cerrada" : "abierta");
+		/** El tilde sigue al rótulo que se muestra, no al estado guardado. */
+		const stateKey = (text, stored) => {
+			const label = String(text ?? "").trim();
+			if (label === "por revisar" || label === "por cerrar") return "por_revisar";
+			if (label === "abierta" || label === "cerrada" || label === "fallada" || label === "cancelada") return label;
+			return stateId({ state: stored });
+		};
 
 		var module = { exports: {} };
 		var exports = module.exports;
