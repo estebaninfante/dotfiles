@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Atajo: el `omarchy-agent-seat-run` del PATH pasa por `agent-seat run`, que reusa
+# el navegador vivo del asiento en vez de lanzar otro contra el mismo perfil.
+# `agent-seat` llama al original de ~/.local/share/agent-seat/bin (va primero en
+# su PATH), así que esto no se llama a sí mismo.
+exec agent-seat run "$@"

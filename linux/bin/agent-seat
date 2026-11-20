@@ -64,28 +64,44 @@ arrancar_slots() {
     printf '%s\n' "$!" > "$ruta"
 }
 
+# Imprime el programa de un `run` (lo que va después de las opciones del seat).
+programa_de() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --share|--share-ro) shift 2 ;;
+            --*) shift ;;
+            *) printf '%s\n' "$1"; return 0 ;;
+        esac
+    done
+    return 1
+}
+
+es_navegador() {
+    case "${1##*/}" in
+        chromium|chromium-browser|google-chrome*|chrome|brave|brave-browser*) return 0 ;;
+    esac
+    return 1
+}
+
 # Todos los navegadores del asiento comparten un home, así que un segundo
 # chromium choca con el perfil del primero ("Profile error occurred" en
 # cascada). Si ya hay uno vivo con CDP, las URLs se abren como pestañas en él y
 # se devuelve su ventana. Imprime el número de ventana si reusó.
 reusar_navegador() {
-    local -a flags=()
-    while [ "${1:-}" != "${1#--}" ]; do
-        case "$1" in
-            --share|--share-ro) return 1 ;;   # otro sandbox: no se puede reusar
-            *) flags+=("$1") ;;
-        esac
-        shift
-    done
-    local prog="${1:-}"
-    case "${prog##*/}" in
-        chromium|chromium-browser|google-chrome*|chrome|brave|brave-browser*) ;;
-        *) return 1 ;;
-    esac
-    shift
-    local a
+    local prog
+    prog=$(programa_de "$@") || return 1
+    es_navegador "$prog" || return 1
+    # Con --share hace falta otro sandbox; con perfil propio no hay choque.
+    local a pasado=0 urls=()
     for a in "$@"; do
-        case "$a" in --user-data-dir*|--profile-directory*) return 1 ;; esac
+        case "$a" in
+            --share|--share-ro) return 1 ;;
+            --user-data-dir*|--profile-directory*) return 1 ;;
+        esac
+        if [ "$pasado" = 1 ]; then
+            case "$a" in -*) ;; *) urls+=("$a") ;; esac
+        fi
+        [ "$a" = "$prog" ] && pasado=1
     done
 
     local dir="${XDG_RUNTIME_DIR:-/tmp}/omarchy/agent-seat/sandboxes"
@@ -114,8 +130,7 @@ reusar_navegador() {
         done < <(printf '%s' "$estado" | jq -r '.windows | sort_by(.window)[] | "\(.window) \(.pid // 0)"')
         [ -n "$ventana" ] || continue
 
-        for a in "$@"; do
-            case "$a" in -*) continue ;; esac
+        for a in "${urls[@]}"; do
             curl -sf -m 5 -X PUT "http://127.0.0.1:$puerto/json/new?$a" >/dev/null ||
                 echo "agent-seat: no pude abrir $a en la ventana $ventana" >&2
         done
@@ -132,9 +147,19 @@ case "$cmd" in
     run)
         arrancar_vigia
         arrancar_slots
+        # Un lanzamiento a la vez: si dos agentes piden navegador juntos, el
+        # segundo tiene que ver al primero para reusarlo. El candado se suelta
+        # cuando omarchy-agent-seat-run termina (ya apareció la ventana).
+        exec 7>"${XDG_RUNTIME_DIR:-/tmp}/agent-seat-run.lock"
+        flock -w 30 7 || { echo "agent-seat: otro lanzamiento no terminó en 30 s" >&2; exit 1; }
+        # Un navegador siempre con CDP, así el siguiente puede reusarlo.
+        if prog=$(programa_de "$@") && es_navegador "$prog"; then
+            case " $* " in *" --cdp "*) ;; *) set -- --cdp "$@" ;; esac
+        fi
         reusar_navegador "$@" && exit 0
         limpiar_locks
-        exec "omarchy-agent-seat-run" "$@" ;;
+        omarchy-agent-seat-run "$@"
+        exit $? ;;
     state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show)
         exec "omarchy-agent-seat-$cmd" "$@" ;;
     show-or-start)

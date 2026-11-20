@@ -6,6 +6,12 @@
 # ventana (con títulos) y al cerrarse la última. Se apaga solo cuando el broker
 # se detiene o cuando pasan AGENT_SEAT_WATCH_IDLE segundos sin ventanas.
 #
+# También limpia: cierra solo los diálogos basura que dejan las apps del
+# asiento (hoy "Profile error occurred", de un chromium que chocó con el perfil
+# de otro), avisa una vez y lo anota en ~/.local/state/agent-seat/limpieza.log.
+# `agent-seat run` ya evita ese choque reusando el navegador; esto es la red
+# para lo que se escape.
+#
 # Uso: agent-seat-watch [-v]     (-v: además imprime cada cambio, para probar)
 set -uo pipefail
 
@@ -26,6 +32,29 @@ aviso() {
         || notify-send "$*" >/dev/null 2>&1 || true
 }
 decir() { [ "$VERBOSO" = 1 ] && echo "$*"; return 0; }
+
+BASURA='^(Profile error occurred)$'
+REGISTRO="${XDG_STATE_HOME:-$HOME/.local/state}/agent-seat/limpieza.log"
+
+# Cierra (cierre normal, no kill) cada ventana del asiento con título basura.
+limpiar_basura() {
+    local lista n=0 w dir titulo
+    lista="$(agent-seat windows 2>/dev/null | jq -r --arg re "$BASURA" \
+        '.[]? | select(.title | test($re)) | "\(.window)\t\(.address)\t\(.title)"' 2>/dev/null)" || return 0
+    [ -n "$lista" ] || return 0
+    mkdir -p "${REGISTRO%/*}"
+    while IFS=$'\t' read -r w dir titulo; do
+        [ -n "$dir" ] && [ "$dir" != null ] || continue
+        if [ "$(hyprctl dispatch "hl.dsp.window.close({ window = 'address:$dir' })" 2>/dev/null)" = ok ]; then
+            n=$((n + 1))
+            printf '%s cerrada ventana %s (%s) "%s"\n' "$(date '+%F %T')" "$w" "$dir" "$titulo" >>"$REGISTRO"
+        fi
+    done <<<"$lista"
+    if [ "$n" -gt 0 ]; then
+        aviso "Agent Seat: cerré $n diálogo(s) de error de un agente (ver $REGISTRO)"
+        decir "vigía: cerradas $n ventanas basura"
+    fi
+}
 
 decir "vigía del asiento: arrancando"
 while :; do
@@ -54,6 +83,8 @@ while :; do
             continue
             ;;
     esac
+
+    limpiar_basura
 
     n="$(agent-seat windows 2>/dev/null | jq -r 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)"
     n="${n:-0}"
