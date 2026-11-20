@@ -13,7 +13,13 @@ import { removeTaskFiles } from "./attach.js";
 
 const DIR = join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "storages");
 const FILE = join(DIR, "local-tasks.json");
-const STATES = new Set(["abierta", "resuelta", "cancelada"]);
+/**
+ * Estados que declara el usuario desde la UI de Tareas. El agente no cierra:
+ * cuando termina, la tarea queda "por_revisar" y solo el clic del usuario la
+ * pasa a "cerrada". "resuelta" es el nombre viejo y se lee como "cerrada".
+ */
+const STATES = new Set(["abierta", "por_revisar", "cerrada", "fallada", "cancelada", "resuelta"]);
+const normalizeState = (state) => (state === "resuelta" ? "cerrada" : state);
 
 /**
  * Turnos de una tarea. Una tarea no es un turno: el pedido que la abre y los
@@ -169,11 +175,16 @@ export function updateTask(id, patch) {
 		if (files) task.attachments = files;
 		if (Number.isSafeInteger(patch.launchedAt) && patch.launchedAt > 0) task.launchedAt = patch.launchedAt;
 		if (typeof patch.orchestratorSessionId === "string" && patch.orchestratorSessionId.trim()) task.orchestratorSessionId = clean(patch.orchestratorSessionId, 120);
-		if (STATES.has(patch.state) && patch.state !== task.state) {
-			task.state = patch.state;
-			// Cancelada = el usuario detuvo el turno; no es un cierre exitoso.
-			task.resolvedAt = patch.state === "resuelta" ? Date.now() : null;
-			task.cancelledAt = patch.state === "cancelada" ? Date.now() : null;
+		if (STATES.has(patch.state)) {
+			const next = normalizeState(patch.state);
+			if (next !== task.state) {
+				task.state = next;
+				// Cancelada = el usuario detuvo el turno; no es un cierre exitoso.
+				task.resolvedAt = next === "cerrada" ? Date.now() : null;
+				task.cancelledAt = next === "cancelada" ? Date.now() : null;
+				// Quien cierra desde la UI es el usuario: queda registrado.
+				if (next === "cerrada") task.closedBy = "user";
+			}
 		}
 		task.updatedAt = Date.now();
 		await writeDb(db);

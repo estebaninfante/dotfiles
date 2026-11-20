@@ -78,7 +78,7 @@ function absoluteWorkspace(value) {
 const STATE_TEXT = {
 	abierta: "abierta",
 	en_curso: "en curso",
-	por_cerrar: "por cerrar",
+	por_revisar: "por revisar",
 	cerrada: "cerrada",
 	fallada: "fallada",
 	cancelada: "cancelada",
@@ -94,20 +94,20 @@ function closeText(reason) {
 }
 
 /**
- * Estado de una tarea: en curso si se trabaja ahora, cerrada si el agente la dio
- * por terminada, fallada si falló, cancelada si el usuario detuvo el turno,
- * por cerrar cuando el turno terminó y todavía nadie la revisó, y abierta si
- * falta trabajo.
+ * Estado de una tarea. Solo el usuario cierra: el agente deja la tarea en
+ * "por revisar" (turno terminado o resultado ok) y el clic en "cerrada" es del
+ * usuario. Fallada y cancelada son hechos, no una revisión.
  */
 function taskState(task, live = {}) {
 	if (task?.state === "cancelada" || task?.outcome === "cancelada") return STATE_TEXT.cancelada;
 	const turns = taskTurns(task);
 	// Si el turno está corriendo, la tarea está en curso aunque antes se cerrara.
 	if (live.running && live.current && turns.includes(live.current)) return STATE_TEXT.en_curso;
-	if (task?.outcome === "falló") return STATE_TEXT.fallada;
-	if (task?.state === "resuelta" || task?.outcome === "ok") return STATE_TEXT.cerrada;
-	// El turno terminó (con evidencia o no) y la tarea quedó sin revisar.
-	if (task?.outcome === "parcial" || live.ended) return STATE_TEXT.por_cerrar;
+	if (task?.state === "fallada" || task?.outcome === "falló") return STATE_TEXT.fallada;
+	// Cerrada es siempre un acto del usuario (el nombre viejo era "resuelta").
+	if (task?.state === "cerrada" || task?.state === "resuelta") return STATE_TEXT.cerrada;
+	// El agente terminó o el turno se cerró: queda esperando la revisión del usuario.
+	if (task?.state === "por_revisar" || task?.outcome === "ok" || task?.outcome === "parcial" || live.ended) return STATE_TEXT.por_revisar;
 	return STATE_TEXT.abierta;
 }
 
