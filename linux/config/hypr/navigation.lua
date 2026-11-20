@@ -4,9 +4,15 @@ local hyprexpo = require("plugins.hyprexpo")
 -- 9 espacios por pantalla: acá todo se razona con el índice LOCAL 1..9 y
 -- base.workspaces lo traduce al id real de la pantalla con foco. Ver ese archivo.
 local spaces = require("base.workspaces")
--- Aterrizar el tile del overview, con caída a mano si el workspace no tiene
--- tile (grilla dinámica: sólo espacios con ventanas). Ver el archivo.
+-- ¿La grilla tiene tile de este workspace? Con `dynamic_grid = 1` sólo los
+-- espacios CON ventanas lo tienen. Ver base/expo-tile.lua.
 local expo_tile = require("base.expo-tile")
+local function grilla_tiene_tile(id)
+    if id == nil then return false end
+    local ok, windows = pcall(hl.get_workspace_windows, id)
+    if not ok then return true end
+    return expo_tile.tiene_tile(windows)
+end
 
 local main_mod = variables.main_mod
 local ws_keys = variables.workspace_keys
@@ -252,7 +258,7 @@ local function ws_grid_index(n)
     return (2 - row_from_bottom) * 3 + col
 end
 
-local fly_goto, fly_commit_now, fly_schedule_commit, fly_poll_step, ensure_poll, fly_open_and_go, fly_abort
+local fly_goto, fly_commit_now, fly_schedule_commit, fly_poll_step, ensure_poll, fly_open_and_go, fly_abort, salto_sin_tile
 
 fly_goto = function(target)
     if not expo_fly.open then return end
@@ -333,6 +339,13 @@ fly_poll_step = function()
 end
 
 fly_open_and_go = function(n)
+    -- Espacio sin ventanas: no hay tile donde caer (grilla dinámica). Ahí no se
+    -- abre la grilla, se salta derecho. Ver salto_sin_tile.
+    local destino = spaces.to_global(n) or n
+    if not grilla_tiene_tile(destino) then
+        salto_sin_tile(destino)
+        return
+    end
     local cur = spaces.local_of(hl.get_active_workspace())
     -- Vuelo en UN solo movimiento: abrir en "peek" (la grilla entra un poco más
     -- grande que la pantalla, o sea el escritorio actual se aleja apenas) y a los
@@ -361,6 +374,17 @@ fly_abort = function()
         expo_fly.busy = EXPO_CLOSE_TICKS
         ensure_poll()
     end
+end
+
+-- Volar a un espacio que NO tiene tile en la grilla (sin ventanas) no aterriza:
+-- el plugin devuelve éxito igual, no cierra la grilla y el zoom del "peek" queda
+-- aplicado (las ventanas se ven ~1.3x y colgando fuera de la pantalla) hasta que
+-- se abre y cierra el overview. Así que ahí ni se abre: se cierra lo que haya y
+-- se salta derecho. Bug del 2026-11-20 (video del space vacío).
+salto_sin_tile = function(workspace)
+    fly_abort()
+    if plugin ~= nil then pcall(plugin.expo, "cancel") end
+    hl.dispatch(hl.dsp.focus({ workspace = tostring(workspace) }))
 end
 
 expo_ui_toggle = function()
@@ -425,6 +449,12 @@ expo_select = function(i)
         -- visible: con la grilla dinámica los tiles no están en orden 1..9, así
         -- que `kb_selecti(i)` elegía otro tile o fallaba.
         local gid = spaces.to_global(i) or i
+        -- Sin tile (espacio sin ventanas) el plugin no cierra la grilla aunque
+        -- devuelva éxito: se cierra a mano antes de elegir.
+        if not grilla_tiene_tile(gid) then
+            salto_sin_tile(gid)
+            return
+        end
         if pcall(plugin.kb_selectn, gid) then return end
         -- El workspace no está en la grilla (vacío, oculto en modo dinámico):
         -- cerrar la grilla y enfocarlo directo, sin quedar pegado.
