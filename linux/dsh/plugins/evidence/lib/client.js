@@ -73,7 +73,7 @@ window.__ModuleLoader__.load({
 			".evd-steps li::before{content:'·';position:absolute;left:3px}",
 			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px}.evd-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c);cursor:zoom-in}.evd-thumb img{width:100%;height:100%;object-fit:contain;display:block}",
 			".evd-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}.evd-video{width:212px;height:120px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
-			".evd-lightbox{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:28px;background:#08090bd9;backdrop-filter:blur(2px)}",
+			".evd-lightbox{border:0;padding:0;margin:auto;max-width:none;max-height:none;background:transparent;overflow:visible}.evd-lightbox::backdrop{background:#08090bd9;backdrop-filter:blur(2px)}",
 			".evd-lightbox-img{max-width:94vw;max-height:88vh;border-radius:10px;box-shadow:0 24px 60px #000a;display:block}",
 			".evd-lightbox-close{position:fixed;top:16px;right:18px;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary,#b9b9c2);cursor:pointer}.evd-lightbox-close:hover{color:var(--dsw-alias-label-primary,#ececf1)}",
 			".evd-lightbox-close:focus-visible,.evd-lightbox-more:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:2px}",
@@ -212,7 +212,22 @@ window.__ModuleLoader__.load({
 		function Gallery(props) {
 			const media = (props.media ?? []).slice(0, props.max ?? 99);
 			const [view, setView] = useState(null);
+			const dialog = React.useRef(null);
 			const current = view === null ? null : media[view] ?? null;
+			/**
+			 * El visor es un `<dialog>` modal: se abre en la capa de arriba del
+			 * navegador. Un overlay `position:fixed` dentro de la tarjeta queda
+			 * recortado por el panel del composer, que tiene su propio overflow.
+			 */
+			useEffect(() => {
+				const node = dialog.current;
+				if (!node) return;
+				if (view === null) {
+					if (node.open) node.close();
+					return;
+				}
+				if (!node.open) node.showModal();
+			}, [view]);
 			const move = React.useCallback(
 				(delta) => {
 					if (view === null) return;
@@ -258,9 +273,20 @@ window.__ModuleLoader__.load({
 				),
 				current
 					? h(
-							"div",
-							{ className: "evd-lightbox", role: "dialog", "aria-modal": "true", "aria-label": current.label ?? "Imagen de la evidencia", onClick: () => setView(null) },
-							h("img", { className: "evd-lightbox-img", src: current.url, alt: current.label ?? "", onClick: (event) => event.stopPropagation() }),
+							"dialog",
+							{
+								ref: dialog, className: "evd-lightbox", "aria-label": current.label ?? "Imagen de la evidencia",
+								onClose: () => setView(null),
+								onClick: (event) => {
+									if (event.target === event.currentTarget) setView(null);
+								},
+							},
+							h("img", {
+								className: "evd-lightbox-img", src: current.url, alt: current.label ?? "",
+								// Inline: ningún reset del harness puede volver a recortarla.
+								style: { width: "auto", height: "auto", maxWidth: "94vw", maxHeight: "88vh", objectFit: "contain", display: "block" },
+								onClick: (event) => event.stopPropagation(),
+							}),
 							h(
 								"button",
 								{ type: "button", className: "evd-lightbox-close", "aria-label": "Cerrar", onClick: () => setView(null) },
