@@ -43,6 +43,9 @@ window.__ModuleLoader__.load({
 
 		const STYLE_ID = "dsh-local-evidence-style";
 		const CSS = [
+			// El reset del harness deja las imágenes sin ancho máximo: las del
+			// mensaje se dibujan a tamaño natural y el borde del chat las recorta.
+			"[data-chat-turn] img{max-width:100%;height:auto}",
 			".evd-root{box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance,0px) - var(--dsh-composer-side-clearance,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px));max-width:calc(var(--dsh-composer-card-max-width,952px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px) - var(--dsh-composer-dock-inset,0px));border-radius:var(--dsw-radius-lg,16px);background:var(--dsw-specific-menu,#202226);box-shadow:var(--dsw-elevation-panel,0 10px 30px #0007);backdrop-filter:var(--dsw-menu-backdrop-filter,blur(20px));flex:none;margin:0 auto;overflow:hidden}",
 			".evd-body{display:flex;flex-direction:column;padding:6px 12px}",
 			".evd-head{display:flex;align-items:center;gap:8px;width:100%;min-width:0}",
@@ -68,7 +71,7 @@ window.__ModuleLoader__.load({
 			".evd-steps{margin:0 0 8px;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px}",
 			".evd-steps li{position:relative;padding-left:13px;font:400 12px/1.55 system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--dsw-alias-label-tertiary,#9a9aa3)}",
 			".evd-steps li::before{content:'·';position:absolute;left:3px}",
-			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px}.evd-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c);cursor:zoom-in}.evd-thumb img{width:100%;height:100%;object-fit:cover;display:block}",
+			".evd-gallery{display:flex;flex-wrap:wrap;gap:6px}.evd-thumb{display:block;width:132px;height:82px;border-radius:6px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:var(--dsw-alias-bg-layer-1,#16181c);cursor:zoom-in}.evd-thumb img{width:100%;height:100%;object-fit:contain;display:block}",
 			".evd-thumb:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#6ea8fe);outline-offset:1px}.evd-video{width:212px;height:120px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1,#2c2f36);background:#000}",
 			".evd-lightbox{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:28px;background:#08090bd9;backdrop-filter:blur(2px)}",
 			".evd-lightbox-img{max-width:94vw;max-height:88vh;border-radius:10px;box-shadow:0 24px 60px #000a;display:block}",
