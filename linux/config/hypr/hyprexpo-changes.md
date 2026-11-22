@@ -1,5 +1,41 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-21 — el espacio actual SIEMPRE tiene tile en la grilla
+
+**Motivo**: parado en un espacio sin ventanas, tu propio espacio no aparecía en la
+grilla (`dynamic_grid = 1` sólo arma tiles de espacios CON ventanas). Peor: sin tile
+del espacio actual, volar con `SUPER+<tecla>` a un destino sin ventanas no tenía
+dónde aterrizar, el plugin devolvía éxito igual y la grilla quedaba abierta a mitad
+del zoom del peek (ventanas ~1.3x colgando fuera de la pantalla). Es el bug del
+video del 2026-11-20.
+
+**Implementación**:
+
+- Patch nuevo `linux/patches/hyprexpo-current-workspace.patch` (4 líneas en
+  `Overview.cpp`, rama `dynamicGrid` del constructor de `COverview`): además de los
+  espacios con ventanas, entra siempre el espacio actual. El orden lo normaliza
+  `expandDynamicWorkspaceIDs` (sort + unique); `mru_sort` lo manda al primer tile.
+- Va como patch aparte, no dentro de `hyprexpo-local.patch`: el grande son ~150 KB
+  de diffs del fork y regenerarlo entero por 4 líneas es ruido. `hyprexpo-rebuild.sh`
+  aplica los dos y tiene guard anti-regresion.
+- Del lado Lua (`navigation.lua`) queda igual: para un destino vacío que NO es el
+  actual se salta directo, sin abrir la grilla.
+
+**Verificado** (compositor anidado, nunca la sesión viva; mismo escenario antes y
+después: una terminal en el espacio 1, parado en el 3 vacío, abrir la grilla y elegir
+el 3):
+
+- sin el patch: `submap tras elegir el 3 = hyprexpo` (la grilla no se cierra → bug).
+- con el patch: `submap tras elegir el 3 = default` y el espacio queda en 3.
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` (ya corrido: el `.so` está
+instalado en `/var/cache/hyprpm/eztvn/hyprexpo/`). El `.so` nuevo entra en el
+**próximo arranque de Hyprland**: no se puede hacer `hyprctl plugin unload/load` en
+la sesión viva (descargar un plugin con pass elements/hooks la tumba).
+
+**Revertir**: sacar el `git apply` del patch chico en `hyprexpo-rebuild.sh`, rebuild
+y reiniciar Hyprland.
+
 ## Cambio 2026-11-19 — SUPER+N: el viaje vuela en UN solo movimiento
 
 **Motivo**: en la grilla plana, cambiar de espacio con `SUPER+<n>` se sentía lento y
