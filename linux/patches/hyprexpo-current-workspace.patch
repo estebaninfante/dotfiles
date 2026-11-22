@@ -1,0 +1,14 @@
+diff --git a/Overview.cpp b/Overview.cpp
+--- a/Overview.cpp
++++ b/Overview.cpp
+@@ -1316,5 +1316,9 @@
+             visibleWorkspaceIDs.push_back(workspace->m_id);
+         }
+ 
+-        if (visibleWorkspaceIDs.empty() && currentWorkspaceID != WORKSPACE_INVALID)
++        // El espacio en el que estas SIEMPRE va en la grilla, aunque no tenga
++        // ventanas: si falta no hay tile del espacio actual y volar a un destino
++        // vacio deja la grilla abierta con el zoom del peek (bug 2026-11-20).
++        // El orden lo normaliza expandDynamicWorkspaceIDs (sort + unique).
++        if (currentWorkspaceID != WORKSPACE_INVALID)
+             visibleWorkspaceIDs.push_back(currentWorkspaceID);

@@ -35,6 +35,19 @@ git -C "$SRC" checkout -f --quiet "$PIN"
 git -C "$SRC" reset --hard --quiet "$PIN"
 git -C "$SRC" clean -fdq
 git -C "$SRC" apply "$PATCH"
+# Segundo patch, aparte a propósito: el de arriba son ~150 KB de diffs del fork y
+# regenerarlo entero por un cambio de 4 líneas es ruido. Este va después, sobre el
+# árbol ya parcheado.
+git -C "$SRC" apply "$HERE/../patches/hyprexpo-current-workspace.patch"
+
+# Guard: el espacio actual tiene que estar siempre en la grilla dinámica, aunque
+# esté vacío (si no, no hay tile del espacio en el que estás: el space vacío no se
+# ve y volar a un destino sin ventanas deja la grilla abierta con el zoom del peek).
+if ! grep -q "El espacio en el que estas SIEMPRE va en la grilla" "$SRC/Overview.cpp"; then
+    echo "error: el patch perdio el espacio actual en la grilla dinamica" >&2
+    echo "       ver linux/patches/hyprexpo-current-workspace.patch y hyprexpo-changes.md" >&2
+    exit 1
+fi
 
 # Guard anti-regresion: los previews en vivo de tiles en otros workspaces
 # dependen de COverview::startLiveRefresh (timer 33ms que recaptura tiles
