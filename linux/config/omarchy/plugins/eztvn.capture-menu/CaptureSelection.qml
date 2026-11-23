@@ -25,8 +25,6 @@ Item {
   readonly property bool hasSelection: selW >= 1 && selH >= 1
   readonly property bool showCrosshair: regionMode && !dragging &&
       pointerX >= 0 && pointerY >= 0 && pointerX <= width && pointerY <= height
-  onHasSelectionChanged: console.log("[capture-menu] hasSelection=" + hasSelection +
-                                     " regionMode=" + regionMode + " sel=" + selW + "x" + selH)
   readonly property color scrimColor: Util.alpha(Color.background, 0.55)
   readonly property color accentColor: Color.accent
 
