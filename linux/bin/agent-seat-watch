@@ -15,7 +15,9 @@
 # Y cierra el asiento cuando los agentes terminan: nadie toca el asiento en
 # AGENT_SEAT_IDLE_CIERRE segundos, el vigía lo baja entero (ventanas, sandboxes
 # y broker) para no dejar RAM colgada. Si el último en actuar en una ventana fue
-# el usuario, se le da AGENT_SEAT_IDLE_USUARIO segundos en vez de eso.
+# el usuario, se le da AGENT_SEAT_IDLE_USUARIO segundos en vez de eso. El plazo
+# se puede fijar sin tocar esto en ~/.config/agent-seat/idle-cierre (un número,
+# en segundos; 0 no cierra nunca), y la variable de entorno gana sobre el archivo.
 #
 # Uso: agent-seat-watch [-v]     (-v: además imprime cada cambio, para probar)
 set -uo pipefail
@@ -23,10 +25,17 @@ set -uo pipefail
 INTERVALO="${AGENT_SEAT_WATCH_INTERVALO:-2}"
 IDLE="${AGENT_SEAT_WATCH_IDLE:-900}"
 GRACIA="${AGENT_SEAT_WATCH_GRACIA:-60}"
-CIERRE="${AGENT_SEAT_IDLE_CIERRE:-300}"
+CIERRE="${AGENT_SEAT_IDLE_CIERRE:-}"
 CIERRE_USUARIO="${AGENT_SEAT_IDLE_USUARIO:-900}"
 VERBOSO=0
 [ "${1:-}" = "-v" ] && VERBOSO=1
+
+if [ -z "$CIERRE" ]; then
+    CIERRE=$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/agent-seat/idle-cierre" 2>/dev/null)
+    case "$CIERRE" in
+        ''|*[!0-9]*) CIERRE=300 ;;
+    esac
+fi
 
 RUTA="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-watch.pid"
 ULTIMO=-1
@@ -44,6 +53,8 @@ decir() { [ "$VERBOSO" = 1 ] && echo "$*"; return 0; }
 # agent-seat): `global` es el último toque al asiento, `<ventana>` el de esa
 # ventana. Viven en el runtime y se borran al cerrar el asiento.
 USO="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-uso"
+# Registro de los cierres por inactividad: qué se cerró y cuánto llevaba quieto.
+CIERRES="${XDG_STATE_HOME:-$HOME/.local/state}/agent-seat/cierres.log"
 
 ultimo_uso() {
     local t
@@ -62,7 +73,7 @@ usuario_en_el_asiento() {
 # Cierra el asiento cuando ningún agente lo tocó en CIERRE segundos. Devuelve 0
 # si lo cerró. Con CIERRE=0 no se cierra nunca por inactividad.
 cerrar_si_inactivo() {
-    local ahora ultimo espera
+    local ahora ultimo espera ventanas
     [ "$CIERRE" -gt 0 ] || return 1
     ahora=$(date +%s)
     ultimo=$(ultimo_uso)
@@ -76,7 +87,12 @@ cerrar_si_inactivo() {
         espera=$CIERRE_USUARIO
     fi
     [ $((ahora - ultimo)) -ge "$espera" ] || return 1
+    ventanas="$(agent-seat windows 2>/dev/null \
+        | jq -r '[.[]? | "\(.app_id): \(.title)"] | join(" · ")' 2>/dev/null || true)"
     decir "vigía: $((ahora - ultimo))s sin uso (límite ${espera}s), cierro el asiento"
+    mkdir -p "${CIERRES%/*}"
+    printf '%s cierre por inactividad: %ss sin uso (límite %ss) · %s\n' \
+        "$(date '+%F %T')" "$((ahora - ultimo))" "$espera" "${ventanas:-sin ventanas}" >>"$CIERRES"
     agent-seat stop >/dev/null 2>&1
     aviso "Agent Seat cerrado: ${espera}s sin uso por el agente (sus apps ya no ocupan RAM)"
     return 0
