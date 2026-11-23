@@ -168,7 +168,8 @@ Item {
         }
       }
 
-      // Confirmar: en área hace falta una zona; en dibujo captura la pantalla.
+      // Confirmar: en área hace falta una zona; en dibujo captura la zona
+      // elegida o, si no hay ninguna, la pantalla entera.
       Rectangle {
         visible: root.canConfirm
         width: Style.space(34)

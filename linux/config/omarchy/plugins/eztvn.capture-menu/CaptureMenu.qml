@@ -9,9 +9,11 @@ import "Annotations.js" as Annotations
 
 // PrintScreen entra directo a capturar y Shift+Print a grabar. La barra de
 // abajo elige el modo: "Seleccionar área" (arrastrar zona, clic en ventana) o
-// "Dibujar" (anotar con el botón izquierdo sobre la pantalla y después
-// capturarla entera). La barra de arriba cambia entre captura y grabación y
-// confirma. Ctrl+C copia sin guardar archivo; Esc o clic derecho cancelan.
+// "Dibujar" (anotar con el botón izquierdo sobre la pantalla). El área elegida
+// sigue a la vista al pasar a dibujar y manda: el trazo no se sale de ella y
+// la captura sale recortada a esa zona. Sin área, dibujar captura la pantalla
+// entera. La barra de arriba cambia entre captura y grabación y confirma.
+// Ctrl+C copia sin guardar archivo; Esc o clic derecho cancelan.
 //
 // Los trazos se mandan al script y se componen sobre el PNG congelado, así que
 // entran en la imagen guardada y en el portapapeles.
@@ -222,30 +224,20 @@ Item {
       if (root.selectionValid) root.finishVideoRegion()
       return
     }
-    if (root.drawMode) {
-      root.finish("full")
+    // Con un área elegida, dibujar captura esa zona: el recuadro es el límite.
+    if (root.selectionValid) {
+      root.finish(root.regionKey("region:"))
       return
     }
-    if (!root.selectionValid) return
-    root.finish("region:" + root.imageCoord(root.selX, true) + "," +
-                root.imageCoord(root.selY, false) + "," +
-                root.imageCoord(root.selW, true) + "," +
-                root.imageCoord(root.selH, false))
+    if (root.drawMode) root.finish("full")
   }
 
-  // Ctrl+C: sólo portapapeles, sin archivo en Imágenes. En dibujo copia la
-  // pantalla con los trazos; en área, la zona elegida (o la pantalla entera si
-  // no hay zona).
+  // Ctrl+C: sólo portapapeles, sin archivo en Imágenes. Con zona elegida copia
+  // esa zona (con los trazos); sin zona, la pantalla entera.
   function copyToClipboard() {
     if (root.intent !== "image") return
-    if (!root.drawMode && root.selectionValid) {
-      root.finish("clipboardregion:" + root.imageCoord(root.selX, true) + "," +
-                  root.imageCoord(root.selY, false) + "," +
-                  root.imageCoord(root.selW, true) + "," +
-                  root.imageCoord(root.selH, false))
-    } else {
-      root.finish("clipboardfull")
-    }
+    if (root.selectionValid) root.finish(root.regionKey("clipboardregion:"))
+    else root.finish("clipboardfull")
   }
 
   Process {
@@ -324,11 +316,11 @@ Item {
         onPointerMoved: function(x, y) {
           root.pointerX = x
           root.pointerY = y
-          if (drawing.drawing) drawing.extend(x, y)
+          if (drawing.drawing) drawing.extend(root.clampDrawX(x), root.clampDrawY(y))
         }
         onDrawingStarted: function(x, y) {
           annotations.closePicker()
-          drawing.begin(x, y)
+          drawing.begin(root.clampDrawX(x), root.clampDrawY(y))
         }
         onDrawingEnded: drawing.end()
         onDragStarted: function(x, y) {
