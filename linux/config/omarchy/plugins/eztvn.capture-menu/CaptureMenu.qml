@@ -186,6 +186,26 @@ Item {
     return Math.round(value * Screen.devicePixelRatio)
   }
 
+  // Clave para el script: la zona elegida, en píxeles del PNG congelado.
+  function regionKey(prefix) {
+    return prefix + root.imageCoord(root.selX, true) + "," +
+           root.imageCoord(root.selY, false) + "," +
+           root.imageCoord(root.selW, true) + "," +
+           root.imageCoord(root.selH, false)
+  }
+
+  // En dibujo el área elegida manda: el trazo no se sale del recuadro, así lo
+  // que se ve es exactamente lo que sale en la captura.
+  function clampDrawX(x) {
+    if (!root.selectionValid) return x
+    return Math.max(root.selX, Math.min(root.selX + root.selW, x))
+  }
+
+  function clampDrawY(y) {
+    if (!root.selectionValid) return y
+    return Math.max(root.selY, Math.min(root.selY + root.selH, y))
+  }
+
   function captureWindow(x, y) {
     var prefix = root.intent === "video" ? "recordwindowat:" : "windowat:"
     root.finish(prefix + root.screenX(x) + "," + root.screenY(y))

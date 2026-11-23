@@ -19,7 +19,10 @@ Item {
   // Lógico → píxeles del archivo (el PNG/MP4 sale a resolución física).
   property real pixelScale: 1
 
-  readonly property bool hasSelection: regionMode && selW >= 1 && selH >= 1
+  // El recuadro se queda visible también en modo dibujar: es el límite de la
+  // captura, así que hay que verlo mientras se traza. `regionMode` sólo
+  // agrega las guías del puntero para elegir la zona.
+  readonly property bool hasSelection: selW >= 1 && selH >= 1
   readonly property bool showCrosshair: regionMode && !dragging &&
       pointerX >= 0 && pointerY >= 0 && pointerX <= width && pointerY <= height
   readonly property color scrimColor: Util.alpha(Color.background, 0.55)
@@ -104,7 +107,9 @@ Item {
       required property int index
       readonly property bool onRight: index % 2 === 1
       readonly property bool onBottom: index >= 2
-      visible: root.hasSelection && root.selW > Style.space(12) && root.selH > Style.space(12)
+      // Esquinas sólo al elegir la zona: en dibujo marcan pero no se arrastran.
+      visible: root.hasSelection && root.regionMode &&
+               root.selW > Style.space(12) && root.selH > Style.space(12)
       x: (onRight ? root.selX + root.selW : root.selX) - width / 2
       y: (onBottom ? root.selY + root.selH : root.selY) - height / 2
       width: Style.space(7)
