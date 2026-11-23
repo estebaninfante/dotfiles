@@ -22,6 +22,10 @@
 #   agent-seat windows                                  # ventanas del asiento
 #   agent-seat status                                   # ¿corriendo?
 #   agent-seat stop                                      # mata broker y sandboxes
+#
+# El asiento no queda abierto después de trabajar: agent-seat-watch lo cierra
+# entero cuando pasan AGENT_SEAT_IDLE_CIERRE segundos (300) sin ninguna acción
+# de un agente. Un agente que termina igual corre `agent-seat stop` enseguida.
 set -uo pipefail
 
 RAIZ="${AGENT_SEAT_HOME:-$HOME/.local/share/agent-seat}"
@@ -183,6 +187,23 @@ meta_poner() {
 
 meta_leer() { sed -n "s/^$2=//p" "$META/$1" 2>/dev/null | tail -1; }
 
+# Sello de uso, para que el asiento no quede abierto cuando los agentes
+# terminan: cada acción de un agente lo actualiza y agent-seat-watch cierra el
+# asiento si pasan AGENT_SEAT_IDLE_CIERRE segundos sin sellos nuevos.
+USO="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-uso"
+
+# marcar_uso <ventana>: sella ahora en el asiento y, si hay ventana, en ella.
+marcar_uso() {
+    local ahora
+    ahora=$(date +%s)
+    mkdir -p "$USO" || return 0
+    printf '%s\n' "$ahora" >"$USO/global"
+    case "${1:-}" in
+        ''|*[!0-9]*) ;;
+        *) printf '%s\n' "$ahora" >"$USO/$1" ;;
+    esac
+}
+
 # Anota quién actuó y qué hizo sobre una ventana. Con "lectura" (ui,
 # screenshot) solo cuenta si es el mismo agente: mirar no le quita la pestaña
 # al que trabaja ahí.
@@ -195,6 +216,7 @@ anotar() {
     fi
     meta_poner "$1" agente "$yo"
     meta_poner "$1" accion "$2"
+    marcar_uso "$1"
 }
 
 # Texto de la pestaña: "▸ <agente> · <tarea | última acción | app>".
@@ -259,6 +281,7 @@ case "$cmd" in
         [ -n "${1:-}" ] || { echo "uso: agent-seat tarea <ventana> \"texto\"" >&2; exit 1; }
         meta_poner "$1" agente "$(quien_llama)"
         meta_poner "$1" tarea "${2:-}"
+        marcar_uso "$1"
         exit 0 ;;
     etiqueta)
         etiqueta "${1:?uso: agent-seat etiqueta <ventana>}"

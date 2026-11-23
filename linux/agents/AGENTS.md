@@ -46,6 +46,7 @@
 - Prohibido `ydotool`, `wtype`, `xdotool`, `grim` y `wf-recorder` sobre la sesión del usuario.
 - Login, captcha o 2FA: pedile al usuario que salte con `Super + Ctrl + Alt + X` y esperá.
 - Mientras el usuario escribe en una ventana del asiento, no toques esa ventana.
+- Al terminar, `agent-seat stop`: el asiento y sus ventanas no quedan chupando RAM.
 
 ## Pruebas con ventanas
 - Las ventanas de prueba van al asiento del agente; nunca a las pantallas del usuario.

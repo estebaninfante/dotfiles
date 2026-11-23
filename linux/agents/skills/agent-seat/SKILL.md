@@ -35,6 +35,8 @@ agent-seat stop                                     # cierra broker y sandboxes
 ## Reglas
 
 - Leé `ui` antes de capturar: nombre, rol y posición cuestan cero imágenes.
+- Cuando terminás el trabajo, `agent-seat stop`: el asiento no se queda abierto ocupando RAM.
+- Si te olvidás, el vigía lo cierra solo a los 5 minutos sin uso (`AGENT_SEAT_IDLE_CIERRE`).
 - Después de actuar, releé `ui` y verificá el valor o estado; eso es la prueba.
 - Capturá sólo si `ui` sale 2 (sin árbol), falta un control o hay que confirmar algo visual.
 - Siempre `--tarea "…"` (3-6 palabras, qué venís a hacer): el usuario ve en el overview una pestaña `▸ <agente> · <tarea>` y sin tarea sólo ve tu última acción. Si la tarea cambia, `agent-seat tarea N "…"`.

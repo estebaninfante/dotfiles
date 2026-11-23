@@ -12,12 +12,19 @@
 # `agent-seat run` ya evita ese choque reusando el navegador; esto es la red
 # para lo que se escape.
 #
+# Y cierra el asiento cuando los agentes terminan: nadie toca el asiento en
+# AGENT_SEAT_IDLE_CIERRE segundos, el vigía lo baja entero (ventanas, sandboxes
+# y broker) para no dejar RAM colgada. Si el último en actuar en una ventana fue
+# el usuario, se le da AGENT_SEAT_IDLE_USUARIO segundos en vez de eso.
+#
 # Uso: agent-seat-watch [-v]     (-v: además imprime cada cambio, para probar)
 set -uo pipefail
 
 INTERVALO="${AGENT_SEAT_WATCH_INTERVALO:-2}"
 IDLE="${AGENT_SEAT_WATCH_IDLE:-900}"
 GRACIA="${AGENT_SEAT_WATCH_GRACIA:-60}"
+CIERRE="${AGENT_SEAT_IDLE_CIERRE:-300}"
+CIERRE_USUARIO="${AGENT_SEAT_IDLE_USUARIO:-900}"
 VERBOSO=0
 [ "${1:-}" = "-v" ] && VERBOSO=1
 
@@ -32,6 +39,48 @@ aviso() {
         || notify-send "$*" >/dev/null 2>&1 || true
 }
 decir() { [ "$VERBOSO" = 1 ] && echo "$*"; return 0; }
+
+# Sellos que deja `agent-seat` en cada acción de un agente (ver marcar_uso en
+# agent-seat): `global` es el último toque al asiento, `<ventana>` el de esa
+# ventana. Viven en el runtime y se borran al cerrar el asiento.
+USO="${XDG_RUNTIME_DIR:-/tmp}/agent-seat-uso"
+
+ultimo_uso() {
+    local t
+    t=$(cat "$USO/global" 2>/dev/null) || t=0
+    case "$t" in ''|*[!0-9]*) t=0 ;; esac
+    printf '%s\n' "$t"
+}
+
+# ¿El usuario fue el último en actuar en alguna ventana del asiento? Entonces
+# está mirando o usando lo que hizo el agente, y el asiento es suyo un rato más.
+usuario_en_el_asiento() {
+    agent-seat state --json 2>/dev/null \
+        | jq -e 'any(.windows[]?; (.focus.owner // "agent") == "user")' >/dev/null 2>&1
+}
+
+# Cierra el asiento cuando ningún agente lo tocó en CIERRE segundos. Devuelve 0
+# si lo cerró. Con CIERRE=0 no se cierra nunca por inactividad.
+cerrar_si_inactivo() {
+    local ahora ultimo espera
+    [ "$CIERRE" -gt 0 ] || return 1
+    ahora=$(date +%s)
+    ultimo=$(ultimo_uso)
+    if [ "$ultimo" -eq 0 ]; then
+        # Asiento abierto por una versión sin sellos: el reloj arranca ahora.
+        mkdir -p "$USO" && printf '%s\n' "$ahora" >"$USO/global"
+        return 1
+    fi
+    espera=$CIERRE
+    if usuario_en_el_asiento; then
+        espera=$CIERRE_USUARIO
+    fi
+    [ $((ahora - ultimo)) -ge "$espera" ] || return 1
+    decir "vigía: $((ahora - ultimo))s sin uso (límite ${espera}s), cierro el asiento"
+    agent-seat stop >/dev/null 2>&1
+    aviso "Agent Seat cerrado: ${espera}s sin uso por el agente (sus apps ya no ocupan RAM)"
+    return 0
+}
 
 # Uno solo por sesión: `agent-seat run` lo arranca en cada lanzamiento y el pid
 # de `setsid ... &` no sirve para saber si ya corre (setsid hace fork).
@@ -75,6 +124,7 @@ while :; do
             # espera un rato. Si ya lo vimos correr, se cerró de verdad.
             if [ "$VIO_CORRER" = 1 ]; then
                 rm -f "$RUTA"
+                rm -rf "$USO"
                 [ "$ULTIMO" -gt 0 ] && aviso "Agent Seat cerrado (las apps del agente terminaron)"
                 decir "vigía: broker detenido, salgo"
                 exit 0
@@ -82,6 +132,7 @@ while :; do
             ESPERANDO=$((ESPERANDO + INTERVALO))
             if [ "$ESPERANDO" -ge "$GRACIA" ]; then
                 rm -f "$RUTA"
+                rm -rf "$USO"
                 decir "vigía: el broker no arrancó en ${GRACIA}s, salgo"
                 exit 0
             fi
@@ -108,11 +159,19 @@ while :; do
         ULTIMO="$n"
     fi
 
+    # Asiento sin uso: los agentes terminaron y las ventanas quedan colgadas.
+    if [ "$n" -gt 0 ] && cerrar_si_inactivo; then
+        SIN_VENTANAS=0
+        sleep "$INTERVALO"
+        continue
+    fi
+
     if [ "$n" -eq 0 ]; then
         SIN_VENTANAS=$((SIN_VENTANAS + INTERVALO))
         if [ "$SIN_VENTANAS" -ge "$IDLE" ]; then
             decir "vigía: ${IDLE}s sin ventanas, salgo"
             rm -f "$RUTA"
+            rm -rf "$USO"
             exit 0
         fi
     else
