@@ -67,7 +67,8 @@ ultimo_uso() {
 # está mirando o usando lo que hizo el agente, y el asiento es suyo un rato más.
 usuario_en_el_asiento() {
     agent-seat state --json 2>/dev/null \
-        | jq -e 'any(.windows[]?; (.focus.owner // "agent") == "user")' >/dev/null 2>&1
+        | jq -e '(if type == "array" then . else (.windows // []) end)
+                 | any(.[]?; ((.focus.owner // "agent") == "user"))' >/dev/null 2>&1
 }
 
 # Cierra el asiento cuando ningún agente lo tocó en CIERRE segundos. Devuelve 0
@@ -176,10 +177,12 @@ while :; do
     fi
 
     # Asiento sin uso: los agentes terminaron y las ventanas quedan colgadas.
+    # Se cierra y el vigía termina: su trabajo era este.
     if [ "$n" -gt 0 ] && cerrar_si_inactivo; then
-        SIN_VENTANAS=0
-        sleep "$INTERVALO"
-        continue
+        rm -f "$RUTA"
+        rm -rf "$USO"
+        decir "vigía: asiento cerrado por inactividad, salgo"
+        exit 0
     fi
 
     if [ "$n" -eq 0 ]; then
