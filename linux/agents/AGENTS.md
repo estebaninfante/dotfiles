@@ -47,6 +47,7 @@
 - Login, captcha o 2FA: pedile al usuario que salte con `Super + Ctrl + Alt + X` y esperá.
 - Mientras el usuario escribe en una ventana del asiento, no toques esa ventana.
 - Al terminar, `agent-seat stop`: el asiento y sus ventanas no quedan chupando RAM.
+- Si te olvidás, el harness lo cierra al terminar el turno (plugin `seat-cierre`); el vigía, a los 5 min sin uso.
 
 ## Pruebas con ventanas
 - Las ventanas de prueba van al asiento del agente; nunca a las pantallas del usuario.

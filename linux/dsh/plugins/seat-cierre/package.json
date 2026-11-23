@@ -1,0 +1,11 @@
+{
+  "name": "dsh-local-seat-cierre",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "description": "Cierra el agent-seat que usó la sesión, al terminar el turno."
+}

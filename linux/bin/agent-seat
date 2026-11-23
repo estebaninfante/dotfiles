@@ -187,6 +187,10 @@ meta_poner() {
 
 meta_leer() { sed -n "s/^$2=//p" "$META/$1" 2>/dev/null | tail -1; }
 
+# Sesión del harness que llama (dsh la pasa en DSH_SESSION_ID). Con esto el
+# plugin seat-cierre sabe qué ventanas cerrar cuando el agente termina el turno.
+sesion_llama() { printf '%s\n' "${AGENT_SEAT_SESION:-${DSH_SESSION_ID:-}}"; }
+
 # Sello de uso, para que el asiento no quede abierto cuando los agentes
 # terminan: cada acción de un agente lo actualiza y agent-seat-watch cierra el
 # asiento si pasan AGENT_SEAT_IDLE_CIERRE segundos sin sellos nuevos.
@@ -208,7 +212,7 @@ marcar_uso() {
 # screenshot) solo cuenta si es el mismo agente: mirar no le quita la pestaña
 # al que trabaja ahí.
 anotar() {
-    local yo dueno
+    local yo dueno sesion
     yo=$(quien_llama)
     if [ "${3:-}" = lectura ]; then
         dueno=$(meta_leer "$1" agente)
@@ -216,6 +220,8 @@ anotar() {
     fi
     meta_poner "$1" agente "$yo"
     meta_poner "$1" accion "$2"
+    sesion=$(sesion_llama)
+    [ -n "$sesion" ] && meta_poner "$1" sesion "$sesion"
     marcar_uso "$1"
 }
 
@@ -281,7 +287,31 @@ case "$cmd" in
         [ -n "${1:-}" ] || { echo "uso: agent-seat tarea <ventana> \"texto\"" >&2; exit 1; }
         meta_poner "$1" agente "$(quien_llama)"
         meta_poner "$1" tarea "${2:-}"
+        [ -n "$(sesion_llama)" ] && meta_poner "$1" sesion "$(sesion_llama)"
         marcar_uso "$1"
+        exit 0 ;;
+    cerrar-sesion)
+        # agent-seat cerrar-sesion <sesión>: cierra las ventanas que esa sesión
+        # del harness abrió y, si no queda ninguna, baja el asiento entero.
+        # Lo llama el plugin seat-cierre al terminar el turno.
+        sesion="${1:-}"
+        [ -n "$sesion" ] || { echo "uso: agent-seat cerrar-sesion <sesión>" >&2; exit 1; }
+        cerradas=0
+        while IFS=$'\t' read -r n dir; do
+            [ -n "$dir" ] && [ "$dir" != null ] || continue
+            [ "$(meta_leer "$n" sesion)" = "$sesion" ] || continue
+            if [ "$(hyprctl dispatch "hl.dsp.window.close({ window = 'address:$dir' })" 2>/dev/null)" = ok ]; then
+                rm -rf "${META:?}/$n"
+                rm -f "${USO:?}/$n"
+                cerradas=$((cerradas + 1))
+            fi
+        done < <(omarchy-agent-seat-windows 2>/dev/null | jq -r '.[]? | "\(.window)\t\(.address)"')
+        restantes=$(omarchy-agent-seat-windows 2>/dev/null | jq -r 'if type == "array" then length else 0 end')
+        if [ "$cerradas" -gt 0 ] && [ "${restantes:-0}" -eq 0 ]; then
+            echo "agent-seat: cerradas $cerradas ventana(s) de $sesion, asiento abajo" >&2
+            timeout 20 omarchy-agent-seat-stop >/dev/null 2>&1 || true
+        fi
+        printf '%s\n' "$cerradas"
         exit 0 ;;
     etiqueta)
         etiqueta "${1:?uso: agent-seat etiqueta <ventana>}"
@@ -313,6 +343,6 @@ case "$cmd" in
         omarchy-agent-seat-run chromium about:blank >/dev/null || exit 1
         exec omarchy-agent-seat-show ;;
     *)
-        echo "uso: agent-seat run [--tarea \"…\"]|tarea|etiqueta|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show|show-or-start" >&2
+        echo "uso: agent-seat run [--tarea \"…\"]|tarea|cerrar-sesion|etiqueta|state|ui|click-ui|type|screenshot|pointer|windows|status|stop|show|show-or-start" >&2
         exit 1 ;;
 esac

@@ -257,6 +257,19 @@ if [ -d "${REPO}/linux/dsh/plugins" ]; then
             && ok "perfil web: dsh-local-hotkeys instalado" \
             || warn "no pude instalar dsh-local-hotkeys (correr: dsh plugin --profile web add link:~/.dsh/plugins/hotkeys)"
     fi
+
+    # El asiento no queda abierto: al terminar el turno, el harness cierra las
+    # ventanas que esa sesión abrió con `agent-seat run` (y el asiento si no
+    # queda ninguna). Ver linux/bin/agent-seat (cerrar-sesion) y el vigía.
+    if [ -f "$PATCH" ] && ! grep -q "local-seat-cierre" "$PATCH"; then
+        printf '\n# Cierre del agent-seat al terminar el turno: no queda RAM colgada.\n- insert:\n    - id: local-seat-cierre\n      name: dsh-local-seat-cierre\n' >> "$PATCH"
+        ok "patch del perfil web: + local-seat-cierre"
+    fi
+    if [ -f "$PATCH" ] && command -v dsh >/dev/null 2>&1 && ! grep -q "dsh-local-seat-cierre" "${HOME}/.dsh/profiles/web/package.json" 2>/dev/null; then
+        dsh plugin --profile web add "link:${HOME}/.dsh/plugins/seat-cierre" >/dev/null 2>&1 \
+            && ok "perfil web: dsh-local-seat-cierre instalado" \
+            || warn "no pude instalar dsh-local-seat-cierre (correr: dsh plugin --profile web add link:~/.dsh/plugins/seat-cierre)"
+    fi
 fi
 if [ -d "${REPO}/linux/agents/skills" ]; then
     mkdir -p "${HOME}/.agents/skills"
