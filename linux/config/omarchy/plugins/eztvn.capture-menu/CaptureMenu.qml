@@ -169,6 +169,8 @@ Item {
     if (mode !== "area" && mode !== "draw") return
     root.interaction = mode
     root.dragging = false
+    console.log("[capture-menu] modo=" + mode + " sel=" + root.selW + "x" + root.selH +
+                " valid=" + root.selectionValid)
     annotations.closePicker()
     keys.forceActiveFocus()
   }
