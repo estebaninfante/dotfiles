@@ -68,3 +68,4 @@ evidencia skill "wf-recorder graba sólo salidas montadas; el asiento usa frames
 
 ## Aprendido
 - 2026-11-19 — wf-recorder graba salidas montadas; el asiento vive en una ventana oculta y se muestrea con grabar
+- 2026-11-23 — El --asiento de iniciar no persiste en los pasos: exportá OBJETIVO=asiento:N en cada invocación
