@@ -1,5 +1,58 @@
 # Hyprexpo — registro de cambios
 
+## Cambio 2026-11-23 — la etiqueta de la grilla ya no se corta (se mide con pango)
+
+**Motivo**: en la grilla, la etiqueta del tile del asiento (la tarea del agente,
+"▸ dsh · present task") salía tapada y sin poder leerse: sólo se veía una franja
+del texto, y a veces el texto no se cortaba. Dependía del largo del nombre del
+espacio: con nombres cortos se leía, con un nombre largo se cortaba.
+
+**Causa** (todo en `renderLabel`/`renderNumberTexture`, no en la config):
+
+- La caja de la textura se **adivinaba**: `fsz * strlen()` de ancho por
+  `max(24, fsz + 8)` de alto, en píxeles LÓGICOS, mientras la fuente se dibuja a
+  `fsz * escala` puntos. En la interna (2880x1800, escala 2) el texto ocupa el
+  doble de lo adivinado: la etiqueta de 34 px de tinta entraba en una superficie
+  de 24 px y se perdía más de la mitad de cada glifo.
+- Peor: `pango_layout_set_width(buffer)` envolvía el texto cuando lo adivinado
+  quedaba corto, y la tinta de dos líneas (77 px) se centraba en esa superficie
+  de 24 px: se veía el pedazo del medio. Por eso "a veces sí, a veces no": un
+  nombre de pocos caracteres no envolvía y se leía; uno largo sí.
+- La píldora de fondo se armaba con la misma caja adivinada, así que era hasta
+  3 veces más ancha que el texto y **tapaba la barra de pestañas de la ventana**
+  de la miniatura.
+
+**Implementación** (`linux/patches/hyprexpo-label-fit.patch`, tercer patch, va
+después del grande y del del espacio actual):
+
+- `labelLayout()`: un solo lugar arma la fuente/atributos del label, sin
+  `set_width` (una etiqueta es una línea: nada que envolver).
+- `renderNumberTexture()` mide la tinta con pango en píxeles del monitor, arma la
+  superficie con ese tamaño (+2 px de margen para el borde antialias) y devuelve
+  la caja en píxeles lógicos (`tinta / escala`).
+- `renderLabel()` deja de adivinar: usa la caja que devuelve la textura, así la
+  píldora queda pegada al texto y tapa mucho menos.
+
+**Verificado**:
+
+- Compila (`hyprexpo-rebuild.sh`, con guard nuevo en el script: si el patch
+  pierde la medición, falla en vez de instalar un build con el texto cortado).
+- Reproducción aislada del cálculo (pango/cairo, escala 2, los mismos textos del
+  asiento) antes/después: `~/Imágenes/screenshots/etiqueta-grilla-2x-antes-despues.png`.
+  El render de arriba reproduce la captura del usuario; el de abajo se lee entero
+  y la píldora mide lo que mide el texto.
+- **Pendiente de ver en la grilla real**: el `.so` nuevo entra con el próximo
+  arranque de Hyprland (no se puede recargar el plugin en la sesión viva sin
+  tumbarla). El compositor anidado no arranca dentro del agent seat (no hay GPU
+  en el sandbox: `CBackend::create() failed`), así que la prueba en vivo no se
+  pudo hacer en este turno.
+
+**Aplicar**: `~/dotfiles/linux/bin/hyprexpo-rebuild.sh` (ya corrido e instalado en
+`/var/cache/hyprpm/eztvn/hyprexpo/hyprexpo.so`) + reiniciar Hyprland.
+
+**Revertir**: sacar el `git apply` de `hyprexpo-label-fit.patch` en
+`hyprexpo-rebuild.sh`, rebuild y reiniciar Hyprland.
+
 ## Cambio 2026-11-21 — el espacio actual SIEMPRE tiene tile en la grilla
 
 **Motivo**: parado en un espacio sin ventanas, tu propio espacio no aparecía en la
