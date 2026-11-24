@@ -28,6 +28,7 @@ Uso:
     present-remote --replay        procesa eventos keyd por stdin (para test)
     present-remote cancel          cancela la sesión de voz activa
     present-remote arrow prev|next acción contextual de las flechas
+    present-remote enter           manda Enter (misma tecla que @enter)
 
 Notas de implementación:
   - Se ignoran los "down" repetidos mientras la tecla sigue apretada: el control
@@ -621,7 +622,10 @@ def run_check():
 
 
 def main(argv):
-    if len(argv) >= 2 and argv[1] in ("cancel", "arrow", "toggle", "voice"):
+    if len(argv) >= 2 and argv[1] in ("cancel", "arrow", "toggle", "voice", "enter"):
+        if argv[1] == "enter":
+            builtin("@enter")
+            return 0
         if argv[1] in ("cancel", "toggle", "voice"):
             if argv[1] == "cancel":
                 cancel_voice()

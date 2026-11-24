@@ -41,9 +41,11 @@ cancel_key = "esc"   # tecla que cancela la sesión de voz activa ("" = desactiv
 [buttons.f14]
 tap = "kindle-mode if-on chatgpt-dictate -- present-remote voice"
 
-# 2 toques (Enter -> f17): dictado del escritorio. Y 2+1 (Enter+Tab) = 3 toques -> launcher.
+# 2 toques (Enter -> f17): con el modo Kindle activo, Enter (manda el prompt
+# que estás dictando en ChatGPT); sin modo, dictado del escritorio.
+# Y 2+1 (Enter+Tab) = 3 toques -> launcher.
 [buttons.f17]
-tap = "~/.local/bin/dictado"
+tap = "kindle-mode if-on present-remote enter -- ~/.local/bin/dictado"
 combo_with = "f14"
 combo = "omarchy-menu toggle"
 
