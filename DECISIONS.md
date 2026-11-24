@@ -3,6 +3,35 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-11-24 — Revertido: `kindle-usbnet` vuelve a autoactivarse (el pasador lo necesita)
+
+**Contexto.** Dejar el enlace USB opt-in dejó la barra en wifi y sin ethernet,
+pero rompió el pasador de páginas: `present-remote` → `kindle-page` golpea
+primero `192.168.15.244` (USBNetwork) y el Kindle no está en Wi-Fi (barrido de
+`192.168.1.0/24` en 8080 y 2222: no responde, ni `/koreader/` en los hosts con
+8080 abierto). Sin el enlace USB, cada tap esperaba 22 s de reintentos y no
+pasaba página.
+
+**Elegido.**
+
+- `kindle-usbnet` con `autoconnect yes` de nuevo. Lo que mantiene la Wi-Fi como
+  camino a internet (y el icono en wifi) es `ipv4.never-default=yes`, no el
+  autoconnect: verificado con el enlace arriba (`omarchy-network-status` =
+  `wifi`, `ip route get 1.1.1.1` → `wlo1`) y con el Kindle apagado (netdev
+  fuera): 200 en `https://example.com`.
+- Se mantiene `no-auto-default=*`: era lo que creaba `Wired connection 2` con
+  DHCP para el segundo netdev del gadget y se llevaba la conexión al enchufar.
+
+**Descartado.**
+
+- Dejar el USB opt-in y descubrir el Kindle por Wi-Fi: hoy no está en la red,
+  así que el pasador se quedaría sin transporte.
+
+**Verificación.** `kindle-page next` y `prev` → rc 0 y
+`GET /koreader/event/GotoViewRel/1` = 200; rebind del gadget →
+`kindle-usbnet` autoactiva con `192.168.15.201`, sin perfiles nuevos, con la
+ruta por defecto en `wlo1`.
+
 ## 2026-11-24 — El enlace USB del Kindle es opt-in; la barra se queda en wifi
 
 **Contexto.** Con `no-auto-default=*` ya no aparecen perfiles cableados
