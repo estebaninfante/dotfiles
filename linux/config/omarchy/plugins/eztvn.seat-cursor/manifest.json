@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "eztvn.seat-cursor",
+  "name": "Seat Cursor",
+  "version": "1.0.0",
+  "author": "eztvn",
+  "license": "MIT",
+  "description": "Dibuja el puntero del Agent Seat: una flecha simulada donde el agente apunta, sólo mientras mirás su ventana.",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "SeatCursor.qml"
+  }
+}
