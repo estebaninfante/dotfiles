@@ -3,6 +3,34 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-11-24 — El enlace USB del Kindle es opt-in; la barra se queda en wifi
+
+**Contexto.** Con `no-auto-default=*` ya no aparecen perfiles cableados
+inventados, pero `kindle-usbnet` seguía con `autoconnect yes`: al enchufar el
+Kindle se activaba una "ethernet" (`192.168.15.201/24`) y el icono de red
+cambiaba, aunque la ruta por defecto siguiera en `wlo1`. El uso real es Wi-Fi
+(control de KOReader y `lh-books` por `192.168.1.4`); el cable es para cargar.
+
+**Elegido.**
+
+- `kindle-usbnet` con `connection.autoconnect no`. Enchufar el Kindle no toca
+  la red: el netdev queda `disconnected`, sin IP, y `omarchy-network-status`
+  (el icono de la barra, que resuelve con `ip route get 1.1.1.1`) sigue en wifi.
+- Enlace USB a demanda: `nmcli connection up kindle-usbnet`. Mantiene
+  `ipv4.never-default=yes`, así que ni levantado a mano cambia el icono ni la
+  ruta por defecto. `92-kindle-books` se dispara igual cuando se levanta a mano.
+
+**Descartado.**
+
+- `NM_UNMANAGED` por udev: deja el enlace USB inutilizable, ni siquiera a mano.
+- Parchear el icono: lo pinta `omarchy-network-status` del paquete y el shell
+  ignora plugins `omarchy.*` de terceros; no hay override sin copiar el plugin.
+
+**Verificación.** Rebind del gadget → solo `wlo1` activa, `curl https://example.com`
+responde 200, `omarchy-network-status` imprime `wifi`. `nmcli c up kindle-usbnet`
+→ IP `192.168.15.201`, ruta por defecto e icono siguen en `wlo1`; `down` vuelve
+al estado inicial.
+
 ## 2026-11-24 — Sin "Wired connection N": el último perfil cableado se define a mano
 
 **Contexto.** Al conectar el Kindle, NetworkManager se pasaba a ethernet. El
