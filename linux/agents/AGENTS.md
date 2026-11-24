@@ -37,6 +37,7 @@
 - Antes de construir o refactorizar UI: `machine vicio`. Son los vicios reales del modelo, con evidencia. Leelos todos.
 - Prohibido: `prompt()`/`alert()`/`confirm()`, pastillas de color para estado, puntos con halo o pulso, bordes punteados, tipografía display de carácter, más de 400 líneas por archivo.
 - Estado: texto plano, no pastilla. Botones de una sola altura, con `:hover` y `:focus-visible`.
+- Botones: ícono antes que texto; el texto sólo cuando el ícono no alcanza (regla del dueño, 2026-11-24).
 - Antes de decir "listo": `npx impeccable detect <url-o-dir>` y captura a 390 y 1440 px.
 - Lienzo Creativo (`~/Proyectos/lienzo-creativo`): `webapp-launch ~/Proyectos/lienzo-creativo`.
 
