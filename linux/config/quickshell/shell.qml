@@ -48,6 +48,7 @@ PanelWindow {
     Launcher {}
 
     GameOverlay { }
+    AgentCursor { }
     PomodoroPill { }
     PomodoroBreakOverlay { }
     EyeCareOverlay { }
