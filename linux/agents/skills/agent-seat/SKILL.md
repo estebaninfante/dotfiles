@@ -22,8 +22,8 @@ de UI usá `evidencia` (skill `evidencia`).
 ## Flujo
 
 ```bash
-agent-seat run --tarea "probar el login" chromium https://example.com   # imprime N
-agent-seat tarea 1 "revisar el checkout"            # cambiar la tarea cuando cambie
+agent-seat run --tarea "comparar precios de vuelos" chromium https://example.com   # imprime N
+agent-seat tarea 1 "revisar el checkout de la tienda"   # cuando cambia lo que hacés
 agent-seat state 1                                  # ¿dibujó? ¿popups? ¿quién actuó último?
 agent-seat ui 1                                     # controles por rol y nombre
 agent-seat click-ui 1 "button:Guardar"              # click por nombre, con tu puntero
@@ -39,7 +39,10 @@ agent-seat stop                                     # cierra broker y sandboxes
 - Si te olvidás, el harness cierra el asiento al terminar el turno (plugin `seat-cierre`) y el vigía lo baja a los 5 min sin uso (`AGENT_SEAT_IDLE_CIERRE`).
 - Después de actuar, releé `ui` y verificá el valor o estado; eso es la prueba.
 - Capturá sólo si `ui` sale 2 (sin árbol), falta un control o hay que confirmar algo visual.
-- Siempre `--tarea "…"` (3-6 palabras, qué venís a hacer): el usuario ve en el overview una pestaña `▸ <agente> · <tarea>` y sin tarea sólo ve tu última acción. Si la tarea cambia, `agent-seat tarea N "…"`.
+- `--tarea` obligatoria y concreta: **qué estás haciendo y sobre qué**, 3-6 palabras, en castellano ("comparar precios de vuelos", "revisar el checkout de la tienda").
+- Prohibido texto genérico o en inglés ("present task", "testing", "probar cosas"): el usuario lee `▸ <agente> · <tarea>` en el tile y no sabe qué ventana es ni qué estás haciendo.
+- Cuando cambia lo que estás haciendo, `agent-seat tarea N "…"` en el momento: el tile se renombra en ~1s.
+- Sin `--tarea` el tile cae a tu última acción ("clic en «Llamada»") y, si no hubo, al nombre de la app: es el piso, no el objetivo.
 - Navegadores: si ya hay uno abierto en el asiento, `run` abre tu URL como pestaña nueva ahí y devuelve esa ventana (no se lanza un segundo navegador: chocarían por el perfil). `--cdp` se agrega solo.
 - El asiento es del agente, no del usuario: si él está escribiendo en una ventana del asiento, no toques esa ventana.
 - El workspace del asiento es **20**; el atajo del usuario para saltar es `Super + Ctrl + Alt + X`.

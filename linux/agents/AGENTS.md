@@ -42,6 +42,7 @@
 
 ## Agent Seat (GUI y capturas)
 - Para abrir una app gráfica, clickear, tipear o scrollear: `agent-seat` (skill `agent-seat`). Corre sandboxeado, en su workspace (20), con puntero y teclado propios.
+- Al abrir una ventana del asiento, `--tarea` concreta (qué hacés y sobre qué, en castellano): es lo que el usuario lee en el tile del overview.
 - Capturas de una ventana: `agent-seat screenshot`; secuencias y pruebas: `evidencia` (skill `evidencia`).
 - Prohibido `ydotool`, `wtype`, `xdotool`, `grim` y `wf-recorder` sobre la sesión del usuario.
 - Login, captcha o 2FA: pedile al usuario que salte con `Super + Ctrl + Alt + X` y esperá.
