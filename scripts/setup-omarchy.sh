@@ -533,6 +533,19 @@ else
     warn "Falta linux/system/NetworkManager/{kvm-ensure.sh,dispatcher.d/90-lan-mouse}"
 fi
 
+# NetworkManager no inventa perfiles cableados ("Wired connection N"). Sin esto
+# el gadget USB del Kindle trae un segundo netdev y NM lo autoactivaba con DHCP:
+# al enchufar el Kindle, el enlace USB se llevaba la conexión.
+if [[ -f "$DOTFILES_SYSTEM/NetworkManager/conf.d/00-no-auto-default.conf" ]]; then
+    sudo install -o root -g root -m 0644 \
+        "$DOTFILES_SYSTEM/NetworkManager/conf.d/00-no-auto-default.conf" \
+        /etc/NetworkManager/conf.d/00-no-auto-default.conf
+    sudo nmcli general reload conf >/dev/null 2>&1 || true
+    ok "no-auto-default (linux/system/NetworkManager/conf.d)"
+else
+    warn "Falta linux/system/NetworkManager/conf.d/00-no-auto-default.conf"
+fi
+
 # Power guard: aplica ahorro (bateria) vs rendimiento (AC) al cambiar de fuente.
 # Sin esto, hyprland.lua/monitors.lua quedan en modo AC (120Hz, blur, anims) y
 # no hay `hyprctl reload` que re-evalue el estado -> consumo alto en bateria.

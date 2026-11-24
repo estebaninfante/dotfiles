@@ -3,6 +3,40 @@
 Registro de decisiones de arquitectura del repo: qué se eligió, por qué y qué
 se descartó. Las entradas no se reescriben; se agregan.
 
+## 2026-11-24 — Sin "Wired connection N": el último perfil cableado se define a mano
+
+**Contexto.** Al conectar el Kindle, NetworkManager se pasaba a ethernet. El
+gadget RNDIS/CDC del Kindle (`0525:a4a2`) expone dos netdevs USB; el principal
+(`enp5s0f3u1`) lo cubre el perfil `kindle-usbnet`, pero el segundo
+(`enp5s0f3u1i1`) no tenía perfil y NM le creaba uno por defecto
+(`Wired connection 2`) que autoactivaba con DHCP — con lo que el enlace USB se
+llevaba la conexión. Quedaba además un `Wired connection 1` huérfano atado al
+puerto del Kindle con `192.168.1.18/24` (misma subred que la LAN de casa) y
+`autoconnect yes`.
+
+**Elegido.**
+
+- **`no-auto-default=*` en `/etc/NetworkManager/conf.d/00-no-auto-default.conf`**
+  (fuente en `linux/system/NetworkManager/conf.d/`, instalado por
+  `setup-omarchy.sh`). Sin perfiles cableados automáticos ningún netdev del
+  Kindle se autoactiva solo; `kindle-usbnet` sigue funcionando porque es un
+  perfil explícito con match de MAC y `ipv4.never-default=yes`.
+- **`Wired connection 1` con `autoconnect no`** (no se borró): es el perfil
+  viejo del mismo puerto y su subred choca con la Wi-Fi de casa.
+
+**Descartado.**
+
+- Marcar la interfaz `NM_UNMANAGED` por udev: rompe `kindle-usbnet` (USBNetwork,
+  `kindle-page`, `lh-books`) que necesita NM para poner la IP del USB.
+- Propiedad udev `NM_AUTO_DEFAULT=0`: no es la que usa NM 1.58 (solo existe
+  `NM_AUTO_DEFAULT_LINK_LOCAL_ONLY`); `no-auto-default` sí está en el binario y
+  se verificó por A/B.
+
+**Verificación.** A/B con un `veth` gestionado: sin el conf, NM crea
+`Wired connection 2/3`; con el conf, ninguno. Rebind del gadget
+(`cdc_ether` unbind/bind) → solo se reactiva `kindle-usbnet`, sin perfiles
+nuevos, y el default route sigue en `wlo1`.
+
 ## 2026-11-10 — Un solo estándar de ideas, y el vault como fuente única
 
 **Contexto.** El usuario suelta ideas y pendientes en cualquier chat y se le
