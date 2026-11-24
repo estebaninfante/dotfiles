@@ -1,0 +1,122 @@
+--- a/Overview.cpp
++++ b/Overview.cpp
+@@ -298,16 +298,19 @@
+     return Hyprexpo::isGradientBorderSpec(borderSpec);
+ }
+ 
+-SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprColor& color, const Vector2D& bufferSize, const float scale, const int fontSize) {
+-    const auto CAIROSURFACE = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, bufferSize.x, bufferSize.y);
+-    const auto CAIRO        = cairo_create(CAIROSURFACE);
+-
+-    cairo_save(CAIRO);
+-    cairo_set_operator(CAIRO, CAIRO_OPERATOR_CLEAR);
+-    cairo_paint(CAIRO);
+-    cairo_restore(CAIRO);
+-
+-    PangoLayout* layout = pango_cairo_create_layout(CAIRO);
++// Sets up the layout a label is measured and drawn with: font family, weight,
++// style and size (fontSize * scale, so the glyphs come out in the monitor's own
++// pixels), plus underline and strikethrough. The measuring pass and the drawing
++// pass share it so both agree on the box the glyphs need.
++//
++// Deliberately no pango_layout_set_width(): a label is one line, and a width
++// limit wraps it onto lines a single-line texture cannot hold. That limit used
++// to be the caller's estimate of fontSize * strlen() in LOGICAL pixels while the
++// font was drawn at fontSize * scale, so on a scale-2 monitor the text was twice
++// the estimate: any label longer than a few characters wrapped, the surface kept
++// only the middle of two lines, and the seat's task in the grid ("▸ dsh · present
++// task") could not be read.
++static void labelLayout(PangoLayout* layout, const std::string& text, const int fontSize, const float scale) {
+     pango_layout_set_text(layout, text.c_str(), -1);
+ 
+     // font options from config
+@@ -335,9 +338,47 @@
+         pango_layout_set_attributes(layout, attrs);
+         pango_attr_list_unref(attrs);
+     }
++}
++
++// The label texture is drawn at device resolution (fontSize * monitor scale) and
++// then shown in a box of logical pixels, so the buffer has to be measured in
++// device pixels: sizing it in logical ones held a 26 pt font in a 21 px surface
++// and cut half of every glyph. The size handed back is the same texture in
++// logical pixels — what the caller places and puts the background pill around —
++// so the pill hugs the text instead of a guessed box that covers the window.
++SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprColor& color, const float scale, const int fontSize, Vector2D& logicalSize) {
++    const float S = std::max(0.01f, scale);
++
++    int measuredW = 1, measuredH = 1;
++    {
++        const auto PROBESURFACE = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
++        const auto PROBECAIRO   = cairo_create(PROBESURFACE);
++        PangoLayout* probe      = pango_cairo_create_layout(PROBECAIRO);
++        labelLayout(probe, text, fontSize, S);
++        PangoRectangle ink_rect, logical_rect;
++        pango_layout_get_extents(probe, &ink_rect, &logical_rect);
++        measuredW = std::max(1, (int)std::ceil((double)ink_rect.width / PANGO_SCALE));
++        measuredH = std::max(1, (int)std::ceil((double)ink_rect.height / PANGO_SCALE));
++        g_object_unref(probe);
++        cairo_destroy(PROBECAIRO);
++        cairo_surface_destroy(PROBESURFACE);
++    }
++
++    // One pixel of margin so an antialiased edge never lands on the texture border.
++    const int bufferW = measuredW + 2;
++    const int bufferH = measuredH + 2;
++    logicalSize       = {bufferW / S, bufferH / S};
++
++    const auto CAIROSURFACE = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, bufferW, bufferH);
++    const auto CAIRO        = cairo_create(CAIROSURFACE);
++
++    cairo_save(CAIRO);
++    cairo_set_operator(CAIRO, CAIRO_OPERATOR_CLEAR);
++    cairo_paint(CAIRO);
++    cairo_restore(CAIRO);
+ 
+-    pango_layout_set_width(layout, bufferSize.x * PANGO_SCALE);
+-    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_NONE);
++    PangoLayout* layout = pango_cairo_create_layout(CAIRO);
++    labelLayout(layout, text, fontSize, S);
+ 
+     cairo_set_source_rgba(CAIRO, color.r, color.g, color.b, color.a);
+ 
+@@ -351,8 +392,8 @@
+     const int    inkY   = ink_rect.y / PANGO_SCALE; // can be negative
+     static auto* const* PCENTERADJX = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_center_adjust_x")->getDataStaticPtr();
+     static auto* const* PCENTERADJY = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_center_adjust_y")->getDataStaticPtr();
+-    const double xOffset = (bufferSize.x - inkW) / 2.0 - inkX + **PCENTERADJX;
+-    const double yOffset = (bufferSize.y - inkH) / 2.0 - inkY + **PCENTERADJY;
++    const double xOffset = (bufferW - inkW) / 2.0 - inkX + **PCENTERADJX;
++    const double yOffset = (bufferH - inkH) / 2.0 - inkY + **PCENTERADJY;
+ 
+     cairo_move_to(CAIRO, xOffset, yOffset);
+     pango_cairo_show_layout(CAIRO, layout);
+--- a/OverviewRender.cpp
++++ b/OverviewRender.cpp
+@@ -653,10 +653,12 @@
+ 
+         const int baseF = std::max(8, fontSize);
+         if (!tex || tex->m_texID == 0) {
++            // The texture measures itself: it comes back sized to the glyphs at the
++            // monitor's scale, and hands over its box in logical pixels. Guessing
++            // that box here (fontSize * bytes wide) made it wider than the text,
++            // so the background pill covered the window's own title bar.
+             const int fsz = std::max(8, (int)std::round(baseF * scaleMul));
+-            Vector2D  buf{std::max(32, fsz * std::max(2, (int)label.size())), std::max(24, fsz + 8)};
+-            sz  = buf;
+-            tex = renderNumberTexture(label, col, buf, MON->m_scale, fsz);
++            tex           = renderNumberTexture(label, col, MON->m_scale, fsz, sz);
+         }
+ 
+         if (!tex || tex->m_texID == 0)
+--- a/OverviewInternal.hpp
++++ b/OverviewInternal.hpp
+@@ -62,7 +62,7 @@
+ 
+ SHyprGradientSpec parseGradientSpec(const std::string& inRaw);
+ bool isGradientBorderSpec(const std::string& borderSpec);
+-SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprColor& color, const Vector2D& bufferSize, float scale, int fontSize);
++SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprColor& color, float scale, int fontSize, Vector2D& logicalSize);
+ SP<Render::ITexture> loadBackgroundImage(const std::string& path);
+ 
+ SWorkspacePreviewState applyWorkspacePreviewState(const PHLWORKSPACE& workspace);

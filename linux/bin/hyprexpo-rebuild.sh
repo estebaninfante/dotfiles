@@ -39,6 +39,19 @@ git -C "$SRC" apply "$PATCH"
 # regenerarlo entero por un cambio de 4 líneas es ruido. Este va después, sobre el
 # árbol ya parcheado.
 git -C "$SRC" apply "$HERE/../patches/hyprexpo-current-workspace.patch"
+# Tercer patch, tambien aparte: la etiqueta de la grilla se mide con pango en
+# pixeles del monitor en vez de adivinar la caja. Los dos de arriba no lo pueden
+# llevar porque el grande se regenera entero y el chico es del espacio actual.
+git -C "$SRC" apply "$HERE/../patches/hyprexpo-label-fit.patch"
+
+# Guard: la etiqueta tiene que seguir midiendose sola. Si el patch se perdio, el
+# texto vuelve a cortarse en la grilla (a escala 2 la caja adivinada era la mitad
+# de lo que ocupa la fuente).
+if ! grep -q "labelLayout(PangoLayout\*" "$SRC/Overview.cpp" || ! grep -q "renderNumberTexture(label, col, MON->m_scale, fsz, sz)" "$SRC/OverviewRender.cpp"; then
+    echo "error: el patch perdio la etiqueta medida con pango (el texto se corta en la grilla)" >&2
+    echo "       ver linux/patches/hyprexpo-label-fit.patch y hyprexpo-changes.md" >&2
+    exit 1
+fi
 
 # Guard: el espacio actual tiene que estar siempre en la grilla dinámica, aunque
 # esté vacío (si no, no hay tile del espacio en el que estás: el space vacío no se
