@@ -53,6 +53,8 @@
 
 ## Pruebas con ventanas
 - Las ventanas de prueba van al asiento del agente; nunca a las pantallas del usuario.
+- Prohibido manejar la ventana de una app del usuario: ni CDP/puppeteer sobre su sesión, ni clicks, ni teclas, ni navegarla, ni matarla para “probar”. Si hay que probar UI, abrí una ventana propia en el asiento (`agent-seat run …`) y capturá ahí.
+- Si la app del usuario necesita reiniciarse para tomar un cambio, no la reinicies vos: dejá el build listo y decile qué reiniciar.
 - Evidencia de UI: `evidencia iniciar/paso/cerrar` o `evidencia grabar -- <comando>`.
 
 ## Evidencia
