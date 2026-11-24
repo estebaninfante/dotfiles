@@ -24,8 +24,12 @@
           "target": "2027-01-25T00:00:00"
         },
         {
+          "activeSlot": 1,
+          "alwaysShuffle": false,
           "id": "io.github.keegan-sucks.flowstate",
+          "playSoundtrack": false,
           "shortBreakMinutes": 10,
+          "spotifyVolume": 0,
           "workMinutes": 50
         },
         {
