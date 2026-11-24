@@ -4,9 +4,9 @@
 Brave corre con `--remote-debugging-port` (ver ~/.config/brave-flags.conf), el
 mismo CDP que usa `dictado`. Por ahí se busca la pestaña de chatgpt.com que
 tiene el botón `[data-dictation-button]` y se le hace `.click()` desde la
-página: no se mueve el puntero, no se enfoca nada y no hace falta que ChatGPT
-esté en primer plano (sí que su pestaña esté visible: Chromium no expone el
-botón de una pestaña en segundo plano de forma confiable).
+página: no se mueve el puntero ni se enfoca nada. Si hay varias pestañas con
+el botón se prefiere la visible y con foco; si el empate persiste, no toca
+ninguna (mejor no dictar en el chat equivocado).
 
 Uso:
     chatgpt-dictate            alterna el dictado (si estaba grabando, lo corta)
