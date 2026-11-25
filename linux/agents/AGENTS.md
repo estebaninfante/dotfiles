@@ -2,7 +2,7 @@
 
 ## Harness
 - No reinicies ni pares `dsh-web`: mata el turno y las sesiones. Cerrá con `dsh-web --restart` para el usuario.
-- Tras 2-3 intentos fallidos, delegá a Claude con `claude-job` (brief por stdin). Verificá lo que reporta.
+- Tras 2-3 intentos fallidos, escalá a un modelo superior con `codex-job` (brief por stdin; skill `escalar-a-modelo-superior`). Verificá lo que reporta.
 
 ## Intención
 - Es deber del agente ayudarme a resolver la ambigüedad y la abstracción que tengo en la mente.

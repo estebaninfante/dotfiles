@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# opencode-job — corre opencode como trabajo en segundo plano, con salida en vivo.
+#
+# Uso:  opencode-job <<'BRIEF'  …  BRIEF
+#       opencode-job -m opencode-go/gpt-6-luna <<'BRIEF' … BRIEF
+#       opencode-job -f brief.md
+#
+# Imprime una línea por hecho mientras el delegado trabaja (DICE / HACE / FIN),igual
+# que claude-job y codex-job. Brief por stdin, salida por stdout, sin estado en disco.
+#
+# Variables: OPENCODE_BIN, OPENCODE_MODEL (default opencode-go/gpt-6-luna), OPENCODE_DIR.
+set -uo pipefail
+OPENCODE="${OPENCODE_BIN:-$HOME/.local/bin/opencode}"
+[ -x "$OPENCODE" ] || { echo "opencode-job: no encuentro $OPENCODE" >&2; exit 127; }
+
+model="${OPENCODE_MODEL:-opencode-go/gpt-6-luna}"
+if [ "${1:-}" = "-m" ] && [ -n "${2:-}" ]; then model="$2"; shift 2; fi
+if [ "${1:-}" = "-f" ] && [ -n "${2:-}" ]; then
+  brief=$(cat "$2")
+else
+  brief=$(cat)
+fi
+if [ "${#brief}" -lt 40 ]; then
+  echo "opencode-job: el brief es demasiado corto (${#brief} caracteres)" >&2
+  exit 2
+fi
+if [ -n "${OPENCODE_DIR:-}" ]; then cd "$OPENCODE_DIR" || exit 1; fi
+
+printf '%s' "$brief" | "$OPENCODE" run --standalone --auto -m "$model" --format json - 2>&1 | python3 -u -c '
+import json, sys
+last = ""
+cost = 0.0
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        event = json.loads(line)
+    except Exception:
+        print(line[:200], flush=True)
+        continue
+    kind = event.get("type")
+    part = event.get("part") or {}
+    if kind == "text":
+        text = (part.get("text") or "").strip()
+        if text:
+            last = text
+            print("DICE:", " ".join(text.split())[:400], flush=True)
+    elif kind == "tool_use":
+        state = part.get("state") or {}
+        inp = state.get("input") or {}
+        detail = inp.get("command") or inp.get("filePath") or inp.get("path") or inp.get("pattern") or inp.get("description") or ""
+        print("HACE:", part.get("tool"), "->", " ".join(str(detail).split())[:160], flush=True)
+    elif kind == "step_finish":
+        cost += float((part.get("cost") or 0))
+    elif kind == "error":
+        print("FIN: ERROR:", str(event.get("error") or part)[:800], flush=True)
+print("FIN:", last[:1500] or "(sin mensaje final)", flush=True)
+print("USO: costo usd", round(cost, 4), flush=True)
+'
