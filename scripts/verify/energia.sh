@@ -241,6 +241,31 @@ if command -v kitten >/dev/null 2>&1; then
   done
 fi
 
+# --- alerta de batería baja (toast inmortal) -------------------------------
+# docs/energia-laptop-82y5.md §8: en omarchy-shell un toast critical tiene
+# duración 0 — no expira nunca, se persiste y vuelve en cada arranque del
+# shell. La copia del repo tiene que ganarle a /usr/bin y no puede ser critical.
+alerta="$(command -v omarchy-battery-low 2>/dev/null || true)"
+alerta_real="$(readlink -f "${alerta:-/nonexistent}" 2>/dev/null || true)"
+if [ "$alerta_real" = "$HOME/dotfiles/linux/bin/omarchy-battery-low" ]; then
+  ok "alerta batería: la del repo gana en PATH"
+elif [ -z "$alerta" ]; then
+  fail "alerta batería: omarchy-battery-low no está en PATH"
+else
+  fail "alerta batería: PATH usa $alerta (el original manda un toast que no expira)"
+fi
+if [ -n "${alerta_real:-}" ] && [ -f "$alerta_real" ]; then
+  envio='^[[:space:]]*omarchy-notification-send'
+  grep -Eq "$envio.*-u[[:space:]]+critical" "$alerta_real" \
+    && fail "alerta batería: manda critical (toast inmortal)"
+  grep -Eq "$envio.*-t[[:space:]]+[0-9]+" "$alerta_real" \
+    && ok "alerta batería: el toast expira solo" \
+    || warn "alerta batería: sin -t; puede quedar pegada en pantalla"
+  grep -q 'omarchy-battery-low.stamp' "$alerta_real" \
+    && ok "alerta batería: una por ventana de tiempo (no una por parpadeo)" \
+    || warn "alerta batería: sin límite; cada parpadeo del cargador avisa"
+fi
+
 printf '\n'
 if [ "$fails" -gt 0 ]; then
   printf 'RESULTADO: %d falla(s), %d aviso(s) — correr battery-power-guard.sh\n' "$fails" "$warns"
