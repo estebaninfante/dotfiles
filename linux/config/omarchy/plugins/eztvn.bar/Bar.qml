@@ -581,7 +581,9 @@ Item {
   // resize the bar window and make its height jump. Keep this in sync with
   // GAP_MAX in ~/.config/hypr/hyprland.lua if you change it. Horizontal gaps
   // stay dynamic so the islands keep aligning with the tiled-window edge.
-  property int windowGapTop: 0
+  // Barra flotante: cada isla se despega del borde por este mismo margen
+  // arriba y abajo, así el fondo del escritorio se ve alrededor.
+  property int windowGapTop: 8
   property int windowGapRight: Style.gapsOut
   property int windowGapBottom: Style.gapsOut
   property int windowGapLeft: Style.gapsOut
@@ -590,7 +592,7 @@ Item {
   // Square-ish: follow Style.cornerRadius (lee decoration:rounding de Hyprland)
   // con un piso de 2px, en vez del piso pill de 12px.
   readonly property int islandRadius: Math.min(Math.round(root.islandHeight / 2), Math.max(Style.cornerRadius, 2))
-  readonly property int barWindowSize: root.windowGapTop + root.islandHeight
+  readonly property int barWindowSize: root.vertical ? root.barSize : root.windowGapTop * 2 + root.islandHeight
 
   // Read the raw Hyprland gaps_out (Style.gapsOut is intentionally half of it)
   // so the islands can align with the tiled-window edge, not the panel edge.
@@ -1361,10 +1363,9 @@ Item {
 
     implicitWidth: root.vertical ? root.barSize : 0
     implicitHeight: root.vertical ? 0 : root.barWindowSize
-    // Una sola pieza: tanto la barra horizontal como la vertical pintan el
-    // slab completo. Las islas de abajo quedan solo como contenedores de
-    // layout (color transparente), así se ve una única barra unificada.
-    color: root.transparent ? "transparent" : root.background
+    // Horizontal bars paint transparent and let each island carry the
+    // background; vertical bars keep the single slab.
+    color: root.vertical ? (root.transparent ? "transparent" : root.background) : "transparent"
     surfaceFormat.opaque: false
     WlrLayershell.namespace: "omarchy-bar"
     WlrLayershell.layer: WlrLayer.Top
@@ -1459,10 +1460,10 @@ Item {
         // transparency while widget clicks stay on top.
         CenterGestureArea { anchors.fill: parent }
 
-        // Left island (solo layout; el fondo lo pinta el slab de la barra)
+        // Left island (pinta su propio fondo flotante)
         Rectangle {
           id: leftIsland
-          color: "transparent"
+          color: root.transparent ? "transparent" : root.background
           radius: root.islandRadius
           border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
@@ -1482,10 +1483,10 @@ Item {
           }
         }
 
-        // Right island (solo layout; el fondo lo pinta el slab de la barra)
+        // Right island (pinta su propio fondo flotante)
         Rectangle {
           id: rightIsland
-          color: "transparent"
+          color: root.transparent ? "transparent" : root.background
           radius: root.islandRadius
           border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
@@ -1505,10 +1506,10 @@ Item {
           }
         }
 
-        // Center island (solo layout; el fondo lo pinta el slab de la barra)
+        // Center island (pinta su propio fondo flotante)
         Rectangle {
           id: centerIsland
-          color: "transparent"
+          color: root.transparent ? "transparent" : root.background
           radius: root.islandRadius
           border.width: 0
           border.color: Util.alpha(Color.accent, 0.22)
