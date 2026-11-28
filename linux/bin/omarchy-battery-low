@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Reemplaza a /usr/bin/omarchy-battery-low (va antes en PATH: ~/.local/bin).
+#
+# Por qué existe: el original manda la alerta con -u critical, y omarchy-shell
+# traduce critical a duración 0 (Service.qml, durationFor), o sea un toast que
+# NO expira nunca, que además se persiste y se vuelve a mostrar en cada arranque
+# del shell. Con el cargador haciendo falso contacto eso deja una pared de
+# "Time to recharge!" encima de todo hasta que la cierres a mano.
+#
+# Dos correcciones:
+#   1. -u normal -t 15000: se va solo a los 15 s. Sigue pasando el modo No
+#      molestar, porque omarchy-action siempre lo atraviesa.
+#   2. Una alerta cada 10 minutos. El original ya avisa una vez por descarga,
+#      pero ese latch se resetea cada vez que vuelve la corriente; con el cable
+#      flojo (2026-11-26: 48 cambios de fuente en 10 minutos) avisaba por cada
+#      parpadeo.
+#
+# El hook battery-low corre siempre y sin límite: 00-power-extreme.sh ya tiene
+# su propia gracia y es lo que entra en ahorro extremo.
+
+set -euo pipefail
+
+if (($# != 1)); then
+  echo "Usage: omarchy-battery-low <percentage>" >&2
+  exit 1
+fi
+
+level=$1
+[[ $level =~ ^[0-9]+$ ]] || exit 0
+
+omarchy-hook battery-low "$level" || true
+
+STAMP="${XDG_RUNTIME_DIR:-/tmp}/omarchy-battery-low.stamp"
+now=$(date +%s)
+if [[ -f $STAMP ]]; then
+  last=$(cat "$STAMP" 2>/dev/null || echo 0)
+  if [[ $last =~ ^[0-9]+$ ]] && ((now - last < 600)); then
+    exit 0
+  fi
+fi
+printf '%s\n' "$now" >"$STAMP"
+
+omarchy-notification-send -g 󱐋 -u normal -t 15000 \
+  "Time to recharge!" "Battery is down to ${level}%" -i battery-caution
