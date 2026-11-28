@@ -1,0 +1,139 @@
+diff --git a/Overview.hpp b/Overview.hpp
+--- a/Overview.hpp
++++ b/Overview.hpp
+@@ -61,6 +61,12 @@
+     // close without a selection
+     void          close(bool switchToSelection = true);
+     bool          selectHoveredWorkspace();
++    // Clic en el fondo de la grilla (sin tile debajo del puntero): cerrar y
++    // entrar a un espacio NUEVO de este monitor.
++    void          closeSelectingNewWorkspace();
++    // Primer hueco libre del set de espacios de este monitor, o
++    // WORKSPACE_INVALID si los tiene todos ocupados. Ver gridStartID.
++    WORKSPACEID   firstFreeSlotID() const;
+ 
+     // keyboard navigation interface
+     bool          onKbMoveFocus(const std::string& dir);
+@@ -149,6 +155,12 @@
+     bool       dynamicGrid = false;
+     bool       emptyTilesSelectable = false;
+     Hyprexpo::SGridShape gridShape{3, 3};
++    // Ancla y tamaño del set de espacios de ESTE monitor tal como lo declara
++    // `workspace_method` ("<salida> first N" + columns x rows). Sirve para el
++    // clic en el fondo: el hueco nuevo tiene que caer dentro del set del monitor
++    // (1..9 en la interna, 28..36 en la externa) y no en el 10 de leia.
++    int        gridStartID = WORKSPACE_INVALID;
++    int        gridSlots   = 0;
+     int        GAP_WIDTH   = 5;
+     CHyprColor BG_COLOR    = CHyprColor{0.1, 0.1, 0.1, 1.0};
+ 
+diff --git a/Overview.cpp b/Overview.cpp
+--- a/Overview.cpp
++++ b/Overview.cpp
+@@ -1251,6 +1251,13 @@
+ 
+     images.resize(gridShape.cols * gridShape.rows);
+ 
++    // Set de espacios de este monitor (ancla + cantidad de slots) para el clic
++    // en el fondo: se guarda ANTES de que el modo dinámico recalcule gridShape,
++    // que achica la grilla al número de workspaces visibles y ya no representa
++    // el set completo (3x3 = los 9 espacios de la pantalla).
++    gridStartID = methodStartID;
++    gridSlots   = std::max(1, gridShape.cols * gridShape.rows);
++
+     const bool anchorSelector = !methodCenter || (!skipEmpty && maxWorkspace > 0 && methodStartID != startedOn->m_id);
+     if (anchorSelector) {
+         PHLWORKSPACE PWORKSPACESTART;
+@@ -1506,6 +1513,10 @@
+     armHoverSelectPark();
+     kbFocusID = openedID;
+ 
++    // Boton izquierdo (0x110 = BTN_LEFT de linux/input-event-codes.h). Se usa
++    // solo para el clic en el fondo; el resto de los botones sigue igual.
++    constexpr uint32_t MOUSE_BUTTON_LEFT = 0x110;
++
+     auto onCursorMove = [this](Event::SCallbackInfo& info) {
+         if (closing)
+             return;
+@@ -1573,6 +1584,13 @@
+ 
+         if (TARGET && TARGET->selectHoveredWorkspace())
+             closeOverviewsSelecting(TARGET);
++        // Clic IZQUIERDO en el fondo de la grilla (area en blanco, ningun tile
++        // debajo del puntero): no hay espacio que elegir, asi que se abre uno
++        // NUEVO y se entra. Antes este clic no hacia nada (solo lo consumiamos).
++        // El boton se filtra solo para esto: el resto de los botones sigue
++        // comportandose como siempre (elegir el tile con hover).
++        else if (TARGET && event.button == MOUSE_BUTTON_LEFT)
++            TARGET->closeSelectingNewWorkspace();
+     };
+ 
+     auto onTouchSelect = [this](Event::SCallbackInfo& info) {
+diff --git a/OverviewInteraction.cpp b/OverviewInteraction.cpp
+--- a/OverviewInteraction.cpp
++++ b/OverviewInteraction.cpp
+@@ -32,6 +32,64 @@
+     return closeOnID != -1;
+ }
+ 
++// Primer hueco libre del set de espacios de este monitor. El set lo declara la
++// config del plugin: `workspace_method "<salida> first N"` da el ancla
++// (gridStartID) y `columns x rows` cuantos slots tiene (9: 1..9 en la interna,
++// 28..36 en la externa). Se busca DENTRO del set y no "el proximo id libre de
++// Hyprland" a proposito: el 10 es el espacio de leia y 11..20 los del asiento,
++// IDs que este clic no tiene por que ocupar.
++WORKSPACEID COverview::firstFreeSlotID() const {
++    if (gridStartID == WORKSPACE_INVALID || gridSlots <= 0)
++        return WORKSPACE_INVALID;
++
++    const auto workspaces = State::workspaceState()->workspacesCopy();
++    for (int offset = 0; offset < gridSlots; ++offset) {
++        const WORKSPACEID id = gridStartID + offset;
++
++        // Ocupado = existe y tiene ventanas. Un espacio vacio del set tambien
++        // sirve: no se ve en la grilla dinamica, asi que para el usuario es
++        // igual de nuevo, y evita crear IDs sueltos cada vez que se hace clic.
++        bool tieneVentanas = false;
++        for (const auto& ws : workspaces) {
++            if (!ws || ws->m_id != id)
++                continue;
++            tieneVentanas = ws->getWindowCount() > 0;
++            break;
++        }
++        if (!tieneVentanas)
++            return id;
++    }
++
++    return WORKSPACE_INVALID;
++}
++
++// Clic en el fondo de la grilla (area en blanco, ningun tile debajo del
++// puntero): cerrar el overview y entrar a un espacio NUEVO de este monitor.
++// Sin tile destino no hay morph al que apuntar, asi que el espacio se cambia
++// primero y el cierre va detras: un solo gesto, sin zoom a un tile inexistente.
++void COverview::closeSelectingNewWorkspace() {
++    const auto MON = pMonitor.lock();
++    if (!MON || closing)
++        return;
++
++    const WORKSPACEID NEWID = firstFreeSlotID();
++    if (NEWID == WORKSPACE_INVALID) {
++        // Set lleno: no hay donde abrir uno nuevo, se cierra como antes.
++        close(false);
++        return;
++    }
++
++    PHLWORKSPACE NEWWS = State::workspaceState()->query().id(NEWID).run();
++    if (!NEWWS)
++        NEWWS = State::workspaceState()->create(NEWID, MON->m_id, std::to_string(NEWID), false);
++
++    const auto CHANGE = Config::Actions::changeWorkspace(NEWWS);
++    if (!CHANGE)
++        Log::logger->log(Log::ERR, "[hyprexpo] empty click: failed to change workspace: {}", CHANGE.error().message);
++
++    close(false);
++}
++
+ int64_t COverview::selectedWorkspaceID() const {
+     const int id = closeOnID == -1 ? openedID : closeOnID;
+     if (id < 0 || id >= (int)images.size())

@@ -43,6 +43,19 @@ git -C "$SRC" apply "$HERE/../patches/hyprexpo-current-workspace.patch"
 # pixeles del monitor en vez de adivinar la caja. Los dos de arriba no lo pueden
 # llevar porque el grande se regenera entero y el chico es del espacio actual.
 git -C "$SRC" apply "$HERE/../patches/hyprexpo-label-fit.patch"
+# Cuarto patch, tambien aparte: clic izquierdo en el fondo de la grilla = entrar
+# a un espacio NUEVO del monitor. Va ultimo porque esta hecho contra el arbol que
+# dejan los otros tres.
+git -C "$SRC" apply "$HERE/../patches/hyprexpo-empty-click.patch"
+
+# Guard: el clic en el fondo tiene que abrir un espacio nuevo. Sin esto el clic
+# vuelve a no hacer nada (es lo que hacia antes: solo se consumia el evento).
+if ! grep -q "closeSelectingNewWorkspace" "$SRC/OverviewInteraction.cpp" \
+    || ! grep -q "TARGET->closeSelectingNewWorkspace();" "$SRC/Overview.cpp"; then
+    echo "error: el patch perdio el clic en el fondo (workspace nuevo)" >&2
+    echo "       ver linux/patches/hyprexpo-empty-click.patch y hyprexpo-changes.md" >&2
+    exit 1
+fi
 
 # Guard: la etiqueta tiene que seguir midiendose sola. Si el patch se perdio, el
 # texto vuelve a cortarse en la grilla (a escala 2 la caja adivinada era la mitad
