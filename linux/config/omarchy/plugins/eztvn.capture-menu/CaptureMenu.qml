@@ -68,6 +68,7 @@ Item {
   }
 
   function open(payloadJson) {
+    console.log("[capture-menu] open", Date.now())
     var p = ({})
     try { p = JSON.parse(payloadJson || "{}") } catch (e) { p = ({}) }
     root.selectionFile = String(p.selectionFile || "")
@@ -256,6 +257,7 @@ Item {
     WlrLayershell.namespace: "capture-menu"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    onVisibleChanged: if (visible) console.log("[capture-menu] visible", Date.now())
 
     // La pantalla congelada, tal como estaba antes de abrir el overlay.
     Image {
@@ -266,6 +268,7 @@ Item {
       asynchronous: false
       cache: false
       smooth: true
+      onStatusChanged: console.log("[capture-menu] frame", status, Date.now())
     }
 
     // El mismo velo en los dos modos: al pasar a dibujar se sigue viendo la

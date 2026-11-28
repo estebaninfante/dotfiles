@@ -8,9 +8,9 @@
 # Ctrl+C en el overlay copia la zona al portapapeles sin guardar archivo (para
 # capturas de un solo uso); sin zona elegida copia la pantalla entera.
 #
-# La imagen congelada es un PNG que saca este script ANTES de mostrar el
-# overlay, así que ni la barra ni el resaltado entran en la captura: las
-# imágenes se recortan del PNG original. Para grabar se oculta el overlay y
+# La imagen congelada es un PPM (sin comprimir) que saca este script ANTES de
+# mostrar el overlay, así que ni la barra ni el resaltado entran en la captura:
+# las imágenes se recortan de ese original. Para grabar se oculta el overlay y
 # se espera a que el compositor lo saque de pantalla antes de arrancar.
 
 set -uo pipefail
@@ -35,7 +35,15 @@ SHOTS_DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}"
 # para siempre y la próxima captura sale muda.
 nofd() { "$@" 9>&-; }
 
-frame="$STATE_DIR/frame.png"
+# Tiempos de la última captura (microsegundos desde la época). Sirven para ver
+# si el congelado se va en capturar, en el IPC del overlay o en pintarlo.
+now_us() { local t=${EPOCHREALTIME/,/.}; printf '%s' "${t//./}"; }
+t_start=$(now_us)
+timings=("inicio=$t_start")
+
+# PPM en vez de PNG: no se comprime ni se descomprime, así el congelado no
+# espera el codificador. Qt lo lee nativo y el recorte posterior sale PNG.
+frame="$STATE_DIR/frame.ppm"
 selection_file="$STATE_DIR/selection"
 done_file="$STATE_DIR/done"
 annotations_file="$STATE_DIR/annotations.json"
@@ -49,9 +57,9 @@ if pgrep -f '^gpu-screen-recorder' >/dev/null; then
     exec ~/.local/bin/screenrecord-toggle
 fi
 
-# Congelar primero: el PNG queda sin overlay. Se captura sólo el monitor con
+# Congelar primero: el PPM queda sin overlay. Se captura sólo el monitor con
 # foco (no todo el layout): el overlay vive en ese monitor y así las
-# coordenadas de la selección y el PNG comparten el mismo espacio.
+# coordenadas de la selección y la imagen comparten el mismo espacio.
 read -r mon_name mon_x mon_y mon_scale < <(
     hyprctl monitors -j 2>/dev/null |
         jq -r '.[] | select(.focused) | "\(.name) \(.x) \(.y) \(.scale)"'
@@ -60,17 +68,19 @@ read -r mon_name mon_x mon_y mon_scale < <(
 [[ -n $mon_x && $mon_x != null ]] || mon_x=0
 [[ -n $mon_y && $mon_y != null ]] || mon_y=0
 [[ -n $mon_scale && $mon_scale != null ]] || mon_scale=1
+timings+=("monitor=$(now_us)")
 
 if [[ -n $mon_name ]]; then
-    grim -o "$mon_name" "$frame" 2>/dev/null || grim "$frame" 2>/dev/null
+    grim -t ppm -o "$mon_name" "$frame" 2>/dev/null || grim -t ppm "$frame" 2>/dev/null
 else
-    grim "$frame" 2>/dev/null
+    grim -t ppm "$frame" 2>/dev/null
 fi
 if [[ ! -s $frame ]]; then
     nofd notify -u critical -g "󰅚" --app-name capture-menu \
         "No se pudo congelar la pantalla" "grim no devolvió imagen" 2>/dev/null || true
     exit 1
 fi
+timings+=("congelado=$(now_us)")
 
 payload=$(jq -cn \
     --arg selectionFile "$selection_file" \
@@ -85,6 +95,7 @@ if ! omarchy-shell shell summon eztvn.capture-menu "$payload" >/dev/null 2>&1; t
         "Overlay no disponible" "Revisar: omarchy plugin enable eztvn.capture-menu" 2>/dev/null || true
     exit 1
 fi
+timings+=("summon=$(now_us)")
 
 # Espera la tecla (o la cancelación) desde el plugin. Si el overlay desaparece
 # sin dejar `done` (recarga o reinicio del shell), se aborta: si no, el lock
@@ -109,6 +120,7 @@ for _ in $(seq 1 1800); do
     fi
     sleep 0.05
 done
+printf '%s\n' "${timings[@]}" "tecla=$(now_us)" >"$STATE_DIR/timing.log"
 [[ -e $done_file ]] || exit 0
 
 # Escape / clic fuera: el plugin deja el archivo de selección vacío.
@@ -287,12 +299,12 @@ case "$key" in
         exec ~/.local/bin/screenrecord-toggle --region "$geom"
         ;;
     full)
-        magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || cp "$frame" "$STATE_DIR/full.png"
+        magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || exit 1
         copy_png "$STATE_DIR/full.png"
         ;;
     clipboardfull)
         # Ctrl+C sin zona elegida: copiar la pantalla entera, sin archivo.
-        magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || cp "$frame" "$STATE_DIR/full.png"
+        magick "$frame" +repage "png:$STATE_DIR/full.png" 2>/dev/null || exit 1
         copy_only "$STATE_DIR/full.png"
         ;;
 esac
