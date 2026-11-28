@@ -567,6 +567,31 @@ parados, pantalla ≤60 s, Wi-Fi power save on, VRAM ≤256 MiB, y `sshd`,
 `tailscaled` y NetworkManager activos. Con el modo apagado, falla si quedó el
 drop-in (basura de una corrida anterior).
 
+### La alerta de batería baja: toast inmortal
+
+El 2026-11-26 a las 22:00 la pantalla quedó tapada por 13 toasts "Time to
+recharge!". Eran tres cosas sumadas:
+
+1. **El cargador parpadeó.** El log de `battery-power-guard` muestra 48
+   alternaciones de fuente en 10 minutos (109 corridas en esa hora contra 2 en
+   todas las demás). Fue con la batería al 5 %, que es cuando el cargador pide
+   más corriente.
+2. **El latch mentía.** `shouldWarnLowBattery` avisa una vez por descarga, pero
+   se resetea cada vez que vuelve la corriente: un aviso por cada parpadeo.
+3. **El toast era `critical`, y en `omarchy-shell` critical = duración 0**
+   (`Service.qml`, `durationFor`). No expira nunca, se persiste en
+   `~/.local/state/omarchy/notifications/` y vuelve a mostrarse en cada arranque
+   del shell.
+
+Arreglo: `linux/bin/omarchy-battery-low` (va antes en `PATH` que
+`/usr/bin/omarchy-battery-low`, así que el shell usa este) manda el mismo texto
+con `-u normal -t 15000` — se va solo a los 15 s, sigue atravesando No molestar
+porque `omarchy-action` siempre lo atraviesa — y no manda más de una alerta cada
+10 minutos. El hook `battery-low` corre siempre, así el ahorro extremo sigue
+entrando igual.
+
+La alerta sigue siendo una sola: el parpadeo de fuente ya no la multiplica.
+
 ## 9. Cambio de modo del panel: fundido en vez de apagón
 
 Cuando el guard re-aplica el modo del panel (60 Hz en ahorro, 120 Hz en
