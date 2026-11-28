@@ -39,7 +39,10 @@ if [[ -f $STAMP ]]; then
     exit 0
   fi
 fi
-printf '%s\n' "$now" >"$STAMP"
+# Si el sello no se puede escribir, se avisa igual: callar la alerta es peor
+# que repetirla.
+mkdir -p "$(dirname "$STAMP")" 2>/dev/null || true
+{ printf '%s\n' "$now" >"$STAMP"; } 2>/dev/null || true
 
 omarchy-notification-send -g 󱐋 -u normal -t 15000 \
   "Time to recharge!" "Battery is down to ${level}%" -i battery-caution
