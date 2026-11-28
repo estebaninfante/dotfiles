@@ -27,6 +27,42 @@ local expo_fly_super_up
 hl.bind(main_mod .. " + Y", function() expo_ui_toggle() end)
 
 if plugin ~= nil then
+    -- Un paso de navegación dentro de la grilla, en RELACIÓN a la selección
+    -- actual: cada tecla mueve la selección un tile, no salta a un número.
+    -- La diagonal son dos pasos seguidos (vertical y después horizontal):
+    -- la grilla es una matriz, el plugin no tiene diagonales propias.
+    local function expo_move(dx, dy)
+        if dy < 0 then plugin.kb_focus("up")
+        elseif dy > 0 then plugin.kb_focus("down") end
+        if dx < 0 then plugin.kb_focus("left")
+        elseif dx > 0 then plugin.kb_focus("right") end
+    end
+
+    -- Teclado numérico: 1 abajo-izquierda, 5 centro, 9 arriba-derecha.
+    -- El salto ABSOLUTO por número ya no servía: con `dynamic_grid = 1` la
+    -- grilla sólo tiene los espacios CON ventanas, así que "1" no era el primer
+    -- tile de la grilla sino el espacio 1 (otro tile, o ninguno).
+    local EXPO_PASOS = {
+        ["1"] = { dx = -1, dy =  1 },  -- abajo-izquierda
+        ["2"] = { dx =  0, dy =  1 },  -- abajo
+        ["3"] = { dx =  1, dy =  1 },  -- abajo-derecha
+        ["4"] = { dx = -1, dy =  0 },  -- izquierda
+        ["6"] = { dx =  1, dy =  0 },  -- derecha
+        ["7"] = { dx = -1, dy = -1 },  -- arriba-izquierda
+        ["8"] = { dx =  0, dy = -1 },  -- arriba
+        ["9"] = { dx =  1, dy = -1 },  -- arriba-derecha
+    }
+
+    -- Una tecla del submapa se ata tres veces: sola, con Súper apretado (hold)
+    -- y en minúscula. La minúscula sólo si es OTRA tecla: en los números sería
+    -- el mismo bind repetido.
+    local function expo_bind(tecla, fn)
+        hl.bind(tecla, fn)
+        hl.bind(main_mod .. " + " .. tecla, fn)
+        local minuscula = string.lower(tecla)
+        if minuscula ~= tecla then hl.bind(minuscula, fn) end
+    end
+
     hl.define_submap("hyprexpo", function()
         hl.bind("left",  function() plugin.kb_focus("left")  end, { repeating = true })
         hl.bind("right", function() plugin.kb_focus("right") end, { repeating = true })
@@ -34,20 +70,21 @@ if plugin ~= nil then
         hl.bind("down",  function() plugin.kb_focus("down")  end, { repeating = true })
         hl.bind("RETURN", function() plugin.kb_confirm() end)
         hl.bind(main_mod .. " + Y", function() expo_ui_toggle() end)
-        -- Elegir workspace por numero dentro de la grilla: en 3D pasa por la
-        -- camara (expo_focus); en plano es la seleccion directa del plugin.
-        for i = 1, 10 do
-            hl.bind(main_mod .. " + " .. ws_keys[i], function() expo_select(i) end)
-            hl.bind(ws_keys[i], function() expo_select(i) end)
-            hl.bind(string.lower(ws_keys[i]), function() expo_select(i) end)
+        -- Números y teclas de workspace: cada tecla es un paso en su dirección
+        -- (8 y C = arriba, 2 y W = abajo, etc.). Se atan juntos porque son el
+        -- mismo movimiento: el número es la forma "teclado numérico" y la letra
+        -- la forma "tecla de espacio".
+        for numero, paso in pairs(EXPO_PASOS) do
+            local mover = function() expo_move(paso.dx, paso.dy) end
+            expo_bind(numero, mover)
+            expo_bind(ws_keys[tonumber(numero)], mover)
         end
-        -- Números 1..9 dentro de la grilla: mismo destino que la tecla del
-        -- workspace. Con Súper apretado (hold) también, por si el bind con
-        -- modificador no matchea en el submap.
-        for i = 1, 9 do
-            hl.bind(tostring(i), function() expo_select(i) end)
-            hl.bind(main_mod .. " + " .. tostring(i), function() expo_select(i) end)
-        end
+        -- 5 / T = confirmar: el centro del teclado numérico es "elegir éste".
+        expo_bind("5", function() plugin.kb_confirm() end)
+        expo_bind(ws_keys[5], function() plugin.kb_confirm() end)
+        -- S (índice 10) sigue ABSOLUTA: es el espacio especial (leia), no un
+        -- lugar de la grilla, así que no tiene dirección.
+        expo_bind(ws_keys[10], function() expo_select(10) end)
         -- Capturar desde la grilla: cierra el overview y lanza la captura. Sin esto
         -- el `catchall` se come la tecla (solo resetea el submap) y parecia que no
         -- se podia capturar mientras la grilla estaba abierta.

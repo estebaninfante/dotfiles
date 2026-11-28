@@ -1,0 +1,18 @@
+{
+  "name": "dsh-local-sidebar-fit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Auto-colapsa la sidebar cuando la ventana es angosta y ensancha el agarre del borde para redimensionarla.",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  }
+}

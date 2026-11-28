@@ -70,7 +70,14 @@ local style = {
     edge_passthrough = 2,
     gaps_in = 16,
     gaps_out = 22,
-    border_width = 2,
+    -- Sin outline alrededor de las miniaturas (pedido del dueño, 2026-11-28).
+    -- En el fork el outline de cada tile es SOLO este borde: `drawBorderForID`
+    -- (OverviewRender.cpp) vuelve sin dibujar cuando el ancho es <= 0, así que
+    -- con 0 no queda ningún marco (ni el del tile actual, ni hover, ni focus).
+    -- Los `border_color*` de abajo quedan como estaban: con ancho 0 no se usan,
+    -- así revertir es cambiar este 0 por 2. No toca los bordes de las ventanas
+    -- normales ni el foco de Hyprland: eso es `general:border_size`, otra clave.
+    border_width = 0,
     -- Esquinas rectas: la grilla se lee como pestanas de workspace, no como
     -- tarjetas redondeadas (0 = sin radio en el modo plano y en el borde).
     tile_rounding = 0,
