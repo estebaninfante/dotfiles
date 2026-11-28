@@ -23,10 +23,12 @@
  * Mapeo estándar (Chromium/Firefox/Edge):
  *   D-pad 12-15 → flechas        A → Enter        B → Escape
  *   X → Backspace                Y → Tab          R1 (5) → Tab
- *   L1 (4) → Shift+Tab           Start (9) → "/" (menú de comandos)
+ *   L1 (4) → Shift+Tab           Start (9) → foco al compositor
  *
- * Start se omite mientras se escribe: ahí un "/" se tipearía de verdad y
- * ensuciaría el texto. El resto se emite siempre, como el teclado físico.
+ * Start no emite "/": un KeyboardEvent sintético no dispara el default del
+ * navegador (no inserta texto), así que no abriría el menú de comandos. En su
+ * lugar enfoca el compositor real de DSH ([data-composer-input]), solo desde
+ * fuera de un campo y sin diálogo ni menú abierto.
  */
 window.__ModuleLoader__.load({
   id: "dsh-local-gamepad",
@@ -56,7 +58,7 @@ window.__ModuleLoader__.load({
       3: { key: "Tab", code: "Tab" },
       4: { key: "Tab", code: "Tab", shiftKey: true },
       5: { key: "Tab", code: "Tab" },
-      9: { key: "/", code: "Slash", onlyWhenIdle: true },
+      9: { action: "focusComposer" },
     };
 
     /** keyCode/which para manejadores legacy; los navegadores modernos usan key. */
@@ -74,7 +76,11 @@ window.__ModuleLoader__.load({
 
     const DEFAULTS = { deadzone: 0.35, repeatMs: 140, sticks: true };
 
+    /** Capas que ya tienen el teclado: no les robamos el foco. */
+    const FOREGROUND = '[role="dialog"][aria-modal="true"], [role="menu"]';
+
     function idOf(spec) {
+      if (spec.action) return "action:" + spec.action;
       return spec.code + (spec.shiftKey === true ? "|shift" : "");
     }
 
@@ -110,6 +116,37 @@ window.__ModuleLoader__.load({
       const tag = element.tagName.toUpperCase();
       if (tag === "INPUT" || tag === "TEXTAREA") return true;
       return element.isContentEditable === true;
+    }
+
+    function isComposer(element) {
+      return Boolean(
+        element &&
+          typeof element.matches === "function" &&
+          element.matches("[data-composer-input]"),
+      );
+    }
+
+    /**
+     * Start: lleva el foco al compositor real de DSH sin escribir nada.
+     * Es la opción segura que pidió el dueño: no pisa un input/textarea, no
+     * compite con un diálogo o menú abierto y no depende de que un evento
+     * sintético inserte texto (los no confiables no disparan el default).
+     */
+    function focusComposer() {
+      const doc = window.document;
+      if (!doc) return false;
+      const active = doc.activeElement;
+      if (isComposer(active)) return true;
+      if (isTyping(active)) return false;
+      if (typeof doc.querySelector === "function" && doc.querySelector(FOREGROUND) !== null) {
+        return false;
+      }
+      const composer = typeof doc.querySelector === "function"
+        ? doc.querySelector("[data-composer-input]")
+        : null;
+      if (!composer || typeof composer.focus !== "function") return false;
+      composer.focus();
+      return true;
     }
 
     function focusTarget() {
@@ -169,7 +206,7 @@ window.__ModuleLoader__.load({
     }
 
     /** Lo que el mando pide en este frame, ya en términos de teclas. */
-    function desiredKeys(cfg, now) {
+    function desiredKeys(cfg) {
       const wanted = new Map();
       const nav = window.navigator;
       if (!nav || typeof nav.getGamepads !== "function") return wanted;
@@ -200,11 +237,8 @@ window.__ModuleLoader__.load({
         if (spec && pressed(Number(index))) wanted.set(idOf(spec), spec);
       }
 
-      const typing = isTyping(window.document && window.document.activeElement);
       for (const [index, spec] of Object.entries(cfg.buttons)) {
-        if (!spec || !pressed(Number(index))) continue;
-        if (spec.onlyWhenIdle === true && typing) continue;
-        wanted.set(idOf(spec), spec);
+        if (spec && pressed(Number(index))) wanted.set(idOf(spec), spec);
       }
 
       if (cfg.sticks) {
@@ -239,7 +273,9 @@ window.__ModuleLoader__.load({
       let stopped = false;
 
       const releaseAll = () => {
-        for (const record of held.values()) emitKey("keyup", record.spec, false);
+        for (const record of held.values()) {
+          if (!record.spec.action) emitKey("keyup", record.spec, false);
+        }
         held.clear();
       };
 
@@ -247,18 +283,19 @@ window.__ModuleLoader__.load({
         if (stopped) return;
         rafId = win.requestAnimationFrame(frame);
 
-        const wanted = desiredKeys(cfg, now);
+        const wanted = desiredKeys(cfg);
         for (const [id, record] of held) {
           if (wanted.has(id)) continue;
-          emitKey("keyup", record.spec, false);
+          if (!record.spec.action) emitKey("keyup", record.spec, false);
           held.delete(id);
         }
         for (const [id, spec] of wanted) {
           const record = held.get(id);
           if (!record) {
             held.set(id, { spec, lastAt: now });
-            emitKey("keydown", spec, false);
-          } else if (now - record.lastAt >= cfg.repeatMs) {
+            if (spec.action === "focusComposer") focusComposer();
+            else emitKey("keydown", spec, false);
+          } else if (!spec.action && now - record.lastAt >= cfg.repeatMs) {
             record.lastAt = now;
             emitKey("keydown", spec, true);
           }
