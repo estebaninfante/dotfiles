@@ -1,0 +1,8 @@
+# Fila canónica del plugin.
+#
+# En este perfil los plugins locales NO son bundles: su fila se aplica desde
+# ~/.dsh/profiles/web/cordis.patch.yml (igual que hotkeys y folder). Este
+# archivo deja la fila a la vista; no se declara dsh.bundle en package.json.
+- insert:
+    - id: local-gamepad
+      name: dsh-local-gamepad

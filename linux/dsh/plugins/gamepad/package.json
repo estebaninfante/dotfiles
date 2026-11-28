@@ -1,0 +1,19 @@
+{
+  "name": "dsh-local-gamepad",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mando de Nintendo (Switch Pro / Joy-Con por Bluetooth) como teclado: el D-pad emite flechas reales para navegar la GUI web.",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [],
+      "immediately": false
+    }
+  }
+}
