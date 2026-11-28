@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Selector de temas de Omarchy, recortado a dos: uno oscuro y uno claro.
+#
+# El selector de Omarchy (`omarchy theme switcher`) lista los temas del paquete
+# más los propios. Los del paquete viven en /usr/share/omarchy/themes y no se
+# tocan: volverían en cada actualización y romperían el paquete. Así que acá se
+# arma una carpeta de miniaturas con sólo los dos elegidos y se abre el mismo
+# selector de imágenes del shell; al elegir, se aplica con omarchy-theme-set.
+#
+# Cambiar la pareja:
+#   TEMA_OSCURO=gruvbox TEMA_CLARO=flexoki-light tema
+set -euo pipefail
+
+dark_slug="${TEMA_OSCURO:-vantablack}"
+light_slug="${TEMA_CLARO:-catppuccin-latte}"
+
+user_themes="$HOME/.config/omarchy/themes"
+stock_themes="${OMARCHY_PATH:-/usr/share/omarchy}/themes"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/tema-dos"
+
+pretty() {
+    printf '%s' "$1" | sed -E 's/-/ /g; s/(^| )([a-z])/\1\U\2/g'
+}
+
+dark_label="Oscuro - $(pretty "$dark_slug")"
+light_label="Claro - $(pretty "$light_slug")"
+
+label_to_slug() {
+    case "$1" in
+        "$dark_label") printf '%s' "$dark_slug" ;;
+        "$light_label") printf '%s' "$light_slug" ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# Primera imagen presentable del tema: preview.* si existe, si no el primer
+# fondo. Es la misma regla que usa omarchy-theme-switcher.
+find_preview() {
+    local dir="$1" name found
+    for name in preview.png preview.jpg preview.jpeg preview.webp preview.gif preview.bmp; do
+        found=$(find -L "$dir" -maxdepth 1 -type f -iname "$name" -print -quit 2>/dev/null || true)
+        if [ -n "$found" ]; then
+            printf '%s\n' "$found"
+            return
+        fi
+    done
+    if [ -d "$dir/backgrounds" ]; then
+        find -L "$dir/backgrounds" -maxdepth 1 -type f \
+            \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
+            -print 2>/dev/null | sort | head -n 1
+    fi
+}
+
+slug_dir() {
+    local slug="$1"
+    if [ -d "$user_themes/$slug" ]; then
+        printf '%s' "$user_themes/$slug"
+    elif [ -d "$stock_themes/$slug" ]; then
+        printf '%s' "$stock_themes/$slug"
+    fi
+}
+
+rm -rf "$cache_dir"
+mkdir -p "$cache_dir"
+
+current_slug=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null || true)
+selected=""
+
+for entry in "$dark_slug|$dark_label" "$light_slug|$light_label"; do
+    slug=${entry%%|*}
+    label=${entry#*|}
+    dir=$(slug_dir "$slug")
+    if [ -z "$dir" ]; then
+        echo "tema: no encuentro el tema '$slug'" >&2
+        exit 1
+    fi
+    preview=$(find_preview "$dir")
+    if [ -z "$preview" ]; then
+        continue
+    fi
+    ext="${preview##*.}"
+    ln -s "$preview" "$cache_dir/$label.$ext"
+    if [ "$current_slug" = "$slug" ]; then
+        selected="$cache_dir/$label.$ext"
+    fi
+done
+
+if ! compgen -G "$cache_dir/*" >/dev/null; then
+    echo "tema: los dos temas elegidos no tienen imagen de muestra" >&2
+    exit 1
+fi
+
+menu_args=(--print-name --show-labels --filterable)
+[ -n "$selected" ] && menu_args+=(--selected "$selected")
+
+# `tema --debug` sólo muestra qué va a ofrecer, sin abrir el selector.
+if [ "${1:-}" = "--debug" ]; then
+    printf 'actual: %s\n' "${current_slug:-ninguno}"
+    for image in "$cache_dir"/*; do
+        printf 'opción: %s -> %s\n' "${image##*/}" "$(readlink -f "$image")"
+    done
+    exit 0
+fi
+
+choice=$(omarchy-menu-images "${menu_args[@]}" "$cache_dir" || true)
+[ -n "$choice" ] || exit 0
+
+omarchy-theme-set "$(label_to_slug "$choice")"

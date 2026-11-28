@@ -28,6 +28,11 @@
   // fields are kept unless overridden.
   // "about": {"icon":"","label":"About","action":"omarchy-launch-or-focus-tui \"zsh -c 'fastfetch; read -k 1'\""},
 
+  // Selector de temas recortado a dos (uno claro y uno oscuro). El de Omarchy
+  // lista los 22 temas del paquete; la pareja se elige en ~/dotfiles/linux/bin/tema
+  // y no se toca /usr/share/omarchy/themes, que vuelve en cada actualización.
+  "style.theme": {"icon":"󰸌","label":"Tema","aliases":["theme","themes","tema","temas"],"description":"Claro u oscuro: sólo los dos temas elegidos","action":"~/.local/bin/tema"},
+
   // Ajustes del escritorio (omatings): ventana nativa del shell con las páginas
   // del sistema (pantallas, sonido, red, atajos, energía) y la página Voz, que
   // reproduce los audios capturados por el asistente con su transcripción.
