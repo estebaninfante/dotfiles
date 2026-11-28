@@ -8,10 +8,14 @@
 # del shell. Con el cargador haciendo falso contacto eso deja una pared de
 # "Time to recharge!" encima de todo hasta que la cierres a mano.
 #
-# Dos correcciones:
-#   1. -u normal -t 15000: se va solo a los 15 s. Sigue pasando el modo No
-#      molestar, porque omarchy-action siempre lo atraviesa.
-#   2. Una alerta cada 10 minutos. El original ya avisa una vez por descarga,
+# Qué hace esta copia:
+#   1. Texto propio en castellano neutro, dos líneas y el porcentaje en negrita.
+#   2. Queda en pantalla un minuto largo (DURACION) para que dé tiempo a
+#      conectarlo. El shell corta cualquier aviso automático a 30 s
+#      (Service.qml, maxPopupDuration), así que va como critical —que dura 0, o
+#      sea no expira— y lo cierra este mismo script: apenas entra corriente, o
+#      cuando se cumple DURACION. Sin cuenta regresiva ni reapariciones.
+#   3. Una alerta cada 10 minutos. El original ya avisa una vez por descarga,
 #      pero ese latch se resetea cada vez que vuelve la corriente; con el cable
 #      flojo (2026-11-26: 48 cambios de fuente en 10 minutos) avisaba por cada
 #      parpadeo.
@@ -19,7 +23,41 @@
 # El hook battery-low corre siempre y sin límite: 00-power-extreme.sh ya tiene
 # su propia gracia y es lo que entra en ahorro extremo.
 
-set -euo pipefail
+set -uo pipefail
+
+TITULO="Conecta el cargador"
+DURACION="${BATERIA_AVISO_SEGUNDOS:-70}"
+FUENTES="${POWER_SUPPLY_DIR:-/sys/class/power_supply}"
+SELF=$(readlink -f "$0")
+
+cargando() {
+  local p
+  for p in "$FUENTES"/*/online; do
+    [ -f "$p" ] || continue
+    case "$p" in */BAT*) continue ;; esac
+    [ "$(cat "$p" 2>/dev/null)" = "1" ] && return 0
+  done
+  return 1
+}
+
+cerrar() { omarchy-shell notifications dismiss "$TITULO" >/dev/null 2>&1 || true; }
+
+# Modo interno: el que cierra el aviso. Corre suelto (setsid) para sobrevivir a
+# la salida del avisador; si la laptop se apaga antes, el toast queda pero el
+# próximo arranque del shell lo archiva.
+if [[ ${1:-} == --cerrar ]]; then
+  fin=$(($(date +%s) + DURACION))
+  while :; do
+    if cargando; then
+      cerrar
+      exit 0
+    fi
+    (($(date +%s) >= fin)) && break
+    sleep 2
+  done
+  cerrar
+  exit 0
+fi
 
 if (($# != 1)); then
   echo "Usage: omarchy-battery-low <percentage>" >&2
@@ -44,5 +82,8 @@ fi
 mkdir -p "$(dirname "$STAMP")" 2>/dev/null || true
 { printf '%s\n' "$now" >"$STAMP"; } 2>/dev/null || true
 
-omarchy-notification-send -g 󱐋 -u normal -t 15000 \
-  "Time to recharge!" "Battery is down to ${level}%" -i battery-caution
+omarchy-notification-send -g 󱐋 -i battery-caution -u critical "$TITULO" \
+  "Te queda <b>${level}%</b> de batería.<br/>Este aviso se va solo cuando lo conectes." \
+  || exit 0
+
+setsid -f "$SELF" --cerrar >/dev/null 2>&1 || true
