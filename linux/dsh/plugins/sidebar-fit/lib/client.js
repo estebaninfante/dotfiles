@@ -19,6 +19,14 @@ window.__ModuleLoader__.load({
 		/** Zona de agarre del borde: 8 px es muy fino para el mouse. */
 		const HANDLE_CSS =
 			'[class*="_handle"][data-side="sidebar"]{width:14px;margin-left:-3px}';
+		/**
+		 * Drawer angosto (<768 px): el velo oscuro (z 70) queda POR ENCIMA de la
+		 * sidebar (z 22). Se ve opaca y cualquier clic cae en el velo, que la
+		 * cierra. Subir la sidebar por encima del velo mientras exista el velo
+		 * deja el clic interior útil y mantiene el cierre al tocar afuera.
+		 */
+		const DRAWER_CSS =
+			'[class*="_frame"]:has([class*="_drawerMask"]) [class*="_sidebarCol"]{z-index:80!important}';
 
 		function apply(ctx) {
 			if (typeof document === "undefined") return;
@@ -26,7 +34,7 @@ window.__ModuleLoader__.load({
 			ctx.effect(() => {
 				const style = document.createElement("style");
 				style.dataset.plugin = "dsh-local-sidebar-fit";
-				style.textContent = HANDLE_CSS;
+				style.textContent = HANDLE_CSS + DRAWER_CSS;
 				document.head.append(style);
 				return () => style.remove();
 			}, "dsh-local-sidebar-fit: agarre del borde");
